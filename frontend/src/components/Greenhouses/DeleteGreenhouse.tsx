@@ -1,10 +1,10 @@
-import { Button, DialogTitle, Text } from "@chakra-ui/react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { FiTrash2 } from "react-icons/fi"
+import { Button, DialogTitle, Text } from "@chakra-ui/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { FiTrash2 } from "react-icons/fi";
 
-import { ItemsService } from "@/client"
+import { GreenhousesService } from "@/client";
 import {
   DialogActionTrigger,
   DialogBody,
@@ -14,39 +14,39 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import useCustomToast from "@/hooks/useCustomToast"
+} from "@/components/ui/dialog";
+import useCustomToast from "@/hooks/useCustomToast";
 
-const DeleteItem = ({ id }: { id: string }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const queryClient = useQueryClient()
-  const { showSuccessToast, showErrorToast } = useCustomToast()
+const DeleteGreenhouse = ({ id }: { id: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { showSuccessToast, showErrorToast } = useCustomToast();
   const {
     handleSubmit,
     formState: { isSubmitting },
-  } = useForm()
+  } = useForm();
 
-  const deleteItem = async (id: string) => {
-    await ItemsService.deleteItem({ id: id })
-  }
+  const deleteGreenhouse = async (id: string) => {
+    await GreenhousesService.deleteGreenhouse({ greenhouseId: id });
+  };
 
   const mutation = useMutation({
-    mutationFn: deleteItem,
+    mutationFn: deleteGreenhouse,
     onSuccess: () => {
-      showSuccessToast("The item was deleted successfully")
-      setIsOpen(false)
+      showSuccessToast("The greenhouse was deleted successfully.");
+      setIsOpen(false);
     },
     onError: () => {
-      showErrorToast("An error occurred while deleting the item")
+      showErrorToast("An error occurred while deleting the greenhouse.");
     },
     onSettled: () => {
-      queryClient.invalidateQueries()
+      queryClient.invalidateQueries({ queryKey: ["greenhouses"] });
     },
-  })
+  });
 
-  const onSubmit = async () => {
-    mutation.mutate(id)
-  }
+  const onSubmit = () => {
+    mutation.mutate(id);
+  };
 
   return (
     <DialogRoot
@@ -59,7 +59,7 @@ const DeleteItem = ({ id }: { id: string }) => {
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" colorPalette="red">
           <FiTrash2 fontSize="16px" />
-          Delete Item
+          Delete Greenhouse
         </Button>
       </DialogTrigger>
 
@@ -67,11 +67,11 @@ const DeleteItem = ({ id }: { id: string }) => {
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogCloseTrigger />
           <DialogHeader>
-            <DialogTitle>Delete Item</DialogTitle>
+            <DialogTitle>Delete Greenhouse</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <Text mb={4}>
-              This item will be permanently deleted. Are you sure? You will not
+              This greenhouse will be permanently deleted. Are you sure? You will not
               be able to undo this action.
             </Text>
           </DialogBody>
@@ -98,7 +98,7 @@ const DeleteItem = ({ id }: { id: string }) => {
         </form>
       </DialogContent>
     </DialogRoot>
-  )
-}
+  );
+};
 
-export default DeleteItem
+export default DeleteGreenhouse;

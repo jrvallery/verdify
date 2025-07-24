@@ -11,7 +11,7 @@ import { useState } from "react"
 import { type SubmitHandler, useForm } from "react-hook-form"
 import { FaExchangeAlt } from "react-icons/fa"
 
-import { type ApiError, type ItemPublic, ItemsService } from "@/client"
+import { type ApiError, type GreenhousePublic, GreenhousesService } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 import {
@@ -26,16 +26,16 @@ import {
 } from "../ui/dialog"
 import { Field } from "../ui/field"
 
-interface EditItemProps {
-  item: ItemPublic
+interface EditGreenhouseProps {
+  greenhouse: GreenhousePublic
 }
 
-interface ItemUpdateForm {
+interface GreenhouseUpdateForm {
   title: string
   description?: string
 }
 
-const EditItem = ({ item }: EditItemProps) => {
+const EditGreenhouse = ({ greenhouse }: EditGreenhouseProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast } = useCustomToast()
@@ -44,20 +44,20 @@ const EditItem = ({ item }: EditItemProps) => {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<ItemUpdateForm>({
+  } = useForm<GreenhouseUpdateForm>({
     mode: "onBlur",
     criteriaMode: "all",
     defaultValues: {
-      ...item,
-      description: item.description ?? undefined,
+      ...greenhouse,
+      description: greenhouse.description ?? undefined,
     },
   })
 
   const mutation = useMutation({
-    mutationFn: (data: ItemUpdateForm) =>
-      ItemsService.updateItem({ id: item.id, requestBody: data }),
+    mutationFn: (data: GreenhouseUpdateForm) =>
+      GreenhousesService.updateGreenhouse({ greenhouseId: greenhouse.id, requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Item updated successfully.")
+      showSuccessToast("Greenhouse updated successfully.")
       reset()
       setIsOpen(false)
     },
@@ -65,11 +65,11 @@ const EditItem = ({ item }: EditItemProps) => {
       handleError(err)
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["items"] })
+      queryClient.invalidateQueries({ queryKey: ["greenhouses"] })
     },
   })
 
-  const onSubmit: SubmitHandler<ItemUpdateForm> = async (data) => {
+  const onSubmit: SubmitHandler<GreenhouseUpdateForm> = async (data) => {
     mutation.mutate(data)
   }
 
@@ -83,16 +83,16 @@ const EditItem = ({ item }: EditItemProps) => {
       <DialogTrigger asChild>
         <Button variant="ghost">
           <FaExchangeAlt fontSize="16px" />
-          Edit Item
+          Edit Greenhouse
         </Button>
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
-            <DialogTitle>Edit Item</DialogTitle>
+            <DialogTitle>Edit Greenhouse</DialogTitle>
           </DialogHeader>
           <DialogBody>
-            <Text mb={4}>Update the item details below.</Text>
+            <Text mb={4}>Update the greenhouse details below.</Text>
             <VStack gap={4}>
               <Field
                 required
@@ -148,4 +148,4 @@ const EditItem = ({ item }: EditItemProps) => {
   )
 }
 
-export default EditItem
+export default EditGreenhouse

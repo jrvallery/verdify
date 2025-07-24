@@ -43,7 +43,7 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
-    items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
+    greenhouses: list["Greenhouse"] = Relationship(back_populates="owner", cascade_delete=True)
 
 
 # Properties to return via API, id is always required
@@ -57,39 +57,39 @@ class UsersPublic(SQLModel):
 
 
 # Shared properties
-class ItemBase(SQLModel):
+class GreenhouseBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
 
 
-# Properties to receive on item creation
-class ItemCreate(ItemBase):
+# Properties to receive on Greenhouse creation
+class GreenhouseCreate(GreenhouseBase):
     pass
 
 
-# Properties to receive on item update
-class ItemUpdate(ItemBase):
+# Properties to receive on Greenhouse update
+class GreenhouseUpdate(GreenhouseBase):
     title: str | None = Field(default=None, min_length=1, max_length=255)  # type: ignore
 
 
 # Database model, database table inferred from class name
-class Item(ItemBase, table=True):
+class Greenhouse(GreenhouseBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     title: str = Field(max_length=255)
     owner_id: uuid.UUID = Field(
         foreign_key="user.id", nullable=False, ondelete="CASCADE"
     )
-    owner: User | None = Relationship(back_populates="items")
+    owner: User | None = Relationship(back_populates="greenhouses")
 
 
 # Properties to return via API, id is always required
-class ItemPublic(ItemBase):
+class GreenhousePublic(GreenhouseBase):
     id: uuid.UUID
     owner_id: uuid.UUID
 
 
-class ItemsPublic(SQLModel):
-    data: list[ItemPublic]
+class GreenhousesPublic(SQLModel):
+    data: list[GreenhousePublic]
     count: int
 
 
