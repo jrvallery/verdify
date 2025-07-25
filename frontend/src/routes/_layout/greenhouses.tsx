@@ -12,7 +12,8 @@ import { FiSearch } from "react-icons/fi"
 import { z } from "zod"
 
 import { GreenhousesService } from "@/client"
-import { GreenhouseActionsMenu } from "@/components/Common/GreenhouseActionsMenu.tsx"
+import { Icon } from "@chakra-ui/react"
+import { FiCheck, FiX } from "react-icons/fi"
 import AddGreenhouse from "@/components/Greenhouses/AddGreenhouse"
 import PendingItems from "@/components/Pending/PendingItems"
 import {
@@ -88,30 +89,35 @@ function GreenhousesTable() {
       <Table.Root size={{ base: "sm", md: "md" }}>
         <Table.Header>
           <Table.Row>
-            <Table.ColumnHeader w="30%">ID</Table.ColumnHeader>
-            <Table.ColumnHeader w="30%">Title</Table.ColumnHeader>
-            <Table.ColumnHeader w="30%">Description</Table.ColumnHeader>
-            <Table.ColumnHeader w="10%">Actions</Table.ColumnHeader>
+            <Table.ColumnHeader w="30%" fontSize="lg">Title</Table.ColumnHeader>
+            <Table.ColumnHeader w="30%" fontSize="lg">Description</Table.ColumnHeader>
+            <Table.ColumnHeader w="10%" fontSize="lg">Active</Table.ColumnHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {greenhouses.map((gh) => (
-            <Table.Row key={gh.id} opacity={isPlaceholderData ? 0.5 : 1}>
-              <Table.Cell truncate maxW="30%">
-                {gh.id}
-              </Table.Cell>
-              <Table.Cell truncate maxW="30%">
+            <Table.Row
+            cursor="pointer"
+            onClick={() => navigate({ to: "/greenhouses/$greenhouseId", params: { greenhouseId: gh.id } })}
+            key={gh.id} 
+            opacity={isPlaceholderData ? 0.5 : 1}>
+              <Table.Cell fontSize="lg" truncate maxW="30%">
                 {gh.title}
               </Table.Cell>
               <Table.Cell
+                fontSize="lg"
                 color={!gh.description ? "gray" : "inherit"}
                 truncate
                 maxW="30%"
               >
                 {gh.description || "N/A"}
               </Table.Cell>
-              <Table.Cell width="10%">
-                <GreenhouseActionsMenu greenhouse={gh} />
+              <Table.Cell width="10%" textAlign="center">
+                {gh.is_active ? (
+                  <Icon as={FiCheck} boxSize={5} color="green.500" />
+                ) : (
+                  <Icon as={FiX}   boxSize={5} color="red.500" />
+                )}
               </Table.Cell>
             </Table.Row>
           ))}

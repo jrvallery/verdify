@@ -27,6 +27,15 @@ def create_greenhouse(*, session: Session, greenhouse_create: GreenhouseCreate, 
     return gh
 
 
+def update_greenhouse(session: Session, gh: Greenhouse, data: GreenhouseUpdate) -> Greenhouse:
+    gh_data = data.model_dump(exclude_unset=True)
+    for key, val in gh_data.items():
+        setattr(gh, key, val)
+    session.add(gh)
+    session.commit()
+    session.refresh(gh)
+    return gh
+
 
 def delete_greenhouse(*, session: Session, db_gh: Greenhouse) -> None:
     # cascade delete of links happens automatically (link table FKs)

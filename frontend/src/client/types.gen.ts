@@ -9,14 +9,82 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type GreenhouseClimateUpdate = {
+    temperature: number;
+    humidity: number;
+    outside_temperature?: (number | null);
+    outside_humidity?: (number | null);
+};
+
 export type GreenhouseCreate = {
     title: string;
     description?: (string | null);
+    /**
+     * Whether this greenhouse is active
+     */
+    is_active?: boolean;
+    /**
+     * Current internal temperature
+     */
+    temperature?: number;
+    /**
+     * Current internal humidity
+     */
+    humidity?: number;
+    /**
+     * Current external temperature
+     */
+    outside_temperature?: number;
+    /**
+     * Current external humidity
+     */
+    outside_humidity?: number;
+    /**
+     * Greenhouse style/type
+     */
+    type?: (string | null);
+    /**
+     * Latitude of greenhouse location
+     */
+    latitude?: (number | null);
+    /**
+     * Longitude of greenhouse location
+     */
+    longitude?: (number | null);
 };
 
 export type GreenhousePublic = {
     title: string;
     description?: (string | null);
+    is_active: boolean;
+    /**
+     * Current internal temperature
+     */
+    temperature?: number;
+    /**
+     * Current internal humidity
+     */
+    humidity?: number;
+    /**
+     * Current external temperature
+     */
+    outside_temperature?: number;
+    /**
+     * Current external humidity
+     */
+    outside_humidity?: number;
+    /**
+     * Greenhouse style/type
+     */
+    type?: (string | null);
+    /**
+     * Latitude of greenhouse location
+     */
+    latitude?: (number | null);
+    /**
+     * Longitude of greenhouse location
+     */
+    longitude?: (number | null);
     id: string;
     owner_id: string;
 };
@@ -29,6 +97,14 @@ export type GreenhousesPublic = {
 export type GreenhouseUpdate = {
     title?: (string | null);
     description?: (string | null);
+    is_active?: (boolean | null);
+    temperature?: (number | null);
+    humidity?: (number | null);
+    outside_temperature?: (number | null);
+    outside_humidity?: (number | null);
+    type?: (string | null);
+    latitude?: (number | null);
+    longitude?: (number | null);
 };
 
 export type HTTPValidationError = {
@@ -49,6 +125,12 @@ export type PrivateUserCreate = {
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+export type SensorPayload = {
+    sensor_type: string;
+    value: number;
+    timestamp: string;
 };
 
 export type Token = {
@@ -138,6 +220,20 @@ export type GreenhousesDeleteGreenhouseData = {
 };
 
 export type GreenhousesDeleteGreenhouseResponse = (Message);
+
+export type GreenhousesAddSensorDataData = {
+    greenhouseId: string;
+    requestBody: SensorPayload;
+};
+
+export type GreenhousesAddSensorDataResponse = (GreenhousePublic);
+
+export type GreenhousesUpdateClimateData = {
+    greenhouseId: string;
+    requestBody: GreenhouseClimateUpdate;
+};
+
+export type GreenhousesUpdateClimateResponse = (GreenhousePublic);
 
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;
