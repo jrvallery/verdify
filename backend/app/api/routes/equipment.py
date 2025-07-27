@@ -20,7 +20,7 @@ from app.crud.equipment import (
 )
 from app.crud.greenhouses import get_greenhouse as crud_get_greenhouse
 
-router = APIRouter(tags=["equipment"], prefix="/equipment")
+router = APIRouter()
 
 @router.post("/", response_model=EquipmentPublic)
 def create_equipment(

@@ -9,6 +9,30 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type EquipmentCreate = {
+    /**
+     * Equipment name, e.g. 'fan', 'heater'
+     */
+    name: string;
+    model?: (string | null);
+    greenhouse_id: string;
+};
+
+export type EquipmentPublic = {
+    /**
+     * Equipment name, e.g. 'fan', 'heater'
+     */
+    name: string;
+    model?: (string | null);
+    id: string;
+    greenhouse_id: string;
+};
+
+export type EquipmentUpdate = {
+    name?: (string | null);
+    model?: (string | null);
+};
+
 export type GreenhouseClimateUpdate = {
     temperature: number;
     humidity: number;
@@ -111,6 +135,8 @@ export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
 
+export type LocationEnum = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
+
 export type Message = {
     message: string;
 };
@@ -188,6 +214,63 @@ export type ValidationError = {
     msg: string;
     type: string;
 };
+
+export type ZoneCreate = {
+    /**
+     * Numeric identifier within greenhouse
+     */
+    zone_number: number;
+    /**
+     * N, E, S, W, NE, SE, SW, NW
+     */
+    location: LocationEnum;
+    greenhouse_id: string;
+};
+
+export type ZonePublic = {
+    /**
+     * Numeric identifier within greenhouse
+     */
+    zone_number: number;
+    /**
+     * N, E, S, W, NE, SE, SW, NW
+     */
+    location: LocationEnum;
+    id: string;
+    greenhouse_id: string;
+};
+
+export type ZoneUpdate = {
+    zone_number?: (number | null);
+    location?: (LocationEnum | null);
+};
+
+export type EquipmentListEquipmentResponse = (Array<EquipmentPublic>);
+
+export type EquipmentCreateEquipmentData = {
+    requestBody: EquipmentCreate;
+};
+
+export type EquipmentCreateEquipmentResponse = (EquipmentPublic);
+
+export type EquipmentGetEquipmentData = {
+    equipmentId: string;
+};
+
+export type EquipmentGetEquipmentResponse = (EquipmentPublic);
+
+export type EquipmentUpdateEquipmentData = {
+    equipmentId: string;
+    requestBody: EquipmentUpdate;
+};
+
+export type EquipmentUpdateEquipmentResponse = (EquipmentPublic);
+
+export type EquipmentDeleteEquipmentData = {
+    equipmentId: string;
+};
+
+export type EquipmentDeleteEquipmentResponse = (unknown);
 
 export type GreenhousesReadGreenhousesData = {
     limit?: number;
@@ -328,3 +411,30 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+export type ZonesListZonesResponse = (Array<ZonePublic>);
+
+export type ZonesCreateZoneData = {
+    requestBody: ZoneCreate;
+};
+
+export type ZonesCreateZoneResponse = (ZonePublic);
+
+export type ZonesGetZoneData = {
+    zoneId: string;
+};
+
+export type ZonesGetZoneResponse = (ZonePublic);
+
+export type ZonesUpdateZoneData = {
+    requestBody: ZoneUpdate;
+    zoneId: string;
+};
+
+export type ZonesUpdateZoneResponse = (ZonePublic);
+
+export type ZonesDeleteZoneData = {
+    zoneId: string;
+};
+
+export type ZonesDeleteZoneResponse = (Message);

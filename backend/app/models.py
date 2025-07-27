@@ -127,6 +127,12 @@ class GreenhouseClimateUpdate(SQLModel):
     outside_temperature: Optional[float] = None
     outside_humidity: Optional[float] = None
 
+
+class GreenhouseClimateRead(SQLModel):
+    temperature: float
+    humidity: float
+    outside_temperature: float
+    outside_humidity: float
 #-------------------------------------------------------
 #ZONE MODELS
 #-------------------------------------------------------

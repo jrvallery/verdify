@@ -22,7 +22,7 @@ from app.crud.zone import (
 )
 from app.crud.greenhouses import get_greenhouse as crud_get_greenhouse
 
-router = APIRouter(tags=["zones"], prefix="/zones")
+router = APIRouter()
 
 @router.post("/", response_model=ZonePublic)
 def create_zone(

@@ -12,19 +12,10 @@ from app.models import (
     GreenhousePublic,
     GreenhousesPublic,
     GreenhouseUpdate,
-    GreenhouseClimateUpdate,
     Message,
 )
 
-router = APIRouter(prefix="/greenhouses", tags=["greenhouses"])
-
-
-class SensorPayload(BaseModel):
-    sensor_type: str
-    value: float
-    timestamp: str
-
-
+router = APIRouter()
 @router.get("/", response_model=GreenhousesPublic)
 def read_greenhouses(
     *,
@@ -114,50 +105,3 @@ def delete_greenhouse(
     session.delete(gh)
     session.commit()
     return Message(message="Greenhouse deleted successfully")
-
-
-@router.post("/{greenhouse_id}/sensors", response_model=GreenhousePublic)
-def add_sensor_data(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    greenhouse_id: uuid.UUID,
-    payload: SensorPayload,
-) -> Greenhouse:
-    gh = session.get(Greenhouse, greenhouse_id)
-    if not gh:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Greenhouse not found")
-    if not (current_user.is_superuser or gh.owner_id == current_user.id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
-
-    greenhouse_in = GreenhouseUpdate(**payload.dict())
-    updates = greenhouse_in.model_dump(exclude_unset=True)
-    gh.sqlmodel_update(updates)
-    session.add(gh)
-    session.commit()
-    session.refresh(gh)
-    return gh
-
-@router.put("/{greenhouse_id}/climate", response_model=GreenhousePublic)
-def update_climate(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    greenhouse_id: uuid.UUID,
-    climate_in: GreenhouseClimateUpdate,               # ← bind JSON body here
-) -> Greenhouse:
-    gh = session.get(Greenhouse, greenhouse_id)
-    if not gh:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Greenhouse not found")
-    if not (current_user.is_superuser or gh.owner_id == current_user.id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
-
-    # apply only the provided fields
-    updates = climate_in.model_dump(exclude_unset=True)
-    for field, value in updates.items():
-        setattr(gh, field, value)
-
-    session.add(gh)
-    session.commit()
-    session.refresh(gh)
-    return gh
