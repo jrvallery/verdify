@@ -1,10 +1,10 @@
 // frontend/src/routes/greenhouses/$greenhouseId.tsx
+import { Outlet } from '@tanstack/react-router';
 import {
     Box,
     Flex,
     Heading,
     Spinner,
-    Stack,
     Text,
   } from "@chakra-ui/react";
   import { createFileRoute } from "@tanstack/react-router";
@@ -15,6 +15,9 @@ import {
   import Sidebar from "@/components/Greenhouses/GHSidebar";
   import { GreenhousesService } from "@/client";
   //import EditGreenhouse from "@/components/Greenhouses/EditGreenhouse";
+  import QuonsetImg from "@/assets/images/quonset_wireframe.png";
+  import StandardImg from "@/assets/images/greenhouse_wireframe.png";
+  import { Image } from "@chakra-ui/react";
   
   export const Route = createFileRoute("/greenhouses/$greenhouseId")({
     component: GreenhouseDetail,
@@ -39,20 +42,31 @@ import {
         <Text color="red.500">{error ? "Failed to load." : "Not found."}</Text>
       </Flex>
     );
-  
+    const typeImg = data.type === "Quonset" ? QuonsetImg : StandardImg;
     return (
-      <Flex direction="column" h="100vh">
-        {/* Top nav */}
-        <Navbar />
-  
-        <Flex flex="1" overflow="hidden">
-          {/* Side nav */}
-          <Sidebar />
-  
-          {/* Main content */}
+        <Flex direction="column" h="100vh">
+          <Navbar />
+          <Flex flex="1" overflow="hidden">
+            <Sidebar />
+    
+            <Box as="main" flex="1" overflowY="auto" p={{ base: 4, md: 8 }}>
+              <Heading mb={2}>{"🌱 " + data.title + " 🌱"}</Heading>
+              {/* …status, temp, humidity… */}
+
+              {/* **This is key**: nested routes render here */}
+              <Outlet />
+              <Image
+                src={typeImg}
+                alt={`${data.type} greenhouse`}
+                maxW="400px"
+                mb={6}
+                mx="auto"
+            />
+            <Text mb={6}>{data.description || "No description."}</Text>
+            </Box>
+          </Flex>
         </Flex>
-      </Flex>
-    );
-  }
+      );
+    }
   
   export default GreenhouseDetail;

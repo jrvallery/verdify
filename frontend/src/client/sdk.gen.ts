@@ -3,32 +3,78 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { EquipmentListEquipmentResponse, EquipmentCreateEquipmentData, EquipmentCreateEquipmentResponse, EquipmentGetEquipmentData, EquipmentGetEquipmentResponse, EquipmentUpdateEquipmentData, EquipmentUpdateEquipmentResponse, EquipmentDeleteEquipmentData, EquipmentDeleteEquipmentResponse, GreenhousesReadGreenhousesData, GreenhousesReadGreenhousesResponse, GreenhousesCreateGreenhouseData, GreenhousesCreateGreenhouseResponse, GreenhousesReadGreenhouseData, GreenhousesReadGreenhouseResponse, GreenhousesUpdateGreenhouseData, GreenhousesUpdateGreenhouseResponse, GreenhousesDeleteGreenhouseData, GreenhousesDeleteGreenhouseResponse, GreenhousesAddSensorDataData, GreenhousesAddSensorDataResponse, GreenhousesUpdateClimateData, GreenhousesUpdateClimateResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, ZonesListZonesResponse, ZonesCreateZoneData, ZonesCreateZoneResponse, ZonesGetZoneData, ZonesGetZoneResponse, ZonesUpdateZoneData, ZonesUpdateZoneResponse, ZonesDeleteZoneData, ZonesDeleteZoneResponse } from './types.gen';
+import type { GreenhouseUpdateClimateData, GreenhouseUpdateClimateResponse, GreenhouseReadClimateData, GreenhouseReadClimateResponse, GreenhouseListControllersResponse, GreenhouseCreateControllerData, GreenhouseCreateControllerResponse, GreenhouseGetControllerData, GreenhouseGetControllerResponse, GreenhouseUpdateControllerData, GreenhouseUpdateControllerResponse, GreenhouseDeleteControllerData, GreenhouseDeleteControllerResponse, CreateUserCreateUserData, CreateUserCreateUserResponse, GreenhouseListZonesResponse, GreenhouseCreateZoneData, GreenhouseCreateZoneResponse, GreenhouseGetZoneData, GreenhouseGetZoneResponse, GreenhouseUpdateZoneData, GreenhouseUpdateZoneResponse, GreenhouseDeleteZoneData, GreenhouseDeleteZoneResponse, GreenhouseUpdateZoneReadingsData, GreenhouseUpdateZoneReadingsResponse, GreenhouseGetZoneReadingData, GreenhouseGetZoneReadingResponse, GreenhouseGetZoneReadingsData, GreenhouseGetZoneReadingsResponse, GreenhouseCreateSensorData, GreenhouseCreateSensorResponse, GreenhouseListSensorsData, GreenhouseListSensorsResponse, GreenhouseGetSensorData, GreenhouseGetSensorResponse, GreenhouseUpdateSensorData, GreenhouseUpdateSensorResponse, GreenhouseDeleteSensorData, GreenhouseDeleteSensorResponse, GreenhousesReadGreenhousesData, GreenhousesReadGreenhousesResponse, GreenhousesCreateGreenhouseData, GreenhousesCreateGreenhouseResponse, GreenhousesReadGreenhouseData, GreenhousesReadGreenhouseResponse, GreenhousesUpdateGreenhouseData, GreenhousesUpdateGreenhouseResponse, GreenhousesDeleteGreenhouseData, GreenhousesDeleteGreenhouseResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, UsersReadUsersData, UsersReadUsersResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
-export class EquipmentService {
+export class ClimateService {
     /**
-     * List Equipment
-     * @returns EquipmentPublic Successful Response
+     * Update Climate
+     * @param data The data for the request.
+     * @param data.greenhouseId
+     * @param data.requestBody
+     * @returns GreenhousePublic Successful Response
      * @throws ApiError
      */
-    public static listEquipment(): CancelablePromise<EquipmentListEquipmentResponse> {
+    public static greenhouseUpdateClimate(data: GreenhouseUpdateClimateData): CancelablePromise<GreenhouseUpdateClimateResponse> {
         return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/equipment/'
+            method: 'PUT',
+            url: '/api/v1/greenhouses/{greenhouse_id}/climate/',
+            path: {
+                greenhouse_id: data.greenhouseId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
         });
     }
     
     /**
-     * Create Equipment
+     * Read Climate
      * @param data The data for the request.
-     * @param data.requestBody
-     * @returns EquipmentPublic Successful Response
+     * @param data.greenhouseId
+     * @returns GreenhouseClimateRead Successful Response
      * @throws ApiError
      */
-    public static createEquipment(data: EquipmentCreateEquipmentData): CancelablePromise<EquipmentCreateEquipmentResponse> {
+    public static greenhouseReadClimate(data: GreenhouseReadClimateData): CancelablePromise<GreenhouseReadClimateResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/climate/',
+            path: {
+                greenhouse_id: data.greenhouseId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+}
+
+export class ControllerService {
+    /**
+     * List Controllers
+     * @returns ControllerPublic Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseListControllers(): CancelablePromise<GreenhouseListControllersResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/'
+        });
+    }
+    
+    /**
+     * Create Controller
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ControllerPublic Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseCreateController(data: GreenhouseCreateControllerData): CancelablePromise<GreenhouseCreateControllerResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/equipment/',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
@@ -38,18 +84,18 @@ export class EquipmentService {
     }
     
     /**
-     * Get Equipment
+     * Get Controller
      * @param data The data for the request.
-     * @param data.equipmentId
-     * @returns EquipmentPublic Successful Response
+     * @param data.controllerId
+     * @returns ControllerPublic Successful Response
      * @throws ApiError
      */
-    public static getEquipment(data: EquipmentGetEquipmentData): CancelablePromise<EquipmentGetEquipmentResponse> {
+    public static greenhouseGetController(data: GreenhouseGetControllerData): CancelablePromise<GreenhouseGetControllerResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/equipment/{equipment_id}',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/{controller_id}',
             path: {
-                equipment_id: data.equipmentId
+                controller_id: data.controllerId
             },
             errors: {
                 422: 'Validation Error'
@@ -58,19 +104,19 @@ export class EquipmentService {
     }
     
     /**
-     * Update Equipment
+     * Update Controller
      * @param data The data for the request.
-     * @param data.equipmentId
+     * @param data.controllerId
      * @param data.requestBody
-     * @returns EquipmentPublic Successful Response
+     * @returns ControllerPublic Successful Response
      * @throws ApiError
      */
-    public static updateEquipment(data: EquipmentUpdateEquipmentData): CancelablePromise<EquipmentUpdateEquipmentResponse> {
+    public static greenhouseUpdateController(data: GreenhouseUpdateControllerData): CancelablePromise<GreenhouseUpdateControllerResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/equipment/{equipment_id}',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/{controller_id}',
             path: {
-                equipment_id: data.equipmentId
+                controller_id: data.controllerId
             },
             body: data.requestBody,
             mediaType: 'application/json',
@@ -81,18 +127,438 @@ export class EquipmentService {
     }
     
     /**
-     * Delete Equipment
+     * Delete Controller
      * @param data The data for the request.
-     * @param data.equipmentId
+     * @param data.controllerId
      * @returns unknown Successful Response
      * @throws ApiError
      */
-    public static deleteEquipment(data: EquipmentDeleteEquipmentData): CancelablePromise<EquipmentDeleteEquipmentResponse> {
+    public static greenhouseDeleteController(data: GreenhouseDeleteControllerData): CancelablePromise<GreenhouseDeleteControllerResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/equipment/{equipment_id}',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/{controller_id}',
             path: {
-                equipment_id: data.equipmentId
+                controller_id: data.controllerId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+}
+
+export class DefaultService {
+    /**
+     * Create User
+     * Create a new user.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns UserPublic Successful Response
+     * @throws ApiError
+     */
+    public static createUserCreateUser(data: CreateUserCreateUserData): CancelablePromise<CreateUserCreateUserResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/users/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+}
+
+export class GreenhouseService {
+    /**
+     * Update Climate
+     * @param data The data for the request.
+     * @param data.greenhouseId
+     * @param data.requestBody
+     * @returns GreenhousePublic Successful Response
+     * @throws ApiError
+     */
+    public static updateClimate(data: GreenhouseUpdateClimateData): CancelablePromise<GreenhouseUpdateClimateResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/greenhouses/{greenhouse_id}/climate/',
+            path: {
+                greenhouse_id: data.greenhouseId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Climate
+     * @param data The data for the request.
+     * @param data.greenhouseId
+     * @returns GreenhouseClimateRead Successful Response
+     * @throws ApiError
+     */
+    public static readClimate(data: GreenhouseReadClimateData): CancelablePromise<GreenhouseReadClimateResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/climate/',
+            path: {
+                greenhouse_id: data.greenhouseId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Zones
+     * @returns ZonePublic Successful Response
+     * @throws ApiError
+     */
+    public static listZones(): CancelablePromise<GreenhouseListZonesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/'
+        });
+    }
+    
+    /**
+     * Create Zone
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ZonePublic Successful Response
+     * @throws ApiError
+     */
+    public static createZone(data: GreenhouseCreateZoneData): CancelablePromise<GreenhouseCreateZoneResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Zone
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZonePublic Successful Response
+     * @throws ApiError
+     */
+    public static getZone(data: GreenhouseGetZoneData): CancelablePromise<GreenhouseGetZoneResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Zone
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @param data.requestBody
+     * @returns ZonePublic Successful Response
+     * @throws ApiError
+     */
+    public static updateZone(data: GreenhouseUpdateZoneData): CancelablePromise<GreenhouseUpdateZoneResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}',
+            path: {
+                zone_id: data.zoneId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Zone
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteZone(data: GreenhouseDeleteZoneData): CancelablePromise<GreenhouseDeleteZoneResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Zone Readings
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZoneReading Successful Response
+     * @throws ApiError
+     */
+    public static updateZoneReadings(data: GreenhouseUpdateZoneReadingsData): CancelablePromise<GreenhouseUpdateZoneReadingsResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/updateReadings',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Zone Reading
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZoneReading Successful Response
+     * @throws ApiError
+     */
+    public static getZoneReading(data: GreenhouseGetZoneReadingData): CancelablePromise<GreenhouseGetZoneReadingResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/reading',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Zone Readings
+     * Get all readings for a specific zone.
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZoneReading Successful Response
+     * @throws ApiError
+     */
+    public static getZoneReadings(data: GreenhouseGetZoneReadingsData): CancelablePromise<GreenhouseGetZoneReadingsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/readings',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Controllers
+     * @returns ControllerPublic Successful Response
+     * @throws ApiError
+     */
+    public static listControllers(): CancelablePromise<GreenhouseListControllersResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/'
+        });
+    }
+    
+    /**
+     * Create Controller
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ControllerPublic Successful Response
+     * @throws ApiError
+     */
+    public static createController(data: GreenhouseCreateControllerData): CancelablePromise<GreenhouseCreateControllerResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Controller
+     * @param data The data for the request.
+     * @param data.controllerId
+     * @returns ControllerPublic Successful Response
+     * @throws ApiError
+     */
+    public static getController(data: GreenhouseGetControllerData): CancelablePromise<GreenhouseGetControllerResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/{controller_id}',
+            path: {
+                controller_id: data.controllerId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Controller
+     * @param data The data for the request.
+     * @param data.controllerId
+     * @param data.requestBody
+     * @returns ControllerPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateController(data: GreenhouseUpdateControllerData): CancelablePromise<GreenhouseUpdateControllerResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/{controller_id}',
+            path: {
+                controller_id: data.controllerId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Controller
+     * @param data The data for the request.
+     * @param data.controllerId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deleteController(data: GreenhouseDeleteControllerData): CancelablePromise<GreenhouseDeleteControllerResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/greenhouses/{greenhouse_id}/controller/{controller_id}',
+            path: {
+                controller_id: data.controllerId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Sensor
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static createSensor(data: GreenhouseCreateSensorData): CancelablePromise<GreenhouseCreateSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Sensors
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static listSensors(data: GreenhouseListSensorsData): CancelablePromise<GreenhouseListSensorsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Sensor
+     * @param data The data for the request.
+     * @param data.sensorId
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static getSensor(data: GreenhouseGetSensorData): CancelablePromise<GreenhouseGetSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/{sensor_id}',
+            path: {
+                sensor_id: data.sensorId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Sensor
+     * @param data The data for the request.
+     * @param data.sensorId
+     * @param data.requestBody
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateSensor(data: GreenhouseUpdateSensorData): CancelablePromise<GreenhouseUpdateSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/{sensor_id}',
+            path: {
+                sensor_id: data.sensorId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Sensor
+     * @param data The data for the request.
+     * @param data.sensorId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deleteSensor(data: GreenhouseDeleteSensorData): CancelablePromise<GreenhouseDeleteSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/{sensor_id}',
+            path: {
+                sensor_id: data.sensorId
             },
             errors: {
                 422: 'Validation Error'
@@ -207,52 +673,6 @@ export class GreenhousesService {
         });
     }
     
-    /**
-     * Add Sensor Data
-     * @param data The data for the request.
-     * @param data.greenhouseId
-     * @param data.requestBody
-     * @returns GreenhousePublic Successful Response
-     * @throws ApiError
-     */
-    public static addSensorData(data: GreenhousesAddSensorDataData): CancelablePromise<GreenhousesAddSensorDataResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/greenhouses/{greenhouse_id}/sensors',
-            path: {
-                greenhouse_id: data.greenhouseId
-            },
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Update Climate
-     * @param data The data for the request.
-     * @param data.greenhouseId
-     * @param data.requestBody
-     * @returns GreenhousePublic Successful Response
-     * @throws ApiError
-     */
-    public static updateClimate(data: GreenhousesUpdateClimateData): CancelablePromise<GreenhousesUpdateClimateResponse> {
-        return __request(OpenAPI, {
-            method: 'PUT',
-            url: '/api/v1/greenhouses/{greenhouse_id}/climate',
-            path: {
-                greenhouse_id: data.greenhouseId
-            },
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
 }
 
 export class LoginService {
@@ -300,7 +720,7 @@ export class LoginService {
     public static recoverPassword(data: LoginRecoverPasswordData): CancelablePromise<LoginRecoverPasswordResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/password-recovery/{email}',
+            url: '/api/v1/login/password-recovery/{email}',
             path: {
                 email: data.email
             },
@@ -321,7 +741,7 @@ export class LoginService {
     public static resetPassword(data: LoginResetPasswordData): CancelablePromise<LoginResetPasswordResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/reset-password/',
+            url: '/api/v1/login/reset-password/',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
@@ -341,7 +761,7 @@ export class LoginService {
     public static recoverPasswordHtmlContent(data: LoginRecoverPasswordHtmlContentData): CancelablePromise<LoginRecoverPasswordHtmlContentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/password-recovery-html-content/{email}',
+            url: '/api/v1/login/password-recovery-html-content/{email}',
             path: {
                 email: data.email
             },
@@ -353,21 +773,103 @@ export class LoginService {
     
 }
 
-export class PrivateService {
+export class SensorsService {
     /**
-     * Create User
-     * Create a new user.
+     * Create Sensor
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns UserPublic Successful Response
+     * @returns SensorPublic Successful Response
      * @throws ApiError
      */
-    public static createUser(data: PrivateCreateUserData): CancelablePromise<PrivateCreateUserResponse> {
+    public static greenhouseCreateSensor(data: GreenhouseCreateSensorData): CancelablePromise<GreenhouseCreateSensorResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/private/users/',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/',
             body: data.requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Sensors
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseListSensors(data: GreenhouseListSensorsData): CancelablePromise<GreenhouseListSensorsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Sensor
+     * @param data The data for the request.
+     * @param data.sensorId
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseGetSensor(data: GreenhouseGetSensorData): CancelablePromise<GreenhouseGetSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/{sensor_id}',
+            path: {
+                sensor_id: data.sensorId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Sensor
+     * @param data The data for the request.
+     * @param data.sensorId
+     * @param data.requestBody
+     * @returns SensorPublic Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseUpdateSensor(data: GreenhouseUpdateSensorData): CancelablePromise<GreenhouseUpdateSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/{sensor_id}',
+            path: {
+                sensor_id: data.sensorId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Sensor
+     * @param data The data for the request.
+     * @param data.sensorId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseDeleteSensor(data: GreenhouseDeleteSensorData): CancelablePromise<GreenhouseDeleteSensorResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/sensors/{sensor_id}',
+            path: {
+                sensor_id: data.sensorId
+            },
             errors: {
                 422: 'Validation Error'
             }
@@ -394,26 +896,6 @@ export class UsersService {
                 skip: data.skip,
                 limit: data.limit
             },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Create User
-     * Create new user.
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static createUser(data: UsersCreateUserData): CancelablePromise<UsersCreateUserResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/users/',
-            body: data.requestBody,
-            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }
@@ -616,10 +1098,10 @@ export class ZonesService {
      * @returns ZonePublic Successful Response
      * @throws ApiError
      */
-    public static listZones(): CancelablePromise<ZonesListZonesResponse> {
+    public static greenhouseListZones(): CancelablePromise<GreenhouseListZonesResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/zones/'
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/'
         });
     }
     
@@ -630,10 +1112,10 @@ export class ZonesService {
      * @returns ZonePublic Successful Response
      * @throws ApiError
      */
-    public static createZone(data: ZonesCreateZoneData): CancelablePromise<ZonesCreateZoneResponse> {
+    public static greenhouseCreateZone(data: GreenhouseCreateZoneData): CancelablePromise<GreenhouseCreateZoneResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/zones/',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
@@ -649,10 +1131,10 @@ export class ZonesService {
      * @returns ZonePublic Successful Response
      * @throws ApiError
      */
-    public static getZone(data: ZonesGetZoneData): CancelablePromise<ZonesGetZoneResponse> {
+    public static greenhouseGetZone(data: GreenhouseGetZoneData): CancelablePromise<GreenhouseGetZoneResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/zones/{zone_id}',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}',
             path: {
                 zone_id: data.zoneId
             },
@@ -670,10 +1152,10 @@ export class ZonesService {
      * @returns ZonePublic Successful Response
      * @throws ApiError
      */
-    public static updateZone(data: ZonesUpdateZoneData): CancelablePromise<ZonesUpdateZoneResponse> {
+    public static greenhouseUpdateZone(data: GreenhouseUpdateZoneData): CancelablePromise<GreenhouseUpdateZoneResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/zones/{zone_id}',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}',
             path: {
                 zone_id: data.zoneId
             },
@@ -692,10 +1174,71 @@ export class ZonesService {
      * @returns Message Successful Response
      * @throws ApiError
      */
-    public static deleteZone(data: ZonesDeleteZoneData): CancelablePromise<ZonesDeleteZoneResponse> {
+    public static greenhouseDeleteZone(data: GreenhouseDeleteZoneData): CancelablePromise<GreenhouseDeleteZoneResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/zones/{zone_id}',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Zone Readings
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZoneReading Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseUpdateZoneReadings(data: GreenhouseUpdateZoneReadingsData): CancelablePromise<GreenhouseUpdateZoneReadingsResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/updateReadings',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Zone Reading
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZoneReading Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseGetZoneReading(data: GreenhouseGetZoneReadingData): CancelablePromise<GreenhouseGetZoneReadingResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/reading',
+            path: {
+                zone_id: data.zoneId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Zone Readings
+     * Get all readings for a specific zone.
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns ZoneReading Successful Response
+     * @throws ApiError
+     */
+    public static greenhouseGetZoneReadings(data: GreenhouseGetZoneReadingsData): CancelablePromise<GreenhouseGetZoneReadingsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/readings',
             path: {
                 zone_id: data.zoneId
             },
