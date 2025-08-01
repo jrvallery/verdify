@@ -15,10 +15,7 @@ import {
   import Sidebar from "@/components/Greenhouses/GHSidebar";
   import { GreenhousesService } from "@/client";
   //import EditGreenhouse from "@/components/Greenhouses/EditGreenhouse";
-  import QuonsetImg from "@/assets/images/quonset_wireframe.png";
-  import StandardImg from "@/assets/images/greenhouse_wireframe.png";
-  import { Image } from "@chakra-ui/react";
-  
+
   export const Route = createFileRoute("/greenhouses/$greenhouseId")({
     component: GreenhouseDetail,
     parseParams: (raw) => z.object({ greenhouseId: z.string() }).parse(raw),
@@ -42,7 +39,6 @@ import {
         <Text color="red.500">{error ? "Failed to load." : "Not found."}</Text>
       </Flex>
     );
-    const typeImg = data.type === "Quonset" ? QuonsetImg : StandardImg;
     return (
         <Flex direction="column" h="100vh">
           <Navbar />
@@ -55,14 +51,6 @@ import {
 
               {/* **This is key**: nested routes render here */}
               <Outlet />
-              <Image
-                src={typeImg}
-                alt={`${data.type} greenhouse`}
-                maxW="400px"
-                mb={6}
-                mx="auto"
-            />
-            <Text mb={6}>{data.description || "No description."}</Text>
             </Box>
           </Flex>
         </Flex>

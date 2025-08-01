@@ -21,10 +21,12 @@ def get_controller(session: Session, controller_id: uuid.UUID) -> Controller | N
     """
     return session.get(Controller, controller_id)
 
-def list_controllers(session: Session) -> List[Controller]:
+def list_controllers(session: Session, greenhouse_id: uuid.UUID | None = None) -> List[Controller]:
     """
-    List all controllers.
+    List controllers, optionally filtered by greenhouse.
     """
+    if greenhouse_id:
+        return session.exec(select(Controller).where(Controller.greenhouse_id == greenhouse_id)).all()
     return session.exec(select(Controller)).all()
 
 def update_controller(session: Session, controller: Controller, c_in: ControllerUpdate) -> Controller:

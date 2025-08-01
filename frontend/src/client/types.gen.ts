@@ -33,6 +33,55 @@ export type ControllerUpdate = {
     model?: (string | null);
 };
 
+export type CropCreate = {
+    /**
+     * Name of the crop (e.g., 'Tomato')
+     */
+    name: string;
+    description?: (string | null);
+    /**
+     * Expected yield per square meter
+     */
+    expected_yield_per_sqm?: (number | null);
+    /**
+     * Expected days from seed to harvest
+     */
+    growing_days?: (number | null);
+    recipe?: ({
+    [key: string]: unknown;
+} | null);
+};
+
+export type CropPublic = {
+    /**
+     * Name of the crop (e.g., 'Tomato')
+     */
+    name: string;
+    description?: (string | null);
+    /**
+     * Expected yield per square meter
+     */
+    expected_yield_per_sqm?: (number | null);
+    /**
+     * Expected days from seed to harvest
+     */
+    growing_days?: (number | null);
+    id: string;
+    recipe?: ({
+    [key: string]: unknown;
+} | null);
+};
+
+export type CropUpdate = {
+    name?: (string | null);
+    description?: (string | null);
+    recipe?: ({
+    [key: string]: unknown;
+} | null);
+    expected_yield_per_sqm?: (number | null);
+    growing_days?: (number | null);
+};
+
 export type GreenhouseClimateRead = {
     temperature: number;
     humidity: number;
@@ -55,6 +104,10 @@ export type GreenhouseCreate = {
      */
     is_active?: boolean;
     /**
+     * Greenhouse style/type
+     */
+    type?: (string | null);
+    /**
      * Current internal temperature
      */
     temperature?: number;
@@ -70,10 +123,6 @@ export type GreenhouseCreate = {
      * Current external humidity
      */
     outside_humidity?: number;
-    /**
-     * Greenhouse style/type
-     */
-    type?: (string | null);
     /**
      * Latitude of greenhouse location
      */
@@ -89,6 +138,10 @@ export type GreenhousePublic = {
     description?: (string | null);
     is_active: boolean;
     /**
+     * Greenhouse style/type
+     */
+    type?: (string | null);
+    /**
      * Current internal temperature
      */
     temperature?: number;
@@ -104,10 +157,6 @@ export type GreenhousePublic = {
      * Current external humidity
      */
     outside_humidity?: number;
-    /**
-     * Greenhouse style/type
-     */
-    type?: (string | null);
     /**
      * Latitude of greenhouse location
      */
@@ -166,9 +215,9 @@ export type SensorCreate = {
      */
     name: string;
     /**
-     * Type of sensor (temperature, humidity, etc.)
+     * Type of sensor
      */
-    type: string;
+    type: SensorType;
     /**
      * Model/manufacturer information
      */
@@ -181,8 +230,11 @@ export type SensorCreate = {
      * Unit of measurement
      */
     unit?: (string | null);
-    zone_id: string;
-    controller_id?: (string | null);
+    /**
+     * Whether this sensor is mapped to a zone
+     */
+    is_mapped?: boolean;
+    controller_id: string;
 };
 
 export type SensorPublic = {
@@ -191,9 +243,9 @@ export type SensorPublic = {
      */
     name: string;
     /**
-     * Type of sensor (temperature, humidity, etc.)
+     * Type of sensor
      */
-    type: string;
+    type: SensorType;
     /**
      * Model/manufacturer information
      */
@@ -206,9 +258,15 @@ export type SensorPublic = {
      * Unit of measurement
      */
     unit?: (string | null);
+    /**
+     * Whether this sensor is mapped to a zone
+     */
+    is_mapped?: boolean;
     id: string;
-    zone_id: string;
+    controller_id: string;
 };
+
+export type SensorType = 'temperature' | 'humidity' | 'co2' | 'light' | 'soil_moisture';
 
 export type SensorUpdate = {
     name?: (string | null);
@@ -289,6 +347,84 @@ export type ZoneCreate = {
     greenhouse_id: string;
 };
 
+export type ZoneCropCreate = {
+    start_date?: string;
+    end_date?: (string | null);
+    is_active?: boolean;
+    /**
+     * Total yield produced
+     */
+    final_yield?: (number | null);
+    /**
+     * Area used in square meters
+     */
+    area_sqm?: (number | null);
+    crop_id: string;
+    zone_id: string;
+};
+
+export type ZoneCropObservationCreate = {
+    observed_at?: string;
+    notes?: (string | null);
+    /**
+     * URL to uploaded image
+     */
+    image_url?: (string | null);
+    /**
+     * Plant height in cm
+     */
+    height_cm?: (number | null);
+    /**
+     * Health score 1-10
+     */
+    health_score?: (number | null);
+    zone_crop_id: string;
+};
+
+export type ZoneCropObservationPublic = {
+    observed_at?: string;
+    notes?: (string | null);
+    /**
+     * URL to uploaded image
+     */
+    image_url?: (string | null);
+    /**
+     * Plant height in cm
+     */
+    height_cm?: (number | null);
+    /**
+     * Health score 1-10
+     */
+    health_score?: (number | null);
+    id: string;
+    zone_crop_id: string;
+};
+
+export type ZoneCropPublic = {
+    start_date?: string;
+    end_date?: (string | null);
+    is_active?: boolean;
+    /**
+     * Total yield produced
+     */
+    final_yield?: (number | null);
+    /**
+     * Area used in square meters
+     */
+    area_sqm?: (number | null);
+    id: string;
+    crop_id: string;
+    zone_id: string;
+};
+
+export type ZoneCropUpdate = {
+    crop_id?: (string | null);
+    end_date?: (string | null);
+    is_active?: (boolean | null);
+    final_yield?: (number | null);
+    area_sqm?: (number | null);
+};
+
 export type ZonePublic = {
     /**
      * Numeric identifier within greenhouse
@@ -304,12 +440,9 @@ export type ZonePublic = {
     greenhouse_id: string;
 };
 
-export type ZoneReading = {
-    id?: string;
-    zone_id: string;
-    timestamp?: string;
-    temperature: number;
-    humidity: number;
+export type ZoneSensorMap = {
+    sensor_id: string;
+    type: SensorType;
 };
 
 export type ZoneUpdate = {
@@ -317,127 +450,144 @@ export type ZoneUpdate = {
     location?: (LocationEnum | null);
 };
 
-export type GreenhouseUpdateClimateData = {
+export type ClimateUpdateClimateData = {
     greenhouseId: string;
     requestBody: GreenhouseClimateUpdate;
 };
 
-export type GreenhouseUpdateClimateResponse = (GreenhousePublic);
+export type ClimateUpdateClimateResponse = (GreenhousePublic);
 
-export type GreenhouseReadClimateData = {
+export type ClimateReadClimateData = {
     greenhouseId: string;
 };
 
-export type GreenhouseReadClimateResponse = (GreenhouseClimateRead);
+export type ClimateReadClimateResponse = (GreenhouseClimateRead);
 
-export type GreenhouseListControllersResponse = (Array<ControllerPublic>);
-
-export type GreenhouseCreateControllerData = {
+export type ControllersCreateControllerData = {
+    greenhouseId: string;
     requestBody: ControllerCreate;
 };
 
-export type GreenhouseCreateControllerResponse = (ControllerPublic);
+export type ControllersCreateControllerResponse = (ControllerPublic);
 
-export type GreenhouseGetControllerData = {
-    controllerId: string;
+export type ControllersListControllersData = {
+    greenhouseId: string;
 };
 
-export type GreenhouseGetControllerResponse = (ControllerPublic);
+export type ControllersListControllersResponse = (Array<ControllerPublic>);
 
-export type GreenhouseUpdateControllerData = {
+export type ControllersGetControllerData = {
     controllerId: string;
+    greenhouseId: string;
+};
+
+export type ControllersGetControllerResponse = (ControllerPublic);
+
+export type ControllersUpdateControllerData = {
+    controllerId: string;
+    greenhouseId: string;
     requestBody: ControllerUpdate;
 };
 
-export type GreenhouseUpdateControllerResponse = (ControllerPublic);
+export type ControllersUpdateControllerResponse = (ControllerPublic);
 
-export type GreenhouseDeleteControllerData = {
+export type ControllersDeleteControllerData = {
     controllerId: string;
+    greenhouseId: string;
 };
 
-export type GreenhouseDeleteControllerResponse = (unknown);
+export type ControllersDeleteControllerResponse = (unknown);
+
+export type CropsListCropsResponse = (Array<CropPublic>);
+
+export type CropsCreateCropData = {
+    requestBody: CropCreate;
+};
+
+export type CropsCreateCropResponse = (CropPublic);
+
+export type CropsGetCropData = {
+    cropId: string;
+};
+
+export type CropsGetCropResponse = (CropPublic);
+
+export type CropsUpdateCropData = {
+    cropId: string;
+    requestBody: CropUpdate;
+};
+
+export type CropsUpdateCropResponse = (CropPublic);
+
+export type CropsDeleteCropData = {
+    cropId: string;
+};
+
+export type CropsDeleteCropResponse = (unknown);
+
+export type CropsGetZoneCropData = {
+    zoneId: string;
+};
+
+export type CropsGetZoneCropResponse = (ZoneCropPublic);
+
+export type CropsPlantCropInZoneData = {
+    requestBody: ZoneCropCreate;
+    zoneId: string;
+};
+
+export type CropsPlantCropInZoneResponse = (ZoneCropPublic);
+
+export type CropsUpdateZoneCropData = {
+    requestBody: ZoneCropUpdate;
+    zoneId: string;
+};
+
+export type CropsUpdateZoneCropResponse = (ZoneCropPublic);
+
+export type CropsHarvestCropFromZoneData = {
+    zoneId: string;
+};
+
+export type CropsHarvestCropFromZoneResponse = (unknown);
+
+export type CropsListZoneCropHistoryData = {
+    zoneId: string;
+};
+
+export type CropsListZoneCropHistoryResponse = (Array<ZoneCropPublic>);
+
+export type CropsPermanentlyDeleteZoneCropData = {
+    zoneCropId: string;
+    zoneId: string;
+};
+
+export type CropsPermanentlyDeleteZoneCropResponse = (unknown);
+
+export type CropsGetZoneCropAnalyticsData = {
+    zoneId: string;
+};
+
+export type CropsGetZoneCropAnalyticsResponse = (unknown);
+
+export type CropsListZoneCropObservationsData = {
+    zoneId: string;
+};
+
+export type CropsListZoneCropObservationsResponse = (Array<ZoneCropObservationPublic>);
+
+export type CropsCreateZoneCropObservationData = {
+    requestBody: ZoneCropObservationCreate;
+    zoneId: string;
+};
+
+export type CropsCreateZoneCropObservationResponse = (ZoneCropObservationPublic);
 
 export type CreateUserCreateUserData = {
     requestBody: PrivateUserCreate;
 };
 
 export type CreateUserCreateUserResponse = (UserPublic);
-
-export type GreenhouseListZonesResponse = (Array<ZonePublic>);
-
-export type GreenhouseCreateZoneData = {
-    requestBody: ZoneCreate;
-};
-
-export type GreenhouseCreateZoneResponse = (ZonePublic);
-
-export type GreenhouseGetZoneData = {
-    zoneId: string;
-};
-
-export type GreenhouseGetZoneResponse = (ZonePublic);
-
-export type GreenhouseUpdateZoneData = {
-    requestBody: ZoneUpdate;
-    zoneId: string;
-};
-
-export type GreenhouseUpdateZoneResponse = (ZonePublic);
-
-export type GreenhouseDeleteZoneData = {
-    zoneId: string;
-};
-
-export type GreenhouseDeleteZoneResponse = (Message);
-
-export type GreenhouseUpdateZoneReadingsData = {
-    zoneId: string;
-};
-
-export type GreenhouseUpdateZoneReadingsResponse = (ZoneReading);
-
-export type GreenhouseGetZoneReadingData = {
-    zoneId: string;
-};
-
-export type GreenhouseGetZoneReadingResponse = (ZoneReading);
-
-export type GreenhouseGetZoneReadingsData = {
-    zoneId: string;
-};
-
-export type GreenhouseGetZoneReadingsResponse = (Array<ZoneReading>);
-
-export type GreenhouseCreateSensorData = {
-    requestBody: SensorCreate;
-};
-
-export type GreenhouseCreateSensorResponse = (SensorPublic);
-
-export type GreenhouseListSensorsData = {
-    zoneId: string;
-};
-
-export type GreenhouseListSensorsResponse = (Array<SensorPublic>);
-
-export type GreenhouseGetSensorData = {
-    sensorId: string;
-};
-
-export type GreenhouseGetSensorResponse = (SensorPublic);
-
-export type GreenhouseUpdateSensorData = {
-    requestBody: SensorUpdate;
-    sensorId: string;
-};
-
-export type GreenhouseUpdateSensorResponse = (SensorPublic);
-
-export type GreenhouseDeleteSensorData = {
-    sensorId: string;
-};
-
-export type GreenhouseDeleteSensorResponse = (unknown);
 
 export type GreenhousesReadGreenhousesData = {
     limit?: number;
@@ -471,6 +621,18 @@ export type GreenhousesDeleteGreenhouseData = {
 
 export type GreenhousesDeleteGreenhouseResponse = (Message);
 
+export type GreenhousesListGreenhouseSensorsData = {
+    greenhouseId: string;
+};
+
+export type GreenhousesListGreenhouseSensorsResponse = (Array<SensorPublic>);
+
+export type GreenhousesListUnmappedGreenhouseSensorsData = {
+    greenhouseId: string;
+};
+
+export type GreenhousesListUnmappedGreenhouseSensorsResponse = (Array<SensorPublic>);
+
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;
 };
@@ -496,6 +658,38 @@ export type LoginRecoverPasswordHtmlContentData = {
 };
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
+
+export type SensorsCreateSensorData = {
+    controllerId: string;
+    requestBody: SensorCreate;
+};
+
+export type SensorsCreateSensorResponse = (SensorPublic);
+
+export type SensorsListSensorsData = {
+    controllerId: string;
+};
+
+export type SensorsListSensorsResponse = (Array<SensorPublic>);
+
+export type SensorsGetSensorData = {
+    sensorId: string;
+};
+
+export type SensorsGetSensorResponse = (SensorPublic);
+
+export type SensorsUpdateSensorData = {
+    requestBody: SensorUpdate;
+    sensorId: string;
+};
+
+export type SensorsUpdateSensorResponse = (SensorPublic);
+
+export type SensorsDeleteSensorData = {
+    sensorId: string;
+};
+
+export type SensorsDeleteSensorResponse = (unknown);
 
 export type UsersReadUsersData = {
     limit?: number;
@@ -552,3 +746,58 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+export type ZonesCreateZoneData = {
+    greenhouseId: string;
+    requestBody: ZoneCreate;
+};
+
+export type ZonesCreateZoneResponse = (ZonePublic);
+
+export type ZonesListZonesData = {
+    greenhouseId: string;
+};
+
+export type ZonesListZonesResponse = (Array<ZonePublic>);
+
+export type ZonesGetZoneData = {
+    greenhouseId: string;
+    zoneId: string;
+};
+
+export type ZonesGetZoneResponse = (ZonePublic);
+
+export type ZonesUpdateZoneData = {
+    greenhouseId: string;
+    requestBody: ZoneUpdate;
+    zoneId: string;
+};
+
+export type ZonesUpdateZoneResponse = (ZonePublic);
+
+export type ZonesDeleteZoneData = {
+    greenhouseId: string;
+    zoneId: string;
+};
+
+export type ZonesDeleteZoneResponse = (Message);
+
+export type ZonesListZoneSensorsData = {
+    zoneId: string;
+};
+
+export type ZonesListZoneSensorsResponse = (Array<SensorPublic>);
+
+export type ZonesMapSensorToZoneEndpointData = {
+    requestBody: ZoneSensorMap;
+    zoneId: string;
+};
+
+export type ZonesMapSensorToZoneEndpointResponse = (ZonePublic);
+
+export type ZonesUnmapSensorFromZoneEndpointData = {
+    sensorType: SensorType;
+    zoneId: string;
+};
+
+export type ZonesUnmapSensorFromZoneEndpointResponse = (ZonePublic);

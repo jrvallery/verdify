@@ -96,7 +96,7 @@ function ClimateDetail() {
   
     const { data, isLoading, isError, error } = useQuery({
         queryKey: ['greenhouseClimate', greenhouseId],
-        queryFn: () => ClimateService.greenhouseReadClimate({ greenhouseId }),
+        queryFn: () => ClimateService.readClimate({ greenhouseId }),
         refetchInterval: 10_000,
         retry: 3,
         staleTime: 60_000,

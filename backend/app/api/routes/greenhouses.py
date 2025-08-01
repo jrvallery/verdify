@@ -13,7 +13,10 @@ from app.models import (
     GreenhousesPublic,
     GreenhouseUpdate,
     Message,
+    SensorPublic,
 )
+from app.crud.sensors import list_sensors_by_greenhouse, list_unmapped_sensors_by_greenhouse
+from app.crud.greenhouses import get_greenhouse as crud_get_greenhouse
 
 router = APIRouter()
 @router.get("/", response_model=GreenhousesPublic)
@@ -105,3 +108,37 @@ def delete_greenhouse(
     session.delete(gh)
     session.commit()
     return Message(message="Greenhouse deleted successfully")
+
+
+@router.get("/{greenhouse_id}/listsensors", response_model=List[SensorPublic])
+def list_greenhouse_sensors(
+    greenhouse_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser
+):
+    """List all sensors for a specific greenhouse."""
+    greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
+    if not greenhouse:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+    
+    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    return list_sensors_by_greenhouse(session, greenhouse_id)
+
+
+@router.get("/{greenhouse_id}/unmapped-sensors", response_model=List[SensorPublic])
+def list_unmapped_greenhouse_sensors(
+    greenhouse_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser
+):
+    """List all unmapped sensors for a specific greenhouse."""
+    greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
+    if not greenhouse:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+    
+    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    return list_unmapped_sensors_by_greenhouse(session, greenhouse_id)

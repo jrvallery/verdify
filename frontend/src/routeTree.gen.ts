@@ -24,7 +24,7 @@ import { Route as LayoutAdminImport } from './routes/_layout/admin'
 import { Route as GreenhousesGreenhouseIdZonesImport } from './routes/greenhouses/$greenhouseId/zones'
 import { Route as GreenhousesGreenhouseIdSettingsImport } from './routes/greenhouses/$greenhouseId/settings'
 import { Route as GreenhousesGreenhouseIdGraphsImport } from './routes/greenhouses/$greenhouseId/graphs'
-import { Route as GreenhousesGreenhouseIdEquipmentImport } from './routes/greenhouses/$greenhouseId/equipment'
+import { Route as GreenhousesGreenhouseIdControllerImport } from './routes/greenhouses/$greenhouseId/controller'
 import { Route as GreenhousesGreenhouseIdClimateImport } from './routes/greenhouses/$greenhouseId/climate'
 
 // Create/Update Routes
@@ -97,9 +97,9 @@ const GreenhousesGreenhouseIdGraphsRoute =
     getParentRoute: () => GreenhousesGreenhouseIdRoute,
   } as any)
 
-const GreenhousesGreenhouseIdEquipmentRoute =
-  GreenhousesGreenhouseIdEquipmentImport.update({
-    path: '/equipment',
+const GreenhousesGreenhouseIdControllerRoute =
+  GreenhousesGreenhouseIdControllerImport.update({
+    path: '/controller',
     getParentRoute: () => GreenhousesGreenhouseIdRoute,
   } as any)
 
@@ -157,8 +157,8 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GreenhousesGreenhouseIdClimateImport
       parentRoute: typeof GreenhousesGreenhouseIdImport
     }
-    '/greenhouses/$greenhouseId/equipment': {
-      preLoaderRoute: typeof GreenhousesGreenhouseIdEquipmentImport
+    '/greenhouses/$greenhouseId/controller': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdControllerImport
       parentRoute: typeof GreenhousesGreenhouseIdImport
     }
     '/greenhouses/$greenhouseId/graphs': {
@@ -191,7 +191,7 @@ export const routeTree = rootRoute.addChildren([
   SignupRoute,
   GreenhousesGreenhouseIdRoute.addChildren([
     GreenhousesGreenhouseIdClimateRoute,
-    GreenhousesGreenhouseIdEquipmentRoute,
+    GreenhousesGreenhouseIdControllerRoute,
     GreenhousesGreenhouseIdGraphsRoute,
     GreenhousesGreenhouseIdSettingsRoute,
     GreenhousesGreenhouseIdZonesRoute,

@@ -16,16 +16,18 @@ def create_zone(session: Session, z_in: ZoneCreate) -> Zone:
     session.refresh(zone)
     return zone
 
-def get_zone(session: Session, z_id: uuid.UUID) -> Zone | None:
+def get_zone(session: Session, zone_id: uuid.UUID) -> Zone | None:
     """
     Retrieve a Zone by its ID.
     """
-    return session.get(Zone, z_id)
+    return session.get(Zone, zone_id)
 
-def list_zones(session: Session) -> List[Zone]:
+def list_zones(session: Session, greenhouse_id: uuid.UUID | None = None) -> List[Zone]:
     """
-    List all zones.
+    List zones, optionally filtered by greenhouse.
     """
+    if greenhouse_id:
+        return session.exec(select(Zone).where(Zone.greenhouse_id == greenhouse_id)).all()
     return session.exec(select(Zone)).all()
 
 def update_zone(session: Session, zone: Zone, z_in: ZoneUpdate) -> Zone:
