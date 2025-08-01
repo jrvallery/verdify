@@ -1,9 +1,31 @@
 import uuid
+from datetime import datetime, timezone
 
 from pydantic import EmailStr
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, JSON
+from typing import Optional, Dict, Any
+from enum import Enum
 
+class LocationEnum(str, Enum):
+    N  = "N"
+    NE = "NE"
+    E  = "E"
+    SE = "SE"
+    S  = "S"
+    SW = "SW"
+    W  = "W"
+    NW = "NW"
 
+class SensorType(str, Enum):
+    TEMPERATURE = "temperature"
+    HUMIDITY = "humidity"
+    CO2 = "co2"
+    LIGHT = "light"
+    SOIL_MOISTURE = "soil_moisture"
+
+#-------------------------------------------------------
+#USER MODELS
+#-------------------------------------------------------
 # Shared properties
 class UserBase(SQLModel):
     email: EmailStr = Field(unique=True, index=True, max_length=255)
@@ -43,7 +65,7 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
-    items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
+    greenhouses: list["Greenhouse"] = Relationship(back_populates="owner", cascade_delete=True)
 
 
 # Properties to return via API, id is always required
@@ -56,43 +78,311 @@ class UsersPublic(SQLModel):
     count: int
 
 
-# Shared properties
-class ItemBase(SQLModel):
+#-------------------------------------------------------
+#GREENHOUSE MODELS
+#-------------------------------------------------------
+class GreenhouseBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=255)
+    is_active: bool = Field(default=True, description="Whether this greenhouse is active")
+    type: Optional[str] = Field(default="standard", description="Greenhouse style/type")
+
+    temperature: float = Field(default=0.0, description="Current internal temperature")
+    humidity: float = Field(default=0.0, description="Current internal humidity")
+    outside_temperature: float = Field(default=0.0, description="Current external temperature")
+    outside_humidity: float = Field(default=0.0, description="Current external humidity")
+
+    latitude: Optional[float] = Field(default=None, description="Latitude of greenhouse location")
+    longitude: Optional[float] = Field(default=None, description="Longitude of greenhouse location")
 
 
-# Properties to receive on item creation
-class ItemCreate(ItemBase):
+class Greenhouse(GreenhouseBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    owner: "User" = Relationship(back_populates="greenhouses")
+    zones: list["Zone"] = Relationship(back_populates="greenhouse", cascade_delete=True)
+    controllers: list["Controller"] = Relationship(back_populates="greenhouse", cascade_delete=True)
+    #climate_history: list["GreenhouseClimateHistory"] = Relationship(back_populates="greenhouse", cascade_delete=True)
+
+
+class GreenhouseCreate(GreenhouseBase):
     pass
 
 
-# Properties to receive on item update
-class ItemUpdate(ItemBase):
-    title: str | None = Field(default=None, min_length=1, max_length=255)  # type: ignore
+class GreenhouseUpdate(SQLModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    outside_temperature: Optional[float] = None
+    outside_humidity: Optional[float] = None
+    type: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
-# Database model, database table inferred from class name
-class Item(ItemBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    title: str = Field(max_length=255)
-    owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, ondelete="CASCADE"
-    )
-    owner: User | None = Relationship(back_populates="items")
-
-
-# Properties to return via API, id is always required
-class ItemPublic(ItemBase):
+class GreenhousePublic(GreenhouseBase):
     id: uuid.UUID
     owner_id: uuid.UUID
+    is_active: bool
 
 
-class ItemsPublic(SQLModel):
-    data: list[ItemPublic]
+class GreenhousesPublic(SQLModel):
+    data: list[GreenhousePublic]
     count: int
 
 
+class GreenhouseClimateUpdate(SQLModel):
+    temperature: float
+    humidity: float
+    outside_temperature: Optional[float] = None
+    outside_humidity: Optional[float] = None
+
+
+class GreenhouseClimateRead(SQLModel):
+    temperature: float
+    humidity: float
+    outside_temperature: float
+    outside_humidity: float
+#-------------------------------------------------------
+#ZONE MODELS
+#-------------------------------------------------------
+class ZoneBase(SQLModel):
+    zone_number: int = Field(..., description="Numeric identifier within greenhouse")
+    location: LocationEnum = Field(..., description="N, E, S, W, NE, SE, SW, NW")
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+
+class Zone(ZoneBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    greenhouse_id: uuid.UUID = Field(foreign_key="greenhouse.id", nullable=False, ondelete="CASCADE")
+    greenhouse: "Greenhouse" = Relationship(back_populates="zones")
+
+    temperature_sensor_id: Optional[uuid.UUID] = Field(foreign_key="sensor.id", nullable=True)
+    humidity_sensor_id: Optional[uuid.UUID] = Field(foreign_key="sensor.id", nullable=True)
+    co2_sensor_id: Optional[uuid.UUID] = Field(foreign_key="sensor.id", nullable=True)
+    light_sensor_id: Optional[uuid.UUID] = Field(foreign_key="sensor.id", nullable=True)
+    soil_moisture_sensor_id: Optional[uuid.UUID] = Field(foreign_key="sensor.id", nullable=True)
+
+    # Historical zone crops (all instances)
+    zone_crops: list["ZoneCrop"] = Relationship(back_populates="zone", cascade_delete=True)
+
+    # Helper property to get current active crop
+    @property
+    def current_crop(self) -> Optional["ZoneCrop"]:
+        """Get the currently active crop for this zone"""
+        for zone_crop in self.zone_crops:
+            if zone_crop.is_active:
+                return zone_crop
+        return None
+
+class ZoneCreate(ZoneBase):
+    greenhouse_id: uuid.UUID
+
+class ZonePublic(ZoneBase):
+    id: uuid.UUID
+    greenhouse_id: uuid.UUID
+
+class ZoneUpdate(SQLModel):
+    zone_number: Optional[int] = None
+    location: Optional[LocationEnum] = None
+
+class ZoneRead(ZoneBase):
+    id: uuid.UUID
+    sensors: list["Sensor"] = []
+
+class ZoneReading(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    zone_id: uuid.UUID = Field(foreign_key="zone.id")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    temperature: float
+    humidity: float
+
+# New model for sensor mapping
+class ZoneSensorMap(SQLModel):
+    sensor_id: uuid.UUID
+    type: SensorType
+
+
+#-------------------------------------------------------
+#CROP MODELS (Global crop templates)
+#-------------------------------------------------------
+class CropBase(SQLModel):
+    name: str = Field(..., max_length=255, description="Name of the crop (e.g., 'Tomato')")
+    description: Optional[str] = Field(default=None, max_length=500)
+    expected_yield_per_sqm: Optional[float] = Field(default=None, description="Expected yield per square meter")
+    growing_days: Optional[int] = Field(default=None, description="Expected days from seed to harvest")
+
+class Crop(CropBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    recipe: Optional[dict[str, Any]] = Field(default=None, sa_type=JSON, description="JSON recipe for the crop")
+    
+    # No direct relationship to zones - crops are global templates
+
+class CropCreate(CropBase):
+    recipe: Optional[dict[str, Any]] = None
+
+class CropPublic(CropBase):
+    id: uuid.UUID
+    recipe: Optional[dict[str, Any]] = None
+
+class CropUpdate(SQLModel):
+    name: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=500)
+    recipe: Optional[dict[str, Any]] = None
+    expected_yield_per_sqm: Optional[float] = None
+    growing_days: Optional[int] = None
+
+#-------------------------------------------------------
+#ZONE CROP MODELS (Zone-specific crop instance)
+#-------------------------------------------------------
+class ZoneCropBase(SQLModel):
+    start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    end_date: Optional[datetime] = Field(default=None)
+    is_active: bool = Field(default=True)
+    final_yield: Optional[float] = Field(default=None, description="Total yield produced")
+    area_sqm: Optional[float] = Field(default=None, description="Area used in square meters")
+
+class ZoneCrop(ZoneCropBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    crop_id: uuid.UUID = Field(foreign_key="crop.id", nullable=False, ondelete="CASCADE")
+    zone_id: uuid.UUID = Field(foreign_key="zone.id", nullable=False, ondelete="CASCADE")
+    
+    crop: "Crop" = Relationship()  # Reference to global crop template
+    zone: "Zone" = Relationship(back_populates="zone_crops")  # Fixed relationship name
+    observations: list["ZoneCropObservation"] = Relationship(back_populates="zone_crop", cascade_delete=True)
+
+class ZoneCropCreate(ZoneCropBase):
+    crop_id: uuid.UUID
+    zone_id: uuid.UUID
+
+class ZoneCropPublic(ZoneCropBase):
+    id: uuid.UUID
+    crop_id: uuid.UUID
+    zone_id: uuid.UUID
+
+class ZoneCropUpdate(SQLModel):
+    crop_id: Optional[uuid.UUID] = None  # Allow changing the crop template
+    end_date: Optional[datetime] = None
+    is_active: Optional[bool] = None
+    final_yield: Optional[float] = None
+    area_sqm: Optional[float] = None
+
+#-------------------------------------------------------
+#ZONE CROP OBSERVATION MODELS
+#-------------------------------------------------------
+class ZoneCropObservationBase(SQLModel):
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When observation was made")
+    notes: Optional[str] = Field(default=None, max_length=2000)
+    image_url: Optional[str] = Field(default=None, max_length=500, description="URL to uploaded image")
+    height_cm: Optional[float] = Field(default=None, description="Plant height in cm")
+    health_score: Optional[int] = Field(default=None, ge=1, le=10, description="Health score 1-10")
+
+class ZoneCropObservation(ZoneCropObservationBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    zone_crop_id: uuid.UUID = Field(foreign_key="zonecrop.id", nullable=False, ondelete="CASCADE")
+    
+    zone_crop: "ZoneCrop" = Relationship(back_populates="observations")
+
+class ZoneCropObservationCreate(ZoneCropObservationBase):
+    zone_crop_id: uuid.UUID
+
+class ZoneCropObservationPublic(ZoneCropObservationBase):
+    id: uuid.UUID
+    zone_crop_id: uuid.UUID
+
+class ZoneCropObservationUpdate(SQLModel):
+    notes: Optional[str] = Field(default=None, max_length=2000)
+    image_url: Optional[str] = Field(default=None, max_length=500)
+    height_cm: Optional[float] = None
+    health_score: Optional[int] = Field(default=None, ge=1, le=10)
+
+#-------------------------------------------------------
+#Controller MODELS
+#-------------------------------------------------------
+class ControllerBase(SQLModel):
+    name: str = Field(..., description="Controller name, e.g. 'fan', 'heater'")
+    model: Optional[str] = None
+    # you can add other fields later (serial number, specs, etc.)
+
+class Controller(ControllerBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    greenhouse_id: uuid.UUID = Field(foreign_key="greenhouse.id", nullable=False, ondelete="CASCADE")
+    greenhouse: "Greenhouse" = Relationship(back_populates="controllers")
+    sensors: list["Sensor"] = Relationship(back_populates="controller")
+    equipment: list["Equipment"] = Relationship(back_populates="controller", cascade_delete=True)
+
+class ControllerCreate(ControllerBase):
+    greenhouse_id: uuid.UUID
+
+class ControllerPublic(ControllerBase):
+    id: uuid.UUID
+    greenhouse_id: uuid.UUID
+
+class ControllerUpdate(SQLModel):
+    name: Optional[str] = None
+    model: Optional[str] = None
+
+#-------------------------------------------------------
+#SENSOR MODELS
+#-------------------------------------------------------
+class SensorBase(SQLModel):
+    name: str = Field(..., description="Sensor name/identifier")
+    type: SensorType = Field(..., description="Type of sensor")
+    model: Optional[str] = Field(default=None, description="Model/manufacturer information")
+    value: Optional[float] = Field(default=None, description="Current sensor value")
+    unit: Optional[str] = Field(default=None, description="Unit of measurement")
+    is_mapped: bool = Field(default=False, description="Whether this sensor is mapped to a zone")
+
+class Sensor(SensorBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    controller_id: uuid.UUID = Field(foreign_key="controller.id", nullable=False, ondelete="CASCADE")
+    controller: "Controller" = Relationship(back_populates="sensors")
+
+class SensorCreate(SensorBase):
+    controller_id: uuid.UUID
+
+class SensorPublic(SensorBase):
+    id: uuid.UUID
+    controller_id: uuid.UUID
+
+class SensorUpdate(SQLModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    model: Optional[str] = None
+    value: Optional[float] = None
+    unit: Optional[str] = None
+    controller_id: Optional[uuid.UUID] = None
+
+#-------------------------------------------------------
+#Equipment MODELS
+#-------------------------------------------------------
+class EquipmentBase(SQLModel):
+    name: str = Field(..., description="Equipment name, e.g. 'fan', 'heater'")
+    model: Optional[str] = None
+    status: bool = Field(..., description="Current status of the equipment (e.g. 'on', 'off')")
+
+class Equipment(EquipmentBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    controller_id: uuid.UUID = Field(foreign_key="controller.id", nullable=False, ondelete="CASCADE")
+    controller: "Controller" = Relationship(back_populates="equipment")
+
+class EquipmentCreate(EquipmentBase):
+    controller_id: uuid.UUID
+
+class EquipmentPublic(EquipmentBase):
+    id: uuid.UUID
+    controller_id: uuid.UUID
+
+class EquipmentUpdate(SQLModel):
+    name: Optional[str] = None
+    model: Optional[str] = None
+    status: bool = None
+
+#-------------------------------------------------------
+#MISC MODELS
+#-------------------------------------------------------
 # Generic message
 class Message(SQLModel):
     message: str
@@ -112,3 +402,4 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=40)
+

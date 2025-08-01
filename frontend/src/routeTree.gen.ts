@@ -17,9 +17,15 @@ import { Route as RecoverPasswordImport } from './routes/recover-password'
 import { Route as LoginImport } from './routes/login'
 import { Route as LayoutImport } from './routes/_layout'
 import { Route as LayoutIndexImport } from './routes/_layout/index'
+import { Route as GreenhousesGreenhouseIdImport } from './routes/greenhouses/$greenhouseId'
 import { Route as LayoutSettingsImport } from './routes/_layout/settings'
-import { Route as LayoutItemsImport } from './routes/_layout/items'
+import { Route as LayoutGreenhousesImport } from './routes/_layout/greenhouses'
 import { Route as LayoutAdminImport } from './routes/_layout/admin'
+import { Route as GreenhousesGreenhouseIdZonesImport } from './routes/greenhouses/$greenhouseId/zones'
+import { Route as GreenhousesGreenhouseIdSettingsImport } from './routes/greenhouses/$greenhouseId/settings'
+import { Route as GreenhousesGreenhouseIdGraphsImport } from './routes/greenhouses/$greenhouseId/graphs'
+import { Route as GreenhousesGreenhouseIdControllerImport } from './routes/greenhouses/$greenhouseId/controller'
+import { Route as GreenhousesGreenhouseIdClimateImport } from './routes/greenhouses/$greenhouseId/climate'
 
 // Create/Update Routes
 
@@ -53,13 +59,18 @@ const LayoutIndexRoute = LayoutIndexImport.update({
   getParentRoute: () => LayoutRoute,
 } as any)
 
+const GreenhousesGreenhouseIdRoute = GreenhousesGreenhouseIdImport.update({
+  path: '/greenhouses/$greenhouseId',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const LayoutSettingsRoute = LayoutSettingsImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
 } as any)
 
-const LayoutItemsRoute = LayoutItemsImport.update({
-  path: '/items',
+const LayoutGreenhousesRoute = LayoutGreenhousesImport.update({
+  path: '/greenhouses',
   getParentRoute: () => LayoutRoute,
 } as any)
 
@@ -67,6 +78,36 @@ const LayoutAdminRoute = LayoutAdminImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
 } as any)
+
+const GreenhousesGreenhouseIdZonesRoute =
+  GreenhousesGreenhouseIdZonesImport.update({
+    path: '/zones',
+    getParentRoute: () => GreenhousesGreenhouseIdRoute,
+  } as any)
+
+const GreenhousesGreenhouseIdSettingsRoute =
+  GreenhousesGreenhouseIdSettingsImport.update({
+    path: '/settings',
+    getParentRoute: () => GreenhousesGreenhouseIdRoute,
+  } as any)
+
+const GreenhousesGreenhouseIdGraphsRoute =
+  GreenhousesGreenhouseIdGraphsImport.update({
+    path: '/graphs',
+    getParentRoute: () => GreenhousesGreenhouseIdRoute,
+  } as any)
+
+const GreenhousesGreenhouseIdControllerRoute =
+  GreenhousesGreenhouseIdControllerImport.update({
+    path: '/controller',
+    getParentRoute: () => GreenhousesGreenhouseIdRoute,
+  } as any)
+
+const GreenhousesGreenhouseIdClimateRoute =
+  GreenhousesGreenhouseIdClimateImport.update({
+    path: '/climate',
+    getParentRoute: () => GreenhousesGreenhouseIdRoute,
+  } as any)
 
 // Populate the FileRoutesByPath interface
 
@@ -96,17 +137,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminImport
       parentRoute: typeof LayoutImport
     }
-    '/_layout/items': {
-      preLoaderRoute: typeof LayoutItemsImport
+    '/_layout/greenhouses': {
+      preLoaderRoute: typeof LayoutGreenhousesImport
       parentRoute: typeof LayoutImport
     }
     '/_layout/settings': {
       preLoaderRoute: typeof LayoutSettingsImport
       parentRoute: typeof LayoutImport
     }
+    '/greenhouses/$greenhouseId': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdImport
+      parentRoute: typeof rootRoute
+    }
     '/_layout/': {
       preLoaderRoute: typeof LayoutIndexImport
       parentRoute: typeof LayoutImport
+    }
+    '/greenhouses/$greenhouseId/climate': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdClimateImport
+      parentRoute: typeof GreenhousesGreenhouseIdImport
+    }
+    '/greenhouses/$greenhouseId/controller': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdControllerImport
+      parentRoute: typeof GreenhousesGreenhouseIdImport
+    }
+    '/greenhouses/$greenhouseId/graphs': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdGraphsImport
+      parentRoute: typeof GreenhousesGreenhouseIdImport
+    }
+    '/greenhouses/$greenhouseId/settings': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdSettingsImport
+      parentRoute: typeof GreenhousesGreenhouseIdImport
+    }
+    '/greenhouses/$greenhouseId/zones': {
+      preLoaderRoute: typeof GreenhousesGreenhouseIdZonesImport
+      parentRoute: typeof GreenhousesGreenhouseIdImport
     }
   }
 }
@@ -116,7 +181,7 @@ declare module '@tanstack/react-router' {
 export const routeTree = rootRoute.addChildren([
   LayoutRoute.addChildren([
     LayoutAdminRoute,
-    LayoutItemsRoute,
+    LayoutGreenhousesRoute,
     LayoutSettingsRoute,
     LayoutIndexRoute,
   ]),
@@ -124,6 +189,13 @@ export const routeTree = rootRoute.addChildren([
   RecoverPasswordRoute,
   ResetPasswordRoute,
   SignupRoute,
+  GreenhousesGreenhouseIdRoute.addChildren([
+    GreenhousesGreenhouseIdClimateRoute,
+    GreenhousesGreenhouseIdControllerRoute,
+    GreenhousesGreenhouseIdGraphsRoute,
+    GreenhousesGreenhouseIdSettingsRoute,
+    GreenhousesGreenhouseIdZonesRoute,
+  ]),
 ])
 
 /* prettier-ignore-end */

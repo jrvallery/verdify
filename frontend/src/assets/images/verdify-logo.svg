@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="400" viewBox="0 0 1000 400">
+  <text
+    x="50%"
+    y="50%"
+    font-family="Impact, Arial Black, sans-serif"
+    font-size="300"
+    font-weight="bold"
+    fill="#5AB286"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >
+    Verdify
+  </text>
+</svg>
