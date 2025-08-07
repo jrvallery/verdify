@@ -16,6 +16,7 @@ from app.models import (
     SensorPublic,
     ZoneSensorMap,
     SensorType,
+
 )
 from app.crud.zone import (
     create_zone as crud_create_zone,
@@ -187,3 +188,21 @@ def unmap_sensor_from_zone_endpoint(
         return unmap_sensor_from_zone(session, zone_id, sensor_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@router.get("/{zone_id}/hasCrop", response_model=bool)
+def has_crop(
+    zone_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser
+) -> bool:
+    """Check if the zone has an active crop."""
+    zone = crud_get_zone(session, zone_id)
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    
+    if not (current_user.is_superuser or zone.greenhouse.owner_id == current_user.id):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    if zone.current_crop:
+        return True
+    return False
