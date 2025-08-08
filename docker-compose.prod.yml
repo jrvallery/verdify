@@ -18,7 +18,8 @@ services:
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
       - POSTGRES_PASSWORD_FILE=/run/secrets/verdify_postgres_password
-      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_USER=veridify_db_user
+      - POSTGRES_DB=veridify_db
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
     secrets:
       - verdify_postgres_password
