@@ -51,7 +51,7 @@ services:
       - POSTGRES_PASSWORD_FILE=/run/secrets/verdify_postgres_password
       - SENTRY_DSN=${SENTRY_DSN}
     networks:
-      - traefik-public
+      - shared-services
       - default
     secrets:
       - verdify_secret_key
@@ -90,12 +90,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - traefik-public
+      - shared-services
       - default
     labels:
       - traefik.enable=true
-      - traefik.docker.network=traefik-public
-      - traefik.constraint-label=traefik-public
+      - traefik.docker.network=shared-services
+      - traefik.constraint-label=shared-services
       - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.rule=Host(`api.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.entrypoints=http
@@ -135,7 +135,7 @@ volumes:
   app-db-data:
 
 networks:
-  traefik-public:
+  shared-services:
     external: true
 
 secrets:
