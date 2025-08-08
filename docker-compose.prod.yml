@@ -12,14 +12,15 @@ services:
       start_period: 30s
       timeout: 10s
     volumes:
-      - app-db-data:/var/lib/postgresql/data/pgdata
+      - /mnt/stacks/verdify/db:/var/lib/postgresql/data/pgdata
+
     env_file:
       - .env.prod
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
       - POSTGRES_PASSWORD_FILE=/run/secrets/verdify_postgres_password
-      - POSTGRES_USER=veridify_db_user
-      - POSTGRES_DB=veridify_db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
     secrets:
       - verdify_postgres_password
 
@@ -130,8 +131,6 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=le
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 
-volumes:
-  app-db-data:
 
 networks:
   shared-services:
