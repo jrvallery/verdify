@@ -28,9 +28,7 @@ services:
     image: ${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}
     restart: on-failure
     depends_on:
-      db:
-        condition: service_healthy
-        restart: true
+      - db
     env_file:
       - .env.prod
     command: bash scripts/prestart.sh
