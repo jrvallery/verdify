@@ -33,7 +33,7 @@ function Zones() {
 
   const { data: greenhouse } = useQuery({
     queryKey: ["greenhouse", greenhouseId],
-    queryFn: () => GreenhousesService.getGreenhouse({ greenhouseId }),
+    queryFn: () => GreenhousesService.readGreenhouse({ greenhouseId }),
   })
 
   const {
@@ -51,11 +51,11 @@ function Zones() {
   return (
     <Container maxW="full">
       <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
-        {greenhouse?.name ?? "Zones Management"}
+        {greenhouse?.title ?? "Zones Management"}
       </Heading>
-      {greenhouse?.location && (
+      {greenhouse?.latitude && (
         <Text mt={1} textAlign={{ base: "center", md: "left" }} color="gray.500">
-          {greenhouse.location}
+          {greenhouse.longitude}
         </Text>
       )}
 
