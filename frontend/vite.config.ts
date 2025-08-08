@@ -11,4 +11,13 @@ export default defineConfig({
     },
   },
   plugins: [react(), TanStackRouterVite()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000', // Your FastAPI backend URL
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 })

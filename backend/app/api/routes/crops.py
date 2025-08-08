@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlmodel import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
+from pathlib import Path
+import shutil
+import uuid
 
 from app.api.deps import get_current_user, SessionDep  # Changed get_session to SessionDep
 from app.crud.crop import crop
@@ -258,25 +261,101 @@ def list_zone_crop_observations(
     
     return active_crop.observations
 
-@router.post("/zones/{zone_id}/observations/", response_model=ZoneCropObservationPublic)
-def create_zone_crop_observation(
-    zone_id: str, 
-    observation: ZoneCropObservationCreate, 
+@router.get("/zone-crops/{zone_crop_id}/observations/", response_model=List[ZoneCropObservationPublic])
+def list_zone_crop_observations_by_id(
+    zone_crop_id: str,
     session: SessionDep,
     current_user: User = Depends(get_current_user)
 ):
+    """List observations for a specific zone crop (including historical crops)"""
+    zone_crop = session.get(ZoneCrop, zone_crop_id)
+    if not zone_crop:
+        raise HTTPException(status_code=404, detail="Zone crop not found")
+    
+    # Verify access through zone ownership
+    zone = verify_zone_access(zone_crop.zone_id, current_user, session)
+    
+    return zone_crop.observations
+
+UPLOAD_DIR = Path("static/uploads/observations")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+@router.post("/zones/{zone_id}/observations/", response_model=ZoneCropObservationPublic)
+def create_zone_crop_observation(
+    zone_id: str,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+    file: Optional[UploadFile] = File(None),
+    # Use Form fields instead of Pydantic model for multipart data
+    notes: Optional[str] = Form(None),
+    height_cm: Optional[float] = Form(None),
+    health_score: Optional[int] = Form(None),
+    observed_at: Optional[str] = Form(None)
+):
     """Add observation to the active crop in a zone"""
+    # Debug logging
+    print(f"Received form data:")
+    print(f"  notes: {notes} (type: {type(notes)})")
+    print(f"  height_cm: {height_cm} (type: {type(height_cm)})")
+    print(f"  health_score: {health_score} (type: {type(health_score)})")
+    print(f"  file: {file.filename if file else None}")
+    
     zone = verify_zone_access(zone_id, current_user, session)
     
     active_crop = next((zc for zc in zone.zone_crops if zc.is_active), None)
     if not active_crop:
         raise HTTPException(status_code=404, detail="No active crop planted in this zone")
     
-    db_observation = ZoneCropObservation.model_validate(
-        observation, 
-        update={"zone_crop_id": active_crop.id}
-    )
-    session.add(db_observation)
-    session.commit()
-    session.refresh(db_observation)
-    return db_observation
+    # Handle file upload if provided
+    image_url = None
+    if file and file.filename:
+        ext = file.filename.split(".")[-1]
+        observation_id = uuid.uuid4()
+        greenhouse_id = zone.greenhouse_id
+
+        filename = f"{current_user.id}_{greenhouse_id}_{zone_id}_{active_crop.id}_{observation_id}.{ext}"
+        file_path = UPLOAD_DIR / filename
+
+        # Save file
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        image_url = str(file_path)
+    
+    # Parse datetime if provided, otherwise use current time
+    parsed_observed_at = datetime.now(timezone.utc)
+    if observed_at:
+        try:
+            parsed_observed_at = datetime.fromisoformat(observed_at.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid datetime format")
+    
+    # Create observation object with better error handling
+    try:
+        observation_data = {
+            "zone_crop_id": active_crop.id,
+            "observed_at": parsed_observed_at
+        }
+        
+        # Only add fields that are not None
+        if notes is not None and notes.strip():
+            observation_data["notes"] = notes.strip()
+        if height_cm is not None:
+            observation_data["height_cm"] = float(height_cm)
+        if health_score is not None:
+            observation_data["health_score"] = int(health_score)
+        if image_url is not None:
+            observation_data["image_url"] = image_url
+        
+        print(f"Creating observation with data: {observation_data}")
+        
+        db_observation = ZoneCropObservation(**observation_data)
+        session.add(db_observation)
+        session.commit()
+        session.refresh(db_observation)
+        return db_observation
+        
+    except Exception as e:
+        print(f"Error creating observation: {e}")
+        session.rollback()
+        raise HTTPException(status_code=400, detail=f"Error creating observation: {str(e)}")
+

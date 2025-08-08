@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ClimateUpdateClimateData, ClimateUpdateClimateResponse, ClimateReadClimateData, ClimateReadClimateResponse, ControllersCreateControllerData, ControllersCreateControllerResponse, ControllersListControllersData, ControllersListControllersResponse, ControllersGetControllerData, ControllersGetControllerResponse, ControllersUpdateControllerData, ControllersUpdateControllerResponse, ControllersDeleteControllerData, ControllersDeleteControllerResponse, CropsListCropsResponse, CropsCreateCropData, CropsCreateCropResponse, CropsGetCropData, CropsGetCropResponse, CropsUpdateCropData, CropsUpdateCropResponse, CropsDeleteCropData, CropsDeleteCropResponse, CropsGetZoneCropData, CropsGetZoneCropResponse, CropsPlantCropInZoneData, CropsPlantCropInZoneResponse, CropsUpdateZoneCropData, CropsUpdateZoneCropResponse, CropsHarvestCropFromZoneData, CropsHarvestCropFromZoneResponse, CropsListZoneCropHistoryData, CropsListZoneCropHistoryResponse, CropsPermanentlyDeleteZoneCropData, CropsPermanentlyDeleteZoneCropResponse, CropsGetZoneCropAnalyticsData, CropsGetZoneCropAnalyticsResponse, CropsListZoneCropObservationsData, CropsListZoneCropObservationsResponse, CropsCreateZoneCropObservationData, CropsCreateZoneCropObservationResponse, CreateUserCreateUserData, CreateUserCreateUserResponse, GreenhousesReadGreenhousesData, GreenhousesReadGreenhousesResponse, GreenhousesCreateGreenhouseData, GreenhousesCreateGreenhouseResponse, GreenhousesReadGreenhouseData, GreenhousesReadGreenhouseResponse, GreenhousesUpdateGreenhouseData, GreenhousesUpdateGreenhouseResponse, GreenhousesDeleteGreenhouseData, GreenhousesDeleteGreenhouseResponse, GreenhousesListGreenhouseSensorsData, GreenhousesListGreenhouseSensorsResponse, GreenhousesListUnmappedGreenhouseSensorsData, GreenhousesListUnmappedGreenhouseSensorsResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, SensorsCreateSensorData, SensorsCreateSensorResponse, SensorsListSensorsData, SensorsListSensorsResponse, SensorsGetSensorData, SensorsGetSensorResponse, SensorsUpdateSensorData, SensorsUpdateSensorResponse, SensorsDeleteSensorData, SensorsDeleteSensorResponse, UsersReadUsersData, UsersReadUsersResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, ZonesCreateZoneData, ZonesCreateZoneResponse, ZonesListZonesData, ZonesListZonesResponse, ZonesGetZoneData, ZonesGetZoneResponse, ZonesUpdateZoneData, ZonesUpdateZoneResponse, ZonesDeleteZoneData, ZonesDeleteZoneResponse, ZonesListZoneSensorsData, ZonesListZoneSensorsResponse, ZonesMapSensorToZoneEndpointData, ZonesMapSensorToZoneEndpointResponse, ZonesUnmapSensorFromZoneEndpointData, ZonesUnmapSensorFromZoneEndpointResponse } from './types.gen';
+import type { ClimateUpdateClimateData, ClimateUpdateClimateResponse, ClimateReadClimateData, ClimateReadClimateResponse, ControllersCreateControllerData, ControllersCreateControllerResponse, ControllersListControllersData, ControllersListControllersResponse, ControllersGetControllerData, ControllersGetControllerResponse, ControllersUpdateControllerData, ControllersUpdateControllerResponse, ControllersDeleteControllerData, ControllersDeleteControllerResponse, CropsListCropsResponse, CropsCreateCropData, CropsCreateCropResponse, CropsGetCropData, CropsGetCropResponse, CropsUpdateCropData, CropsUpdateCropResponse, CropsDeleteCropData, CropsDeleteCropResponse, CropsGetZoneCropData, CropsGetZoneCropResponse, CropsPlantCropInZoneData, CropsPlantCropInZoneResponse, CropsUpdateZoneCropData, CropsUpdateZoneCropResponse, CropsHarvestCropFromZoneData, CropsHarvestCropFromZoneResponse, CropsListZoneCropHistoryData, CropsListZoneCropHistoryResponse, CropsPermanentlyDeleteZoneCropData, CropsPermanentlyDeleteZoneCropResponse, CropsGetZoneCropAnalyticsData, CropsGetZoneCropAnalyticsResponse, CropsListZoneCropObservationsData, CropsListZoneCropObservationsResponse, CropsCreateZoneCropObservationData, CropsCreateZoneCropObservationResponse, CropsListZoneCropObservationsByIdData, CropsListZoneCropObservationsByIdResponse, CreateUserCreateUserData, CreateUserCreateUserResponse, GreenhousesReadGreenhousesData, GreenhousesReadGreenhousesResponse, GreenhousesCreateGreenhouseData, GreenhousesCreateGreenhouseResponse, GreenhousesReadGreenhouseData, GreenhousesReadGreenhouseResponse, GreenhousesUpdateGreenhouseData, GreenhousesUpdateGreenhouseResponse, GreenhousesDeleteGreenhouseData, GreenhousesDeleteGreenhouseResponse, GreenhousesListGreenhouseSensorsData, GreenhousesListGreenhouseSensorsResponse, GreenhousesListUnmappedGreenhouseSensorsData, GreenhousesListUnmappedGreenhouseSensorsResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, SensorsCreateSensorData, SensorsCreateSensorResponse, SensorsListSensorsData, SensorsListSensorsResponse, SensorsGetSensorData, SensorsGetSensorResponse, SensorsUpdateSensorData, SensorsUpdateSensorResponse, SensorsDeleteSensorData, SensorsDeleteSensorResponse, UsersReadUsersData, UsersReadUsersResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, ZonesCreateZoneData, ZonesCreateZoneResponse, ZonesListZonesData, ZonesListZonesResponse, ZonesGetZoneData, ZonesGetZoneResponse, ZonesUpdateZoneData, ZonesUpdateZoneResponse, ZonesDeleteZoneData, ZonesDeleteZoneResponse, ZonesListZoneSensorsData, ZonesListZoneSensorsResponse, ZonesMapSensorToZoneEndpointData, ZonesMapSensorToZoneEndpointResponse, ZonesUnmapSensorFromZoneEndpointData, ZonesUnmapSensorFromZoneEndpointResponse, ZonesHasCropData, ZonesHasCropResponse } from './types.gen';
 
 export class ClimateService {
     /**
@@ -447,7 +447,7 @@ export class CropsService {
      * Add observation to the active crop in a zone
      * @param data The data for the request.
      * @param data.zoneId
-     * @param data.requestBody
+     * @param data.formData
      * @returns ZoneCropObservationPublic Successful Response
      * @throws ApiError
      */
@@ -458,8 +458,29 @@ export class CropsService {
             path: {
                 zone_id: data.zoneId
             },
-            body: data.requestBody,
-            mediaType: 'application/json',
+            formData: data.formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Zone Crop Observations By Id
+     * List observations for a specific zone crop (including historical crops)
+     * @param data The data for the request.
+     * @param data.zoneCropId
+     * @returns ZoneCropObservationPublic Successful Response
+     * @throws ApiError
+     */
+    public static listZoneCropObservationsById(data: CropsListZoneCropObservationsByIdData): CancelablePromise<CropsListZoneCropObservationsByIdResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/crops/zone-crops/{zone_crop_id}/observations/',
+            path: {
+                zone_crop_id: data.zoneCropId
+            },
             errors: {
                 422: 'Validation Error'
             }
@@ -1236,6 +1257,27 @@ export class ZonesService {
             path: {
                 zone_id: data.zoneId,
                 sensor_type: data.sensorType
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Has Crop
+     * Check if the zone has an active crop.
+     * @param data The data for the request.
+     * @param data.zoneId
+     * @returns boolean Successful Response
+     * @throws ApiError
+     */
+    public static hasCrop(data: ZonesHasCropData): CancelablePromise<ZonesHasCropResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/greenhouses/{greenhouse_id}/zones/{zone_id}/hasCrop',
+            path: {
+                zone_id: data.zoneId
             },
             errors: {
                 422: 'Validation Error'

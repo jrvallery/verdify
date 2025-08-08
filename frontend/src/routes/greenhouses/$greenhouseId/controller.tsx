@@ -139,9 +139,6 @@ function ControllerSensors({ controllerId, greenhouseId }: { controllerId: strin
                   Unit
                 </Table.ColumnHeader>
                 <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
-                  Mapped
-                </Table.ColumnHeader>
-                <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
                   Actions
                 </Table.ColumnHeader>
               </Table.Row>
@@ -170,11 +167,6 @@ function ControllerSensors({ controllerId, greenhouseId }: { controllerId: strin
                   </Table.Cell>
                   <Table.Cell color={{ base: "gray.600", _dark: "gray.400" }}>
                     {sensor.unit || "-"}
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Badge colorPalette={sensor.is_mapped ? "green" : "gray"}>
-                      {sensor.is_mapped ? "Mapped" : "Unmapped"}
-                    </Badge>
                   </Table.Cell>
                   <Table.Cell>
                     <DeleteSensor id={sensor.id} controllerId={controllerId} />

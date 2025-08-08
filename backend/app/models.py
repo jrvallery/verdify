@@ -5,6 +5,7 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel, JSON
 from typing import Optional, Dict, Any
 from enum import Enum
+from fastapi import UploadFile, File
 
 class LocationEnum(str, Enum):
     N  = "N"
@@ -333,7 +334,7 @@ class SensorBase(SQLModel):
     model: Optional[str] = Field(default=None, description="Model/manufacturer information")
     value: Optional[float] = Field(default=None, description="Current sensor value")
     unit: Optional[str] = Field(default=None, description="Unit of measurement")
-    is_mapped: bool = Field(default=False, description="Whether this sensor is mapped to a zone")
+
 
 class Sensor(SensorBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

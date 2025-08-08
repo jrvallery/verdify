@@ -43,11 +43,12 @@ const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
   const queryClient = useQueryClient();
   const { showSuccessToast, showErrorToast } = useCustomToast();
 
-  // Get observations for this crop
+  // Get observations for this crop (only fetch if we have a valid zone crop)
   const { data: observations } = useQuery({
     queryKey: ["crop-observations", zone.id],
     queryFn: () => CropsService.listZoneCropObservations({ zoneId: zone.id }),
-    enabled: isOpen,
+    enabled: isOpen && !!zoneCrop.id,
+    throwOnError: false,
   });
 
   const harvestMutation = useMutation({
@@ -55,13 +56,17 @@ const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
     onSuccess: () => {
       showSuccessToast("Crop harvested successfully.");
       setIsOpen(false);
+      
+      // Force remove the zone crop data from cache to prevent 404s
+      queryClient.removeQueries({ queryKey: ["zone-crop", zone.id] });
+      queryClient.removeQueries({ queryKey: ["crop-observations", zone.id] });
+      queryClient.removeQueries({ queryKey: ["zone-has-crop", zone.id] }); // Also remove hasCrop cache
+      
+      // Invalidate related queries to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: ["zones"] });
     },
     onError: () => {
       showErrorToast("Error harvesting crop.");
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["zones"] });
-      queryClient.invalidateQueries({ queryKey: ["zone-crop", zone.id] });
     },
   });
 
