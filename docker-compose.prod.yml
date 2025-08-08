@@ -1,5 +1,6 @@
-# Production stack: uses pre-built images from GHCR (no local build stages)
-# Deploy via Portainer (Git stack) or: docker stack deploy -c docker-compose.prod.yml verdify
+# docker-compose.prod.yml
+# Deploy via Portainer (Git stack) or:
+#   docker stack deploy --with-registry-auth -c docker-compose.prod.yml verdify
 
 services:
   db:
@@ -16,7 +17,6 @@ services:
         source: /mnt/stacks/verdify/db
         target: /var/lib/postgresql/data/pgdata
     healthcheck:
-      # Use container env (double $) so it evaluates at runtime
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       retries: 5
@@ -116,7 +116,7 @@ services:
 
         traefik.http.routers.verdify-backend-http.rule: Host(`api.verdify.ai`)
         traefik.http.routers.verdify-backend-http.entrypoints: web
-        traefik.http.routers.verdify-backend-http.middlewares=redirect-to-https@file
+        traefik.http.routers.verdify-backend-http.middlewares: redirect-to-https@file
 
         traefik.http.routers.verdify-backend-https.rule: Host(`api.verdify.ai`)
         traefik.http.routers.verdify-backend-https.entrypoints: websecure
@@ -150,13 +150,41 @@ services:
 
         traefik.http.routers.verdify-frontend-http.rule: Host(`app.verdify.ai`)
         traefik.http.routers.verdify-frontend-http.entrypoints: web
-        traefik.http.routers.verdify-frontend-http.middlewares=redirect-to-https@file
+        traefik.http.routers.verdify-frontend-http.middlewares: redirect-to-https@file
 
         traefik.http.routers.verdify-frontend-https.rule: Host(`app.verdify.ai`)
         traefik.http.routers.verdify-frontend-https.entrypoints: websecure
         traefik.http.routers.verdify-frontend-https.tls: "true"
         traefik.http.routers.verdify-frontend-https.tls.certresolver: cloudflare
         traefik.http.routers.verdify-frontend-https.priority: "10"
+    networks:
+      - shared-services
+      - default
+
+  adminer:
+    image: adminer:latest
+    environment:
+      - ADMINER_DESIGN=pepa-linha-dark
+      - ADMINER_DEFAULT_SERVER=db
+    depends_on:
+      - db
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        traefik.enable: "true"
+        traefik.docker.network: shared-services
+        traefik.http.services.verdify-adminer.loadbalancer.server.port: "8080"
+
+        traefik.http.routers.verdify-adminer-http.rule: Host(`adminer.verdify.ai`)
+        traefik.http.routers.verdify-adminer-http.entrypoints: web
+        traefik.http.routers.verdify-adminer-http.middlewares: redirect-to-https@file
+
+        traefik.http.routers.verdify-adminer-https.rule: Host(`adminer.verdify.ai`)
+        traefik.http.routers.verdify-adminer-https.entrypoints: websecure
+        traefik.http.routers.verdify-adminer-https.tls: "true"
+        traefik.http.routers.verdify-adminer-https.tls.certresolver: cloudflare
+        traefik.http.routers.verdify-adminer-https.priority: "10"
     networks:
       - shared-services
       - default
