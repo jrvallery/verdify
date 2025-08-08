@@ -9,20 +9,19 @@ on:
 
 permissions:
   contents: read
-  packages: write    # required to push to ghcr.io
-  # id-token: write  # (optional) for future attestations/provenance
+  packages: write
 
 env:
   REGISTRY: ghcr.io
   OWNER: ${{ github.repository_owner }}
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  # Frontend API base (override via repo/ org/ env secret FRONTEND_API_URL if needed)
+  FRONTEND_API_URL: https://api.verdify.ai
 
 jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ubuntu-latest
-
-    # EDIT the matrix to match your services & their build contexts
     strategy:
       matrix:
         include:
@@ -32,20 +31,13 @@ jobs:
           - name: frontend
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
-          # - name: worker
-          #   context: ./worker
-          #   dockerfile: ./worker/Dockerfile
 
     steps:
-      - name: Checkout (only needed for path context)
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (for multi-arch; optional)
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        # omit if you only build linux/amd64
-        # with:
-        #   platforms: arm64,amd64
-        # docs: https://github.com/docker/setup-qemu-action
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -67,9 +59,10 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=sha,format=short
-            # adds semver tags when you push a vX.Y.Z tag:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            # Always add latest on main branch for convenience
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && matrix.name != '' }}
 
       - name: Build & push
         uses: docker/build-push-action@v6
@@ -79,6 +72,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # platforms: linux/amd64,linux/arm64   # uncomment for multi-arch
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: ${{ matrix.name == 'frontend' && format('VITE_API_URL={0}', env.FRONTEND_API_URL) || '' }}

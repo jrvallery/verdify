@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Controller, type SubmitHandler, useForm } from "react-hook-form"
 
-import { type UserCreate, UsersService } from "@/client"
+import { type UserCreate } from "@/client"
+import { DefaultService } from "@/client"
 import type { ApiError } from "@/client/core/ApiError"
 import useCustomToast from "@/hooks/useCustomToast"
 import { emailPattern, handleError } from "@/utils"
@@ -30,6 +31,8 @@ import { Field } from "../ui/field"
 
 interface UserCreateForm extends UserCreate {
   confirm_password: string
+  is_superuser: boolean
+  is_active: boolean
 }
 
 const AddUser = () => {
@@ -57,8 +60,16 @@ const AddUser = () => {
   })
 
   const mutation = useMutation({
-    mutationFn: (data: UserCreate) =>
-      UsersService.createUser({ requestBody: data }),
+    mutationFn: (data: UserCreateForm) =>
+      DefaultService.createUserCreateUser({
+        requestBody: {
+          email: data.email,
+          // full_name required by PrivateUserCreate; fallback to empty string
+          full_name: data.full_name ?? "",
+          password: data.password,
+          // is_verified not exposed here; admin flags (is_superuser/is_active) not part of create schema
+        },
+      }),
     onSuccess: () => {
       showSuccessToast("User created successfully.")
       reset()
@@ -73,6 +84,7 @@ const AddUser = () => {
   })
 
   const onSubmit: SubmitHandler<UserCreateForm> = (data) => {
+    // Strip non-schema fields before mutation (already handled in mutationFn)
     mutation.mutate(data)
   }
 
@@ -123,7 +135,7 @@ const AddUser = () => {
               >
                 <Input
                   id="name"
-                  {...register("full_name")}
+                  {...register("full_name", { required: "Full name is required" })}
                   placeholder="Full name"
                   type="text"
                 />
@@ -170,6 +182,7 @@ const AddUser = () => {
             </VStack>
 
             <Flex mt={4} direction="column" gap={4}>
+              {/* Admin flags kept in UI but not sent in initial create; future enhancement: follow-up PATCH to set roles */}
               <Controller
                 control={control}
                 name="is_superuser"
