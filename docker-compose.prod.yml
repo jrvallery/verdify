@@ -1,19 +1,9 @@
 # Production stack: uses pre-built images from GHCR (no local build stages)
-# Deploy via Portainer (Git stack) or docker stack deploy -c docker-compose.prod.yml verdify
+# Deploy via Portainer (Git stack) or: docker stack deploy -c docker-compose.prod.yml verdify
 
 services:
   db:
     image: postgres:12
-    restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      retries: 5
-      start_period: 30s
-      timeout: 10s
-    volumes:
-      - /mnt/stacks/verdify/db:/var/lib/postgresql/data/pgdata
-
     env_file:
       - .env.prod
     environment:
@@ -21,17 +11,33 @@ services:
       - POSTGRES_PASSWORD_FILE=/run/secrets/verdify_postgres_password
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - type: bind
+        source: /mnt/stacks/verdify/db
+        target: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      # Use container env (double $) so it evaluates at runtime
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == onyx
+      restart_policy:
+        condition: any
     secrets:
       - verdify_postgres_password
+    networks:
+      - default
 
   prestart:
     image: ${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}
-    restart: on-failure
-    depends_on:
-      - db
+    command: bash scripts/prestart.sh
     env_file:
       - .env.prod
-    command: bash scripts/prestart.sh
     environment:
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
@@ -50,20 +56,28 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD_FILE=/run/secrets/verdify_postgres_password
       - SENTRY_DSN=${SENTRY_DSN}
-    networks:
-      - shared-services
-      - default
+    depends_on:
+      - db
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == onyx
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 30s
     secrets:
       - verdify_secret_key
       - verdify_first_superuser_password
       - verdify_postgres_password
       - verdify_smtp_password
+    networks:
+      - shared-services
+      - default
 
   backend:
     image: ${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}
-    restart: always
-    depends_on:
-      - db
     env_file:
       - .env.prod
     environment:
@@ -89,9 +103,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - shared-services
-      - default
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == onyx
+      restart_policy:
+        condition: any
     labels:
       - traefik.enable=true
       - traefik.docker.network=shared-services
@@ -99,25 +116,31 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.rule=Host(`api.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=redirect-to-https
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.rule=Host(`api.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls.certresolver=le
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=https-redirect
     secrets:
       - verdify_secret_key
       - verdify_first_superuser_password
       - verdify_postgres_password
       - verdify_smtp_password
-
-  frontend:
-    image: ${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}
-    restart: always
-    env_file:
-      - .env.prod
     networks:
       - shared-services
       - default
+
+  frontend:
+    image: ${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}
+    env_file:
+      - .env.prod
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.verdify_frontend == true
+      restart_policy:
+        condition: any
     labels:
       - traefik.enable=true
       - traefik.docker.network=shared-services
@@ -125,16 +148,20 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=80
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`app.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=redirect-to-https
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.rule=Host(`app.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=le
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
-
+    networks:
+      - shared-services
+      - default
 
 networks:
   shared-services:
     external: true
+  default:
+    driver: overlay
 
 secrets:
   verdify_secret_key:
