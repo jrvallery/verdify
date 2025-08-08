@@ -1,3 +1,4 @@
+import os
 import secrets
 import warnings
 from typing import Annotated, Any, Literal
@@ -14,6 +15,26 @@ from pydantic import (
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
+
+
+# Load secrets from *_FILE pattern (Docker Swarm / Kubernetes style)
+for _secret_var in [
+    "SECRET_KEY",
+    "POSTGRES_PASSWORD",
+    "FIRST_SUPERUSER_PASSWORD",
+    "SMTP_PASSWORD",
+]:
+    _file_var = f"{_secret_var}_FILE"
+    _path = os.getenv(_file_var)
+    if _path and os.path.isfile(_path):
+        try:
+            with open(_path, "r", encoding="utf-8") as _f:
+                _value = _f.read().strip()
+                if _value:
+                    os.environ[_secret_var] = _value
+        except Exception:
+            # Fail silently; validation later will raise if missing
+            pass
 
 
 def parse_cors(v: Any) -> list[str] | str:
