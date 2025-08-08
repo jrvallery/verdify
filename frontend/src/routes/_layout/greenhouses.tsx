@@ -98,7 +98,7 @@ function GreenhousesTable() {
           {greenhouses.map((gh) => (
             <Table.Row
             cursor="pointer"
-            onClick={() => navigate({ to: "/greenhouses/$greenhouseId", params: { greenhouseId: gh.id } })}
+            onClick={() => navigate({ to: "/greenhouses/$greenhouseId/zones", params: { greenhouseId: gh.id } })}
             key={gh.id} 
             opacity={isPlaceholderData ? 0.5 : 1}>
               <Table.Cell fontSize="lg" truncate maxW="30%">
