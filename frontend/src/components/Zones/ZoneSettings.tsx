@@ -17,7 +17,8 @@ import {
   ZonePublic, 
   SensorType, 
   ZonesService, 
-  GreenhousesService
+  GreenhousesService,
+  CropsService
 } from "@/client";
 import {
   DialogBody,
@@ -29,6 +30,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import useCustomToast from "@/hooks/useCustomToast";
+import ViewPastCrops from "./ViewPastCrops";
 
 interface ZoneSettingsProps {
   zone: ZonePublic;
@@ -60,6 +62,15 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
     enabled: isOpen,
   });
 
+  // Get the zone crop data to check if there's an active crop
+  const { data: zoneCrop } = useQuery({
+    queryKey: ["zone-crop", zone.id],
+    queryFn: () => CropsService.getZoneCrop({ zoneId: zone.id }),
+    enabled: isOpen,
+    retry: false,
+    throwOnError: false,
+  });
+
   const deleteZoneMutation = useMutation({
     mutationFn: (zoneId: string) =>
       ZonesService.deleteZone({ greenhouseId: zone.greenhouse_id, zoneId }),
@@ -72,6 +83,20 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["zones"] });
+    },
+  });
+
+  const harvestMutation = useMutation({
+    mutationFn: () => CropsService.harvestCropFromZone({ zoneId: zone.id }),
+    onSuccess: () => {
+      showSuccessToast("Crop harvested successfully.");
+      queryClient.removeQueries({ queryKey: ["zone-crop", zone.id] });
+      queryClient.removeQueries({ queryKey: ["crop-observations", zone.id] });
+      queryClient.removeQueries({ queryKey: ["zone-has-crop", zone.id] });
+      queryClient.invalidateQueries({ queryKey: ["zones"] });
+    },
+    onError: () => {
+      showErrorToast("An error occurred while harvesting the crop.");
     },
   });
 
@@ -162,7 +187,10 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
           <VStack gap={6} align="stretch">
             {/* Zone Info */}
             <Box>
-              <Text>Location: {zone.location}</Text>
+              <Flex justify="space-between" align="center" mb={4}>
+                <Text>Location: {zone.location}</Text>
+                <ViewPastCrops zone={zone} />
+              </Flex>
             </Box>
 
             {/* Sensor Mapping */}
@@ -268,22 +296,48 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
                 })}
               </VStack>
             </Box>
-
+            
             {/* Delete Zone */}
             <Box pt={4} borderTop="1px" borderColor="gray.200">
-              <Text fontWeight="bold" color="red.500" mb={2}>Danger Zone</Text>
-              <form onSubmit={handleSubmit(onDeleteZone)}>
-                <Button
-                  variant="solid"
-                  colorPalette="red"
-                  size="sm"
-                  type="submit"
-                  loading={isSubmitting}
-                >
-                  <FiTrash2 />
-                  Delete Zone
-                </Button>
-              </form>
+              <Text fontWeight="bold" color="red.500" mb={4}>Danger Zone</Text>
+              
+              {/* Harvest Crop Button - only show if there's an active crop */}
+              {zoneCrop?.is_active && (
+                <Box mb={4}>
+                  <Text fontSize="sm" color="gray.600" mb={2}>
+                    Harvest the current crop to remove it from this zone (preserves historical data)
+                  </Text>
+                  <Button
+                    variant="solid"
+                    colorPalette="orange"
+                    size="sm"
+                    onClick={() => harvestMutation.mutate()}
+                    loading={harvestMutation.isPending}
+                  >
+                    <FiTrash2 />
+                    Harvest Crop
+                  </Button>
+                </Box>
+              )}
+
+              {/* Delete Zone Button */}
+              <Box>
+                <Text fontSize="sm" color="gray.600" mb={2}>
+                  Permanently delete this zone and all its data
+                </Text>
+                <form onSubmit={handleSubmit(onDeleteZone)}>
+                  <Button
+                    variant="solid"
+                    colorPalette="red"
+                    size="sm"
+                    type="submit"
+                    loading={isSubmitting}
+                  >
+                    <FiTrash2 />
+                    Delete Zone
+                  </Button>
+                </form>
+              </Box>
             </Box>
           </VStack>
         </DialogBody>

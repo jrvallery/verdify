@@ -52,7 +52,6 @@ const AddSensor = ({ controllerId }: AddSensorProps) => {
       model: "",
       value: 0,
       unit: "",
-      is_mapped: false,
       controller_id: controllerId,
     },
   });
