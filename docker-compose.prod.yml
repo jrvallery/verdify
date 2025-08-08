@@ -63,11 +63,7 @@ services:
     image: ${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}
     restart: always
     depends_on:
-      db:
-        condition: service_healthy
-        restart: true
-      prestart:
-        condition: service_completed_successfully
+      - db
     env_file:
       - .env
     environment:
