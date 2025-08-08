@@ -109,19 +109,20 @@ services:
           - node.hostname == onyx
       restart_policy:
         condition: any
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=shared-services
-      - traefik.constraint-label=shared-services
-      - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.rule=Host(`api.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.entrypoints=web
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=redirect-to-https
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.rule=Host(`api.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.entrypoints=websecure
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls.certresolver=cloudflare
-      - traefik.http.routers.${STACK_NAME}-backend-https.priority=10
+      labels:
+        traefik.enable: "true"
+        traefik.docker.network: shared-services
+        traefik.http.services.verdify-backend.loadbalancer.server.port: "8000"
+
+        traefik.http.routers.verdify-backend-http.rule: Host(`api.verdify.ai`)
+        traefik.http.routers.verdify-backend-http.entrypoints: web
+        traefik.http.routers.verdify-backend-http.middlewares: redirect-to-https
+
+        traefik.http.routers.verdify-backend-https.rule: Host(`api.verdify.ai`)
+        traefik.http.routers.verdify-backend-https.entrypoints: websecure
+        traefik.http.routers.verdify-backend-https.tls: "true"
+        traefik.http.routers.verdify-backend-https.tls.certresolver: cloudflare
+        traefik.http.routers.verdify-backend-https.priority: "10"
     secrets:
       - verdify_secret_key
       - verdify_first_superuser_password
@@ -142,19 +143,20 @@ services:
           - node.labels.verdify_frontend == true
       restart_policy:
         condition: any
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=shared-services
-      - traefik.constraint-label=shared-services
-      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=80
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`app.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.entrypoints=web
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=redirect-to-https
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.rule=Host(`app.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=websecure
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=cloudflare
-      - traefik.http.routers.${STACK_NAME}-frontend-https.priority=10      
+      labels:
+        traefik.enable: "true"
+        traefik.docker.network: shared-services
+        traefik.http.services.verdify-frontend.loadbalancer.server.port: "80"
+
+        traefik.http.routers.verdify-frontend-http.rule: Host(`app.verdify.ai`)
+        traefik.http.routers.verdify-frontend-http.entrypoints: web
+        traefik.http.routers.verdify-frontend-http.middlewares: redirect-to-https
+
+        traefik.http.routers.verdify-frontend-https.rule: Host(`app.verdify.ai`)
+        traefik.http.routers.verdify-frontend-https.entrypoints: websecure
+        traefik.http.routers.verdify-frontend-https.tls: "true"
+        traefik.http.routers.verdify-frontend-https.tls.certresolver: cloudflare
+        traefik.http.routers.verdify-frontend-https.priority: "10"
     networks:
       - shared-services
       - default
