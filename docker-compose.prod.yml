@@ -31,7 +31,7 @@ services:
         condition: service_healthy
         restart: true
     env_file:
-      - .env
+      - .env.prod
     command: bash scripts/prestart.sh
     environment:
       - DOMAIN=${DOMAIN}
