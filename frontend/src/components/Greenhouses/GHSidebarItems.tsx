@@ -18,8 +18,8 @@ import type { UserPublic } from "@/client"
 
 const items = [
     { icon: FiHome, title: "greenhouseName", path: "/greenhouses/$greenhouseId" },
-    { icon: FiThermometer, title: "Climate", path: "/greenhouses/$greenhouseId/climate" },
     { icon: FiGrid, title: "Zones", path: "/greenhouses/$greenhouseId/zones" },
+    { icon: FiThermometer, title: "Climate", path: "/greenhouses/$greenhouseId/climate" },
     { icon: FiTool, title: "Controller", path: "/greenhouses/$greenhouseId/controller" },
     { icon: FiBarChart2, title: "Graphs", path: "/greenhouses/$greenhouseId/graphs" },
     { icon: FiSettings, title: "Settings", path: "/greenhouses/$greenhouseId/settings" },
