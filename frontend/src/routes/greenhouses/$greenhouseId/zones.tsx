@@ -12,6 +12,7 @@ import {
 import { useQuery } from "@tanstack/react-query"
 
 import { ZonesService, ZonePublic } from "@/client"
+import { GreenhousesService } from "@/client"
 import AddZone from "@/components/Zones/AddZone"
 import ZoneSettings from "@/components/Zones/ZoneSettings"
 import PlantCrop from "@/components/Crops/PlantCrop"
@@ -30,6 +31,11 @@ export const Route = createFileRoute('/greenhouses/$greenhouseId/zones')({
 function Zones() {
   const { greenhouseId } = Route.useParams()
 
+  const { data: greenhouse } = useQuery({
+    queryKey: ["greenhouse", greenhouseId],
+    queryFn: () => GreenhousesService.getGreenhouse({ greenhouseId }),
+  })
+
   const {
     data: zones,
     isLoading,
@@ -45,8 +51,13 @@ function Zones() {
   return (
     <Container maxW="full">
       <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
-        Zones Management
+        {greenhouse?.name ?? "Zones Management"}
       </Heading>
+      {greenhouse?.location && (
+        <Text mt={1} textAlign={{ base: "center", md: "left" }} color="gray.500">
+          {greenhouse.location}
+        </Text>
+      )}
 
       <AddZone greenhouseId={greenhouseId} />
 

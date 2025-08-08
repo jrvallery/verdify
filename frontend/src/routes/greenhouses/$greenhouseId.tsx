@@ -3,7 +3,6 @@ import { Outlet } from '@tanstack/react-router';
 import {
     Box,
     Flex,
-    Heading,
     Spinner,
     Text,
   } from "@chakra-ui/react";
@@ -44,12 +43,7 @@ import {
           <Navbar />
           <Flex flex="1" overflow="hidden">
             <Sidebar />
-    
             <Box as="main" flex="1" overflowY="auto" p={{ base: 4, md: 8 }}>
-              <Heading mb={2}>{"🌱 " + data.title + " 🌱"}</Heading>
-              {/* …status, temp, humidity… */}
-
-              {/* **This is key**: nested routes render here */}
               <Outlet />
             </Box>
           </Flex>
