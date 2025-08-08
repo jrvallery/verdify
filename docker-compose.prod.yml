@@ -116,7 +116,7 @@ services:
 
         traefik.http.routers.verdify-backend-http.rule: Host(`api.verdify.ai`)
         traefik.http.routers.verdify-backend-http.entrypoints: web
-        traefik.http.routers.verdify-backend-http.middlewares: redirect-to-https
+        traefik.http.routers.verdify-backend-http.middlewares=redirect-to-https@file
 
         traefik.http.routers.verdify-backend-https.rule: Host(`api.verdify.ai`)
         traefik.http.routers.verdify-backend-https.entrypoints: websecure
@@ -150,7 +150,7 @@ services:
 
         traefik.http.routers.verdify-frontend-http.rule: Host(`app.verdify.ai`)
         traefik.http.routers.verdify-frontend-http.entrypoints: web
-        traefik.http.routers.verdify-frontend-http.middlewares: redirect-to-https
+        traefik.http.routers.verdify-frontend-http.middlewares=redirect-to-https@file
 
         traefik.http.routers.verdify-frontend-https.rule: Host(`app.verdify.ai`)
         traefik.http.routers.verdify-frontend-https.entrypoints: websecure
