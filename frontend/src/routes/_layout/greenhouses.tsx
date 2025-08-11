@@ -1,31 +1,19 @@
 import {
+  Box,
   Container,
-  EmptyState,
   Flex,
+  Grid,
   Heading,
-  Table,
+  Icon,
+  Text,
   VStack,
 } from "@chakra-ui/react"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { FiSearch } from "react-icons/fi"
-import { z } from "zod"
-
-import { GreenhousesService } from "@/client"
-import { Icon } from "@chakra-ui/react"
 import { FiCheck, FiX } from "react-icons/fi"
-import AddGreenhouse from "@/components/Greenhouses/AddGreenhouse"
+import { GreenhousesService } from "@/client"
 import PendingItems from "@/components/Pending/PendingItems"
-import {
-  PaginationItems,
-  PaginationNextTrigger,
-  PaginationPrevTrigger,
-  PaginationRoot,
-} from "@/components/ui/pagination.tsx"
-
-const greenhousesSearchSchema = z.object({
-  page: z.number().catch(1),
-})
+import AddGreenhouse from "@/components/Greenhouses/AddGreenhouse"
 
 const PER_PAGE = 5
 
@@ -42,112 +30,75 @@ function getGreenhousesQueryOptions({ page }: { page: number }) {
 
 export const Route = createFileRoute("/_layout/greenhouses")({
   component: Greenhouses,
-  validateSearch: (search) => greenhousesSearchSchema.parse(search),
 })
 
-function GreenhousesTable() {
-  const navigate = useNavigate({ from: Route.fullPath })
-  const { page } = Route.useSearch()
-
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    ...getGreenhousesQueryOptions({ page }),
-    placeholderData: (prev) => prev,
+function Greenhouses() {
+  const navigate = useNavigate()
+  const { data, isLoading, error } = useQuery({
+    ...getGreenhousesQueryOptions({ page: 1 }),
   })
 
-  const setPage = (page: number) =>
-    navigate({
-      search: { page },
-    })
-
-  const greenhouses = data?.data.slice(0, PER_PAGE) ?? []
-  const count = data?.count ?? 0
+  const greenhouses = data?.data ?? []
 
   if (isLoading) {
     return <PendingItems />
   }
 
-  if (greenhouses.length === 0) {
+  if (error) {
     return (
-      <EmptyState.Root>
-        <EmptyState.Content>
-          <EmptyState.Indicator>
-            <FiSearch />
-          </EmptyState.Indicator>
-          <VStack textAlign="center">
-            <EmptyState.Title>You don’t have any greenhouses yet</EmptyState.Title>
-            <EmptyState.Description>
-              Add a new greenhouse to get started
-            </EmptyState.Description>
-          </VStack>
-        </EmptyState.Content>
-      </EmptyState.Root>
+      <VStack textAlign="center" gap={4} mt={8}>
+        <Text fontSize="lg" color="red.500">
+          Failed to load greenhouses. Please try again later.
+        </Text>
+      </VStack>
     )
   }
 
   return (
-    <>
-      <Table.Root size={{ base: "sm", md: "md" }}>
-        <Table.Header>
-          <Table.Row>
-            <Table.ColumnHeader w="30%" fontSize="lg">Title</Table.ColumnHeader>
-            <Table.ColumnHeader w="30%" fontSize="lg">Description</Table.ColumnHeader>
-            <Table.ColumnHeader w="10%" fontSize="lg">Active</Table.ColumnHeader>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {greenhouses.map((gh) => (
-            <Table.Row
-            cursor="pointer"
-            onClick={() => navigate({ to: "/greenhouses/$greenhouseId/zones", params: { greenhouseId: gh.id } })}
-            key={gh.id} 
-            opacity={isPlaceholderData ? 0.5 : 1}>
-              <Table.Cell fontSize="lg" truncate maxW="30%">
-                {gh.title}
-              </Table.Cell>
-              <Table.Cell
-                fontSize="lg"
-                color={!gh.description ? "gray" : "inherit"}
-                truncate
-                maxW="30%"
-              >
-                {gh.description || "N/A"}
-              </Table.Cell>
-              <Table.Cell width="10%" textAlign="center">
-                {gh.is_active ? (
-                  <Icon as={FiCheck} boxSize={5} color="green.500" />
-                ) : (
-                  <Icon as={FiX}   boxSize={5} color="red.500" />
-                )}
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table.Root>
-      <Flex justifyContent="flex-end" mt={4}>
-        <PaginationRoot
-          count={count}
-          pageSize={PER_PAGE}
-          onPageChange={({ page }) => setPage(page)}
-        >
-          <Flex>
-            <PaginationPrevTrigger />
-            <PaginationItems />
-            <PaginationNextTrigger />
-          </Flex>
-        </PaginationRoot>
+    <Container maxW="full" py={8}>
+      <Flex justifyContent="space-between" alignItems="center" mb={6}>
+        <VStack align="start">
+          <Heading size="lg">Greenhouses Management</Heading>
+          <Text color="gray.600">Manage and monitor your greenhouses efficiently.</Text>
+        </VStack>
+        <AddGreenhouse />
       </Flex>
-    </>
-  )
-}
-
-function Greenhouses() {
-  return (
-    <Container maxW="full">
-      <Heading size="lg" pt={12}>
-        Greenhouses Management
-      </Heading>
-      <AddGreenhouse />
-      <GreenhousesTable />
+      {greenhouses.length === 0 ? (
+        <VStack textAlign="center" gap={4}>
+          <Text fontSize="lg" color="gray.600">
+            You don’t have any greenhouses yet.
+          </Text>
+          <Text color="gray.500">Add a new greenhouse to get started.</Text>
+        </VStack>
+      ) : (
+        <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" }} gap={6}>
+          {greenhouses.map((gh) => (
+            <Box
+              key={gh.id}
+              p={4}
+              borderWidth="1px"
+              borderRadius="lg"
+              boxShadow="sm"
+              _hover={{ boxShadow: "md", transform: "scale(1.02)", cursor: "pointer" }}
+              transition="all 0.2s"
+              onClick={() => navigate({ to: `/greenhouses/${gh.id}`, params: { greenhouseId: gh.id } })}
+            >
+              <Heading size="md" mb={2}>
+                {gh.title}
+              </Heading>
+              <Text color="gray.600" mb={4}>
+                {gh.description || "No description available."}
+              </Text>
+              <Flex justifyContent="space-between" alignItems="center">
+                <Text fontWeight="bold" color={gh.is_active ? "green.500" : "red.500"}>
+                  {gh.is_active ? "Active" : "Inactive"}
+                </Text>
+                <Icon as={gh.is_active ? FiCheck : FiX} boxSize={5} />
+              </Flex>
+            </Box>
+          ))}
+        </Grid>
+      )}
     </Container>
   )
 }

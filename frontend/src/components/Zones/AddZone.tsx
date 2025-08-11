@@ -140,34 +140,6 @@ const AddZone = ({ greenhouseId }: AddZoneProps) => {
                   ))}
                 </select>
               </Field>
-
-              <Field
-                invalid={!!errors.temperature}
-                errorText={errors.temperature?.message}
-                label="Initial Temperature (°C)"
-              >
-                <Input
-                  id="temperature"
-                  type="number"
-                  step="any"
-                  {...register("temperature", { valueAsNumber: true })}
-                  placeholder="Optional"
-                />
-              </Field>
-
-              <Field
-                invalid={!!errors.humidity}
-                errorText={errors.humidity?.message}
-                label="Initial Humidity (%)"
-              >
-                <Input
-                  id="humidity"
-                  type="number"
-                  step="any"
-                  {...register("humidity", { valueAsNumber: true })}
-                  placeholder="Optional"
-                />
-              </Field>
             </VStack>
           </DialogBody>
 

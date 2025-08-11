@@ -1,5 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
+import GHSettings from "@/components/Greenhouses/GHSettings";
 
-export const Route = createFileRoute('/greenhouses/$greenhouseId/settings')({
-  component: () => <div>Hello /greenhouses/$greenhouseId/settings!</div>
-})
+export const Route = createFileRoute("/greenhouses/$greenhouseId/settings")({
+  component: GHSettings,
+});

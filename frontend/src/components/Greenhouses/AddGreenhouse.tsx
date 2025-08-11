@@ -43,9 +43,6 @@ const AddGreenhouse = () => {
     defaultValues: {
       title: "",
       description: "",
-      type: "",
-      longitude: undefined,
-      latitude: undefined,
     },
   });
 
@@ -116,49 +113,6 @@ const AddGreenhouse = () => {
                   {...register("description")}
                   placeholder="Description"
                   type="text"
-                />
-              </Field>
-
-              <Field
-              invalid={!!errors.type}
-              errorText={errors.type?.message}
-              label="Type"
-            >
-            <select id="type" {...register("type")}>
-              <option value="Quonset">Quonset</option>
-              <option value="Standard">Standard</option>
-            </select>
-          </Field>
-              <Field
-                required
-                errorText={errors.longitude?.message}
-                label="Longitude"
-              >
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="any"
-                  {...register("longitude", {
-                    required: "Longitude is required.",
-                    valueAsNumber: true,
-                  })}
-                  placeholder="Longitude"
-                />
-              </Field>
-              <Field
-                required
-                errorText={errors.latitude?.message}
-                label="Latitude"
-              >
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="any"
-                  {...register("latitude", {
-                    required: "Latitude is required.",
-                    valueAsNumber: true,
-                  })}
-                  placeholder="Latitude"
                 />
               </Field>
             </VStack>

@@ -1,11 +1,13 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, HTTPException, status
-from sqlmodel import func, select
+from fastapi import APIRouter, HTTPException, Response, status, Depends
+from sqlmodel import func, select, Session
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, SessionDep
+from app.debug_verify import verify_cleanup
+
+from app.api.deps import CurrentUser, SessionDep, User, get_current_user
 from app.models import (
     Greenhouse,
     GreenhouseCreate,
@@ -92,22 +94,25 @@ def update_greenhouse(
     return gh
 
 
-@router.delete("/{greenhouse_id}", response_model=Message)
+@router.delete("/{greenhouse_id}", status_code=204)
 def delete_greenhouse(
-    *,
-    session: SessionDep,
-    current_user: CurrentUser,
     greenhouse_id: uuid.UUID,
-) -> Message:
+    session: SessionDep,
+    current_user: CurrentUser
+):
     gh = session.get(Greenhouse, greenhouse_id)
     if not gh:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Greenhouse not found")
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
     if not (current_user.is_superuser or gh.owner_id == current_user.id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="Not enough permissions")
 
     session.delete(gh)
     session.commit()
-    return Message(message="Greenhouse deleted successfully")
+
+    # Verify cleanup
+    print(verify_cleanup(SessionDep, gh.id))
+
+    return Response(status_code=204)
 
 
 @router.get("/{greenhouse_id}/listsensors", response_model=List[SensorPublic])

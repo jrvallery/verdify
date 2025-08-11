@@ -33,7 +33,7 @@ const DeleteController = ({ id }: { id: string }) => {
   const mutation = useMutation({
     mutationFn: deleteController,
     onSuccess: () => {
-      showSuccessToast("The controller was deleted successfully.");
+      showSuccessToast("Controller deleted successfully.");
       setIsOpen(false);
     },
     onError: () => {
@@ -52,31 +52,27 @@ const DeleteController = ({ id }: { id: string }) => {
     <DialogRoot
       size={{ base: "xs", md: "md" }}
       placement="center"
-      role="alertdialog"
       open={isOpen}
       onOpenChange={({ open }) => setIsOpen(open)}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" colorPalette="red">
-          <FiTrash2 fontSize="16px" />
+        <Button variant="solid" colorPalette="red" size="sm">
+          <FiTrash2 />
           Delete Controller
         </Button>
       </DialogTrigger>
 
       <DialogContent>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <DialogCloseTrigger />
-          <DialogHeader>
-            <DialogTitle>Delete Controller</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <Text mb={4}>
-              This controller and all its sensors will be permanently deleted. Are you sure? You will not
-              be able to undo this action.
-            </Text>
-          </DialogBody>
-
-          <DialogFooter gap={2}>
+        <DialogHeader>
+          <DialogTitle>Delete Controller</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <Text mb={4}>
+            This controller and all its sensors will be permanently deleted. Are you sure? This action cannot be undone.
+          </Text>
+        </DialogBody>
+        <DialogFooter>
+          <form onSubmit={handleSubmit(onSubmit)}>
             <DialogActionTrigger asChild>
               <Button
                 variant="subtle"
@@ -94,8 +90,9 @@ const DeleteController = ({ id }: { id: string }) => {
             >
               Delete
             </Button>
-          </DialogFooter>
-        </form>
+          </form>
+        </DialogFooter>
+        <DialogCloseTrigger />
       </DialogContent>
     </DialogRoot>
   );

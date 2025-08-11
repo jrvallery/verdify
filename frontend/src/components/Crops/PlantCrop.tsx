@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type SubmitHandler, useForm } from "react-hook-form";
+import { useEffect } from "react";
 
 import {
   Button,
@@ -39,6 +40,14 @@ const PlantCrop = ({ zone }: PlantCropProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const queryClient = useQueryClient();
   const { showSuccessToast } = useCustomToast();
+
+  // Hook to refresh the page when a crop is planted
+  useEffect(() => {
+    if (!isOpen) {
+      queryClient.invalidateQueries({ queryKey: ["zones"] });
+      queryClient.invalidateQueries({ queryKey: ["zone-crop", zone.id] });
+    }
+  }, [isOpen, queryClient, zone.id]);
 
   // Get available crop templates
   const { data: crops } = useQuery({

@@ -13,7 +13,7 @@ api_router.include_router(crops.router, prefix="/crops", tags=["crops"])
 # Create a sub-router for greenhouse-specific routes
 greenhouse_subrouter = APIRouter()
 
-greenhouse_subrouter.include_router(climate.router, prefix="/climate", tags=["climate"])
+# greenhouse_subrouter.include_router(climate.router, prefix="/climate", tags=["climate"])
 greenhouse_subrouter.include_router(controller.router, prefix="/controllers", tags=["controllers"])
 greenhouse_subrouter.include_router(zones.router, prefix="/zones", tags=["zones"])
 

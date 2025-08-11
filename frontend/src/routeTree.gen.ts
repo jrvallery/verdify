@@ -25,7 +25,6 @@ import { Route as GreenhousesGreenhouseIdZonesImport } from './routes/greenhouse
 import { Route as GreenhousesGreenhouseIdSettingsImport } from './routes/greenhouses/$greenhouseId/settings'
 import { Route as GreenhousesGreenhouseIdGraphsImport } from './routes/greenhouses/$greenhouseId/graphs'
 import { Route as GreenhousesGreenhouseIdControllerImport } from './routes/greenhouses/$greenhouseId/controller'
-import { Route as GreenhousesGreenhouseIdClimateImport } from './routes/greenhouses/$greenhouseId/climate'
 
 // Create/Update Routes
 
@@ -103,12 +102,6 @@ const GreenhousesGreenhouseIdControllerRoute =
     getParentRoute: () => GreenhousesGreenhouseIdRoute,
   } as any)
 
-const GreenhousesGreenhouseIdClimateRoute =
-  GreenhousesGreenhouseIdClimateImport.update({
-    path: '/climate',
-    getParentRoute: () => GreenhousesGreenhouseIdRoute,
-  } as any)
-
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
@@ -153,10 +146,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutIndexImport
       parentRoute: typeof LayoutImport
     }
-    '/greenhouses/$greenhouseId/climate': {
-      preLoaderRoute: typeof GreenhousesGreenhouseIdClimateImport
-      parentRoute: typeof GreenhousesGreenhouseIdImport
-    }
     '/greenhouses/$greenhouseId/controller': {
       preLoaderRoute: typeof GreenhousesGreenhouseIdControllerImport
       parentRoute: typeof GreenhousesGreenhouseIdImport
@@ -190,7 +179,6 @@ export const routeTree = rootRoute.addChildren([
   ResetPasswordRoute,
   SignupRoute,
   GreenhousesGreenhouseIdRoute.addChildren([
-    GreenhousesGreenhouseIdClimateRoute,
     GreenhousesGreenhouseIdControllerRoute,
     GreenhousesGreenhouseIdGraphsRoute,
     GreenhousesGreenhouseIdSettingsRoute,

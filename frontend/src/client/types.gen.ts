@@ -90,20 +90,6 @@ export type CropUpdate = {
     growing_days?: (number | null);
 };
 
-export type GreenhouseClimateRead = {
-    temperature: number;
-    humidity: number;
-    outside_temperature: number;
-    outside_humidity: number;
-};
-
-export type GreenhouseClimateUpdate = {
-    temperature: number;
-    humidity: number;
-    outside_temperature?: (number | null);
-    outside_humidity?: (number | null);
-};
-
 export type GreenhouseCreate = {
     title: string;
     description?: (string | null);
@@ -111,18 +97,6 @@ export type GreenhouseCreate = {
      * Whether this greenhouse is active
      */
     is_active?: boolean;
-    /**
-     * Greenhouse style/type
-     */
-    type?: (string | null);
-    /**
-     * Current internal temperature
-     */
-    temperature?: number;
-    /**
-     * Current internal humidity
-     */
-    humidity?: number;
     /**
      * Current external temperature
      */
@@ -145,18 +119,6 @@ export type GreenhousePublic = {
     title: string;
     description?: (string | null);
     is_active: boolean;
-    /**
-     * Greenhouse style/type
-     */
-    type?: (string | null);
-    /**
-     * Current internal temperature
-     */
-    temperature?: number;
-    /**
-     * Current internal humidity
-     */
-    humidity?: number;
     /**
      * Current external temperature
      */
@@ -186,11 +148,8 @@ export type GreenhouseUpdate = {
     title?: (string | null);
     description?: (string | null);
     is_active?: (boolean | null);
-    temperature?: (number | null);
-    humidity?: (number | null);
     outside_temperature?: (number | null);
     outside_humidity?: (number | null);
-    type?: (string | null);
     latitude?: (number | null);
     longitude?: (number | null);
 };
@@ -435,19 +394,6 @@ export type ZoneUpdate = {
     location?: (LocationEnum | null);
 };
 
-export type ClimateUpdateClimateData = {
-    greenhouseId: string;
-    requestBody: GreenhouseClimateUpdate;
-};
-
-export type ClimateUpdateClimateResponse = (GreenhousePublic);
-
-export type ClimateReadClimateData = {
-    greenhouseId: string;
-};
-
-export type ClimateReadClimateResponse = (GreenhouseClimateRead);
-
 export type ControllersCreateControllerData = {
     greenhouseId: string;
     requestBody: ControllerCreate;
@@ -610,7 +556,7 @@ export type GreenhousesDeleteGreenhouseData = {
     greenhouseId: string;
 };
 
-export type GreenhousesDeleteGreenhouseResponse = (Message);
+export type GreenhousesDeleteGreenhouseResponse = (void);
 
 export type GreenhousesListGreenhouseSensorsData = {
     greenhouseId: string;

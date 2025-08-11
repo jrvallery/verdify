@@ -53,12 +53,6 @@ function Zones() {
       <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
         {greenhouse?.title ?? "Zones Management"}
       </Heading>
-      {greenhouse?.latitude && (
-        <Text mt={1} textAlign={{ base: "center", md: "left" }} color="gray.500">
-          {greenhouse.longitude}
-        </Text>
-      )}
-
       <AddZone greenhouseId={greenhouseId} />
 
       <SimpleGrid minChildWidth="400px" gap={6} mt={6}>

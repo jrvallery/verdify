@@ -5,9 +5,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import uuid
-
-from app.api.deps import get_current_user, SessionDep  # Changed get_session to SessionDep
+from app.api.deps import get_current_user, SessionDep
 from app.crud.crop import crop
+import os
+
+# Normalize UPLOAD_DIR to a Path with default and ensure it exists
+UPLOAD_DIR_STR = os.getenv("UPLOAD_DIR", "static/uploads/observations")
+UPLOAD_DIR = Path(UPLOAD_DIR_STR)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+print("UPLOAD_DIR set to:", UPLOAD_DIR)
+
 from app.models import (
     User, Crop, CropCreate, CropPublic, CropUpdate,
     ZoneCrop, ZoneCropCreate, ZoneCropPublic, ZoneCropUpdate,
@@ -277,8 +284,6 @@ def list_zone_crop_observations_by_id(
     
     return zone_crop.observations
 
-UPLOAD_DIR = Path("static/uploads/observations")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @router.post("/zones/{zone_id}/observations/", response_model=ZoneCropObservationPublic)
 def create_zone_crop_observation(
     zone_id: str,
