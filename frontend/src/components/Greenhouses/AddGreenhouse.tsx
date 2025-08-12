@@ -8,6 +8,8 @@ import {
   Input,
   Text,
   VStack,
+  Box,
+  Flex,
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { FaPlus } from "react-icons/fa";
@@ -26,6 +28,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { Field } from "../ui/field";
+import { LocationMap } from "@/components/Common/LocationMap";
 
 const AddGreenhouse = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -37,14 +40,21 @@ const AddGreenhouse = () => {
     handleSubmit,
     reset,
     formState: { errors, isValid, isSubmitting },
+    setValue,
+    watch,
   } = useForm<GreenhouseCreate>({
     mode: "onBlur",
     criteriaMode: "all",
     defaultValues: {
       title: "",
       description: "",
+      latitude: undefined as unknown as number | undefined,
+      longitude: undefined as unknown as number | undefined,
     },
   });
+
+  const lat = watch("latitude");
+  const lng = watch("longitude");
 
   const mutation = useMutation({
     mutationFn: (data: GreenhouseCreate) =>
@@ -63,7 +73,13 @@ const AddGreenhouse = () => {
   });
 
   const onSubmit: SubmitHandler<GreenhouseCreate> = (data) => {
-    mutation.mutate(data);
+    const payload: GreenhouseCreate = {
+      title: data.title,
+      description: data.description,
+      latitude: Number.isFinite(data.latitude as any) ? data.latitude : undefined,
+      longitude: Number.isFinite(data.longitude as any) ? data.longitude : undefined,
+    } as GreenhouseCreate;
+    mutation.mutate(payload);
   };
 
   return (
@@ -115,6 +131,58 @@ const AddGreenhouse = () => {
                   type="text"
                 />
               </Field>
+
+              <Box w="full">
+                <Text mb={2} fontWeight="medium">Location</Text>
+                <LocationMap
+                  lat={lat ?? undefined}
+                  lng={lng ?? undefined}
+                  onChange={(newLat, newLng) => {
+                    setValue("latitude", newLat, { shouldDirty: true, shouldValidate: true });
+                    setValue("longitude", newLng, { shouldDirty: true, shouldValidate: true });
+                  }}
+                  height={280}
+                />
+                <Flex gap={3} mt={3} wrap="wrap">
+                  <Input
+                    placeholder="Latitude"
+                    type="number"
+                    step="any"
+                    width="xs"
+                    {...register("latitude", {
+                      setValueAs: (v) => (v === "" ? undefined : Number(v)),
+                    })}
+                    value={lat ?? ""}
+                    onChange={(e) =>
+                      setValue(
+                        "latitude",
+                        e.target.value === "" ? undefined : Number(e.target.value),
+                        { shouldDirty: true, shouldValidate: true },
+                      )
+                    }
+                  />
+                  <Input
+                    placeholder="Longitude"
+                    type="number"
+                    step="any"
+                    width="xs"
+                    {...register("longitude", {
+                      setValueAs: (v) => (v === "" ? undefined : Number(v)),
+                    })}
+                    value={lng ?? ""}
+                    onChange={(e) =>
+                      setValue(
+                        "longitude",
+                        e.target.value === "" ? undefined : Number(e.target.value),
+                        { shouldDirty: true, shouldValidate: true },
+                      )
+                    }
+                  />
+                </Flex>
+                <Text mt={2} fontSize="xs" color="gray.500">
+                  Click on the map to drop a pin and set coordinates.
+                </Text>
+              </Box>
             </VStack>
           </DialogBody>
 

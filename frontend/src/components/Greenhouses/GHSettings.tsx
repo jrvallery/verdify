@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Button, Flex, Heading, Input, Text, VStack } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
@@ -6,36 +6,7 @@ import { GreenhousesService, type GreenhousePublic } from "@/client";
 import type { ApiError } from "@/client/core/ApiError";
 import useCustomToast from "@/hooks/useCustomToast";
 import { handleError } from "@/utils";
-
-const loadLeaflet = (() => {
-  let loaded: Promise<void> | null = null;
-  return () => {
-    if (loaded) return loaded;
-    loaded = new Promise<void>((resolve, reject) => {
-      // CSS
-      const existingCss = document.querySelector('link[data-leaflet]');
-      if (!existingCss) {
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "https://unpkg.com/leaflet/dist/leaflet.css";
-        link.setAttribute("data-leaflet", "1");
-        document.head.appendChild(link);
-      }
-      // JS
-      if ((window as any).L) {
-        resolve();
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = "https://unpkg.com/leaflet/dist/leaflet.js";
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to load Leaflet"));
-      document.body.appendChild(script);
-    });
-    return loaded;
-  };
-})();
+import { LocationMap } from "@/components/Common/LocationMap";
 
 const GHSettings = () => {
   const { greenhouseId } = useParams({ from: "/greenhouses/$greenhouseId/settings" });
@@ -60,91 +31,6 @@ const GHSettings = () => {
       setLongitude(greenhouse.longitude ?? undefined);
     }
   }, [greenhouse]);
-
-  // Map setup
-  const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapInstance = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-
-  const initialView = useMemo<[number, number, number]>(() => {
-    if (latitude !== undefined && longitude !== undefined) {
-      return [latitude, longitude, 12];
-    }
-    return [39.5, -98.35, 4]; // USA center
-  }, [latitude, longitude]);
-
-  useEffect(() => {
-    let disposed = false;
-    if (!mapRef.current) return;
-
-    loadLeaflet()
-      .then(() => {
-        if (disposed || !mapRef.current) return;
-        const L = (window as any).L;
-
-        // Create or reuse map
-        if (!mapInstance.current) {
-          mapInstance.current = L.map(mapRef.current).setView(
-            [initialView[0], initialView[1]],
-            initialView[2]
-          );
-
-          // Define tile layers
-          const streetLayer = L.tileLayer(
-            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            { attribution: "© OpenStreetMap contributors" }
-          );
-
-          const satelliteLayer = L.tileLayer(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            { attribution: "Tiles © Esri" }
-          );
-
-          // Add default layer and layer control
-          streetLayer.addTo(mapInstance.current);
-          L.control
-            .layers(
-              { "Street View": streetLayer, "Satellite View": satelliteLayer },
-              {}
-            )
-            .addTo(mapInstance.current);
-
-          // Initial marker if we have coords
-          if (latitude !== undefined && longitude !== undefined) {
-            markerRef.current = L.marker([latitude, longitude]).addTo(mapInstance.current);
-          }
-
-          // Click handler to drop/move pin
-          mapInstance.current.on("click", (e: any) => {
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-
-            if (markerRef.current) {
-              mapInstance.current.removeLayer(markerRef.current);
-            }
-            markerRef.current = L.marker([lat, lng]).addTo(mapInstance.current);
-            setLatitude(lat);
-            setLongitude(lng);
-          });
-        } else {
-          // If already exists, just set view/marker
-          mapInstance.current.setView([initialView[0], initialView[1]], initialView[2]);
-          if (latitude !== undefined && longitude !== undefined) {
-            if (markerRef.current) {
-              mapInstance.current.removeLayer(markerRef.current);
-            }
-            markerRef.current = L.marker([latitude, longitude]).addTo(mapInstance.current);
-          }
-        }
-      })
-      .catch(() => {
-        // No-op: map optional
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [initialView, latitude, longitude]);
 
   const updateMutation = useMutation({
     mutationFn: (payload: Partial<GreenhousePublic>) =>
@@ -208,16 +94,23 @@ const GHSettings = () => {
           <Text mb={2} fontWeight="medium">
             Location
           </Text>
-          <Box
-            ref={mapRef}
-            id="map"
-            style={{ height: 360, borderRadius: 8, overflow: "hidden", border: "1px solid var(--chakra-colors-gray-200)" }}
+          <LocationMap
+            lat={latitude}
+            lng={longitude}
+            onChange={(newLat, newLng) => {
+              setLatitude(newLat);
+              setLongitude(newLng);
+            }}
+            height={360}
           />
           <Flex gap={3} mt={3} wrap="wrap">
             <Input
               placeholder="Latitude"
               value={latitude ?? ""}
-              onChange={(e) => setLatitude(e.target.value === "" ? undefined : Number(e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value === "" ? undefined : Number(e.target.value)
+                setLatitude(Number.isFinite(v as any) ? (v as number | undefined) : undefined)
+              }}
               type="number"
               step="any"
               width="xs"
@@ -225,7 +118,10 @@ const GHSettings = () => {
             <Input
               placeholder="Longitude"
               value={longitude ?? ""}
-              onChange={(e) => setLongitude(e.target.value === "" ? undefined : Number(e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value === "" ? undefined : Number(e.target.value)
+                setLongitude(Number.isFinite(v as any) ? (v as number | undefined) : undefined)
+              }}
               type="number"
               step="any"
               width="xs"
