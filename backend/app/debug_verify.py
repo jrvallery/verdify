@@ -1,7 +1,7 @@
-from sqlmodel import select
+from sqlmodel import Session, select
 from app.models import Greenhouse, Zone, ZoneCrop, ZoneCropObservation, Controller, Sensor
 
-def verify_cleanup(session, greenhouse_id):
+def verify_cleanup(session: Session, greenhouse_id):
     """Verify that no orphaned records remain after greenhouse deletion."""
     checks = {
         "greenhouses": session.exec(select(Greenhouse).where(Greenhouse.id == greenhouse_id)).all(),

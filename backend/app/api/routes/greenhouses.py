@@ -110,7 +110,7 @@ def delete_greenhouse(
     session.commit()
 
     # Verify cleanup
-    print(verify_cleanup(SessionDep, gh.id))
+    print(verify_cleanup(session, gh.id))
 
     return Response(status_code=204)
 
