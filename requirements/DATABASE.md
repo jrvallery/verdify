@@ -39,18 +39,125 @@ Each section includes DDL, normalization notes, and usage.
 
 ---
 
-## 2. DDL — Extensions, Types, Meta (Dependency Order)
+## 2. Security Framework & Row-Level Security (RLS)
+
+### 2.1 Multi-Tenant Isolation via RLS
+
+**Critical Security Requirement**: All tables must enforce tenant isolation using PostgreSQL Row-Level Security (RLS) policies. Users can only access greenhouses they own and dependent resources via foreign key relationships.
+
+```sql
+-- 2.1.1 Session context function for current user
+-- Backend middleware sets: SET LOCAL app.current_user_id = '<user_uuid>';
+CREATE OR REPLACE FUNCTION app.current_user_id() RETURNS UUID AS $$
+BEGIN
+  RETURN COALESCE(current_setting('app.current_user_id', TRUE)::UUID, '00000000-0000-0000-0000-000000000000'::UUID);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2.1.2 Device context function for controller token authentication
+-- Backend sets: SET LOCAL app.current_controller_id = '<controller_uuid>';
+CREATE OR REPLACE FUNCTION app.current_controller_id() RETURNS UUID AS $$
+BEGIN
+  RETURN COALESCE(current_setting('app.current_controller_id', TRUE)::UUID, '00000000-0000-0000-0000-000000000000'::UUID);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+**Implementation Notes**:
+- RLS policies are applied to **all core tables** after table creation (see sections 3.x)
+- User endpoints: Set `app.current_user_id` from JWT claims
+- Device endpoints: Set `app.current_controller_id` from device token validation
+- Superuser/admin queries: Use `SET LOCAL` override or disable RLS temporarily
+
+### 2.2 Device Token Security
+
+Device tokens must be stored **hashed** with expiry and revocation tracking to prevent token theft and enable proper lifecycle management.
+
+```sql
+-- Enhanced controller_token table (replaces basic version in section 3.4)
+CREATE TABLE IF NOT EXISTS controller_token (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  controller_id   UUID NOT NULL REFERENCES controller(id) ON DELETE CASCADE,
+  token_hash      TEXT NOT NULL,  -- base64(sha256(token)) - never store plaintext
+  issued_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at      TIMESTAMPTZ NOT NULL,
+  revoked_at      TIMESTAMPTZ NULL,
+  rotation_reason TEXT NULL,      -- 'user_revoke', 'admin_revoke', 'rotation', 'security_incident'
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (controller_id, token_hash)
+);
+
+-- Indexes for fast authentication and cleanup
+CREATE INDEX IF NOT EXISTS idx_controller_token_active 
+  ON controller_token(controller_id, token_hash)
+  WHERE revoked_at IS NULL AND expires_at > now();
+
+CREATE INDEX IF NOT EXISTS idx_controller_token_expiry
+  ON controller_token(expires_at);
+```
+
+### 2.3 Audit Logging
+
+Complete audit trail for all mutations with actor tracking and before/after state capture for compliance and incident response.
+
+```sql
+CREATE TABLE IF NOT EXISTS audit_log (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_user_id       UUID NULL REFERENCES app_user(id) ON DELETE SET NULL,
+  actor_controller_id UUID NULL REFERENCES controller(id) ON DELETE SET NULL,
+  action              TEXT NOT NULL, -- INSERT, UPDATE, DELETE, PUBLISH, ROTATE_TOKEN, REVOKE_TOKEN
+  table_name          TEXT NOT NULL,
+  row_id              UUID NULL,
+  before_data         JSONB NULL,
+  after_data          JSONB NULL,
+  occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  request_id          TEXT NULL,      -- X-Request-Id for correlation
+  CONSTRAINT audit_log_actor_check CHECK (
+    (actor_user_id IS NOT NULL AND actor_controller_id IS NULL) OR
+    (actor_user_id IS NULL AND actor_controller_id IS NOT NULL)
+  )
+);
+
+-- Indexes for audit queries and performance
+CREATE INDEX IF NOT EXISTS idx_audit_log_occurred_at ON audit_log(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_table_row ON audit_log(table_name, row_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor_user ON audit_log(actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor_controller ON audit_log(actor_controller_id);
+```
+
+### 2.4 Idempotency Protection
+
+Prevent duplicate telemetry processing during network retries and ensure reliable device communication.
+
+```sql
+CREATE TABLE IF NOT EXISTS idempotency_key (
+  controller_id UUID NOT NULL REFERENCES controller(id) ON DELETE CASCADE,
+  key          TEXT NOT NULL,
+  seen_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  response_data JSONB NULL,  -- cached response for replay
+  PRIMARY KEY (controller_id, key)
+);
+
+-- TTL cleanup index (cleanup keys older than 24h)
+CREATE INDEX IF NOT EXISTS idx_idempotency_key_ttl ON idempotency_key(seen_at)
+WHERE seen_at < now() - INTERVAL '24 hours';
+```
+
+---
+
+## 3. DDL — Extensions, Types, Meta (Dependency Order)
 
 > Run top‑to‑bottom. No Alembic required yet.
 
 ```sql
--- 2.1 Extensions (install once per database)
+-- 3.1 Extensions (install once per database)
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;     -- gen_random_uuid()
 -- optional:
 -- CREATE EXTENSION IF NOT EXISTS citext;   -- for case-insensitive emails
 
--- 2.2 Enums
+-- 3.2 Enums
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'location_enum') THEN
@@ -61,7 +168,7 @@ BEGIN
   END IF;
 END$$;
 
--- 2.3 Meta (kinds)
+-- 3.3 Meta (kinds)
 CREATE TABLE IF NOT EXISTS sensor_kind_meta (
   kind        TEXT PRIMARY KEY,
   value_type  TEXT NOT NULL CHECK (value_type IN ('float','int')),
@@ -74,7 +181,7 @@ CREATE TABLE IF NOT EXISTS actuator_kind_meta (
   notes       TEXT
 );
 
--- 2.4 Seed meta values (idempotent)
+-- 3.4 Seed meta values (idempotent)
 INSERT INTO sensor_kind_meta(kind, value_type, unit, notes) VALUES
   ('temperature','float','°C','ambient/surface/soil'),
   ('humidity','float','%','relative humidity'),
@@ -112,9 +219,9 @@ ON CONFLICT (kind) DO NOTHING;
 
 ---
 
-## 3. Core Entity Tables
+## 4. Core Entity Tables
 
-### 3.1 Users
+### 4.1 Users
 
 ```sql
 CREATE TABLE IF NOT EXISTS app_user (
@@ -128,7 +235,7 @@ CREATE TABLE IF NOT EXISTS app_user (
 );
 ```
 
-### 3.2 Greenhouses & Zones
+### 4.2 Greenhouses & Zones
 
 ```sql
 CREATE TABLE IF NOT EXISTS greenhouse (
@@ -148,8 +255,8 @@ CREATE TABLE IF NOT EXISTS greenhouse (
   enthalpy_open_kjkg   DOUBLE PRECISION NOT NULL DEFAULT -2.0,
   enthalpy_close_kjkg  DOUBLE PRECISION NOT NULL DEFAULT 1.0,
   site_pressure_hpa    DOUBLE PRECISION NOT NULL DEFAULT 840.0,
-  -- Baseline & context
-  unit_profile         TEXT NOT NULL DEFAULT 'metric' CHECK (unit_profile IN ('metric','imperial')),
+  -- Unit profile: enforce metric-only (remove imperial support)
+  unit_profile         TEXT NOT NULL DEFAULT 'metric' CHECK (unit_profile = 'metric'),
   context_text         TEXT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -168,7 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_zone_greenhouse ON zone(greenhouse_id);
 
 **Normalization:** `zone` references `greenhouse`. Unique `(greenhouse_id, zone_number)` enforces identity.
 
-### 3.3 Crops, Plantings, Observations
+### 4.3 Crops, Plantings, Observations
 
 ```sql
 CREATE TABLE IF NOT EXISTS crop (
@@ -209,36 +316,34 @@ CREATE TABLE IF NOT EXISTS zone_crop_observation (
 CREATE INDEX IF NOT EXISTS idx_obs_zonecrop_time ON zone_crop_observation(zone_crop_id, observed_at DESC);
 ```
 
-### 3.4 Controllers & Device Tokens
+### 4.4 Controllers & Device Tokens
 
 ```sql
 CREATE TABLE IF NOT EXISTS controller (
   id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   greenhouse_id          UUID NOT NULL REFERENCES greenhouse(id) ON DELETE CASCADE,
-  name                   TEXT NOT NULL,
+  label                  TEXT,                    -- renamed from 'name' to align with API.md/openapi.yml
   model                  TEXT,
   device_name            TEXT NOT NULL UNIQUE CHECK (device_name ~ '^verdify-[0-9a-f]{6}$'),
   is_climate_controller  BOOLEAN NOT NULL DEFAULT FALSE,
   fw_version             TEXT,
   hw_version             TEXT,
+  last_seen              TIMESTAMPTZ,            -- track device connectivity
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Exactly one climate controller per greenhouse
+
+-- Constraints for data integrity and business rules
 CREATE UNIQUE INDEX IF NOT EXISTS uq_greenhouse_climate_controller
   ON controller(greenhouse_id)
   WHERE is_climate_controller = TRUE;
 
-CREATE TABLE IF NOT EXISTS controller_token (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  controller_id  UUID NOT NULL REFERENCES controller(id) ON DELETE CASCADE,
-  token_hash     TEXT NOT NULL,            -- never store raw token
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  revoked_at     TIMESTAMPTZ,
-  UNIQUE (controller_id) WHERE (revoked_at IS NULL)  -- one active token
-);
+CREATE INDEX IF NOT EXISTS idx_controller_last_seen ON controller(last_seen DESC);
+
+-- Note: controller_token table is defined in section 2.2 Device Token Security
+-- with enhanced security features (expiry, revocation tracking, etc.)
 ```
 
-### 3.5 Sensors & Mappings
+### 4.5 Sensors & Mappings
 
 ```sql
 CREATE TABLE IF NOT EXISTS sensor (
@@ -260,16 +365,22 @@ CREATE INDEX IF NOT EXISTS idx_sensor_controller ON sensor(controller_id);
 CREATE INDEX IF NOT EXISTS idx_sensor_kind_scope ON sensor(kind, scope);
 
 -- M:N sensor ↔ zone mapping, multi-zone allowed; unique per (sensor, zone, kind)
+-- CRITICAL: Business rule enforces max 1 sensor per (zone_id, kind) for control logic
 CREATE TABLE IF NOT EXISTS sensor_zone_map (
   sensor_id   UUID NOT NULL REFERENCES sensor(id) ON DELETE CASCADE,
   zone_id     UUID NOT NULL REFERENCES zone(id) ON DELETE CASCADE,
   kind        TEXT NOT NULL REFERENCES sensor_kind_meta(kind),
   PRIMARY KEY (sensor_id, zone_id, kind)
 );
+
+-- Enforce business rule: only one sensor per zone/kind combination
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sensor_zone_map_zone_kind
+  ON sensor_zone_map(zone_id, kind);
+
 CREATE INDEX IF NOT EXISTS idx_szm_zone ON sensor_zone_map(zone_id);
 ```
 
-### 3.6 Actuators, Fan Groups, Buttons
+### 4.6 Actuators, Fan Groups, Buttons
 
 ```sql
 CREATE TABLE IF NOT EXISTS actuator (
@@ -277,13 +388,19 @@ CREATE TABLE IF NOT EXISTS actuator (
   controller_id    UUID NOT NULL REFERENCES controller(id) ON DELETE CASCADE,
   name             TEXT NOT NULL,
   kind             TEXT NOT NULL REFERENCES actuator_kind_meta(kind),
-  relay_channel    INTEGER, -- board channel mapping
+  relay_channel    INTEGER CHECK (relay_channel IS NULL OR relay_channel > 0), -- range validation
   min_on_ms        INTEGER NOT NULL DEFAULT 60000,
   min_off_ms       INTEGER NOT NULL DEFAULT 60000,
   fail_safe_state  TEXT NOT NULL DEFAULT 'off' CHECK (fail_safe_state IN ('on','off')),
   zone_id          UUID REFERENCES zone(id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Ensure unique relay channels per controller (when not null)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_actuator_controller_channel
+  ON actuator(controller_id, relay_channel)
+  WHERE relay_channel IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_actuator_controller ON actuator(controller_id);
 CREATE INDEX IF NOT EXISTS idx_actuator_zone ON actuator(zone_id);
 
@@ -317,7 +434,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_button_per_kind
 
 ---
 
-## 4. State Machine (Normalized)
+## 5. State Machine (Normalized)
 
 ```sql
 CREATE TABLE IF NOT EXISTS state_machine_row (
@@ -365,7 +482,35 @@ CREATE TABLE IF NOT EXISTS state_machine_row_fan_group (
 
 ---
 
-## 5. Planning Tables
+## 6. Config Snapshots (for ETag & rollback)
+
+```sql
+CREATE TABLE IF NOT EXISTS config_snapshot (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  greenhouse_id UUID NOT NULL REFERENCES greenhouse(id) ON DELETE CASCADE,
+  version       INTEGER NOT NULL,
+  payload       JSONB NOT NULL,
+  etag          TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by    UUID NULL REFERENCES app_user(id) ON DELETE SET NULL,
+  UNIQUE (greenhouse_id, version)
+);
+
+-- Indexes for ETag-based config fetches and latest version queries
+CREATE INDEX IF NOT EXISTS idx_config_snapshot_etag ON config_snapshot(greenhouse_id, etag);
+CREATE INDEX IF NOT EXISTS idx_config_snapshot_latest ON config_snapshot(greenhouse_id, version DESC);
+
+-- Optionally track latest version per greenhouse to accelerate ETag generation:
+ALTER TABLE greenhouse
+  ADD COLUMN IF NOT EXISTS latest_config_version INTEGER;
+
+ALTER TABLE greenhouse
+  ADD COLUMN IF NOT EXISTS latest_plan_version INTEGER;
+```
+
+---
+
+## 7. Planning Tables
 
 ```sql
 CREATE TABLE IF NOT EXISTS plan (
@@ -430,28 +575,7 @@ CREATE INDEX IF NOT EXISTS idx_plan_lighting_sched ON plan_lighting(controller_i
 
 ---
 
-## 6. Config Snapshots (for ETag & rollback)
-
-```sql
-CREATE TABLE IF NOT EXISTS config_snapshot (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  greenhouse_id   UUID NOT NULL REFERENCES greenhouse(id) ON DELETE CASCADE,
-  version         INTEGER NOT NULL,
-  payload         JSONB NOT NULL,           -- full config.json
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (greenhouse_id, version)
-);
--- Optionally track latest version per greenhouse to accelerate ETag:
-ALTER TABLE greenhouse
-  ADD COLUMN IF NOT EXISTS latest_config_version INTEGER;
-
-ALTER TABLE greenhouse
-  ADD COLUMN IF NOT EXISTS latest_plan_version INTEGER;
-```
-
----
-
-## 7. Timescale Hypertables
+## 8. Timescale Hypertables
 
 > **All times are UTC**; chunk interval suggestions can be tuned later.
 
@@ -555,7 +679,7 @@ SELECT add_compression_policy('input_event', INTERVAL '7 days');
 
 ---
 
-## 8. Validation Functions & Views
+## 9. Validation Functions & Views
 
 ### 8.1 Validate State Machine Coverage
 
@@ -663,7 +787,7 @@ GROUP BY sr.greenhouse_id, time_bucket('5 minutes', sr.time);
 
 ---
 
-## 9. Sample Queries
+## 10. Sample Queries
 
 ### 9.1 Relay ON/OFF durations last 24h (one actuator)
 
@@ -711,7 +835,7 @@ ORDER BY r.bucket DESC;
 
 ---
 
-## 10. Relationships & Indexes (Summary)
+## 11. Relationships & Indexes (Summary)
 
 * **FKs:** All child tables reference parents with `ON DELETE CASCADE` where appropriate (telemetry, mappings, planning).
 * **Uniques:**
@@ -731,7 +855,7 @@ ORDER BY r.bucket DESC;
 
 ---
 
-## 11. Data Migration & Backup Strategy
+## 12. Data Migration & Backup Strategy
 
 ### 11.1 Database Migration Management
 
@@ -1025,7 +1149,7 @@ WHERE status != 'SUCCESS'
 
 ---
 
-## 12. Examples (Insert/Select)
+## 13. Examples (Insert/Select)
 
 ### 12.1 Seed a greenhouse, controller, sensor, actuator
 
@@ -1063,7 +1187,7 @@ VALUES (now(), $GH_ID, $CTRL_ID, $FAN_ID, TRUE, 'STATE_MACHINE:S1');
 
 ---
 
-## 13. Risks & Edge Cases
+## 14. Risks & Edge Cases
 
 * **State machine coverage** cannot be fully enforced via static constraints; use `fn_validate_state_machine` in publish pipeline.
 * **Plan rows vs guard rails:** Clamping occurs in controller; optionally add application‑level validation to reject out‑of‑rail setpoints.
@@ -1072,7 +1196,7 @@ VALUES (now(), $GH_ID, $CTRL_ID, $FAN_ID, TRUE, 'STATE_MACHINE:S1');
 
 ---
 
-## 14. Implementation Guidance for Agentic Coder
+## 15. Implementation Guidance for Agentic Coder
 
 **Task 1 — Create schema**
 
