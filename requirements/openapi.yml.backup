@@ -1,0 +1,2957 @@
+openapi: 3.1.0
+info:
+  title: Project Verdify MVP API
+  version: "2.0"
+  description: >
+    REST API for AI-powered greenhouse MVP. HTTPS required for all endpoints. Metric units on wire.
+    ETag used for config/plan. Device identity via device_name (verdify-aabbcc).
+    Rate limiting applies to telemetry endpoints to prevent DoS attacks.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: https://api.verdify.ai/api/v1
+tags:
+  - name: Authentication
+    description: User and device authentication endpoints including registration, login, and token management
+  - name: Onboarding
+    description: Device discovery, claiming, and initial setup endpoints
+  - name: Config
+    description: Configuration management including publishing, fetching, and diff operations
+  - name: Plan
+    description: Cultivation plan management and retrieval
+  - name: Telemetry
+    description: Device telemetry ingestion endpoints for sensors, actuators, status, and inputs
+  - name: CRUD
+    description: Create, read, update, delete operations for resources like greenhouses, controllers, sensors, actuators
+  - name: Utils
+    description: Utility endpoints for diagnostics and system operations
+security:
+  - UserJWT: []
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register new user account
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CSRFTokenParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserRegisterRequest' }
+            examples:
+              ex:
+                value:
+                  email: "user@example.com"
+                  password: "secure_password"
+                  full_name: "John Doe"
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserRegisterResponse' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login and obtain JWT
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CSRFTokenParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserLoginRequest' }
+            examples:
+              ex:
+                value:
+                  email: "user@example.com"
+                  password: "secure_password"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserLoginResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/csrf:
+    get:
+      tags: [Authentication]
+      summary: Get CSRF token for browser-based authentication
+      security: []
+      responses:
+        '200':
+          description: CSRF token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrf_token, expires_at]
+                properties:
+                  csrf_token:
+                    type: string
+                    description: CSRF token for use in X-CSRF-Token header
+                  expires_at:
+                    type: string
+                    format: date-time
+                    description: UTC timestamp when CSRF token expires
+              examples:
+                ex:
+                  value:
+                    csrf_token: "csrf_1234567890abcdef"
+
+  /auth/revoke-token:
+    post:
+      tags: [Authentication]
+      summary: Revoke current user JWT (logout)
+      security:
+        - UserJWT: []
+      responses:
+        '204':
+          description: Token successfully revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /controllers/{controller_id}/revoke-token:
+    post:
+      tags: [Authentication]
+      summary: Revoke device token for controller (admin)
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+      responses:
+        '204':
+          description: Device token successfully revoked
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /controllers/{controller_id}/rotate-token:
+    post:
+      tags: [Authentication]
+      summary: Rotate device token for controller
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+      responses:
+        '200':
+          description: New device token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_token, expires_at]
+                properties:
+                  device_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /hello:
+    post:
+      tags: [Onboarding]
+      summary: Controller announces itself on first boot
+      security:
+        - {} # public (no auth) for hello
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HelloRequest'
+            examples:
+              ex:
+                value:
+                  device_name: verdify-a1b2c3
+                  claim_code: "932611"
+                  hardware_profile: kincony_a16s
+                  firmware: "esphome-2025.8"
+                  ts_utc: "2025-08-12T18:00:00Z"
+      responses:
+        '200':
+          description: Hello accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelloResponse'
+              examples:
+                pending:
+                  value:
+                    status: pending
+                    message: "Waiting for user claim"
+                claimed:
+                  value:
+                    status: claimed
+                    controller_id: "1b5a0b5f-1d8f-4fc2-9c4d-f1a6a7f9d1a3"
+                    greenhouse_id: "9a94a0a7-d039-4d9b-86f2-46b1c7f7942c"
+                    message: "Controller already claimed"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /controllers/claim:
+    post:
+      tags: [Onboarding]
+      summary: Claim a controller to a greenhouse and issue device_token
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControllerClaimRequest' }
+            examples:
+              ex:
+                value:
+                  device_name: verdify-a1b2c3
+                  claim_code: "932611"
+                  greenhouse_id: "9a94a0a7-d039-4d9b-86f2-46b1c7f7942c"
+      responses:
+        '201':
+          description: Claimed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControllerClaimResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /controllers/{controller_id}/token-exchange:
+    post:
+      tags: [Onboarding]
+      summary: One-time exchange of claim_code + device_name for long-lived device_token & initial ETags
+      description: |
+        Performs a single-use token exchange after /hello indicates status=claimed. Idempotent: a second identical request (after success) returns 200 with same values (no new token) while first successful call returns 201.
+      security:
+        - {} # public (unauthenticated, guarded by claim_code & freshness)
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenExchangeRequest' }
+            examples:
+              ex:
+                value:
+                  device_name: verdify-a1b2c3
+                  claim_code: "932611"
+      responses:
+        '201':
+          description: Token issued (first successful exchange)
+          headers:
+            ETag-Config:
+              description: Strong config ETag the controller should use in If-None-Match on subsequent GET
+              schema: { type: string, pattern: '^config:v[0-9]+:[0-9a-f]{8}$' }
+            ETag-Plan:
+              description: Strong plan ETag the controller should use in If-None-Match on subsequent GET
+              schema: { type: string, pattern: '^plan:v[0-9]+:[0-9a-f]{8}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenExchangeResponse' }
+              examples:
+                ex:
+                  value:
+                    device_token: "eyJhbGciOi..."
+                    config_etag: "config:v42:1a2b3c4d"
+                    plan_etag: "plan:v17:0f9e8d7c"
+                    expires_at: "2024-06-15T10:30:00Z"
+        '200':
+          description: Idempotent replay (token previously issued)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenExchangeResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /controllers/by-name/{device_name}/config:
+    get:
+      tags: [Config]
+      summary: Controller fetches materialized config by device_name (ETag supported, gzip compression available)
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceNameParam'
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - name: Accept-Encoding
+          in: header
+          description: Compression preferences
+          schema:
+            type: string
+            enum: [gzip, identity]
+            default: identity
+          example: gzip
+      responses:
+        '200':
+          description: Config payload
+          headers:
+            ETag:
+              description: "Strong ETag format. Format: config:v<version>:<sha8> (first 8 hex of SHA-256)"
+              schema: { type: string, pattern: '^config:v[0-9]+:[0-9a-f]{8}$' }
+            Last-Modified:
+              schema: { type: string, format: date-time }
+            Content-Encoding:
+              description: Compression algorithm used (if any)
+              schema: 
+                type: string
+                enum: [gzip, identity]
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfigPayload' }
+        '304':
+          description: Not Modified
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /controllers/{controller_id}/plan:
+    get:
+      tags: [Plan]
+      summary: Controller fetches current plan (ETag supported)
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Plan payload
+          headers:
+            ETag:
+              description: "Strong ETag of canonical JSON excluding volatile fields. Format: plan:v<version>:<sha8>"
+              schema: { type: string, pattern: '^plan:v[0-9]+:[0-9a-f]{8}$' }
+            Last-Modified:
+              schema: { type: string, format: date-time }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanPayload' }
+        '304': { description: Not Modified }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /controllers/me/config:
+    get:
+      tags: [Config]
+      summary: Controller fetches current config for authenticated device (identity inferred from token)
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Configuration payload
+          headers:
+            ETag:
+              description: Weak ETag W/"v<version>:<sha256>"
+              schema: 
+                type: string
+                pattern: '^W/"v[0-9]+:[0-9a-f]{64}"$'
+            Last-Modified:
+              schema: { type: string, format: date-time }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfigPayload' }
+        '304': { description: Not Modified }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /controllers/me/plan:
+    get:
+      tags: [Plan]
+      summary: Controller fetches current plan for authenticated device (identity inferred from token)
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Plan payload
+          headers:
+            ETag:
+              description: Weak ETag W/"v<version>:<sha256>"
+              schema: 
+                type: string
+                pattern: '^W/"v[0-9]+:[0-9a-f]{64}"$'
+            Last-Modified:
+              schema: { type: string, format: date-time }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanPayload' }
+        '304': { description: Not Modified }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /greenhouses/{id}/config/publish:
+    post:
+      tags: [Config]
+      summary: Materialize and publish config snapshot for a greenhouse
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Published config (new snapshot created)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfigPublishResult' }
+        '200':
+          description: Dry-run preview (no snapshot persisted)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfigPublishResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /greenhouses/{id}/config/diff:
+    get:
+      tags: [Config]
+      summary: Diff current DB config vs last published snapshot
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      responses:
+        '200':
+          description: JSON patch-like diff
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfigDiff' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # Telemetry ingest (HTTP only)
+  /telemetry/sensors:
+    post:
+      tags: [Telemetry]
+      summary: Ingest sensor readings (batch)
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelemetrySensors' }
+      responses:
+        '202':
+          description: Accepted
+          headers:
+            X-RateLimit-Limit:
+              description: Number of requests allowed per time window
+              schema: { type: integer }
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in current window
+              schema: { type: integer }
+            X-RateLimit-Reset:
+              description: UTC timestamp when rate limit window resets
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /telemetry/actuators:
+    post:
+      tags: [Telemetry]
+      summary: Ingest actuator edge events
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelemetryActuators' }
+      responses:
+        '202':
+          description: Accepted
+          headers:
+            X-RateLimit-Limit:
+              description: Number of requests allowed per time window
+              schema: { type: integer }
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in current window
+              schema: { type: integer }
+            X-RateLimit-Reset:
+              description: UTC timestamp when rate limit window resets
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /telemetry/status:
+    post:
+      tags: [Telemetry]
+      summary: Ingest controller status frames
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelemetryStatus' }
+      responses:
+        '202':
+          description: Accepted
+          headers:
+            X-RateLimit-Limit:
+              description: Number of requests allowed per time window
+              schema: { type: integer }
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in current window
+              schema: { type: integer }
+            X-RateLimit-Reset:
+              description: UTC timestamp when rate limit window resets
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /telemetry/inputs:
+    post:
+      tags: [Telemetry]
+      summary: Ingest input/button events
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelemetryInputs' }
+      responses:
+        '202':
+          description: Accepted
+          headers:
+            X-RateLimit-Limit:
+              description: Number of requests allowed per time window
+              schema: { type: integer }
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in current window
+              schema: { type: integer }
+            X-RateLimit-Reset:
+              description: UTC timestamp when rate limit window resets
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /telemetry/batch:
+    post:
+      tags: [Telemetry]
+      summary: Ingest mixed telemetry batch (sensors, actuators, status, inputs) - supports gzip compression
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyParam'
+        - name: Content-Encoding
+          in: header
+          description: Request body compression (optional)
+          schema:
+            type: string
+            enum: [gzip, identity]
+            default: identity
+          example: gzip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelemetryBatch' }
+            examples:
+              comprehensive_batch:
+                summary: Complete telemetry batch with all data types
+                value:
+                  sensors:
+                    batch_id: "batch_20250813_180500"
+                    ts_utc: "2025-08-13T18:05:00Z"
+                    readings:
+                      - sensor_id: "sensor-temp-01"
+                        kind: "temperature"
+                        value: 24.6
+                        ts_utc: "2025-08-13T18:05:00Z"
+                        scope: "zone"
+                        zone_ids: ["zone-01"]
+                      - sensor_id: "sensor-humi-01"
+                        kind: "humidity"
+                        value: 61.5
+                        ts_utc: "2025-08-13T18:05:00Z"
+                        scope: "greenhouse"
+                  actuators:
+                    events:
+                      - actuator_id: "fan-01"
+                        ts_utc: "2025-08-13T18:04:45Z"
+                        state: "on"
+                        reason: "temp_stage_1"
+                  status:
+                    ts_utc: "2025-08-13T18:05:00Z"
+                    temp_stage: 1
+                    humi_stage: 0
+                    avg_interior_temp_c: 24.6
+                    avg_interior_rh_pct: 61.5
+                    plan_version: 17
+                  inputs:
+                    inputs:
+                      - button_kind: "override"
+                        ts_utc: "2025-08-13T18:04:30Z"
+      responses:
+        '202':
+          description: Accepted
+          headers:
+            X-RateLimit-Limit:
+              description: Number of requests allowed per time window
+              schema: { type: integer }
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in current window
+              schema: { type: integer }
+            X-RateLimit-Reset:
+              description: UTC timestamp when rate limit window resets
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # CRUD — Greenhouse
+  /greenhouses:
+    get:
+      tags: [CRUD]
+      summary: List greenhouses
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GreenhouseList' }
+    post:
+      tags: [CRUD]
+      summary: Create greenhouse
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GreenhouseCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Greenhouse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /greenhouses/{greenhouse_id}:
+    get:
+      tags: [CRUD]
+      summary: Get greenhouse
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      responses:
+        '200':
+          description: Greenhouse details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Greenhouse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [CRUD]
+      summary: Update greenhouse
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GreenhouseUpdate' }
+      responses:
+        '200':
+          description: Greenhouse updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Greenhouse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [CRUD]
+      summary: Delete greenhouse
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      responses:
+        '204':
+          description: Deleted
+
+  # CRUD — Zone
+  /zones:
+    get:
+      tags: [CRUD]
+      summary: List zones
+      security:
+        - UserJWT: []
+      parameters:
+        - name: greenhouse_id
+          in: query
+          description: Filter by greenhouse ID
+          schema:
+            type: string
+            format: uuid
+        - name: is_active
+          in: query
+          description: Filter by active status
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          description: Sort field and direction
+          schema:
+            type: string
+            enum: [zone_number, title, created_at, -zone_number, -title, -created_at]
+            default: zone_number
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneList' }
+    post:
+      tags: [CRUD]
+      summary: Create zone
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneCreate' }
+      responses:
+        '201':
+          description: Zone created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Zone' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /zones/{zone_id}:
+    get:
+      tags: [CRUD]
+      summary: Get zone
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ZoneIdParam'
+      responses:
+        '200':
+          description: Zone details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Zone' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [CRUD]
+      summary: Update zone
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ZoneIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneUpdate' }
+      responses:
+        '200':
+          description: Zone updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Zone' }
+    delete:
+      tags: [CRUD]
+      summary: Delete zone
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ZoneIdParam'
+      responses:
+        '204': { description: Deleted }
+
+  # CRUD — Crop / ZoneCrop / Observation
+  /crops:
+    get:
+      tags: [CRUD]
+      summary: List crops
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List of crops with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CropList' }
+    post:
+      tags: [CRUD]
+      summary: Create crop
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CropCreate' }
+      responses:
+        '201':
+          description: Crop created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Crop' }
+
+  /crops/{crop_id}:
+    get:
+      tags: [CRUD]
+      summary: Get crop
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/CropIdParam'
+      responses:
+        '200':
+          description: Crop details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Crop' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [CRUD]
+      summary: Update crop
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/CropIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CropUpdate' }
+      responses:
+        '200':
+          description: Crop updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Crop' }
+    delete:
+      tags: [CRUD]
+      summary: Delete crop
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/CropIdParam'
+      responses:
+        '204': { description: Deleted }
+
+  /zone-crops:
+    get:
+      tags: [CRUD]
+      summary: List zone crops (plantings)
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_id
+          in: query
+          description: Filter by zone ID
+          schema:
+            type: string
+            format: uuid
+        - name: crop_id
+          in: query
+          description: Filter by crop ID
+          schema:
+            type: string
+            format: uuid
+        - name: is_active
+          in: query
+          description: Filter by active status
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          description: Sort field and direction
+          schema:
+            type: string
+            enum: [planted_at, planned_harvest_at, created_at, -planted_at, -planned_harvest_at, -created_at]
+            default: -planted_at
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCropList' }
+    post:
+      tags: [CRUD]
+      summary: Start/assign a planting to a zone (enforce 1 active)
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneCropCreate' }
+      responses:
+        '201':
+          description: Zone crop planting created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCrop' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /zone-crops/{id}:
+    get:
+      tags: [CRUD]
+      summary: Get zone_crop
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ZoneCropIdParam'
+      responses:
+        '200':
+          description: Zone crop planting details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCrop' }
+    patch:
+      tags: [CRUD]
+      summary: Update/close planting
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ZoneCropIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneCropUpdate' }
+      responses:
+        '200':
+          description: Zone crop planting updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCrop' }
+
+  /observations:
+    get:
+      tags: [CRUD]
+      summary: List crop observations
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_crop_id
+          in: query
+          description: Filter by zone crop ID
+          schema:
+            type: string
+            format: uuid
+        - name: zone_id
+          in: query
+          description: Filter by zone ID
+          schema:
+            type: string
+            format: uuid
+        - name: observation_type
+          in: query
+          description: Filter by observation type
+          schema:
+            type: string
+            enum: [growth, pest, disease, harvest, general]
+        - name: sort
+          in: query
+          description: Sort field and direction
+          schema:
+            type: string
+            enum: [observation_date, created_at, -observation_date, -created_at]
+            default: -observation_date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCropObservationList' }
+    post:
+      tags: [CRUD]
+      summary: Add crop observation
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneCropObservationCreate' }
+      responses:
+        '201':
+          description: Crop observation created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCropObservation' }
+
+  /observations/{id}:
+    patch:
+      tags: [CRUD]
+      summary: Update crop observation
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ObservationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneCropObservationUpdate' }
+      responses:
+        '200':
+          description: Crop observation updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCropObservation' }
+  /observations/{id}/upload-url:
+    post:
+      tags: [CRUD]
+      summary: Generate presigned URL for image upload
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ObservationIdParam'
+      responses:
+        '200':
+          description: Upload URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upload_url, expires_in_s]
+                properties:
+                  upload_url:
+                    type: string
+                    format: uri
+                  expires_in_s:
+                    type: integer
+                    description: URL expires in seconds
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [CRUD]
+      summary: Delete crop observation
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ObservationIdParam'
+      responses:
+        '204': { description: Deleted }
+
+  # CRUD — Controller, Sensor, Mapping, Actuator, Fan Group, Button, State Machine, Plan versions
+  /controllers:
+    get:
+      tags: [CRUD]
+      summary: List controllers
+      security:
+        - UserJWT: []
+      parameters:
+        - name: greenhouse_id
+          in: query
+          description: Filter by greenhouse ID
+          schema:
+            type: string
+            format: uuid
+        - name: is_climate_controller
+          in: query
+          description: Filter by climate controller status
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          description: Sort field and direction
+          schema:
+            type: string
+            enum: [device_name, created_at, -device_name, -created_at]
+            default: device_name
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List of controllers with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControllerList' }
+    post:
+      tags: [CRUD]
+      summary: Create controller (admin)
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControllerCreate' }
+      responses:
+        '201':
+          description: Controller created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Controller' }
+
+  /controllers/{controller_id}:
+    get:
+      tags: [CRUD]
+      summary: Get controller
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+      responses:
+        '200':
+          description: Controller details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Controller' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [CRUD]
+      summary: Update controller (incl. is_climate_controller)
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControllerUpdate' }
+      responses:
+        '200':
+          description: Controller updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Controller' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [CRUD]
+      summary: Delete controller (revokes device_token)
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ControllerIdParam'
+      responses:
+        '204': { description: Deleted }
+
+  /sensors:
+    get:
+      tags: [CRUD]
+      summary: List sensors
+      security:
+        - UserJWT: []
+      parameters:
+        - name: kind
+          in: query
+          description: Filter by sensor kind
+          schema:
+            type: string
+            enum: [temperature, humidity, light, ph, moisture, co2]
+        - name: controller_id
+          in: query
+          description: Filter by controller ID
+          schema:
+            type: string
+            format: uuid
+        - name: greenhouse_id
+          in: query
+          description: Filter by greenhouse ID
+          schema:
+            type: string
+            format: uuid
+        - name: sort
+          in: query
+          description: Sort field and direction
+          schema:
+            type: string
+            enum: [name, kind, created_at, -name, -kind, -created_at]
+            default: name
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List of sensors with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorList' }
+    post:
+      tags: [CRUD]
+      summary: Create sensor
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorCreate' }
+      responses:
+        '201':
+          description: Sensor created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sensor' }
+
+  /sensors/{id}:
+    get:
+      tags: [CRUD]
+      summary: Get sensor
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/SensorIdParam'
+      responses:
+        '200':
+          description: Sensor details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sensor' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [CRUD]
+      summary: Update sensor
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/SensorIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorUpdate' }
+      responses:
+        '200':
+          description: Sensor updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sensor' }
+
+  /sensor-zone-maps:
+    post:
+      tags: [CRUD]
+      summary: Map a sensor to a zone (multi-zone supported)
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorZoneMapCreate' }
+      responses:
+        '201':
+          description: Sensor zone mapping created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorZoneMap' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [CRUD]
+      summary: Unmap a sensor from a zone
+      security:
+        - UserJWT: []
+      parameters:
+        - in: query
+          name: sensor_id
+          schema: { type: string, format: uuid }
+          required: true
+        - in: query
+          name: zone_id
+          schema: { type: string, format: uuid }
+          required: true
+        - in: query
+          name: kind
+          schema: { $ref: '#/components/schemas/SensorKind' }
+          required: true
+      responses:
+        '204': { description: Deleted }
+
+  /actuators:
+    post:
+      tags: [CRUD]
+      summary: Create actuator
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActuatorCreate' }
+      responses:
+        '201':
+          description: Actuator created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Actuator' }  
+
+  /actuators/{id}:
+    get:
+      tags: [CRUD]
+      summary: Get actuator details
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ActuatorIdParam'
+      responses:
+        '200':
+          description: Actuator details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Actuator' }
+
+  /fan-groups:
+    post:
+      tags: [CRUD]
+      summary: Create fan group
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FanGroupCreate' }
+      responses:
+        '201':
+          description: Fan group created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FanGroup' }
+
+  /fan-groups/{id}/members:
+    post:
+      tags: [CRUD]
+      summary: Add member actuator to fan group
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/FanGroupIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FanGroupMemberCreate' }
+      responses:
+        '201':
+          description: Fan group member added successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FanGroupMember' }
+    delete:
+      tags: [CRUD]
+      summary: Remove member from fan group
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/FanGroupIdParam'
+        - in: query
+          name: actuator_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+
+  /buttons:
+    post:
+      tags: [CRUD]
+      summary: Configure a controller button (manual override)
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControllerButtonCreate' }
+      responses:
+        '201':
+          description: Controller button configured successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControllerButton' }
+
+  /state-machine-rows:
+    post:
+      tags: [CRUD]
+      summary: Add/replace a state machine row (49 grid + fallback)
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StateMachineRowCreate' }
+      responses:
+        '201':
+          description: State machine row created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StateMachineRow' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /state-machine-fallback/{greenhouse_id}:
+    put:
+      tags: [CRUD]
+      summary: Set state machine fallback configuration
+      description: Defines fallback actuator states when no state machine rule matches
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StateMachineFallbackUpdate' }
+      responses:
+        '200':
+          description: Fallback configuration updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StateMachineFallback' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /plans:
+    get:
+      tags: [Plan]
+      summary: List plan versions (read-only)
+      security:
+        - UserJWT: []
+      parameters:
+        - in: query
+          name: greenhouse_id
+          schema: { type: string, format: uuid }
+          required: true
+        - name: active
+          in: query
+          description: Filter to active plan only
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          description: Sort field and direction
+          schema:
+            type: string
+            enum: [version, created_at, -version, -created_at]
+            default: -version
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: List of plan versions with pagination
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanList' }
+    post:
+      tags: [Plan]
+      summary: Create new plan version
+      description: Creates a new plan version for a greenhouse. Only one plan can be active at a time.
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanCreate' }
+      responses:
+        '201':
+          description: Plan created successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # Health & Meta endpoints
+  /health:
+    get:
+      tags: [Meta]
+      summary: Health check endpoint
+      description: Returns service health status for load balancers and monitoring
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    description: API version
+                required: [status, timestamp, version]
+                example:
+                  status: healthy
+                  timestamp: "2025-08-13T18:05:00Z"
+                  version: "1.0.0"
+
+  /meta/sensor-kinds:
+    get:
+      tags: [Meta]
+      summary: Get available sensor kinds
+      description: Returns list of supported sensor types for device configuration
+      security: []
+      responses:
+        '200':
+          description: List of sensor kinds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sensor_kinds:
+                    type: array
+                    items:
+                      type: string
+                      enum: [temperature, humidity, light, ph, moisture, co2]
+                required: [sensor_kinds]
+                example:
+                  sensor_kinds: ["temperature", "humidity", "light", "ph", "moisture", "co2"]
+
+  /meta/actuator-kinds:
+    get:
+      tags: [Meta]
+      summary: Get available actuator kinds
+      description: Returns list of supported actuator types for device configuration
+      security: []
+      responses:
+        '200':
+          description: List of actuator kinds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actuator_kinds:
+                    type: array
+                    items:
+                      type: string
+                      enum: [fan, heater, cooler, humidifier, dehumidifier, water_valve, light]
+                required: [actuator_kinds]
+                example:
+                  actuator_kinds: ["fan", "heater", "cooler", "humidifier", "dehumidifier", "water_valve", "light"]
+
+components:
+  securitySchemes:
+    UserJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: User JWT for app/admin calls
+    DeviceToken:
+      type: apiKey
+      in: header
+      name: X-Device-Token
+      description: Long-lived device token for controllers
+
+  parameters:
+    IfNoneMatch:
+      in: header
+      name: If-None-Match
+      schema: { type: string }
+      required: false
+    GreenhouseIdParam:
+      in: path
+      name: greenhouse_id
+      required: true
+      schema: { type: string, format: uuid }
+    ZoneIdParam:
+      in: path
+      name: zone_id
+      required: true
+      schema: { type: string, format: uuid }
+    CropIdParam:
+      in: path
+      name: crop_id
+      required: true
+      schema: { type: string, format: uuid }
+    ZoneCropIdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    ObservationIdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    ControllerIdParam:
+      in: path
+      name: controller_id
+      required: true
+      schema: { type: string, format: uuid }
+    ActuatorIdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    SensorIdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    FanGroupIdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    DeviceNameParam:
+      in: path
+      name: device_name
+      required: true
+      schema:
+        type: string
+        pattern: '^verdify-[0-9a-f]{6}$'
+    PageParam:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSizeParam:
+      in: query
+      name: page_size
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    CSRFTokenParam:
+      in: header
+      name: X-CSRF-Token
+      required: false
+      description: CSRF token for browser-based requests (optional for non-browser clients)
+      schema: { type: string }
+    IdempotencyKeyParam:
+      in: header
+      name: Idempotency-Key
+      required: false
+      description: Idempotency key for exactly-once processing (recommended for telemetry)
+      schema: { type: string, maxLength: 255 }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: 
+                error_code: E400_BAD_REQUEST
+                message: "Invalid input" 
+                timestamp: "2025-08-13T18:05:00Z"
+                details: 
+                  field: "email"
+                  reason: "Invalid email format"
+                request_id: "req_1234567890abcdef"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: 
+                error_code: E401_UNAUTHORIZED
+                message: "Missing/invalid token"
+                timestamp: "2025-08-13T18:05:00Z"
+                request_id: "req_1234567890abcdef"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: { error_code: E404_NOT_FOUND, message: "Resource not found" }
+    Conflict:
+      description: Conflict (uniqueness violated)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: { error_code: E409_CONFLICT, message: "Unique constraint violated" }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          description: Number of requests allowed per time window
+          schema: { type: integer }
+        X-RateLimit-Remaining:
+          description: Number of requests remaining in current window
+          schema: { type: integer }
+        X-RateLimit-Reset:
+          description: UTC timestamp when rate limit window resets
+          schema: { type: integer }
+        Retry-After:
+          description: Seconds to wait before retry
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: 
+                error_code: E429_TOO_MANY_REQUESTS
+                message: "Rate limit exceeded. Try again in 60 seconds."
+                timestamp: "2025-08-13T18:05:00Z"
+                request_id: "req_1234567890abcdef"
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: 
+                error_code: E403_FORBIDDEN
+                message: "Insufficient permissions"
+                timestamp: "2025-08-13T18:05:00Z"
+                request_id: "req_1234567890abcdef"
+
+    UnprocessableEntity:
+      description: Unprocessable entity - validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ex:
+              value: 
+                error_code: E422_UNPROCESSABLE
+                message: "Validation failed"
+                timestamp: "2025-08-13T18:05:00Z"
+                details: 
+                  - field: "email"
+                    value: "invalid-email"
+                    expected: "Valid email format"
+                request_id: "req_1234567890abcdef"
+
+  schemas:
+    # --- Enums / simple types ---
+    ErrorCode:
+      type: string
+      enum:
+        - E400_BAD_REQUEST
+        - E401_UNAUTHORIZED  
+        - E403_FORBIDDEN
+        - E404_NOT_FOUND
+        - E409_CONFLICT
+        - E412_PRECONDITION_FAILED
+        - E422_UNPROCESSABLE
+        - E429_TOO_MANY_REQUESTS
+        - E500_INTERNAL
+        - E503_SERVICE_UNAVAILABLE
+      description: Standardized error codes used across the API
+    LocationEnum:
+      type: string
+      enum: [N, NE, E, SE, S, SW, W, NW]
+    SensorKind:
+      type: string
+      enum:
+        - temperature
+        - humidity
+        - vpd
+        - co2
+        - light
+        - soil_moisture
+        - water_flow
+        - water_total
+        - dew_point
+        - absolute_humidity
+        - enthalpy_delta
+        - air_pressure
+        - kwh
+        - gas_consumption
+        - ppfd
+        - wind_speed
+        - rainfall
+        - power
+    SensorScope:
+      type: string
+      enum: [zone, greenhouse, external]
+    ActuatorKind:
+      type: string
+      enum: [fan, heater, vent, fogger, irrigation_valve, fertilizer_valve, pump, light]
+    OnOffState:
+      type: string
+      enum: [on, off]
+    FailSafeState:
+      type: string
+      enum: [on, off]
+    ButtonKind:
+      type: string
+      enum: [cool, heat, humid]
+
+    # --- Error response ---
+    ErrorResponse:
+      type: object
+      required: [error_code, message, timestamp, request_id]
+      properties:
+        error_code: 
+          $ref: '#/components/schemas/ErrorCode'
+          description: Standardized error code
+          example: "E409_CONFLICT"
+        message: 
+          type: string
+          description: Human-readable error message
+          example: "Email already exists"
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of when the error occurred
+        request_id:
+          type: string
+          description: Unique request identifier for tracing
+          example: "req_1234567890"
+        details: 
+          oneOf:
+            - type: array
+              items: { $ref: '#/components/schemas/ErrorDetail' }
+            - type: object
+              additionalProperties: true
+            - type: string
+          description: Structured error details for field-specific issues
+          example: 
+            field: "email"
+            value: "user@example.com"
+
+    ErrorDetail:
+      type: object
+      required: [field, value, expected]
+      properties:
+        field:
+          type: string
+          description: Name of the field that caused the error
+          example: "email"
+        value:
+          description: The actual value that was provided
+          example: "invalid-email"
+        expected:
+          type: string
+          description: What was expected for this field
+          example: "Valid email address"
+
+    # --- Authentication ---
+    UserRegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        full_name:
+          type: string
+          nullable: true
+    UserRegisterResponse:
+      type: object
+      required: [user, access_token]
+      properties:
+        user:
+          type: object
+          required: [id, email, created_at]
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string, format: email }
+            full_name: { type: string, nullable: true }
+            created_at: { type: string, format: date-time }
+        access_token:
+          type: string
+    UserLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    UserLoginResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [bearer]
+          default: bearer
+        expires_in:
+          type: integer
+          description: Token expiry in seconds
+
+    # --- Onboarding ---
+    HelloRequest:
+      type: object
+      required: [device_name, claim_code, hardware_profile, firmware, ts_utc]
+      properties:
+        device_name:
+          type: string
+          pattern: '^verdify-[0-9a-f]{6}$'
+        claim_code:
+          type: string
+          pattern: '^\\d{6}$'
+          description: 6 digit numeric claim code printed on label / shown in captive portal
+        hardware_profile:
+          type: string
+          example: kincony_a16s
+        firmware:
+          type: string
+        ts_utc:
+          type: string
+          format: date-time
+    HelloResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, claimed]
+        controller_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        greenhouse_id:
+          type: string
+          format: uuid
+          nullable: true
+        retry_after_s:
+          type: integer
+          minimum: 1
+          description: Suggested client poll backoff when status=pending
+        message:
+          type: string
+    TokenExchangeRequest:
+      type: object
+      required: [device_name, claim_code]
+      properties:
+        device_name:
+          type: string
+          pattern: '^verdify-[0-9a-f]{6}$'
+        claim_code:
+          type: string
+          pattern: '^\\d{6}$'
+    TokenExchangeResponse:
+      type: object
+      required: [device_token, config_etag, plan_etag, expires_at]
+      properties:
+        device_token:
+          type: string
+        config_etag:
+          type: string
+          pattern: '^config:v[0-9]+:[0-9a-f]{8}$'
+        plan_etag:
+          type: string
+          pattern: '^plan:v[0-9]+:[0-9a-f]{8}$'
+        expires_at:
+          type: string
+          format: date-time
+          description: UTC timestamp when device token expires (180 days from issue)
+
+    ControllerClaimRequest:
+      type: object
+      required: [device_name, claim_code, greenhouse_id]
+      properties:
+        device_name:
+          type: string
+          pattern: '^verdify-[0-9a-f]{6}$'
+        claim_code:
+          type: string
+        greenhouse_id:
+          type: string
+          format: uuid
+    ControllerClaimResponse:
+      type: object
+      required: [controller, device_token, expires_at]
+      properties:
+        controller: { $ref: '#/components/schemas/Controller' }
+        device_token:
+          type: string
+          description: Long-lived token valid until controller deletion
+        expires_at:
+          type: string
+          format: date-time
+          description: UTC timestamp when device token expires (180 days from issue)
+
+    # --- Generic pagination schema ---
+    Paginated:
+      type: object
+      required: [data, page, page_size, total]
+      properties:
+        data:
+          type: array
+          description: Array of items for current page
+        page:
+          type: integer
+          minimum: 1
+          description: Current page number
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 200
+          description: Number of items per page
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of items across all pages
+
+    # --- CRUD core entities ---
+    Greenhouse:
+      type: object
+      required: [id, title, is_active, min_temp_c, max_temp_c, min_vpd_kpa, max_vpd_kpa]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: [string, "null"], maxLength: 255 }
+        is_active: { type: boolean, default: true }
+        latitude: { type: [number, "null"], minimum: -90, maximum: 90 }
+        longitude: { type: [number, "null"], minimum: -180, maximum: 180 }
+        min_temp_c: { type: number, default: 7.0 }
+        max_temp_c: { type: number, default: 35.0 }
+        min_vpd_kpa: { type: number, default: 0.3 }
+        max_vpd_kpa: { type: number, default: 2.5 }
+        enthalpy_open_kjkg: { type: number, default: -2.0 }
+        enthalpy_close_kjkg: { type: number, default: 1.0 }
+        site_pressure_hpa: { type: number, default: 840.0 }
+        context_text: { type: [string, "null"], maxLength: 4000 }
+
+    GreenhouseCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: [string, "null"], maxLength: 255 }
+        is_active: { type: boolean, default: true }
+        latitude: { type: [number, "null"], minimum: -90, maximum: 90 }
+        longitude: { type: [number, "null"], minimum: -180, maximum: 180 }
+        min_temp_c: { type: number, default: 7.0 }
+        max_temp_c: { type: number, default: 35.0 }
+        min_vpd_kpa: { type: number, default: 0.3 }
+        max_vpd_kpa: { type: number, default: 2.5 }
+        enthalpy_open_kjkg: { type: number, default: -2.0 }
+        enthalpy_close_kjkg: { type: number, default: 1.0 }
+        site_pressure_hpa: { type: number, default: 840.0 }
+        context_text: { type: [string, "null"], maxLength: 4000 }
+    GreenhouseUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: [string, "null"] }
+        is_active: { type: boolean }
+        latitude: { type: [number, "null"] }
+        longitude: { type: [number, "null"] }
+        min_temp_c: { type: number }
+        max_temp_c: { type: number }
+        min_vpd_kpa: { type: number }
+        max_vpd_kpa: { type: number }
+        enthalpy_open_kjkg: { type: number }
+        enthalpy_close_kjkg: { type: number }
+        site_pressure_hpa: { type: number }
+        context_text: { type: [string, "null"] }
+    GreenhouseList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Greenhouse' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    Zone:
+      type: object
+      required: [id, greenhouse_id, zone_number, location]
+      properties:
+        id: { type: string, format: uuid }
+        greenhouse_id: { type: string, format: uuid }
+        zone_number: { type: integer, minimum: 1 }
+        location: { $ref: '#/components/schemas/LocationEnum' }
+        context_text: { type: [string, "null"], maxLength: 2000 }
+    ZoneCreate:
+      required: [greenhouse_id, zone_number, location]
+      type: object
+      properties:
+        greenhouse_id: { type: string, format: uuid }
+        zone_number: { type: integer, minimum: 1 }
+        location: { $ref: '#/components/schemas/LocationEnum' }
+        context_text: { type: [string, "null"] }
+    ZoneUpdate:
+      type: object
+      properties:
+        zone_number: { type: integer, minimum: 1 }
+        location: { $ref: '#/components/schemas/LocationEnum' }
+        context_text: { type: [string, "null"] }
+    ZoneList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Zone' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    Crop:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 255 }
+        description: { type: [string, "null"], maxLength: 500 }
+        expected_yield_per_sqm: { type: [number, "null"] }
+        growing_days: { type: [integer, "null"] }
+        recipe:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+    CropCreate:
+      required: [name]
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: [string, "null"] }
+        expected_yield_per_sqm: { type: [number, "null"] }
+        growing_days: { type: [integer, "null"] }
+        recipe:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+    CropUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: [string, "null"] }
+        expected_yield_per_sqm: { type: [number, "null"] }
+        growing_days: { type: [integer, "null"] }
+        recipe:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+    CropList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Crop' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    ZoneCrop:
+      type: object
+      required: [id, zone_id, crop_id, is_active, start_date]
+      properties:
+        id: { type: string, format: uuid }
+        zone_id: { type: string, format: uuid }
+        crop_id: { type: string, format: uuid }
+        start_date: { type: string, format: date-time }
+        end_date: { type: string, format: date-time, nullable: true }
+        is_active: { type: boolean, default: true }
+        final_yield: { type: number, nullable: true }
+        area_sqm: { type: number, nullable: true }
+    ZoneCropCreate:
+      type: object
+      required: [zone_id, crop_id, start_date]
+      properties:
+        zone_id: { type: string, format: uuid }
+        crop_id: { type: string, format: uuid }
+        start_date: { type: string, format: date-time }
+        area_sqm: { type: number, nullable: true }
+    ZoneCropUpdate:
+      type: object
+      properties:
+        end_date: { type: string, format: date-time, nullable: true }
+        is_active: { type: boolean }
+        final_yield: { type: number, nullable: true }
+        area_sqm: { type: number, nullable: true }
+    ZoneCropList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ZoneCrop' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    ZoneCropObservation:
+      type: object
+      required: [id, zone_crop_id, observed_at]
+      properties:
+        id: { type: string, format: uuid }
+        zone_crop_id: { type: string, format: uuid }
+        observed_at: { type: string, format: date-time }
+        notes: { type: string, maxLength: 2000, nullable: true }
+        image_url: { type: string, nullable: true }
+        height_cm: { type: number, nullable: true }
+        health_score: { type: integer, minimum: 1, maximum: 10, nullable: true }
+    ZoneCropObservationCreate:
+      type: object
+      required: [zone_crop_id, observed_at]
+      properties:
+        zone_crop_id: { type: string, format: uuid }
+        observed_at: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+        image_url: { type: string, nullable: true }
+        height_cm: { type: number, nullable: true }
+        health_score: { type: integer, minimum: 1, maximum: 10, nullable: true }
+    ZoneCropObservationUpdate:
+      type: object
+      properties:
+        observed_at: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+        image_url: { type: string, nullable: true }
+        height_cm: { type: number, nullable: true }
+        health_score: { type: integer, minimum: 1, maximum: 10, nullable: true }
+    ZoneCropObservationList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ZoneCropObservation' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    Controller:
+      type: object
+      required: [id, greenhouse_id, name, device_name, is_climate_controller]
+      properties:
+        id: { type: string, format: uuid }
+        greenhouse_id: { type: string, format: uuid }
+        name: { type: string }
+        model: { type: string, nullable: true }
+        device_name:
+          type: string
+          pattern: '^verdify-[0-9a-f]{6}$'
+        is_climate_controller: { type: boolean, default: false }
+        fw_version: { type: string, nullable: true }
+        hw_version: { type: string, nullable: true }
+    ControllerCreate:
+      type: object
+      required: [greenhouse_id, name, device_name]
+      properties:
+        greenhouse_id: { type: string, format: uuid }
+        name: { type: string }
+        model: { type: string, nullable: true }
+        device_name:
+          type: string
+          pattern: '^verdify-[0-9a-f]{6}$'
+        is_climate_controller: { type: boolean, default: false }
+        fw_version: { type: string, nullable: true }
+        hw_version: { type: string, nullable: true }
+    ControllerUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        model: { type: string, nullable: true }
+        is_climate_controller: { type: boolean }
+        fw_version: { type: string, nullable: true }
+        hw_version: { type: string, nullable: true }
+    ControllerList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Controller' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    Sensor:
+      type: object
+      required: [id, controller_id, name, kind, scope]
+      properties:
+        id: { type: string, format: uuid }
+        controller_id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/SensorKind' }
+        scope: { $ref: '#/components/schemas/SensorScope' }
+        include_in_climate_loop: { type: boolean, default: false }
+        modbus_slave_id: { type: integer, nullable: true }
+        modbus_reg: { type: integer, nullable: true }
+        value_type: { type: string, enum: [float, int], nullable: true }
+        scale_factor: { type: number, default: 1.0 }
+        offset: { type: number, default: 0.0 }
+        poll_interval_s: { type: integer, default: 10 }
+    SensorCreate:
+      type: object
+      required: [controller_id, name, kind, scope]
+      properties:
+        controller_id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/SensorKind' }
+        scope: { $ref: '#/components/schemas/SensorScope' }
+        include_in_climate_loop: { type: boolean, default: false }
+        modbus_slave_id: { type: integer, nullable: true }
+        modbus_reg: { type: integer, nullable: true }
+        value_type: { type: string, enum: [float, int], nullable: true }
+        scale_factor: { type: number, default: 1.0 }
+        offset: { type: number, default: 0.0 }
+        poll_interval_s: { type: integer, default: 10 }
+    SensorUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        include_in_climate_loop: { type: boolean }
+        modbus_slave_id: { type: integer, nullable: true }
+        modbus_reg: { type: integer, nullable: true }
+        scale_factor: { type: number }
+        offset: { type: number }
+        poll_interval_s: { type: integer }
+    SensorList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Sensor' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    SensorZoneMap:
+      type: object
+      required: [sensor_id, zone_id, kind]
+      properties:
+        sensor_id: { type: string, format: uuid }
+        zone_id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/SensorKind' }
+    SensorZoneMapCreate:
+      allOf:
+        - $ref: '#/components/schemas/SensorZoneMap'
+
+    Actuator:
+      type: object
+      required: [id, controller_id, name, kind]
+      properties:
+        id: { type: string, format: uuid }
+        controller_id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/ActuatorKind' }
+        relay_channel: { type: integer, nullable: true }
+        min_on_ms: { type: integer, default: 60000 }
+        min_off_ms: { type: integer, default: 60000 }
+        fail_safe_state: { $ref: '#/components/schemas/FailSafeState' }
+        zone_id: { type: string, format: uuid, nullable: true }
+    ActuatorCreate:
+      type: object
+      required: [controller_id, name, kind]
+      properties:
+        controller_id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/ActuatorKind' }
+        relay_channel: { type: integer, nullable: true }
+        min_on_ms: { type: integer, default: 60000 }
+        min_off_ms: { type: integer, default: 60000 }
+        fail_safe_state: { $ref: '#/components/schemas/FailSafeState' }
+        zone_id: { type: string, format: uuid, nullable: true }
+
+    FanGroup:
+      type: object
+      required: [id, controller_id, name]
+      properties:
+        id: { type: string, format: uuid }
+        controller_id: { type: string, format: uuid }
+        name: { type: string }
+    FanGroupCreate:
+      type: object
+      required: [controller_id, name]
+      properties:
+        controller_id: { type: string, format: uuid }
+        name: { type: string }
+    FanGroupMember:
+      type: object
+      required: [fan_group_id, actuator_id]
+      properties:
+        fan_group_id: { type: string, format: uuid }
+        actuator_id: { type: string, format: uuid }
+    FanGroupMemberCreate:
+      allOf:
+        - $ref: '#/components/schemas/FanGroupMember'
+
+    ControllerButton:
+      type: object
+      required: [id, controller_id, button_kind, timeout_s]
+      properties:
+        id: { type: string, format: uuid }
+        controller_id: { type: string, format: uuid }
+        button_kind: { $ref: '#/components/schemas/ButtonKind' }
+        target_temp_stage: { type: integer, minimum: -3, maximum: 3, nullable: true }
+        target_humi_stage: { type: integer, minimum: -3, maximum: 3, nullable: true }
+        timeout_s: { type: integer, minimum: 1 }
+    ControllerButtonCreate:
+      type: object
+      required: [controller_id, button_kind, timeout_s]
+      properties:
+        controller_id: { type: string, format: uuid }
+        button_kind: { $ref: '#/components/schemas/ButtonKind' }
+        target_temp_stage: { type: integer, minimum: -3, maximum: 3, nullable: true }
+        target_humi_stage: { type: integer, minimum: -3, maximum: 3, nullable: true }
+        timeout_s: { type: integer, minimum: 1 }
+
+    StateMachineRow:
+      type: object
+      required: [id, greenhouse_id, temp_stage, humi_stage]
+      properties:
+        id: { type: string, format: uuid }
+        greenhouse_id: { type: string, format: uuid }
+        temp_stage: { type: integer, minimum: -3, maximum: 3, nullable: true }
+        humi_stage: { type: integer, minimum: -3, maximum: 3, nullable: true }
+        is_fallback: { type: boolean, default: false }
+        must_on_actuators:
+          type: array
+          items: { type: string, format: uuid }
+          default: []
+        must_off_actuators:
+          type: array
+          items: { type: string, format: uuid }
+          default: []
+        must_on_fan_groups:
+          type: array
+          items:
+            type: object
+            required: [fan_group_id, on_count]
+            properties:
+              fan_group_id: { type: string, format: uuid }
+              on_count: { type: integer, minimum: 0 }
+          default: []
+    StateMachineRowCreate:
+      allOf:
+        - $ref: '#/components/schemas/StateMachineRow'
+
+    StateMachineFallback:
+      type: object
+      required: [greenhouse_id, must_on_actuators, must_off_actuators]
+      properties:
+        greenhouse_id: { type: string, format: uuid }
+        must_on_actuators:
+          type: array
+          items: { type: string, format: uuid }
+          description: Actuators that must be on when no state machine rule matches
+        must_off_actuators:
+          type: array
+          items: { type: string, format: uuid }
+          description: Actuators that must be off when no state machine rule matches
+        must_on_fan_groups:
+          type: array
+          items:
+            type: object
+            required: [fan_group_id, on_count]
+            properties:
+              fan_group_id: { type: string, format: uuid }
+              on_count: { type: integer, minimum: 0 }
+          description: Fan groups and their required on counts for fallback state
+
+    StateMachineFallbackUpdate:
+      type: object
+      properties:
+        must_on_actuators:
+          type: array
+          items: { type: string, format: uuid }
+        must_off_actuators:
+          type: array
+          items: { type: string, format: uuid }
+        must_on_fan_groups:
+          type: array
+          items:
+            type: object
+            required: [fan_group_id, on_count]
+            properties:
+              fan_group_id: { type: string, format: uuid }
+              on_count: { type: integer, minimum: 0 }
+
+    # --- Config payload (materialized) ---
+    ConfigPayload:
+      type: object
+      description: Complete configuration package for controllers, including greenhouse parameters, sensor/actuator mappings, and control rules
+      required: [version, greenhouse, controllers, sensors, actuators, state_rules, baselines, rails]
+      properties:
+        version: 
+          type: integer 
+          minimum: 1
+          description: Configuration version number for ETag generation and change tracking
+        generated_at: 
+          type: string 
+          format: date-time
+          description: UTC timestamp when configuration was generated
+        greenhouse:
+          type: object
+          description: Greenhouse physical parameters and operational limits
+          required: [id, title, min_temp_c, max_temp_c, min_vpd_kpa, max_vpd_kpa, enthalpy_open_kjkg, enthalpy_close_kjkg, site_pressure_hpa]
+          properties:
+            id: 
+              type: string 
+              format: uuid
+              description: Unique greenhouse identifier
+            title: 
+              type: string
+              description: Human-readable greenhouse name
+            min_temp_c: 
+              type: number
+              description: Minimum allowable temperature in Celsius (hard safety limit)
+            max_temp_c: 
+              type: number
+              description: Maximum allowable temperature in Celsius (hard safety limit)
+            min_vpd_kpa: 
+              type: number
+              description: Minimum vapor pressure deficit in kPa (humidity control bound)
+            max_vpd_kpa: 
+              type: number
+              description: Maximum vapor pressure deficit in kPa (humidity control bound)
+            enthalpy_open_kjkg: 
+              type: number
+              description: Enthalpy threshold in kJ/kg below which ventilation is beneficial for dehumidification
+            enthalpy_close_kjkg: 
+              type: number
+              description: Enthalpy threshold in kJ/kg above which ventilation should be reduced
+            site_pressure_hpa: 
+              type: number
+              description: Local atmospheric pressure in hPa for enthalpy calculations
+        baselines:
+          type: object
+          description: Control thresholds and hysteresis values for staging decisions
+          required: [temp_thresholds, vpd_thresholds, hysteresis]
+          properties:
+            temp_thresholds:
+              type: object
+              description: Temperature thresholds in Celsius for staging levels (-3 to +3, where negative indicates heat demand and positive indicates cooling demand)
+              required: [minus3, minus2, minus1, zero, plus1, plus2, plus3]
+              properties:
+                minus3: 
+                  type: number
+                  description: Stage -3 temperature threshold (maximum heat demand)
+                minus2: 
+                  type: number
+                  description: Stage -2 temperature threshold (high heat demand)
+                minus1: 
+                  type: number
+                  description: Stage -1 temperature threshold (moderate heat demand)
+                zero: 
+                  type: number
+                  description: Stage 0 temperature threshold (target/neutral temperature)
+                plus1: 
+                  type: number
+                  description: Stage +1 temperature threshold (moderate cooling demand)
+                plus2: 
+                  type: number
+                  description: Stage +2 temperature threshold (high cooling demand)
+                plus3: 
+                  type: number
+                  description: Stage +3 temperature threshold (maximum cooling demand)
+            vpd_thresholds:
+              type: object
+              description: VPD thresholds in kPa for humidity staging levels (-3 to +3, where negative indicates humidification need and positive indicates dehumidification need)
+              required: [minus3, minus2, minus1, zero, plus1, plus2, plus3]
+              properties:
+                minus3: { type: number }
+                minus2: { type: number }
+                minus1: { type: number }
+                zero: { type: number }
+                plus1: { type: number }
+                plus2: { type: number }
+                plus3: { type: number }
+            hysteresis:
+              type: object
+              properties:
+                temp_c: { type: number, default: 0.5 }
+                vpd_kpa: { type: number, default: 0.1 }
+        rails:
+          type: object
+          required: [min_temp_c, max_temp_c, min_vpd_kpa, max_vpd_kpa]
+          properties:
+            min_temp_c: { type: number }
+            max_temp_c: { type: number }
+            min_vpd_kpa: { type: number }
+            max_vpd_kpa: { type: number }
+        controllers:
+          type: array
+          items:
+            type: object
+            required: [controller_id, device_name, is_climate_controller]
+            properties:
+              controller_id: { type: string, format: uuid }
+              device_name:
+                type: string
+                pattern: '^verdify-[0-9a-f]{6}$'
+              is_climate_controller: { type: boolean }
+        sensors:
+          type: array
+          items:
+            type: object
+            required: [sensor_id, controller_id, name, kind, scope, include_in_climate_loop]
+            properties:
+              sensor_id: { type: string, format: uuid }
+              controller_id: { type: string, format: uuid }
+              name: { type: string }
+              kind: { $ref: '#/components/schemas/SensorKind' }
+              scope: { $ref: '#/components/schemas/SensorScope' }
+              include_in_climate_loop: { type: boolean }
+              zone_ids:
+                type: array
+                items: { type: string, format: uuid }
+              poll_interval_s: { type: integer }
+        actuators:
+          type: array
+          items:
+            type: object
+            required: [actuator_id, controller_id, name, kind]
+            properties:
+              actuator_id: { type: string, format: uuid }
+              controller_id: { type: string, format: uuid }
+              name: { type: string }
+              kind: { $ref: '#/components/schemas/ActuatorKind' }
+              relay_channel: { type: integer, nullable: true }
+              min_on_ms: { type: integer }
+              min_off_ms: { type: integer }
+              zone_id: { type: string, format: uuid, nullable: true }
+        fan_groups:
+          type: array
+          items:
+            type: object
+            required: [fan_group_id, controller_id, name, members]
+            properties:
+              fan_group_id: { type: string, format: uuid }
+              controller_id: { type: string, format: uuid }
+              name: { type: string }
+              members:
+                type: array
+                items:
+                  type: object
+                  required: [actuator_id]
+                  properties:
+                    actuator_id: { type: string, format: uuid }
+        buttons:
+          type: array
+          items: { $ref: '#/components/schemas/ControllerButton' }
+        state_rules:
+          type: object
+          required: [grid, fallback]
+          properties:
+            grid:
+              type: array
+              items:
+                type: object
+                required: [temp_stage, humi_stage, must_on_actuators, must_off_actuators]
+                properties:
+                  temp_stage: { type: integer, minimum: -3, maximum: 3 }
+                  humi_stage: { type: integer, minimum: -3, maximum: 3 }
+                  must_on_actuators:
+                    type: array
+                    items: { type: string, format: uuid }
+                  must_off_actuators:
+                    type: array
+                    items: { type: string, format: uuid }
+                  must_on_fan_groups:
+                    type: array
+                    items:
+                      type: object
+                      required: [fan_group_id, on_count]
+                      properties:
+                        fan_group_id: { type: string, format: uuid }
+                        on_count: { type: integer, minimum: 0 }
+            fallback:
+              type: object
+              required: [must_on_actuators, must_off_actuators, must_on_fan_groups, is_fallback]
+              properties:
+                is_fallback: { type: boolean, enum: [true] }
+                must_on_actuators:
+                  type: array
+                  items: { type: string, format: uuid }
+                must_off_actuators:
+                  type: array
+                  items: { type: string, format: uuid }
+                must_on_fan_groups:
+                  type: array
+                  items:
+                    type: object
+                    required: [fan_group_id, on_count]
+                    properties:
+                      fan_group_id: { type: string, format: uuid }
+                      on_count: { type: integer, minimum: 0 }
+
+    ConfigPublishResult:
+      type: object
+      required: [published, version, errors, warnings, payload]
+      properties:
+        published: { type: boolean }
+        version: { type: integer }
+        errors:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        payload:
+          $ref: '#/components/schemas/ConfigPayload'
+
+    ConfigDiff:
+      type: object
+      properties:
+        added: { type: array, items: { type: string } }
+        removed: { type: array, items: { type: string } }
+        changed: { type: array, items: { type: string } }
+
+    # --- Plan schemas ---
+    Plan:
+      type: object
+      required: [id, version, greenhouse_id, is_active, effective_from, effective_to, created_at, payload]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer }
+        greenhouse_id: { type: string, format: uuid }
+        is_active: { type: boolean }
+        effective_from: { type: string, format: date-time }
+        effective_to: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        payload: { $ref: '#/components/schemas/PlanPayload' }
+
+    PlanCreate:
+      type: object
+      required: [greenhouse_id, effective_from, effective_to, payload]
+      properties:
+        greenhouse_id: { type: string, format: uuid }
+        is_active: { type: boolean, default: false }
+        effective_from: { type: string, format: date-time }
+        effective_to: { type: string, format: date-time }
+        payload: { $ref: '#/components/schemas/PlanPayload' }
+
+    PlanList:
+      allOf:
+        - $ref: '#/components/schemas/Paginated'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Plan' }
+
+    # --- Plan payload ---
+    PlanPayload:
+      type: object
+      required: [version, greenhouse_id, effective_from, effective_to, setpoints]
+      properties:
+        version: { type: integer }
+        greenhouse_id: { type: string, format: uuid }
+        effective_from: { type: string, format: date-time }
+        effective_to: { type: string, format: date-time }
+        setpoints:
+          type: array
+          description: 30-min steps recommended
+          items:
+            type: object
+            required: [ts_utc, min_temp_c, max_temp_c, min_vpd_kpa, max_vpd_kpa]
+            properties:
+              ts_utc: { type: string, format: date-time }
+              min_temp_c: { type: number }
+              max_temp_c: { type: number }
+              min_vpd_kpa: { type: number }
+              max_vpd_kpa: { type: number }
+              temp_stage_delta: { type: integer, minimum: -1, maximum: 1, default: 0 }
+              humi_stage_delta: { type: integer, minimum: -1, maximum: 1, default: 0 }
+              hysteresis_overrides:
+                type: object
+                properties:
+                  temp_c: { type: number }
+                  rh_pct: { type: number }
+        irrigation:
+          type: array
+          items:
+            type: object
+            required: [ts_utc, actuator_id, duration_s]
+            properties:
+              ts_utc: { type: string, format: date-time }
+              actuator_id: { type: string, format: uuid }
+              zone_id: { type: string, format: uuid, nullable: true }
+              duration_s: { type: integer, minimum: 1 }
+              min_soil_vwc: { type: number, nullable: true }
+        fertilization:
+          type: array
+          items:
+            type: object
+            required: [ts_utc, actuator_id, duration_s]
+            properties:
+              ts_utc: { type: string, format: date-time }
+              actuator_id: { type: string, format: uuid }
+              zone_id: { type: string, format: uuid, nullable: true }
+              duration_s: { type: integer, minimum: 1 }
+        lighting:
+          type: array
+          items:
+            type: object
+            required: [ts_utc, actuator_id, duration_s]
+            properties:
+              ts_utc: { type: string, format: date-time }
+              actuator_id: { type: string, format: uuid }
+              duration_s: { type: integer, minimum: 1 }
+
+    # --- Telemetry ---
+    TelemetrySensors:
+      type: object
+      required: [readings]
+      properties:
+  # Identity (controller) is derived from DeviceToken; explicit controller_id/device_name omitted for security & payload reduction.
+        batch_id: { type: string, nullable: true }
+        ts_utc: { type: string, format: date-time, nullable: true }
+        readings:
+          type: array
+          items:
+            type: object
+            required: [sensor_id, kind, value, ts_utc]
+            properties:
+              sensor_id: { type: string, format: uuid }
+              kind: { $ref: '#/components/schemas/SensorKind' }
+              value: { type: number }
+              ts_utc: { type: string, format: date-time }
+              scope: { $ref: '#/components/schemas/SensorScope' }
+              zone_ids:
+                type: array
+                items: { type: string, format: uuid }
+    TelemetryActuators:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            required: [actuator_id, ts_utc, state, reason]
+            properties:
+              actuator_id: { type: string, format: uuid }
+              ts_utc: { type: string, format: date-time }
+              state: { type: boolean }
+              reason: { type: string }
+    TelemetryStatus:
+      type: object
+      required: [ts_utc, temp_stage, humi_stage]
+      properties:
+  # Identity derived from DeviceToken
+        ts_utc: { type: string, format: date-time }
+        temp_stage: { type: integer, minimum: -3, maximum: 3 }
+        humi_stage: { type: integer, minimum: -3, maximum: 3 }
+        avg_interior_temp_c: { type: [number, "null"] }
+        avg_interior_rh_pct: { type: [number, "null"] }
+        avg_interior_pressure_hpa: { type: [number, "null"] }
+        avg_exterior_temp_c: { type: [number, "null"] }
+        avg_exterior_rh_pct: { type: [number, "null"] }
+        avg_exterior_pressure_hpa: { type: [number, "null"] }
+        avg_vpd_kpa: { type: [number, "null"] }
+        enthalpy_in_kj_per_kg: { type: [number, "null"] }
+        enthalpy_out_kj_per_kg: { type: [number, "null"] }
+        override_active: { type: boolean, default: false }
+        plan_version: { type: [integer, "null"] }
+        plan_stale: { type: boolean, default: false, description: "True if plan expired beyond grace period" }
+        offline_sensors: { type: array, items: { type: string, format: uuid }, description: "List of sensor IDs that are offline/failed" }
+        fallback_active: { type: boolean, default: false, description: "True if controller is operating in fallback mode" }
+    TelemetryInputs:
+      type: object
+      required: [inputs]
+      properties:
+        inputs:
+          type: array
+          items:
+            type: object
+            required: [button_kind, ts_utc, action]
+            properties:
+              button_kind: { $ref: '#/components/schemas/ButtonKind' }
+              ts_utc: { type: string, format: date-time }
+              action: { type: string, enum: [pressed, released] }
+              latched: { type: boolean, default: false }
+    TelemetryBatch:
+      type: object
+      properties:
+        sensors: { $ref: '#/components/schemas/TelemetrySensors' }
+        actuators: { $ref: '#/components/schemas/TelemetryActuators' }
+        status: { $ref: '#/components/schemas/TelemetryStatus' }
+        inputs: { $ref: '#/components/schemas/TelemetryInputs' }
+    IngestResult:
+      type: object
+      properties:
+        accepted: { type: integer }
+        rejected: { type: integer }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/ErrorResponse' }
