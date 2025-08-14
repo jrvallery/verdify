@@ -24,8 +24,8 @@ tags:
     description: Device telemetry ingestion endpoints for sensors, actuators, status, and inputs
   - name: CRUD
     description: Create, read, update, delete operations for resources like greenhouses, controllers, sensors, actuators
-  - name: Utils
-    description: Utility endpoints for diagnostics and system operations
+  - name: Meta
+    description: Health and metadata endpoints
 security:
   - UserJWT: []
 paths:
@@ -179,8 +179,7 @@ paths:
       operationId: announceController
       tags: [Onboarding]
       summary: Controller announces itself on first boot
-      security:
-        - {} # public (no auth) for hello
+      security: [] # public (no auth) for hello
       requestBody:
         required: true
         content:
@@ -254,8 +253,7 @@ paths:
       summary: One-time exchange of claim_code + device_name for long-lived device_token & initial ETags
       description: |
         Performs a single-use token exchange after /hello indicates status=claimed. Idempotent: a second identical request (after success) returns 200 with same values (no new token) while first successful call returns 201.
-      security:
-        - {} # public (unauthenticated, guarded by claim_code & freshness)
+      security: [] # public (unauthenticated, guarded by claim_code & freshness)
       parameters:
         - $ref: '#/components/parameters/ControllerIdParam'
       requestBody:
@@ -287,7 +285,7 @@ paths:
                     device_token: "eyJhbGciOi..."
                     config_etag: "config:v42:1a2b3c4d"
                     plan_etag: "plan:v17:0f9e8d7c"
-                    expires_at: "2024-06-15T10:30:00Z"
+                    expires_at: "2025-06-15T10:30:00Z"
         '200':
           description: Idempotent replay (token previously issued)
           content:
@@ -429,7 +427,7 @@ paths:
       security:
         - UserJWT: []
       parameters:
-        - $ref: '#/components/parameters/GreenhouseIdPathParam'
+        - $ref: '#/components/parameters/GreenhouseIdParam'
       requestBody:
         required: false
         content:
@@ -462,7 +460,7 @@ paths:
       security:
         - UserJWT: []
       parameters:
-        - $ref: '#/components/parameters/GreenhouseIdPathParam'
+        - $ref: '#/components/parameters/GreenhouseIdParam'
       responses:
         '200':
           description: JSON patch-like diff
@@ -727,7 +725,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
 
-  /greenhouses/{greenhouse_id}:
+  /greenhouses/{id}:
     get:
       operationId: getGreenhouse
       tags: [CRUD]
@@ -834,8 +832,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Zone' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
-  /zones/{zone_id}:
+  /zones/{id}:
     get:
       operationId: getZone
       tags: [CRUD]
@@ -930,7 +930,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /crops/{crop_id}:
+  /crops/{id}:
     get:
       operationId: getCrop
       tags: [CRUD]
@@ -1181,6 +1181,18 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteObservation
+      tags: [CRUD]
+      summary: Delete crop observation
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ObservationIdParam'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /observations/{id}/upload-url:
     post:
       operationId: generateObservationUploadUrl
@@ -1209,18 +1221,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-    delete:
-      operationId: deleteObservation
-      tags: [CRUD]
-      summary: Delete crop observation
-      security:
-        - UserJWT: []
-      parameters:
-        - $ref: '#/components/parameters/ObservationIdParam'
-      responses:
-        '204': { description: Deleted }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
 
   # CRUD — Controller, Sensor, Mapping, Actuator, Fan Group, Button, State Machine, Plan versions
   /controllers:
@@ -1480,6 +1480,26 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   /actuators:
+    get:
+      operationId: listActuators
+      tags: [CRUD]
+      summary: List actuators
+      security:
+        - UserJWT: []
+      parameters:
+        - name: controller_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filter by controller ID
+      responses:
+        '200':
+          description: List of actuators
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActuatorList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: createActuator
       tags: [CRUD]
@@ -1521,8 +1541,65 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateActuator
+      tags: [CRUD]
+      summary: Update actuator
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ActuatorIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActuatorUpdate' }
+      responses:
+        '200':
+          description: Actuator updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Actuator' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteActuator
+      tags: [CRUD]
+      summary: Delete actuator
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/ActuatorIdParam'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /fan-groups:
+    get:
+      operationId: listFanGroups
+      tags: [CRUD]
+      summary: List fan groups
+      security:
+        - UserJWT: []
+      parameters:
+        - name: controller_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filter by controller ID
+      responses:
+        '200':
+          description: List of fan groups
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FanGroupList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: createFanGroup
       tags: [CRUD]
@@ -1588,7 +1665,57 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /fan-groups/{id}:
+    get:
+      operationId: getFanGroup
+      tags: [CRUD]
+      summary: Get fan group details
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/FanGroupIdParam'
+      responses:
+        '200':
+          description: Fan group details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FanGroup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteFanGroup
+      tags: [CRUD]
+      summary: Delete fan group
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/FanGroupIdParam'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /buttons:
+    get:
+      operationId: listButtons
+      tags: [CRUD]
+      summary: List controller buttons
+      security:
+        - UserJWT: []
+      parameters:
+        - name: controller_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filter by controller ID
+      responses:
+        '200':
+          description: List of controller buttons
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControllerButtonList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: createButton
       tags: [CRUD]
@@ -1611,7 +1738,87 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /buttons/{id}:
+    get:
+      operationId: getButton
+      tags: [CRUD]
+      summary: Get controller button details
+      security:
+        - UserJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Controller button details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControllerButton' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateButton
+      tags: [CRUD]
+      summary: Update controller button
+      security:
+        - UserJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControllerButtonUpdate' }
+      responses:
+        '200':
+          description: Controller button updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControllerButton' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteButton
+      tags: [CRUD]
+      summary: Delete controller button
+      security:
+        - UserJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /state-machine-rows:
+    get:
+      operationId: listStateMachineRows
+      tags: [CRUD]
+      summary: List state machine rows
+      security:
+        - UserJWT: []
+      parameters:
+        - name: greenhouse_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filter by greenhouse ID
+      responses:
+        '200':
+          description: List of state machine rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StateMachineRowList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       operationId: createStateMachineRow
       tags: [CRUD]
@@ -1631,7 +1838,68 @@ paths:
               schema: { $ref: '#/components/schemas/StateMachineRow' }
         '409': { $ref: '#/components/responses/Conflict' }
 
-  /state-machine-fallback/{greenhouse_id}:
+  /state-machine-rows/{id}:
+    get:
+      operationId: getStateMachineRow
+      tags: [CRUD]
+      summary: Get state machine row details
+      security:
+        - UserJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: State machine row details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StateMachineRow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateStateMachineRow
+      tags: [CRUD]
+      summary: Update state machine row (idempotent)
+      security:
+        - UserJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StateMachineRowUpdate' }
+      responses:
+        '200':
+          description: State machine row updated successfully
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StateMachineRow' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteStateMachineRow
+      tags: [CRUD]
+      summary: Delete state machine row
+      security:
+        - UserJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /state-machine-fallback/{id}:
     put:
       operationId: setStateMachineFallback
       tags: [CRUD]
@@ -1851,22 +2119,17 @@ components:
       required: false
     GreenhouseIdParam:
       in: path
-      name: greenhouse_id
-      required: true
-      schema: { type: string, format: uuid }
-    GreenhouseIdPathParam:
-      in: path
       name: id
       required: true
       schema: { type: string, format: uuid }
     ZoneIdParam:
       in: path
-      name: zone_id
+      name: id
       required: true
       schema: { type: string, format: uuid }
     CropIdParam:
       in: path
-      name: crop_id
+      name: id
       required: true
       schema: { type: string, format: uuid }
     ZoneCropIdParam:
@@ -2005,7 +2268,7 @@ components:
           description: Number of requests remaining in current window
           schema: { type: integer }
         X-RateLimit-Reset:
-          description: UTC timestamp when rate limit window resets
+          description: Epoch seconds when the window resets
           schema: { type: integer }
         Retry-After:
           description: Seconds to wait before retry
@@ -2278,6 +2541,7 @@ components:
           pattern: '^verdify-[0-9a-f]{6}$'
         claim_code:
           type: string
+          pattern: '^\d{6}$'
         greenhouse_id:
           type: string
           format: uuid
@@ -2685,6 +2949,24 @@ components:
         min_off_ms: { type: integer, default: 60000 }
         fail_safe_state: { $ref: '#/components/schemas/FailSafeState' }
         zone_id: { type: [string, "null"], format: uuid }
+    ActuatorUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/ActuatorKind' }
+        relay_channel: { type: [integer, "null"] }
+        min_on_ms: { type: integer }
+        min_off_ms: { type: integer }
+        fail_safe_state: { $ref: '#/components/schemas/FailSafeState' }
+        zone_id: { type: [string, "null"], format: uuid }
+    ActuatorList:
+      allOf:
+        - $ref: '#/components/schemas/Paginated'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Actuator' }
 
     FanGroup:
       type: object
@@ -2708,6 +2990,14 @@ components:
     FanGroupMemberCreate:
       allOf:
         - $ref: '#/components/schemas/FanGroupMember'
+    FanGroupList:
+      allOf:
+        - $ref: '#/components/schemas/Paginated'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/FanGroup' }
 
     ControllerButton:
       type: object
@@ -2728,6 +3018,21 @@ components:
         target_temp_stage: { anyOf: [{ type: integer, minimum: -3, maximum: 3 }, { type: "null" }] }
         target_humi_stage: { anyOf: [{ type: integer, minimum: -3, maximum: 3 }, { type: "null" }] }
         timeout_s: { type: integer, minimum: 1 }
+    ControllerButtonUpdate:
+      type: object
+      properties:
+        button_kind: { $ref: '#/components/schemas/ButtonKind' }
+        target_temp_stage: { anyOf: [{ type: integer, minimum: -3, maximum: 3 }, { type: "null" }] }
+        target_humi_stage: { anyOf: [{ type: integer, minimum: -3, maximum: 3 }, { type: "null" }] }
+        timeout_s: { type: integer, minimum: 1 }
+    ControllerButtonList:
+      allOf:
+        - $ref: '#/components/schemas/Paginated'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/ControllerButton' }
 
     StateMachineRow:
       type: object
@@ -2758,6 +3063,37 @@ components:
     StateMachineRowCreate:
       allOf:
         - $ref: '#/components/schemas/StateMachineRow'
+    StateMachineRowUpdate:
+      type: object
+      properties:
+        temp_stage: { anyOf: [{ type: integer, minimum: -3, maximum: 3 }, { type: "null" }] }
+        humi_stage: { anyOf: [{ type: integer, minimum: -3, maximum: 3 }, { type: "null" }] }
+        is_fallback: { type: boolean }
+        must_on_actuators:
+          type: array
+          items: { type: string, format: uuid }
+        must_off_actuators:
+          type: array
+          items: { type: string, format: uuid }
+        must_on_fan_groups:
+          type: array
+          items:
+            type: object
+            required: [fan_group_id, on_count]
+            properties:
+              fan_group_id: { type: string, format: uuid }
+              on_count: { type: integer, minimum: 1 }
+        must_off_fan_groups:
+          type: array
+          items: { type: string, format: uuid }
+    StateMachineRowList:
+      allOf:
+        - $ref: '#/components/schemas/Paginated'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/StateMachineRow' }
 
     StateMachineFallback:
       type: object
@@ -3092,7 +3428,7 @@ components:
                 type: object
                 properties:
                   temp_c: { type: number }
-                  rh_pct: { type: number }
+                  vpd_kpa: { type: number }
         irrigation:
           type: array
           items:
