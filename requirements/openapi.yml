@@ -382,10 +382,10 @@ paths:
           description: Configuration payload
           headers:
             ETag:
-              description: Weak ETag W/"v<version>:<sha256>"
+              description: Strong config ETag config:v<version>:<sha8>
               schema: 
                 type: string
-                pattern: '^W/"v[0-9]+:[0-9a-f]{64}"$'
+                pattern: '^config:v[0-9]+:[0-9a-f]{8}$'
             Last-Modified:
               schema: { type: string, format: date-time }
           content:
@@ -409,10 +409,10 @@ paths:
           description: Plan payload
           headers:
             ETag:
-              description: Weak ETag W/"v<version>:<sha256>"
+              description: Strong plan ETag plan:v<version>:<sha8>
               schema: 
                 type: string
-                pattern: '^W/"v[0-9]+:[0-9a-f]{64}"$'
+                pattern: '^plan:v[0-9]+:[0-9a-f]{8}$'
             Last-Modified:
               schema: { type: string, format: date-time }
           content:
@@ -1342,8 +1342,7 @@ paths:
           in: query
           description: Filter by sensor kind
           schema:
-            type: string
-            enum: [temperature, humidity, light, ph, moisture, co2]
+            $ref: '#/components/schemas/SensorKind'
         - name: controller_id
           in: query
           description: Filter by controller ID
@@ -1779,11 +1778,10 @@ paths:
                   sensor_kinds:
                     type: array
                     items:
-                      type: string
-                      enum: [temperature, humidity, light, ph, moisture, co2]
+                      $ref: '#/components/schemas/SensorKind'
                 required: [sensor_kinds]
                 example:
-                  sensor_kinds: ["temperature", "humidity", "light", "ph", "moisture", "co2"]
+                  sensor_kinds: ["temperature", "humidity", "vpd", "co2", "light", "soil_moisture"]
         '400':
           $ref: '#/components/responses/BadRequest'
         '503':
@@ -1815,11 +1813,10 @@ paths:
                   actuator_kinds:
                     type: array
                     items:
-                      type: string
-                      enum: [fan, heater, cooler, humidifier, dehumidifier, water_valve, light]
+                      $ref: '#/components/schemas/ActuatorKind'
                 required: [actuator_kinds]
                 example:
-                  actuator_kinds: ["fan", "heater", "cooler", "humidifier", "dehumidifier", "water_valve", "light"]
+                  actuator_kinds: ["fan", "heater", "vent", "fogger", "irrigation_valve", "fertilizer_valve", "pump", "light"]
         '400':
           $ref: '#/components/responses/BadRequest'
         '503':
@@ -1933,6 +1930,10 @@ components:
   responses:
     BadRequest:
       description: Bad request
+      headers:
+        X-Request-Id:
+          description: Request identifier for tracing
+          schema: { type: string }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1948,6 +1949,10 @@ components:
                 request_id: "req_1234567890abcdef"
     Unauthorized:
       description: Unauthorized
+      headers:
+        X-Request-Id:
+          description: Request identifier for tracing
+          schema: { type: string }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1960,6 +1965,10 @@ components:
                 request_id: "req_1234567890abcdef"
     NotFound:
       description: Not found
+      headers:
+        X-Request-Id:
+          description: Request identifier for tracing
+          schema: { type: string }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1972,6 +1981,10 @@ components:
                 request_id: "req_1234567890"
     Conflict:
       description: Conflict (uniqueness violated)
+      headers:
+        X-Request-Id:
+          description: Request identifier for tracing
+          schema: { type: string }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -2541,11 +2554,11 @@ components:
 
     Controller:
       type: object
-      required: [id, greenhouse_id, name, device_name, is_climate_controller]
+      required: [id, greenhouse_id, device_name, is_climate_controller]
       properties:
         id: { type: string, format: uuid }
         greenhouse_id: { type: string, format: uuid }
-        name: { type: string }
+        label: { type: [string, "null"] }
         model: { type: [string, "null"] }
         device_name:
           type: string
@@ -2553,12 +2566,13 @@ components:
         is_climate_controller: { type: boolean, default: false }
         fw_version: { type: [string, "null"] }
         hw_version: { type: [string, "null"] }
+        last_seen: { type: [string, "null"], format: date-time }
     ControllerCreate:
       type: object
-      required: [greenhouse_id, name, device_name]
+      required: [greenhouse_id, device_name]
       properties:
         greenhouse_id: { type: string, format: uuid }
-        name: { type: string }
+        label: { type: [string, "null"] }
         model: { type: [string, "null"] }
         device_name:
           type: string
@@ -2569,7 +2583,7 @@ components:
     ControllerUpdate:
       type: object
       properties:
-        name: { type: string }
+        label: { type: [string, "null"] }
         model: { type: [string, "null"] }
         is_climate_controller: { type: boolean }
         fw_version: { type: [string, "null"] }
@@ -3042,11 +3056,12 @@ components:
         payload: { $ref: '#/components/schemas/PlanPayload' }
 
     PlanList:
+      type: object
       allOf:
         - $ref: '#/components/schemas/Paginated'
         - type: object
           properties:
-            items:
+            data:
               type: array
               items: { $ref: '#/components/schemas/Plan' }
 
@@ -3167,6 +3182,10 @@ components:
         plan_stale: { type: boolean, default: false, description: "True if plan expired beyond grace period" }
         offline_sensors: { type: array, items: { type: string, format: uuid }, description: "List of sensor IDs that are offline/failed" }
         fallback_active: { type: boolean, default: false, description: "True if controller is operating in fallback mode" }
+        # Operational fields for debugging and monitoring
+        uptime_s: { type: [integer, "null"], description: "Controller uptime in seconds" }
+        loop_ms: { type: [integer, "null"], description: "Main control loop execution time in milliseconds" }
+        config_version: { type: [integer, "null"], description: "Current config version number" }
     TelemetryInputs:
       type: object
       required: [inputs]
