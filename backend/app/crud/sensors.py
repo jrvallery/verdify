@@ -1,6 +1,8 @@
-from typing import List, Optional
+from typing import List, Optional, Union
+from uuid import UUID
 from sqlmodel import Session, select
 import uuid
+from enum import Enum
 
 from app.models import Sensor, SensorCreate, SensorUpdate, Zone, SensorType, Controller
 
@@ -88,36 +90,41 @@ def list_available_sensors(
         .join(Controller)
         .where(
             Controller.greenhouse_id == greenhouse_id,
-            Sensor.type == sensor_type
+            Sensor.kind == sensor_type.value
         )
     ).all()
     
     return all_sensors
 
-def map_sensor_to_zone(
-    session: Session,
-    zone_id: uuid.UUID,
-    sensor_id: uuid.UUID,
-    sensor_type: SensorType
-) -> Zone:
-    """Map a sensor to a zone for a specific type."""
+def map_sensor_to_zone(session: Session, zone_id: Union[UUID, str], sensor_id: Union[UUID, str], sensor_type):
+    # Normalize enum -> string
+    requested_type = sensor_type.value if isinstance(sensor_type, Enum) else str(sensor_type)
+
     zone = session.get(Zone, zone_id)
     if not zone:
         raise ValueError("Zone not found")
-    
+
     sensor = session.get(Sensor, sensor_id)
-    if not sensor or sensor.type != sensor_type:
-        raise ValueError("Invalid sensor for this type")
-    
-    # Check if this sensor type slot is already occupied
-    current_sensor_id = getattr(zone, f"{sensor_type.value}_sensor_id")
-    if current_sensor_id is not None:
-        raise ValueError(f"Zone already has a {sensor_type.value} sensor mapped. Please unmap the existing sensor first.")
-    
-    # Removed check for sensor.is_mapped since sensors can now be mapped to multiple zones
-    
-    setattr(zone, f"{sensor_type.value}_sensor_id", sensor_id)
-    
+    if not sensor:
+        raise ValueError("Sensor not found")
+
+    # Validate kind matches requested type
+    if sensor.kind != requested_type:
+        raise ValueError(f"Sensor kind mismatch: expected {requested_type}, got {sensor.kind}")
+
+    # Map kind -> zone FK field
+    field_map = {
+        "temperature": "temperature_sensor_id",
+        "humidity": "humidity_sensor_id",
+        "co2": "co2_sensor_id",
+        "light": "light_sensor_id",
+        "soil_moisture": "soil_moisture_sensor_id",
+    }
+    fk_field = field_map.get(requested_type)
+    if not fk_field:
+        raise ValueError(f"Unsupported sensor type: {requested_type}")
+
+    setattr(zone, fk_field, sensor.id)
     session.add(zone)
     session.commit()
     session.refresh(zone)

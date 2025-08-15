@@ -68,6 +68,7 @@ def list_zones(
     # Return zones ONLY for this specific greenhouse
     return crud_list_zones(session, greenhouse_id)
 
+
 @router.get("/{zone_id}", response_model=ZonePublic)
 def get_zone(
     greenhouse_id: uuid.UUID,  # From URL path
@@ -86,6 +87,7 @@ def get_zone(
     if not (current_user.is_superuser or zone.greenhouse.owner_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return zone
+
 
 @router.patch("/{zone_id}", response_model=ZonePublic)
 def update_zone(
@@ -106,6 +108,7 @@ def update_zone(
     if not (current_user.is_superuser or zone.greenhouse.owner_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return crud_update_zone(session, zone, z_in)
+
 
 @router.delete("/{zone_id}", response_model=Message)
 def delete_zone(
@@ -170,7 +173,7 @@ def map_sensor_to_zone_endpoint(
 
 
 @router.delete("/{zone_id}/unmap-sensor/{sensor_type}", response_model=ZonePublic)
-def unmap_sensor_from_zone_endpoint(
+def unmap_sensor_from_zone(
     zone_id: uuid.UUID,
     sensor_type: SensorType,
     session: SessionDep,
@@ -189,6 +192,7 @@ def unmap_sensor_from_zone_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+
 @router.get("/{zone_id}/hasCrop", response_model=bool)
 def has_crop(
     zone_id: uuid.UUID,

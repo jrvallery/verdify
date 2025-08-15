@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import greenhouses, login, private, users, utils, zones, controller, climate, sensors, crops
+from app.api.routes import greenhouses, login, private, users, utils, zones, controller, climate, sensors, crops, cropTemplates, observations
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -9,6 +9,8 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(utils.router, prefix="/utils", tags=["utils"])
 api_router.include_router(greenhouses.router, prefix="/greenhouses", tags=["greenhouses"])
 api_router.include_router(crops.router, prefix="/crops", tags=["crops"])
+api_router.include_router(cropTemplates.router, prefix="/crop-templates", tags=["crop-templates"])
+api_router.include_router(observations.router, prefix="/observations", tags=["observations"])
 
 # Create a sub-router for greenhouse-specific routes
 greenhouse_subrouter = APIRouter()

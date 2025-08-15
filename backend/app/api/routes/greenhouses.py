@@ -65,7 +65,7 @@ def create_greenhouse(
     current_user: CurrentUser,
     greenhouse_in: GreenhouseCreate,
 ) -> Greenhouse:
-    gh = Greenhouse(**greenhouse_in.model_dump(), owner_id=current_user.id)
+    gh = Greenhouse(**greenhouse_in.model_dump())
     session.add(gh)
     session.commit()
     session.refresh(gh)
