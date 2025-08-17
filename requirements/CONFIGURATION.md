@@ -17,10 +17,10 @@ This section defines how configuration is created, stored, versioned, delivered,
 ### 1.1 Configuration Schema Structure
 
 > **Schema Reference**: For the complete and authoritative configuration schema, see [ConfigPayload in API.md](./API.md#configpayload).
-> 
+>
 > The configuration structure includes:
 > - **Greenhouse**: Guard rails, baselines, and thresholds
-> - **Controllers**: Device mapping and climate control flags  
+> - **Controllers**: Device mapping and climate control flags
 > - **Sensors**: Physical and virtual sensor definitions
 > - **Actuators**: Relay and device control mappings
 > - **State Machine**: Climate control rules grid with fallback
@@ -30,7 +30,7 @@ This section defines how configuration is created, stored, versioned, delivered,
 
 1. **Create Greenhouse** → Define guard rails (min/max temp, VPD)
 2. **Add Controllers** → Claim devices, designate climate controller
-3. **Configure Sensors** → Map physical sensors to zones  
+3. **Configure Sensors** → Map physical sensors to zones
 4. **Configure Actuators** → Assign relays to heating/cooling/ventilation
 5. **Define State Machine** → Create 49-cell grid (7×7 stages) + fallback
 6. **Publish Configuration** → Generate versioned config with ETag

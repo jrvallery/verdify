@@ -16,7 +16,7 @@ import { useState } from "react";
 import { FiEye, FiCamera, FiCalendar, FiBarChart, FiHeart } from "react-icons/fi";
 import { format } from "date-fns";
 
-import { 
+import {
   CropsService,
   type ZonePublic,
   type ZoneCropObservationPublic,
@@ -48,7 +48,7 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
       if (zoneCropId) {
         // Fetch observations for specific historical crop
         const token = localStorage.getItem('access_token');
-        
+
         if (!token) {
           throw new Error('No authentication token found');
         }
@@ -60,7 +60,7 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
             'Content-Type': 'application/json',
           },
         });
-        
+
         if (!response.ok) {
           if (response.status === 401) {
             throw new Error('Authentication failed - please log in again');
@@ -119,8 +119,8 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
       onOpenChange={({ open }) => setIsOpen(open)}
     >
       <DialogTrigger asChild>
-        <Button 
-          size={getButtonSize()} 
+        <Button
+          size={getButtonSize()}
           colorPalette="blue"
           variant={"solid"}
           onClick={(e) => e.stopPropagation()} // Prevent parent click events
@@ -134,7 +134,7 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
         <DialogHeader>
           <DialogTitle>{getDialogTitle()}</DialogTitle>
         </DialogHeader>
-        
+
         <DialogBody>
           {isLoading ? (
             <Flex justify="center" align="center" h="200px">
@@ -145,8 +145,8 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
               <VStack gap={2}>
                 <Text color="gray.500" fontSize="lg">No observations found</Text>
                 <Text color="gray.400" fontSize="sm">
-                  {zoneCropId 
-                    ? "No observations were recorded for this crop." 
+                  {zoneCropId
+                    ? "No observations were recorded for this crop."
                     : "No observations have been recorded for this crop yet."
                   }
                 </Text>
@@ -170,7 +170,7 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
                   </Box>
                   <Box textAlign="center">
                     <Text fontSize="2xl" fontWeight="bold" color="purple.500">
-                      {observations?.filter((obs: ZoneCropObservationPublic) => obs.health_score).length > 0 
+                      {observations?.filter((obs: ZoneCropObservationPublic) => obs.health_score).length > 0
                         ? Math.round(
                             observations
                               .filter((obs: ZoneCropObservationPublic) => obs.health_score)
@@ -198,15 +198,15 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
                 <VStack gap={4} align="stretch">
                   {observations
                     ?.filter((obs: ZoneCropObservationPublic) => obs.observed_at)
-                    .sort((a: ZoneCropObservationPublic, b: ZoneCropObservationPublic) => 
+                    .sort((a: ZoneCropObservationPublic, b: ZoneCropObservationPublic) =>
                       new Date(b.observed_at!).getTime() - new Date(a.observed_at!).getTime()
                     )
                     .map((observation: ZoneCropObservationPublic) => (
-                    <Box 
-                      key={observation.id} 
-                      border="1px" 
-                      borderColor="gray.200" 
-                      rounded="lg" 
+                    <Box
+                      key={observation.id}
+                      border="1px"
+                      borderColor="gray.200"
+                      rounded="lg"
                       p={4}
                       bg="white"
                       _dark={{ bg: "gray.800", borderColor: "gray.600" }}
@@ -220,9 +220,9 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
                           </Text>
                           <HStack gap={2}>
                             {observation.health_score && (
-                              <Badge 
-                                colorPalette={getHealthScoreColor(observation.health_score)} 
-                                variant="solid" 
+                              <Badge
+                                colorPalette={getHealthScoreColor(observation.health_score)}
+                                variant="solid"
                                 size="sm"
                               >
                                 <FiHeart fontSize="10px" />
@@ -231,7 +231,7 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
                             )}
                           </HStack>
                         </VStack>
-                        
+
                         {observation.height_cm && (
                           <VStack align="end" gap={1}>
                             <Flex align="center" gap={1} color="gray.600">
@@ -316,14 +316,14 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
                       {(() => {
                         const heightObservations = observations
                           .filter((obs: ZoneCropObservationPublic) => obs.height_cm && obs.observed_at)
-                          .sort((a: ZoneCropObservationPublic, b: ZoneCropObservationPublic) => 
+                          .sort((a: ZoneCropObservationPublic, b: ZoneCropObservationPublic) =>
                             new Date(a.observed_at!).getTime() - new Date(b.observed_at!).getTime()
                           );
-                        
+
                         const firstHeight = heightObservations[0]?.height_cm || 0;
                         const lastHeight = heightObservations[heightObservations.length - 1]?.height_cm || 0;
                         const growth = lastHeight - firstHeight;
-                        
+
                         return (
                           <VStack align="start" gap={2}>
                             <Text fontSize="sm" fontWeight="medium">
@@ -348,7 +348,7 @@ const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps)
             Close
           </Button>
         </DialogFooter>
-        
+
         <DialogCloseTrigger />
       </DialogContent>
     </DialogRoot>

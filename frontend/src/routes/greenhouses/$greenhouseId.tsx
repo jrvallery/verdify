@@ -9,7 +9,7 @@ import {
   import { createFileRoute } from "@tanstack/react-router";
   import { useQuery } from "@tanstack/react-query";
   import { z } from "zod";
-  
+
   import Navbar from "@/components/Common/Navbar";
   import Sidebar from "@/components/Greenhouses/GHSidebar";
   import { GreenhousesService } from "@/client";
@@ -19,7 +19,7 @@ import {
     component: GreenhouseDetail,
     parseParams: (raw) => z.object({ greenhouseId: z.string() }).parse(raw),
   });
-  
+
   function GreenhouseDetail() {
     const { greenhouseId } = Route.useParams();
     const { data, isLoading, error } = useQuery({
@@ -27,7 +27,7 @@ import {
       queryFn: () =>
         GreenhousesService.readGreenhouse({ greenhouseId }),
     });
-  
+
     if (isLoading) return (
       <Flex h="100vh" align="center" justify="center">
         <Spinner size="xl" />
@@ -50,5 +50,5 @@ import {
         </Flex>
       );
     }
-  
+
   export default GreenhouseDetail;

@@ -48,7 +48,7 @@ The system supports two distinct authentication principals:
 **CSRF Token Flow**:
 ```
 1. Frontend: GET /api/v1/auth/csrf → { "csrf_token": "abc123..." }
-2. Frontend: POST /api/v1/auth/login 
+2. Frontend: POST /api/v1/auth/login
    Headers: { "X-CSRF-Token": "abc123..." }
    Body: { "email": "...", "password": "..." }
 3. Server: Validates CSRF token before processing login
@@ -180,21 +180,21 @@ Device endpoints require `X-Device-Token` and path/controller match:
 ```python
 def require_device(request):
     token = request.headers.get("X-Device-Token")
-    if not token: 
+    if not token:
         raise HTTPException(401, "missing_device_token")
-    
+
     rec = db.device_tokens.find_by_token_hash(hash(token))
-    if not rec or rec.revoked_at: 
+    if not rec or rec.revoked_at:
         raise HTTPException(401, "invalid_device_token")
-    
+
     path_uuid = request.path_params.get("controller_uuid")
     body_uuid = request.json.get("controller_uuid") if request.method == "POST" else None
-    
-    if path_uuid and path_uuid != rec.controller_uuid: 
+
+    if path_uuid and path_uuid != rec.controller_uuid:
         raise HTTPException(403, "controller_mismatch")
-    if body_uuid and body_uuid != rec.controller_uuid: 
+    if body_uuid and body_uuid != rec.controller_uuid:
         raise HTTPException(403, "controller_mismatch")
-    
+
     return rec.controller_uuid
 ```
 

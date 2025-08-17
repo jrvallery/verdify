@@ -5,7 +5,7 @@
 This API specification is part of a comprehensive requirements suite. For complete implementation guidance, refer to:
 
 - **[CONFIGURATION.md](./CONFIGURATION.md)** - Configuration management, schema validation, and publishing workflows
-- **[CONTROLLER.md](./CONTROLLER.md)** - ESPHome firmware specification and device behavior  
+- **[CONTROLLER.md](./CONTROLLER.md)** - ESPHome firmware specification and device behavior
 - **[PLANNER.md](./PLANNER.md)** - Cultivation planning algorithms and scheduling logic
 - **[DATABASE.md](./DATABASE.md)** - Database schema, migrations, and data modeling
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)** - Authentication flows, JWT handling, and security policies
@@ -136,7 +136,7 @@ class ValueType(str, Enum):
 
 class SensorKindMeta(SQLModel, table=True):
     __tablename__ = "sensor_kind_meta"
-    
+
     id: str = Field(primary_key=True)
     name: str = Field(max_length=100)
     value_type: ValueType
@@ -258,7 +258,7 @@ All error responses follow a standardized format compatible with FastAPI's HTTPE
 
 ```json
 {
-  "error_code": "E400_BAD_REQUEST", 
+  "error_code": "E400_BAD_REQUEST",
   "message": "Human-readable error description",
   "details": "Optional detailed information or field-specific errors"
 }
@@ -266,7 +266,7 @@ All error responses follow a standardized format compatible with FastAPI's HTTPE
 
 **Standard Error Codes**:
 - `E400_BAD_REQUEST` - Invalid JSON, missing required fields, malformed UUIDs
-- `E401_UNAUTHORIZED` - Missing or invalid JWT/device token  
+- `E401_UNAUTHORIZED` - Missing or invalid JWT/device token
 - `E403_FORBIDDEN` - Valid token but insufficient permissions
 - `E404_NOT_FOUND` - Resource does not exist or access denied
 - `E409_CONFLICT` - Uniqueness violations, business logic conflicts
@@ -332,11 +332,11 @@ JSON Schema snippets used throughout the API:
 Endpoints are organized into logical router groups following FastAPI best practices:
 
 **Router Tags & Organization**:
-- `auth` - User authentication, registration, JWT management  
+- `auth` - User authentication, registration, JWT management
 - `onboarding` - Device claiming, hello flow, token exchange
 - `config` - Configuration management, publishing, ETags
 - `planning` - Plan generation, management, and delivery
-- `telemetry` - Sensor data, actuator events, status reporting  
+- `telemetry` - Sensor data, actuator events, status reporting
 - `greenhouses` - Greenhouse CRUD operations
 - `zones` - Zone management and crop plantings
 - `sensors` - Sensor configuration and zone mapping
@@ -485,7 +485,7 @@ Errors
 - E404_NOT_FOUND unknown controller
 - E409_CONFLICT token already issued (idempotent replay returns 200 with same etags)
 - E422_UNPROCESSABLE invalid claim code
- 
+
 1.2 POST /api/v1/controllers/claim (User JWT)
 Associate a device to a greenhouse and issue a device token.
 Request
@@ -510,24 +510,24 @@ Validation
 Errors
 -	E404_NOT_FOUND device_name or greenhouse missing
 -	E409_CONFLICT device already claimed
- 
+
 1.3 POST /api/v1/controllers/{controller_uuid}/rotate-token (User JWT)
 Rotate device token (old token immediately revoked).
 Response 200
-{ 
+{
   "device_token": "eyJhbGciOi...",
   "expires_at": "2024-12-15T10:30:00Z"
 }
 Errors
 -	E404_NOT_FOUND
 -	E403_FORBIDDEN not owner
- 
+
 1.4 DELETE /api/v1/controllers/{controller_uuid} (User JWT)
 Delete controller; revokes device token.
 Response 204 (no body)
 Errors
 -	E404_NOT_FOUND, E403_FORBIDDEN
- 
+
 2) Controllers (`onboarding` router - Config & Plan access)
 2.1 GET /api/v1/controllers/{controller_uuid} (User JWT)
 Fetch controller metadata.
@@ -541,7 +541,7 @@ Response 200
   "fw_version": "verdify-esphome-0.3.1",
   "last_seen": "2025-08-12T18:03:12Z"
 }
- 
+
 2.2 PATCH /api/v1/controllers/{controller_uuid} (User JWT)
 Update label, is_climate_controller (must be unique per greenhouse).
 Request
@@ -550,7 +550,7 @@ Response 200 updated controller JSON
 Validation
 -	If setting is_climate_controller=true, ensure no other controller in the same greenhouse has it.
 -	If violation: E409_CONFLICT.
- 
+
 2.3 GET /api/v1/controllers/{controller_uuid}/config (Device token or User JWT)
 Materialized configuration for this controller. ETag supported.
 Headers
@@ -561,7 +561,7 @@ Response 304: Not Modified
 Errors
 -	E403_FORBIDDEN controller does not belong to token’s greenhouse
 -	E404_NOT_FOUND
- 
+
 2.4 GET /api/v1/greenhouses/{greenhouse_id}/plan/current (Device token or User JWT)
 Current plan slice for the greenhouse (controller uses to execute). ETag supported.
 Headers
@@ -571,7 +571,7 @@ Response 200: Plan JSON (full schema defined in Planning section)
 Response 304: Not Modified
 Errors
 -	E404_NOT_FOUND, E403_FORBIDDEN
- 
+
 3) Telemetry Ingest (`telemetry` router - Device token)
 All payloads may be gzip compressed. The API validates IDs (must exist & belong to controller/greenhouse), units (metric), kinds, and writes to Timescale hypertables.
 3.1 POST /api/v1/telemetry/sensors
@@ -588,7 +588,7 @@ Response 202
 { "ingested": 2, "skipped": 0 }
 Errors
 -	E422_UNPROCESSABLE unknown sensor_id or mismatched ownership
- 
+
 3.2 POST /api/v1/telemetry/actuators
 Request
 {
@@ -603,7 +603,7 @@ Request
   ]
 }
 Response 202 { "ingested": 1 }
- 
+
 3.3 POST /api/v1/telemetry/status
 Request
 {
@@ -622,7 +622,7 @@ Request
   "config_version": 42, "plan_version": 17
 }
 Response 202 { "accepted": true }
- 
+
 3.4 POST /api/v1/telemetry/inputs
 Request
 {
@@ -632,7 +632,7 @@ Request
   ]
 }
 Response 202 { "ingested": 1 }
- 
+
 3.5 POST /api/v1/telemetry/batch
 Bundle of sensors, actuators, status, inputs.
 Request
@@ -645,7 +645,7 @@ Request
   ]
 }
 Response 202 { "accepted": true }
- 
+
 4) Greenhouses (`greenhouses` router)
 4.1 POST /api/v1/greenhouses (User JWT)
 Create a greenhouse.
@@ -662,17 +662,17 @@ Request (abridged; full fields in Database/Configuration sections)
 Response 201 greenhouse JSON (with id)
 Validation
 -	clamp baselines within guard rails
- 
+
 4.2 GET /api/v1/greenhouses / 4.3 GET /api/v1/greenhouses/{id} / 4.4 PATCH /api/v1/greenhouses/{id} / 4.5 DELETE /api/v1/greenhouses/{id}
 Standard CRUD (single owner). PATCH accepts any mutable fields; DELETE cascades to zones/controllers (soft delete optional). Errors: E403_FORBIDDEN, E404_NOT_FOUND.
- 
+
 5) Zones (`zones` router)
 5.1 POST /api/v1/zones
 { "greenhouse_id": "a6f7...", "zone_number": 1, "location": "NW", "context_text": "Shaded afternoon" }
 201 zone JSON with id.
 5.2 GET /api/v1/zones?greenhouse_id=... / 5.3 GET /api/v1/zones/{id} / 5.4 PATCH /api/v1/zones/{id} / 5.5 DELETE /api/v1/zones/{id}
 Standard CRUD. unique(greenhouse_id, zone_number) enforced; E409_CONFLICT on dup.
- 
+
 6) Crops & Plantings (`crops` router)
 6.1 POST /api/v1/crops
 {
@@ -684,7 +684,7 @@ Standard CRUD. unique(greenhouse_id, zone_number) enforced; E409_CONFLICT on dup
 }
 201 crop JSON.
 6.2 GET /api/v1/crops / 6.3 GET /api/v1/crops/{id} / 6.4 PATCH /api/v1/crops/{id} / 6.5 DELETE /api/v1/crops/{id}
- 
+
 6.6 POST /api/v1/zone-crops
 Start a planting in a zone (enforce 1 active per zone).
 { "zone_id": "z1...", "crop_id": "c1...", "start_date": "2025-08-01T00:00:00Z", "area_sqm": 10.0 }
@@ -704,7 +704,7 @@ End planting or update metrics.
   "image_url": "https://..."
 }
 Plus GET/PATCH/DELETE endpoints for observations.
- 
+
 7) Sensors & Mappings (`sensors` router)
 Sensors are created/configured in API; controllers map them via config.json. A sensor may be mapped to multiple zones. Per zone/kind there MUST be ≤1 mapping (enforced).
 7.1 POST /api/v1/sensors
@@ -724,7 +724,7 @@ Validation
 -	include_in_climate_loop==true ONLY allowed for kind ∈ {"temperature","humidity"}.
 -	If include_in_climate_loop==true, sensor’s controller_id MUST equal the greenhouse climate controller; else E409_CONFLICT.
 7.2 GET /api/v1/sensors (supports ?kind=, ?controller_id=, ?greenhouse_id=, ?sort=, pagination) / 7.3 GET /api/v1/sensors/{id} / 7.4 PATCH /api/v1/sensors/{id} / 7.5 DELETE /api/v1/sensors/{id}
- 
+
 7.6 POST /api/v1/sensor-zone-maps
 Map a sensor to a zone as a given kind (used to enforce per zone singleton per kind).
 {
@@ -736,7 +736,7 @@ Map a sensor to a zone as a given kind (used to enforce per zone singleton per k
 Validation
 -	Enforce unique (zone_id, kind); else E409_CONFLICT.
 7.7 GET /api/v1/sensor-zone-maps?zone_id=... / 7.8 DELETE /api/v1/sensor-zone-maps/{sensor_id}:{zone_id}:{kind}
- 
+
 8) Actuators, Fan Groups, Buttons (`actuators` router)
 8.1 POST /api/v1/actuators
 {
@@ -753,7 +753,7 @@ Validation
 Validation
 -	Relay channel must be within controller’s range and unique per controller; E409_CONFLICT on duplicate.
 8.2 GET/PATCH/DELETE /api/v1/actuators/{id} and list /actuators?controller_id=...
- 
+
 8.3 POST /api/v1/fan-groups
 { "controller_id": "6f9a8b0e-09e0-4e59-9b2d-2a0189f1f7ad", "name": "North Fans" }
 201 fan_group JSON with id.
@@ -761,7 +761,7 @@ Validation
 { "actuator_id": "a1..." }
 201 member JSON. Duplicate adds → E409_CONFLICT.
 GET/DELETE members provided.
- 
+
 8.5 POST /api/v1/controller-buttons
 {
   "controller_id": "6f9a8b0e-09e0-4e59-9b2d-2a0189f1f7ad",
@@ -772,7 +772,7 @@ GET/DELETE members provided.
   "timeout_s": 600
 }
 GET/PATCH/DELETE supported.
- 
+
 9) State Machine
 Declarative grid: for each (temp_stage, humi_stage) intersection, define MUST_ON/MUST_OFF plus fan group counts and fallback.
 9.1 POST /api/v1/state-machine-rows
@@ -796,7 +796,7 @@ Validation
   "must_on_fan_groups": [ { "fan_group_id": "fg1...", "on_count": 1 } ]
 }
 Sets the fallback row (used when no explicit row matches).
- 
+
 10) Plans (`planning` router - for Planning Engine + App/Controller)
 10.1 POST /api/v1/plans (Planning Engine JWT or Admin)
 Create a new plan version for a greenhouse. The API validates and clamps to guard rails.
@@ -833,7 +833,7 @@ Validation & Errors
 10.2 GET /api/v1/plans?greenhouse_id=... (supports ?active=true, ?sort=version desc, pagination)
 10.3 GET /api/v1/plans/{plan_id}
 10.4 DELETE /api/v1/plans/{plan_id}
- 
+
 11) Config Publish & Diff (`config` router)
 11.1 POST /api/v1/greenhouses/{id}/config/publish (User JWT)
 Materialize a new config version (rebuilt from DB tables) and invalidate controller caches.
@@ -841,13 +841,13 @@ Response 200
 { "config_version": 43, "controllers_notified": 2 }
 11.2 GET /api/v1/greenhouses/{id}/config/diff?from=42&to=43
 Human readable JSON diff for App.
- 
+
 12) Health & Metadata
 12.1 GET /api/v1/health
 200 OK with { "status": "ok", "time": "..." }
 12.2 GET /api/v1/meta/sensor-kinds / /meta/actuator-kinds
 Return allowed kinds from meta tables.
- 
+
 13) Validation Rules (Server Side)
 -	Ownership: JWT user MUST own the greenhouse for any mutate/read ops (except public meta).
 -	Climate uniqueness: Exactly 0 or 1 is_climate_controller=true per greenhouse. Setting a second → E409_CONFLICT.
@@ -857,7 +857,7 @@ Return allowed kinds from meta tables.
 -	State machine coverage: Server SHOULD warn if the 7×7 grid is not fully specified; fallback MUST exist or E422_UNPROCESSABLE on publish.
 -	Plan clamping: API clamps setpoints against greenhouse guard rails; clamped values returned with warnings field.
 -	ETag: Config/Plan GET returns ETag. If If-None-Match matches, return 304.
- 
+
 14) Endpoint Index (Quick Reference)
 Group	Method	Path	Auth	Notes
 Authentication	POST	/auth/register	none	Create user account
@@ -878,22 +878,22 @@ Telemetry	POST	/telemetry/inputs	Device	Buttons
 Telemetry	POST	/telemetry/batch	Device	Mixed
 Greenhouse	CRUD	/greenhouses	JWT	Guard rails/baselines
 Zone	CRUD	/zones	JWT	unique (gh, number)
-Crop	CRUD	/crops	JWT	
+Crop	CRUD	/crops	JWT
 Planting	CRUD	/zone-crops	JWT	1 active/zone
-Observation	CRUD	/zone-crop-observations	JWT	
+Observation	CRUD	/zone-crop-observations	JWT
 Sensor	CRUD	/sensors	JWT	Kind/scope validation
 Mapping	CRUD	/sensor-zone-maps	JWT	unique (zone, kind)
 Actuator	CRUD	/actuators	JWT	Relay channel unique
-Fan group	CRUD	/fan-groups	JWT	
-Fan member	CRUD	/fan-groups/{id}/members	JWT	
-Button	CRUD	/controller-buttons	JWT	
+Fan group	CRUD	/fan-groups	JWT
+Fan member	CRUD	/fan-groups/{id}/members	JWT
+Button	CRUD	/controller-buttons	JWT
 State machine	CRUD	/state-machine-rows	JWT	7×7 grid
 Fallback	PUT	/state-machine-fallback/{gh_id}	JWT	Required
 Plans	CRUD	/plans	Planner/JWT	Create/Read/Delete
 Publish	POST	/greenhouses/{id}/config/publish	JWT	Bumps version
 Diff	GET	/greenhouses/{id}/config/diff	JWT	Compare versions
 Meta	GET	/meta/*	none	Enums, health
- 
+
 15) Examples (Selected Schemas)
 15.1 Sensor (response)
 {
@@ -919,12 +919,12 @@ Meta	GET	/meta/*	none	Enums, health
   "must_on_fan_groups": [ { "fan_group_id": "fg1...", "on_count": 1 } ]
 }
 Config & Plan response schemas: Full authoritative definitions are provided in the Configuration and Planning sections and are not duplicated here.
- 
+
 16) Logging & Auditing
 -	Request IDs: Every request returns X-Request-Id.
 -	Audit: Mutations on greenhouse/zones/sensors/actuators/state machine/plans SHOULD be logged with actor, before/after diff.
 -	PII: Minimal; email in user account records only.
- 
+
 17) Open Questions
 > **Open Questions Reference**: All open questions have been consolidated in [GAPS.md](./GAPS.md) for systematic resolution. See sections on API Design Questions, Security & Access Control, and Audit & Compliance.
 
@@ -1041,7 +1041,7 @@ The OpenAPI specification can be used for:
 * **Business logic validation**: Uniqueness constraints, cardinality rules, and state machine coverage checked during operations
 * **Response codes**: Standard HTTP status codes for validation failures:
   - `400 Bad Request`: Malformed JSON, invalid UUIDs, wrong timestamp format, imperial units
-  - `409 Conflict`: Uniqueness violations, cardinality conflicts, state machine coverage issues  
+  - `409 Conflict`: Uniqueness violations, cardinality conflicts, state machine coverage issues
   - `422 Unprocessable Entity`: Business logic violations, invalid references, constraint failures
 * **ETag validation**: Strong ETags for configuration and plans with conditional requests (`If-None-Match`)
 * **Authentication separation**: Strict separation between user JWT endpoints and device token endpoints

@@ -13,8 +13,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { FiEye, FiHeart } from "react-icons/fi";
 
-import { 
-  CropsService, 
+import {
+  CropsService,
   type ZonePublic,
   type ZoneCropPublic,
   type CropPublic,
@@ -56,12 +56,12 @@ const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
     onSuccess: () => {
       showSuccessToast("Crop harvested successfully.");
       setIsOpen(false);
-      
+
       // Force remove the zone crop data from cache to prevent 404s
       queryClient.removeQueries({ queryKey: ["zone-crop", zone.id] });
       queryClient.removeQueries({ queryKey: ["crop-observations", zone.id] });
       queryClient.removeQueries({ queryKey: ["zone-has-crop", zone.id] }); // Also remove hasCrop cache
-      
+
       // Invalidate related queries to refetch fresh data
       queryClient.invalidateQueries({ queryKey: ["zones"] });
     },
@@ -100,7 +100,7 @@ const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
             {crop.name} - Zone {zone.zone_number}
           </DialogTitle>
         </DialogHeader>
-        
+
         <DialogBody>
           <VStack gap={6} align="stretch">
             {/* Crop Info */}
@@ -146,14 +146,14 @@ const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
                   <AddObservation zone={zone} />
                 )}
               </Flex>
-              
+
               {observations && observations.length > 0 ? (
                 <VStack gap={3} align="stretch" maxH="200px" overflowY="auto">
                   {observations.map((obs: ZoneCropObservationPublic) => (
-                    <Box 
-                      key={obs.id} 
-                      p={3} 
-                      border="1px" 
+                    <Box
+                      key={obs.id}
+                      p={3}
+                      border="1px"
                       borderColor={{ base: "gray.200", _dark: "gray.600" }}
                       rounded="md"
                       bg={{ base: "gray.50", _dark: "gray.700" }}
@@ -203,7 +203,7 @@ const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
             </Button>
           </DialogActionTrigger>
         </DialogFooter>
-        
+
         <DialogCloseTrigger />
       </DialogContent>
     </DialogRoot>

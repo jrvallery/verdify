@@ -87,7 +87,7 @@ Controllers:
 
 Zones (active plantings):
 {[
-  { "zone_id": "...", "crop": { "name": "...", "recipe": {...} }, 
+  { "zone_id": "...", "crop": { "name": "...", "recipe": {...} },
     "observations_summary": {
       "last_7d": {"health_avg": X, "height_cm_avg": Y, "notes": ["...","..."] },
       "issues": ["pests?","leaf curl?"]
@@ -210,7 +210,7 @@ Note: We embed the JSON Schema (next section) in the prompt to improve complianc
 
 **Validation Pipeline:**
 1. **JSON Schema validation**: Validate against OpenAPI PlanPayload schema
-2. **Guard rail clamping**: Clamp all setpoints to greenhouse min/max boundaries  
+2. **Guard rail clamping**: Clamp all setpoints to greenhouse min/max boundaries
 3. **Business logic validation**: Check irrigation durations, lighting actuator references, schedule conflicts
 4. **Staleness detection**: Use 24-hour grace period for plan expiry checks
 
@@ -336,22 +336,22 @@ logger = logging.getLogger(__name__)
 def generate_plan(self, greenhouse_id: str) -> Dict[str, Any]:
     """
     Generate AI plan for greenhouse with retry logic and error handling.
-    
+
     Args:
         greenhouse_id: UUID of the greenhouse to plan for
-        
+
     Returns:
         Dictionary with plan generation results
-        
+
     Raises:
         Retry: If temporary failures occur (API limits, network issues)
     """
     try:
         logger.info(f"Starting plan generation for greenhouse {greenhouse_id}")
-        
+
         service = PlanningService()
         result = service.generate_plan_with_llm(greenhouse_id)
-        
+
         logger.info(f"Plan generated successfully: {result.plan_id}")
         return {
             "status": "success",
@@ -360,15 +360,15 @@ def generate_plan(self, greenhouse_id: str) -> Dict[str, Any]:
             "generated_at": result.generated_at.isoformat(),
             "setpoints_count": len(result.setpoints)
         }
-        
+
     except Exception as exc:
         logger.error(f"Plan generation failed for greenhouse {greenhouse_id}: {exc}")
-        
+
         # Retry on temporary failures
         if self.request.retries < self.max_retries:
             logger.info(f"Retrying plan generation (attempt {self.request.retries + 1})")
             raise self.retry(countdown=60 * (2 ** self.request.retries), exc=exc)
-        
+
         # Final failure - log and return error
         logger.error(f"Plan generation permanently failed after {self.max_retries} retries")
         return {
@@ -381,23 +381,23 @@ def generate_plan(self, greenhouse_id: str) -> Dict[str, Any]:
 def schedule_periodic_planning():
     """Schedule plan generation for all active greenhouses"""
     from app.crud.greenhouse import get_active_greenhouses
-    
+
     greenhouses = get_active_greenhouses()
-    
+
     for greenhouse in greenhouses:
         logger.info(f"Scheduling plan generation for {greenhouse.title}")
         generate_plan.delay(str(greenhouse.id))
-    
+
     return {"scheduled_count": len(greenhouses)}
 
-@shared_task  
+@shared_task
 def cleanup_old_plans():
     """Remove plan data older than retention period"""
     from app.services.planning import PlanningService
-    
+
     service = PlanningService()
     deleted_count = service.cleanup_expired_plans()
-    
+
     logger.info(f"Cleaned up {deleted_count} expired plan records")
     return {"deleted_count": deleted_count}
 ```
@@ -419,14 +419,14 @@ async def trigger_plan_generation(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger immediate plan generation for greenhouse"""
-    
+
     # Validate greenhouse ownership
     if not await validate_greenhouse_access(greenhouse_id, current_user):
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     # Enqueue background task
     task = generate_plan.delay(greenhouse_id)
-    
+
     return {
         "task_id": task.id,
         "status": "queued",
@@ -436,9 +436,9 @@ async def trigger_plan_generation(
 @router.get("/tasks/{task_id}/status")
 async def get_task_status(task_id: str):
     """Check status of background planning task"""
-    
+
     task = celery_app.AsyncResult(task_id)
-    
+
     return {
         "task_id": task_id,
         "status": task.status,
@@ -480,7 +480,7 @@ celery_app.conf.beat_schedule = {
         'schedule': 3600.0,  # Every hour
     },
     'cleanup-old-plans': {
-        'task': 'app.tasks.planner.cleanup_old_plans', 
+        'task': 'app.tasks.planner.cleanup_old_plans',
         'schedule': 86400.0,  # Daily
     },
 }
@@ -494,9 +494,9 @@ celery_app.conf.beat_schedule = {
 @router.get("/admin/tasks/status")
 async def get_task_statistics():
     """Get Celery task statistics for monitoring"""
-    
+
     inspector = celery_app.control.inspect()
-    
+
     return {
         "active_tasks": inspector.active(),
         "scheduled_tasks": inspector.scheduled(),
@@ -560,7 +560,7 @@ async def get_task_statistics():
 
 **Planning-specific validation:**
 - **Guard rail compliance**: All generated setpoints clamped to greenhouse min/max boundaries
-- **Schedule conflicts**: Irrigation overlaps accepted but marked for sequential execution  
+- **Schedule conflicts**: Irrigation overlaps accepted but marked for sequential execution
 - **JSON schema validation**: Plan outputs validated against OpenAPI schemas before storage
 - **Retry logic**: Failed validation triggers LLM retry with stricter constraints
 

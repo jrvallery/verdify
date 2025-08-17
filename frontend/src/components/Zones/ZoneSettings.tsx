@@ -13,10 +13,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { FiSettings, FiTrash2, FiPlus, FiMinus } from "react-icons/fi";
 
-import { 
-  ZonePublic, 
-  SensorType, 
-  ZonesService, 
+import {
+  ZonePublic,
+  SensorType,
+  ZonesService,
   GreenhousesService,
   CropsService
 } from "@/client";
@@ -40,7 +40,7 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const queryClient = useQueryClient();
   const { showSuccessToast, showErrorToast } = useCustomToast();
-  
+
   const {
     handleSubmit,
     formState: { isSubmitting },
@@ -49,8 +49,8 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
   // Get unmapped sensors for this greenhouse
   const { data: unmappedSensors } = useQuery({
     queryKey: ["unmapped-sensors", zone.greenhouse_id],
-    queryFn: () => GreenhousesService.listUnmappedGreenhouseSensors({ 
-      greenhouseId: zone.greenhouse_id 
+    queryFn: () => GreenhousesService.listUnmappedGreenhouseSensors({
+      greenhouseId: zone.greenhouse_id
     }),
     enabled: isOpen,
   });
@@ -182,7 +182,7 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
         <DialogHeader>
           <DialogTitle>Zone {zone.zone_number} Settings</DialogTitle>
         </DialogHeader>
-        
+
         <DialogBody>
           <VStack gap={6} align="stretch">
             {/* Zone Info */}
@@ -202,15 +202,15 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
                   const availableSensors = getAvailableSensorsForType(sensorType);
 
                   return (
-                    <Box 
-                      key={sensorType} 
-                      border="2px" 
+                    <Box
+                      key={sensorType}
+                      border="2px"
                       borderColor={{ base: "gray.200", _dark: "gray.600" }}
-                      rounded="xl" 
-                      p={6} 
+                      rounded="xl"
+                      p={6}
                       shadow="md"
                       bg={{ base: "white", _dark: "gray.800" }}
-                      _hover={{ 
+                      _hover={{
                         shadow: "lg",
                         borderColor: { base: "gray.300", _dark: "gray.500" }
                       }}
@@ -296,11 +296,11 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
                 })}
               </VStack>
             </Box>
-            
+
             {/* Delete Zone */}
             <Box pt={4} borderTop="1px" borderColor="gray.200">
               <Text fontWeight="bold" color="red.500" mb={4}>Danger Zone</Text>
-              
+
               {/* Harvest Crop Button - only show if there's an active crop */}
               {zoneCrop?.is_active && (
                 <Box mb={4}>
@@ -349,7 +349,7 @@ const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
             </Button>
           </DialogActionTrigger>
         </DialogFooter>
-        
+
         <DialogCloseTrigger />
       </DialogContent>
     </DialogRoot>

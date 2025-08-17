@@ -10,7 +10,7 @@ export const useCropStageData = (
   return useMemo(() => {
     const getDaysGrowing = () => {
       if (!zoneCrop?.start_date) return 0;
-      
+
       const startDate = new Date(zoneCrop.start_date);
       const endDate = zoneCrop.end_date ? new Date(zoneCrop.end_date) : new Date();
       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
@@ -20,18 +20,18 @@ export const useCropStageData = (
 
     const getCurrentStage = () => {
       if (!zoneCrop?.start_date || !crop?.recipe || !isCropRecipe(crop.recipe)) return null;
-      
+
       const daysGrown = getDaysGrowing();
-      return crop.recipe.stages.find((stage) => 
+      return crop.recipe.stages.find((stage) =>
         daysGrown >= stage.duration_days.start_day && daysGrown <= stage.duration_days.end_day
       );
     };
 
     const getNextStage = () => {
       if (!zoneCrop?.start_date || !crop?.recipe || !isCropRecipe(crop.recipe)) return null;
-      
+
       const daysGrown = getDaysGrowing();
-      return crop.recipe.stages.find((stage) => 
+      return crop.recipe.stages.find((stage) =>
         daysGrown < stage.duration_days.start_day
       );
     };
@@ -39,14 +39,14 @@ export const useCropStageData = (
     const getDaysUntilNextStage = () => {
       const nextStage = getNextStage();
       if (!nextStage) return null;
-      
+
       const daysGrown = getDaysGrowing();
       return nextStage.duration_days.start_day - daysGrown;
     };
 
     const getGrowthProgress = () => {
       if (!crop?.recipe || !isCropRecipe(crop.recipe) || !zoneCrop?.start_date) return 0;
-      
+
       const daysGrown = getDaysGrowing();
       const progress = (daysGrown / crop.recipe.growth_duration_days) * 100;
       return Math.min(progress, 100);
@@ -54,7 +54,7 @@ export const useCropStageData = (
 
     const getLatestObservation = () => {
       if (!observations || observations.length === 0) return null;
-      return observations.sort((a, b) => 
+      return observations.sort((a, b) =>
         new Date(b.observed_at || 0).getTime() - new Date(a.observed_at || 0).getTime()
       )[0];
     };

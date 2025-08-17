@@ -60,12 +60,12 @@ function Zones() {
 
 function ZoneCard({ zone }: { zone: ZonePublic }) {
   // Use our custom hook for all crop-related queries
-  const { 
-    zoneCrop, 
-    crop, 
-    observations, 
-    isLoading, 
-    hasNoCrop 
+  const {
+    zoneCrop,
+    crop,
+    observations,
+    isLoading,
+    hasNoCrop
   } = useCropQueries(zone);
 
   // Use our custom hook for stage calculations
@@ -106,9 +106,9 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
       </Box>
 
       <Box mb={6} pr={12}>
-        <Heading 
-          size={{ base: "lg", md: "xl" }} 
-          color={{ base: "gray.800", _dark: "gray.100" }} 
+        <Heading
+          size={{ base: "lg", md: "xl" }}
+          color={{ base: "gray.800", _dark: "gray.100" }}
           mb={2}
           lineClamp={1}
         >
@@ -123,10 +123,10 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
         <EnvironmentalGrid zone={zone} idealConditions={idealConditions} />
       </Box>
 
-      <Box 
-        border="2px" 
+      <Box
+        border="2px"
         borderColor={{ base: "green.200", _dark: "green.600" }}
-        rounded="xl" 
+        rounded="xl"
         p={{ base: 3, md: 5 }}
         bg="linear-gradient(135deg, #f0fff4 0%, #e6fffa 100%)"
         _dark={{ bg: "linear-gradient(135deg, #1a2f1a 0%, #1a2e2a 100%)" }}
@@ -134,8 +134,8 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
       >
         {isLoading ? (
           <Flex justify="center" align="center" h="200px">
-            <Text 
-              color={{ base: "gray.500", _dark: "gray.400" }} 
+            <Text
+              color={{ base: "gray.500", _dark: "gray.400" }}
               fontSize={{ base: "md", md: "lg" }}
               textAlign="center"
             >
@@ -144,9 +144,9 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
           </Flex>
         ) : zoneCrop && crop && !hasNoCrop ? (
           <VStack gap={{ base: 3, md: 5 }} align="stretch" h="full">
-            <CropHeader 
-              crop={crop} 
-              zoneCrop={zoneCrop} 
+            <CropHeader
+              crop={crop}
+              zoneCrop={zoneCrop}
               currentStage={currentStage}
             />
 
@@ -160,15 +160,15 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
                 p={{ base: 3, md: 4 }}
               >
                 <Flex justify="space-between" align="center" mb={2} wrap="wrap" gap={2}>
-                  <Text 
-                    fontSize={{ base: "xs", md: "sm" }} 
-                    fontWeight="medium" 
+                  <Text
+                    fontSize={{ base: "xs", md: "sm" }}
+                    fontWeight="medium"
                     color={{ base: "gray.700", _dark: "gray.300" }}
                   >
                     Growth Progress
                   </Text>
-                  <Text 
-                    fontSize={{ base: "xs", md: "sm" }} 
+                  <Text
+                    fontSize={{ base: "xs", md: "sm" }}
                     color={{ base: "gray.600", _dark: "gray.400" }}
                   >
                     {progress.toFixed(1)}%
@@ -188,9 +188,9 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
                     transition="width 0.3s ease"
                   />
                 </Box>
-                <Flex 
-                  justify="space-between" 
-                  fontSize="xs" 
+                <Flex
+                  justify="space-between"
+                  fontSize="xs"
                   color={{ base: "gray.500", _dark: "gray.400" }}
                   wrap="wrap"
                   gap={1}
@@ -199,9 +199,9 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
                   <Text>{recipe.growth_duration_days - daysGrowing} days remaining</Text>
                 </Flex>
                 {nextStage && daysUntilNext && (
-                  <Text 
-                    fontSize="xs" 
-                    color={{ base: "blue.600", _dark: "blue.400" }} 
+                  <Text
+                    fontSize="xs"
+                    color={{ base: "blue.600", _dark: "blue.400" }}
                     mt={1}
                     lineClamp={2}
                   >
@@ -230,9 +230,9 @@ function ZoneCard({ zone }: { zone: ZonePublic }) {
           </VStack>
         ) : (
           <Flex direction="column" justify="center" align="center" h="200px" gap={4}>
-            <Text 
-              color={{ base: "gray.500", _dark: "gray.400" }} 
-              fontSize={{ base: "md", md: "lg" }} 
+            <Text
+              color={{ base: "gray.500", _dark: "gray.400" }}
+              fontSize={{ base: "md", md: "lg" }}
               textAlign="center"
               px={2}
             >

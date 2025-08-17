@@ -12,12 +12,12 @@ interface MetricCardProps {
   textColor?: string;
 }
 
-const MetricCard = ({ 
-  title, 
-  value, 
-  unit, 
-  icon, 
-  gradient = "linear-gradient(135deg, #6B73FF 0%, #9B59B6 100%)", 
+const MetricCard = ({
+  title,
+  value,
+  unit,
+  icon,
+  gradient = "linear-gradient(135deg, #6B73FF 0%, #9B59B6 100%)",
   idealRange,
   size = "md",
   textColor = "white"

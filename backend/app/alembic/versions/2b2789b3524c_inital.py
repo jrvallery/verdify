@@ -1,7 +1,7 @@
 """inital
 
 Revision ID: 2b2789b3524c
-Revises: 
+Revises:
 Create Date: 2025-07-31 16:25:01.512353
 
 """

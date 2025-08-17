@@ -1,7 +1,7 @@
 -- Migration: P0 Security & Schema Alignment Fixes
 -- Author: GitHub Copilot (via comprehensive audit)
 -- Date: 2025-08-13
--- 
+--
 -- This migration addresses the highest-priority security vulnerabilities,
 -- schema misalignments, and architectural gaps identified in the cross-audit
 -- of API.md, openapi.yml, and DATABASE.md.
@@ -36,15 +36,15 @@ CREATE POLICY zone_owner_access ON zone
   FOR ALL
   USING (
     EXISTS (
-      SELECT 1 FROM greenhouse g 
-      WHERE g.id = zone.greenhouse_id 
+      SELECT 1 FROM greenhouse g
+      WHERE g.id = zone.greenhouse_id
       AND g.owner_id = app.current_user_id()
     )
   )
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM greenhouse g 
-      WHERE g.id = zone.greenhouse_id 
+      SELECT 1 FROM greenhouse g
+      WHERE g.id = zone.greenhouse_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -56,15 +56,15 @@ CREATE POLICY controller_owner_access ON controller
   FOR ALL
   USING (
     EXISTS (
-      SELECT 1 FROM greenhouse g 
-      WHERE g.id = controller.greenhouse_id 
+      SELECT 1 FROM greenhouse g
+      WHERE g.id = controller.greenhouse_id
       AND g.owner_id = app.current_user_id()
     )
   )
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM greenhouse g 
-      WHERE g.id = controller.greenhouse_id 
+      SELECT 1 FROM greenhouse g
+      WHERE g.id = controller.greenhouse_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -78,7 +78,7 @@ CREATE POLICY sensor_owner_access ON sensor
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = sensor.controller_id 
+      WHERE c.id = sensor.controller_id
       AND g.owner_id = app.current_user_id()
     )
   )
@@ -86,7 +86,7 @@ CREATE POLICY sensor_owner_access ON sensor
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = sensor.controller_id 
+      WHERE c.id = sensor.controller_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -100,7 +100,7 @@ CREATE POLICY actuator_owner_access ON actuator
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = actuator.controller_id 
+      WHERE c.id = actuator.controller_id
       AND g.owner_id = app.current_user_id()
     )
   )
@@ -108,7 +108,7 @@ CREATE POLICY actuator_owner_access ON actuator
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = actuator.controller_id 
+      WHERE c.id = actuator.controller_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -123,7 +123,7 @@ CREATE POLICY sensor_zone_map_owner_access ON sensor_zone_map
       SELECT 1 FROM sensor s
       JOIN controller c ON c.id = s.controller_id
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE s.id = sensor_zone_map.sensor_id 
+      WHERE s.id = sensor_zone_map.sensor_id
       AND g.owner_id = app.current_user_id()
     )
   )
@@ -132,7 +132,7 @@ CREATE POLICY sensor_zone_map_owner_access ON sensor_zone_map
       SELECT 1 FROM sensor s
       JOIN controller c ON c.id = s.controller_id
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE s.id = sensor_zone_map.sensor_id 
+      WHERE s.id = sensor_zone_map.sensor_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS controller_token (
 );
 
 -- Index for fast auth lookups (active tokens only)
-CREATE INDEX IF NOT EXISTS idx_controller_token_active 
+CREATE INDEX IF NOT EXISTS idx_controller_token_active
   ON controller_token(controller_id, token_hash)
   WHERE revoked_at IS NULL AND expires_at > now();
 
@@ -172,7 +172,7 @@ CREATE POLICY controller_token_owner_access ON controller_token
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = controller_token.controller_id 
+      WHERE c.id = controller_token.controller_id
       AND g.owner_id = app.current_user_id()
     )
   )
@@ -180,7 +180,7 @@ CREATE POLICY controller_token_owner_access ON controller_token
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = controller_token.controller_id 
+      WHERE c.id = controller_token.controller_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -255,7 +255,7 @@ CREATE POLICY idempotency_key_controller_access ON idempotency_key
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = idempotency_key.controller_id 
+      WHERE c.id = idempotency_key.controller_id
       AND g.owner_id = app.current_user_id()
     )
   )
@@ -263,7 +263,7 @@ CREATE POLICY idempotency_key_controller_access ON idempotency_key
     EXISTS (
       SELECT 1 FROM controller c
       JOIN greenhouse g ON g.id = c.greenhouse_id
-      WHERE c.id = idempotency_key.controller_id 
+      WHERE c.id = idempotency_key.controller_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -291,7 +291,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_actuator_controller_channel
 
 -- Range check for relay channels
 ALTER TABLE actuator
-  ADD CONSTRAINT relay_channel_positive 
+  ADD CONSTRAINT relay_channel_positive
   CHECK (relay_channel IS NULL OR relay_channel > 0);
 
 -- =============================================================================
@@ -309,10 +309,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_climate_controller_per_greenhouse
 
 -- Enforce device_name format and uniqueness
 ALTER TABLE controller
-  ADD CONSTRAINT device_name_format 
+  ADD CONSTRAINT device_name_format
   CHECK (device_name ~ '^verdify-[0-9a-f]{6}$');
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_controller_device_name 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_controller_device_name
   ON controller(device_name);
 
 -- =============================================================================
@@ -326,7 +326,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_controller_device_name
 
 -- Ensure effective date windows are valid
 -- ALTER TABLE plan
---   ADD CONSTRAINT effective_window_valid 
+--   ADD CONSTRAINT effective_window_valid
 --   CHECK (effective_from < effective_to);
 
 -- =============================================================================
@@ -334,7 +334,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_controller_device_name
 -- =============================================================================
 
 -- Add missing fields to controller table (align with openapi.yml changes)
-ALTER TABLE controller 
+ALTER TABLE controller
   ADD COLUMN IF NOT EXISTS label TEXT NULL,
   ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ NULL;
 
@@ -367,15 +367,15 @@ CREATE POLICY config_snapshot_owner_access ON config_snapshot
   FOR ALL
   USING (
     EXISTS (
-      SELECT 1 FROM greenhouse g 
-      WHERE g.id = config_snapshot.greenhouse_id 
+      SELECT 1 FROM greenhouse g
+      WHERE g.id = config_snapshot.greenhouse_id
       AND g.owner_id = app.current_user_id()
     )
   )
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM greenhouse g 
-      WHERE g.id = config_snapshot.greenhouse_id 
+      SELECT 1 FROM greenhouse g
+      WHERE g.id = config_snapshot.greenhouse_id
       AND g.owner_id = app.current_user_id()
     )
   );
@@ -402,7 +402,7 @@ CREATE POLICY config_snapshot_owner_access ON config_snapshot
 --       SELECT 1 FROM sensor s
 --       JOIN controller c ON c.id = s.controller_id
 --       JOIN greenhouse g ON g.id = c.greenhouse_id
---       WHERE s.id = sensor_reading.sensor_id 
+--       WHERE s.id = sensor_reading.sensor_id
 --       AND g.owner_id = app.current_user_id()
 --     )
 --   );
@@ -417,9 +417,9 @@ RETURNS INTEGER AS $$
 DECLARE
   deleted_count INTEGER;
 BEGIN
-  DELETE FROM idempotency_key 
+  DELETE FROM idempotency_key
   WHERE seen_at < now() - INTERVAL '24 hours';
-  
+
   GET DIAGNOSTICS deleted_count = ROW_COUNT;
   RETURN deleted_count;
 END;
@@ -431,9 +431,9 @@ RETURNS INTEGER AS $$
 DECLARE
   deleted_count INTEGER;
 BEGIN
-  DELETE FROM audit_log 
+  DELETE FROM audit_log
   WHERE occurred_at < now() - (retention_days || ' days')::INTERVAL;
-  
+
   GET DIAGNOSTICS deleted_count = ROW_COUNT;
   RETURN deleted_count;
 END;
@@ -444,7 +444,7 @@ $$ LANGUAGE plpgsql;
 -- =============================================================================
 
 -- Verify RLS is enabled
--- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' AND tablename IN 
+-- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' AND tablename IN
 --   ('greenhouse', 'zone', 'controller', 'sensor', 'actuator', 'sensor_zone_map', 'controller_token', 'audit_log', 'idempotency_key', 'config_snapshot');
 
 -- Verify unique constraints exist

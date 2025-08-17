@@ -31,4 +31,3 @@ const Appearance = () => {
 }
 
 export default Appearance
-

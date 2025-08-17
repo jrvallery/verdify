@@ -12,11 +12,11 @@ import {
 import { useState } from "react";
 import { FiPlus } from "react-icons/fi";
 
-import { 
-  type ZoneCropCreate, 
-  CropsService, 
-  type CropPublic, 
-  type ZonePublic 
+import {
+  type ZoneCropCreate,
+  CropsService,
+  type CropPublic,
+  type ZonePublic
 } from "@/client";
 import type { ApiError } from "@/client/core/ApiError";
 import useCustomToast from "@/hooks/useCustomToast";
@@ -73,9 +73,9 @@ const PlantCrop = ({ zone }: PlantCropProps) => {
 
   const mutation = useMutation({
     mutationFn: (data: ZoneCropCreate) =>
-      CropsService.plantCropInZone({ 
-        zoneId: zone.id, 
-        requestBody: data 
+      CropsService.plantCropInZone({
+        zoneId: zone.id,
+        requestBody: data
       }),
     onSuccess: () => {
       showSuccessToast("Crop planted successfully.");
@@ -122,8 +122,8 @@ const PlantCrop = ({ zone }: PlantCropProps) => {
                 errorText={errors.crop_id?.message}
                 label="Crop Template"
               >
-                <select 
-                  id="crop_id" 
+                <select
+                  id="crop_id"
                   {...register("crop_id", { required: "Please select a crop." })}
                 >
                   <option value="">Select a crop...</option>

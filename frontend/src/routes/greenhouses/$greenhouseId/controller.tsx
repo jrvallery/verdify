@@ -44,16 +44,16 @@ function Controller() {
       <AddController greenhouseId={greenhouseId} />
 
       {controllers?.map((controller: ControllerPublic) => (
-        <Box 
-          key={controller.id} 
-          border="2px" 
+        <Box
+          key={controller.id}
+          border="2px"
           borderColor={{ base: "gray.200", _dark: "gray.600" }}
-          rounded="xl" 
-          p={6} 
+          rounded="xl"
+          p={6}
           mb={6}
           shadow="md"
           bg={{ base: "white", _dark: "gray.800" }}
-          _hover={{ 
+          _hover={{
             shadow: "lg",
             borderColor: { base: "gray.300", _dark: "gray.500" }
           }}
@@ -106,15 +106,15 @@ function ControllerSensors({ controllerId, greenhouseId }: { controllerId: strin
 
   return (
     <Box>
-      <Text 
-        fontWeight="bold" 
+      <Text
+        fontWeight="bold"
         mb={2}
         color={{ base: "gray.700", _dark: "gray.200" }}
       >
         Sensors ({sensors?.length || 0})
       </Text>
       {sensors && sensors.length > 0 ? (
-        <Box 
+        <Box
           overflowX="auto"
           bg={{ base: "gray.50", _dark: "gray.900" }}
           rounded="lg"
@@ -145,9 +145,9 @@ function ControllerSensors({ controllerId, greenhouseId }: { controllerId: strin
             </Table.Header>
             <Table.Body>
               {sensors.map((sensor: SensorPublic) => (
-                <Table.Row 
+                <Table.Row
                   key={sensor.id}
-                  _hover={{ 
+                  _hover={{
                     bg: { base: "gray.100", _dark: "gray.700" }
                   }}
                 >

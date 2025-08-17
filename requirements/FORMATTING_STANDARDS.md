@@ -123,7 +123,7 @@ Description of what the endpoint does.
 ### Requirements
 
 - ✅ **MUST**: Critical requirement
-- ⚠️  **SHOULD**: Recommended requirement  
+- ⚠️  **SHOULD**: Recommended requirement
 - ℹ️  **MAY**: Optional requirement
 ```
 
@@ -153,7 +153,7 @@ See [DATABASE.md](./DATABASE.md) for schema details.
 ## Files to Standardize
 
 1. ✅ OVERVIEW.md - Completed
-2. 🔄 API.md - In progress  
+2. 🔄 API.md - In progress
 3. 🔄 CONFIGURATION.md - In progress
 4. 🔄 CONTROLLER.md - Needs formatting
 5. 🔄 PLANNER.md - Needs formatting

@@ -19,7 +19,7 @@ const EnvironmentalGrid = ({ zone, idealConditions }: EnvironmentalGridProps) =>
         icon={<FiThermometer size={18} />}
         gradient="linear-gradient(135deg,rgb(195, 21, 21) 0%, #FF8E8E 100%)"
         idealRange={
-          idealConditions?.temperature_C 
+          idealConditions?.temperature_C
             ? `${idealConditions.temperature_C.min}-${idealConditions.temperature_C.max}°C`
             : undefined
         }

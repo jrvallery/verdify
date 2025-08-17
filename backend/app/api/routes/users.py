@@ -2,13 +2,8 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import col, delete, func, select
+from sqlmodel import func, select
 
-from app.crud.auth import(
-    create_user_crud,
-    update_user,
-    get_user_by_email,
-)
 from app.api.deps import (
     CurrentUser,
     SessionDep,
@@ -16,19 +11,26 @@ from app.api.deps import (
 )
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
+from app.crud.auth import (
+    create_user_crud,
+    get_user_by_email,
+)
+from app.crud.auth import (
+    update_user as crud_update_user,
+)
 from app.models import (
-    Greenhouse,
     Message,
     UpdatePassword,
     User,
     UserCreate,
     UserPublic,
     UserRegister,
-    UsersPublic,
+    UsersPaginated,
     UserUpdate,
     UserUpdateMe,
 )
 from app.utils import generate_new_account_email, send_email
+from app.utils_paging import Paginated
 
 router = APIRouter()
 
@@ -36,12 +38,15 @@ router = APIRouter()
 @router.get(
     "/",
     dependencies=[Depends(get_current_active_superuser)],
-    response_model=UsersPublic,
+    response_model=UsersPaginated,
 )
 def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     """
     Retrieve users.
     """
+    # Convert skip/limit to page/page_size for new pagination format
+    page = (skip // limit) + 1 if limit > 0 else 1
+    page_size = limit
 
     count_statement = select(func.count()).select_from(User)
     count = session.exec(count_statement).one()
@@ -49,7 +54,7 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     statement = select(User).offset(skip).limit(limit)
     users = session.exec(statement).all()
 
-    return UsersPublic(data=users, count=count)
+    return Paginated(data=users, page=page, page_size=page_size, total=count)
 
 
 @router.post(
@@ -167,6 +172,8 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     if user == current_user:
         return user
     if not current_user.is_superuser:
@@ -205,7 +212,7 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    db_user = update_user(session=session, db_user=db_user, user_in=user_in)
+    db_user = crud_update_user(session=session, db_user=db_user, user_in=user_in)
     return db_user
 
 
@@ -223,8 +230,7 @@ def delete_user(
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
-    statement = delete(Greenhouse).where(col(Greenhouse.owner_id) == user_id)
-    session.exec(statement)  # type: ignore
+    # Let database CASCADE handle related records deletion
     session.delete(user)
     session.commit()
     return Message(message="User deleted successfully")

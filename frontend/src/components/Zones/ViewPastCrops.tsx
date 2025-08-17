@@ -15,10 +15,10 @@ import { useState } from "react";
 import { FiCalendar, FiClock, FiTrendingUp, FiEye } from "react-icons/fi";
 import { format, differenceInDays } from "date-fns";
 
-import { 
+import {
   CropsService,
   type ZonePublic,
-  type ZoneCropPublic 
+  type ZoneCropPublic
 } from "@/client";
 import {
   DialogBody,
@@ -49,12 +49,12 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
     queryKey: ["crop-details", pastCrops?.map(c => c.crop_id)],
     queryFn: async () => {
       if (!pastCrops?.length) return {};
-      
+
       const cropDetailsMap: Record<string, any> = {};
-      
+
       // Fetch crop details for each unique crop_id
       const uniqueCropIds = [...new Set(pastCrops.map(c => c.crop_id))];
-      
+
       await Promise.all(
         uniqueCropIds.map(async (cropId) => {
           try {
@@ -66,7 +66,7 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
           }
         })
       );
-      
+
       return cropDetailsMap;
     },
     enabled: isOpen && !!pastCrops?.length,
@@ -116,7 +116,7 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
         <DialogHeader>
           <DialogTitle>Crop History - Zone {zone.zone_number}</DialogTitle>
         </DialogHeader>
-        
+
         <DialogBody>
           {isLoading ? (
             <Flex justify="center" align="center" h="200px">
@@ -170,15 +170,15 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
                   </Heading>
                   <VStack gap={3} align="stretch">
                     {activeCrops.map((crop) => (
-                      <Box 
-                        key={crop.id} 
-                        border="2px" 
-                        borderColor="green.200" 
-                        rounded="lg" 
+                      <Box
+                        key={crop.id}
+                        border="2px"
+                        borderColor="green.200"
+                        rounded="lg"
                         p={4}
                         bg="green.50"
                         _dark={{ bg: "green.900", borderColor: "green.700" }}
-                        _hover={{ 
+                        _hover={{
                           shadow: "md",
                           borderColor: "green.300",
                           cursor: "pointer"
@@ -196,8 +196,8 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
                             <Text fontSize="sm" color="gray.500">
                               Started {crop.start_date ? formatDate(crop.start_date) : "N/A"}
                             </Text>
-                            <ViewObservations 
-                              zone={zone} 
+                            <ViewObservations
+                              zone={zone}
                               zoneCropId={crop.id}
                               cropName={getCropName(crop)}
                             />
@@ -232,15 +232,15 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
                     {completedCrops
                       .sort((a, b) => new Date(b.end_date!).getTime() - new Date(a.end_date!).getTime())
                       .map((crop) => (
-                      <Box 
-                        key={crop.id} 
-                        border="1px" 
-                        borderColor="gray.200" 
-                        rounded="lg" 
+                      <Box
+                        key={crop.id}
+                        border="1px"
+                        borderColor="gray.200"
+                        rounded="lg"
                         p={4}
                         bg="white"
                         _dark={{ bg: "gray.800", borderColor: "gray.600" }}
-                        _hover={{ 
+                        _hover={{
                           shadow: "md",
                           borderColor: "gray.300",
                           cursor: "pointer"
@@ -258,8 +258,8 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
                             <Text fontSize="xs" color="gray.400">
                               {getDurationText(crop)}
                             </Text>
-                            <ViewObservations 
-                              zone={zone} 
+                            <ViewObservations
+                              zone={zone}
                               zoneCropId={crop.id}
                               cropName={getCropName(crop)}
                             />
@@ -279,7 +279,7 @@ const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
             Close
           </Button>
         </DialogFooter>
-        
+
         <DialogCloseTrigger />
       </DialogContent>
     </DialogRoot>

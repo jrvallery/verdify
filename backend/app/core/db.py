@@ -1,10 +1,16 @@
 from sqlmodel import Session, create_engine, select
 
-from app.crud.auth import create_user_crud
+# Import ALL models to ensure they're registered before any DB operations
+import app.models  # noqa: F401
 from app.core.config import settings
+from app.crud.auth import create_user_crud
 from app.models import User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+
+# Force early mapper configuration is commented out for now
+# Will be enabled once all forward references are resolved correctly
+# configure_mappers()
 
 
 # make sure all SQLModel models are imported (app.models) before initializing DB

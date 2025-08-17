@@ -36,7 +36,7 @@ export interface CropRecipe {
 
 // Type guard to check if recipe has the expected structure
 export const isCropRecipe = (recipe: any): recipe is CropRecipe => {
-  return recipe && 
+  return recipe &&
     typeof recipe === 'object' &&
     typeof recipe.growth_duration_days === 'number' &&
     Array.isArray(recipe.stages) &&

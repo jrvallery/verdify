@@ -328,7 +328,7 @@ paths:
               schema: { type: string, format: date-time }
             Content-Encoding:
               description: Compression algorithm used (if any)
-              schema: 
+              schema:
                 type: string
                 enum: [gzip, identity]
           content:
@@ -381,7 +381,7 @@ paths:
           headers:
             ETag:
               description: Strong config ETag config:v<version>:<sha8>
-              schema: 
+              schema:
                 type: string
                 pattern: '^config:v[0-9]+:[0-9a-f]{8}$'
             Last-Modified:
@@ -408,7 +408,7 @@ paths:
           headers:
             ETag:
               description: Strong plan ETag plan:v<version>:<sha8>
-              schema: 
+              schema:
                 type: string
                 pattern: '^plan:v[0-9]+:[0-9a-f]{8}$'
             Last-Modified:
@@ -1014,8 +1014,8 @@ paths:
           description: Sort field and direction
           schema:
             type: string
-            enum: [planted_at, planned_harvest_at, created_at, -planted_at, -planned_harvest_at, -created_at]
-            default: -planted_at
+            enum: [start_date, end_date, created_at, -start_date, -end_date, -created_at]
+            default: -start_date
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/PageSizeParam'
       responses:
@@ -1520,7 +1520,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          $ref: '#/components/responses/Unauthorized'  
+          $ref: '#/components/responses/Unauthorized'
 
   /actuators/{id}:
     get:
@@ -2202,11 +2202,11 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E400_BAD_REQUEST
-                message: "Invalid input" 
+                message: "Invalid input"
                 timestamp: "2025-08-13T18:05:00Z"
-                details: 
+                details:
                   field: "email"
                   reason: "Invalid email format"
                 request_id: "req_1234567890abcdef"
@@ -2221,7 +2221,7 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E401_UNAUTHORIZED
                 message: "Missing/invalid token"
                 timestamp: "2025-08-13T18:05:00Z"
@@ -2237,7 +2237,7 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E404_NOT_FOUND
                 message: "Resource not found"
                 timestamp: "2025-08-13T18:05:00Z"
@@ -2253,7 +2253,7 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E409_CONFLICT
                 message: "Unique constraint violated"
                 timestamp: "2025-08-13T18:05:00Z"
@@ -2278,7 +2278,7 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E429_TOO_MANY_REQUESTS
                 message: "Rate limit exceeded. Try again in 60 seconds."
                 timestamp: "2025-08-13T18:05:00Z"
@@ -2291,7 +2291,7 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E403_FORBIDDEN
                 message: "Insufficient permissions"
                 timestamp: "2025-08-13T18:05:00Z"
@@ -2304,11 +2304,11 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           examples:
             ex:
-              value: 
+              value:
                 error_code: E422_UNPROCESSABLE
                 message: "Validation failed"
                 timestamp: "2025-08-13T18:05:00Z"
-                details: 
+                details:
                   - field: "email"
                     value: "invalid-email"
                     expected: "Valid email format"
@@ -2320,7 +2320,7 @@ components:
       type: string
       enum:
         - E400_BAD_REQUEST
-        - E401_UNAUTHORIZED  
+        - E401_UNAUTHORIZED
         - E403_FORBIDDEN
         - E404_NOT_FOUND
         - E409_CONFLICT
@@ -2372,11 +2372,11 @@ components:
       type: object
       required: [error_code, message, timestamp, request_id]
       properties:
-        error_code: 
+        error_code:
           $ref: '#/components/schemas/ErrorCode'
           description: Standardized error code
           example: "E409_CONFLICT"
-        message: 
+        message:
           type: string
           description: Human-readable error message
           example: "Email already exists"
@@ -2388,7 +2388,7 @@ components:
           type: string
           description: Unique request identifier for tracing
           example: "req_1234567890"
-        details: 
+        details:
           oneOf:
             - type: array
               items: { $ref: '#/components/schemas/ErrorDetail' }
@@ -2396,7 +2396,7 @@ components:
               additionalProperties: true
             - type: string
           description: Structured error details for field-specific issues
-          example: 
+          example:
             field: "email"
             value: "user@example.com"
 
@@ -2769,6 +2769,11 @@ components:
         id: { type: string, format: uuid }
         zone_crop_id: { type: string, format: uuid }
         observed_at: { type: string, format: date-time }
+        observation_type:
+          anyOf:
+            - type: string
+              enum: [growth, pest, disease, harvest, general]
+            - type: "null"
         notes: { type: [string, "null"], maxLength: 2000 }
         image_url: { type: [string, "null"] }
         height_cm: { type: [number, "null"] }
@@ -2784,6 +2789,11 @@ components:
       properties:
         zone_crop_id: { type: string, format: uuid }
         observed_at: { type: string, format: date-time }
+        observation_type:
+          anyOf:
+            - type: string
+              enum: [growth, pest, disease, harvest, general]
+            - type: "null"
         notes: { type: [string, "null"] }
         image_url: { type: [string, "null"] }
         height_cm: { type: [number, "null"] }
@@ -3142,12 +3152,12 @@ components:
       description: Complete configuration package for controllers, including greenhouse parameters, sensor/actuator mappings, and control rules
       required: [version, greenhouse, controllers, sensors, actuators, state_rules, baselines, rails]
       properties:
-        version: 
-          type: integer 
+        version:
+          type: integer
           minimum: 1
           description: Configuration version number for ETag generation and change tracking
-        generated_at: 
-          type: string 
+        generated_at:
+          type: string
           format: date-time
           description: UTC timestamp when configuration was generated
         greenhouse:
@@ -3155,32 +3165,32 @@ components:
           description: Greenhouse physical parameters and operational limits
           required: [id, title, min_temp_c, max_temp_c, min_vpd_kpa, max_vpd_kpa, enthalpy_open_kjkg, enthalpy_close_kjkg, site_pressure_hpa]
           properties:
-            id: 
-              type: string 
+            id:
+              type: string
               format: uuid
               description: Unique greenhouse identifier
-            title: 
+            title:
               type: string
               description: Human-readable greenhouse name
-            min_temp_c: 
+            min_temp_c:
               type: number
               description: Minimum allowable temperature in Celsius (hard safety limit)
-            max_temp_c: 
+            max_temp_c:
               type: number
               description: Maximum allowable temperature in Celsius (hard safety limit)
-            min_vpd_kpa: 
+            min_vpd_kpa:
               type: number
               description: Minimum vapor pressure deficit in kPa (humidity control bound)
-            max_vpd_kpa: 
+            max_vpd_kpa:
               type: number
               description: Maximum vapor pressure deficit in kPa (humidity control bound)
-            enthalpy_open_kjkg: 
+            enthalpy_open_kjkg:
               type: number
               description: Enthalpy threshold in kJ/kg below which ventilation is beneficial for dehumidification
-            enthalpy_close_kjkg: 
+            enthalpy_close_kjkg:
               type: number
               description: Enthalpy threshold in kJ/kg above which ventilation should be reduced
-            site_pressure_hpa: 
+            site_pressure_hpa:
               type: number
               description: Local atmospheric pressure in hPa for enthalpy calculations
         baselines:
@@ -3193,25 +3203,25 @@ components:
               description: Temperature thresholds in Celsius for staging levels (-3 to +3, where negative indicates heat demand and positive indicates cooling demand)
               required: [minus3, minus2, minus1, zero, plus1, plus2, plus3]
               properties:
-                minus3: 
+                minus3:
                   type: number
                   description: Stage -3 temperature threshold (maximum heat demand)
-                minus2: 
+                minus2:
                   type: number
                   description: Stage -2 temperature threshold (high heat demand)
-                minus1: 
+                minus1:
                   type: number
                   description: Stage -1 temperature threshold (moderate heat demand)
-                zero: 
+                zero:
                   type: number
                   description: Stage 0 temperature threshold (target/neutral temperature)
-                plus1: 
+                plus1:
                   type: number
                   description: Stage +1 temperature threshold (moderate cooling demand)
-                plus2: 
+                plus2:
                   type: number
                   description: Stage +2 temperature threshold (high cooling demand)
-                plus3: 
+                plus3:
                   type: number
                   description: Stage +3 temperature threshold (maximum cooling demand)
             vpd_thresholds:

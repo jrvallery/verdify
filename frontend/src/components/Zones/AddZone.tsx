@@ -129,8 +129,8 @@ const AddZone = ({ greenhouseId }: AddZoneProps) => {
                 errorText={errors.location?.message}
                 label="Location"
               >
-                <select 
-                  id="location" 
+                <select
+                  id="location"
                   {...register("location", { required: "Location is required." })}
                 >
                   {locations.map((location) => (

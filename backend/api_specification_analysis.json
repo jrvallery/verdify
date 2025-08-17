@@ -1,0 +1,1795 @@
+{
+  "summary": {
+    "total_endpoints": 82,
+    "user_jwt_required": 65,
+    "device_token_required": 9,
+    "public_endpoints": 8,
+    "categories": 7
+  },
+  "by_category": {
+    "Authentication": [
+      {
+        "path": "/auth/register",
+        "method": "POST",
+        "operation_id": "registerUser",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "expected_responses": [
+          "201",
+          "409",
+          "422"
+        ],
+        "summary": "Register new user account"
+      },
+      {
+        "path": "/auth/login",
+        "method": "POST",
+        "operation_id": "loginUser",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "Login and obtain JWT"
+      },
+      {
+        "path": "/auth/csrf",
+        "method": "GET",
+        "operation_id": "getCsrfToken",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "expected_responses": [
+          "200",
+          "400"
+        ],
+        "summary": "Get CSRF token for browser-based authentication"
+      },
+      {
+        "path": "/auth/revoke-token",
+        "method": "POST",
+        "operation_id": "revokeUserToken",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401"
+        ],
+        "summary": "Revoke current user JWT (logout)"
+      },
+      {
+        "path": "/controllers/{controller_id}/revoke-token",
+        "method": "POST",
+        "operation_id": "revokeControllerToken",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "404",
+          "401",
+          "403"
+        ],
+        "summary": "Revoke device token for controller (admin)"
+      },
+      {
+        "path": "/controllers/{controller_id}/rotate-token",
+        "method": "POST",
+        "operation_id": "rotateControllerToken",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "404",
+          "401",
+          "403"
+        ],
+        "summary": "Rotate device token for controller"
+      }
+    ],
+    "Onboarding": [
+      {
+        "path": "/hello",
+        "method": "POST",
+        "operation_id": "announceController",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [],
+        "expected_responses": [
+          "200",
+          "400"
+        ],
+        "summary": "Controller announces itself on first boot"
+      },
+      {
+        "path": "/controllers/claim",
+        "method": "POST",
+        "operation_id": "claimController",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401",
+          "404",
+          "409"
+        ],
+        "summary": "Claim a controller to a greenhouse and issue device_token"
+      },
+      {
+        "path": "/controllers/{controller_id}/token-exchange",
+        "method": "POST",
+        "operation_id": "exchangeControllerToken",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [],
+        "expected_responses": [
+          "201",
+          "200",
+          "400",
+          "404",
+          "409",
+          "422"
+        ],
+        "summary": "One-time exchange of claim_code + device_name for long-lived device_token & initial ETags"
+      }
+    ],
+    "Config": [
+      {
+        "path": "/controllers/by-name/{device_name}/config",
+        "method": "GET",
+        "operation_id": "getConfigByDeviceName",
+        "tags": [
+          "Config"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "304",
+          "401",
+          "404"
+        ],
+        "summary": "Controller fetches materialized config by device_name (ETag supported, gzip compression available)"
+      },
+      {
+        "path": "/controllers/me/config",
+        "method": "GET",
+        "operation_id": "getMyConfig",
+        "tags": [
+          "Config"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "304",
+          "401",
+          "404"
+        ],
+        "summary": "Controller fetches current config for authenticated device (identity inferred from token)"
+      },
+      {
+        "path": "/greenhouses/{id}/config/publish",
+        "method": "POST",
+        "operation_id": "publishGreenhouseConfig",
+        "tags": [
+          "Config"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "200",
+          "400",
+          "401",
+          "404",
+          "409"
+        ],
+        "summary": "Materialize and publish config snapshot for a greenhouse"
+      },
+      {
+        "path": "/greenhouses/{id}/config/diff",
+        "method": "GET",
+        "operation_id": "getGreenhouseConfigDiff",
+        "tags": [
+          "Config"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401",
+          "404"
+        ],
+        "summary": "Diff current DB config vs last published snapshot"
+      }
+    ],
+    "Plan": [
+      {
+        "path": "/controllers/{controller_id}/plan",
+        "method": "GET",
+        "operation_id": "getPlanByControllerId",
+        "tags": [
+          "Plan"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "304",
+          "401",
+          "404"
+        ],
+        "summary": "Controller fetches current plan (ETag supported)"
+      },
+      {
+        "path": "/controllers/me/plan",
+        "method": "GET",
+        "operation_id": "getMyPlan",
+        "tags": [
+          "Plan"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "304",
+          "401"
+        ],
+        "summary": "Controller fetches current plan for authenticated device (identity inferred from token)"
+      },
+      {
+        "path": "/plans",
+        "method": "GET",
+        "operation_id": "listPlans",
+        "tags": [
+          "Plan"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List plan versions (read-only)"
+      },
+      {
+        "path": "/plans",
+        "method": "POST",
+        "operation_id": "createPlan",
+        "tags": [
+          "Plan"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "409"
+        ],
+        "summary": "Create new plan version"
+      }
+    ],
+    "Telemetry": [
+      {
+        "path": "/telemetry/sensors",
+        "method": "POST",
+        "operation_id": "ingestSensorTelemetry",
+        "tags": [
+          "Telemetry"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "202",
+          "400",
+          "401",
+          "429"
+        ],
+        "summary": "Ingest sensor readings (batch)"
+      },
+      {
+        "path": "/telemetry/actuators",
+        "method": "POST",
+        "operation_id": "ingestActuatorTelemetry",
+        "tags": [
+          "Telemetry"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "202",
+          "400",
+          "401",
+          "429"
+        ],
+        "summary": "Ingest actuator edge events"
+      },
+      {
+        "path": "/telemetry/status",
+        "method": "POST",
+        "operation_id": "ingestStatusTelemetry",
+        "tags": [
+          "Telemetry"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "202",
+          "400",
+          "401",
+          "429"
+        ],
+        "summary": "Ingest controller status frames"
+      },
+      {
+        "path": "/telemetry/inputs",
+        "method": "POST",
+        "operation_id": "ingestInputTelemetry",
+        "tags": [
+          "Telemetry"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "202",
+          "400",
+          "401",
+          "429"
+        ],
+        "summary": "Ingest input/button events"
+      },
+      {
+        "path": "/telemetry/batch",
+        "method": "POST",
+        "operation_id": "ingestTelemetryBatch",
+        "tags": [
+          "Telemetry"
+        ],
+        "security": [
+          {
+            "DeviceToken": []
+          }
+        ],
+        "expected_responses": [
+          "202",
+          "400",
+          "401",
+          "429"
+        ],
+        "summary": "Ingest mixed telemetry batch (sensors, actuators, status, inputs) - supports gzip compression"
+      }
+    ],
+    "CRUD": [
+      {
+        "path": "/greenhouses",
+        "method": "GET",
+        "operation_id": "listGreenhouses",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List greenhouses"
+      },
+      {
+        "path": "/greenhouses",
+        "method": "POST",
+        "operation_id": "createGreenhouse",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "409"
+        ],
+        "summary": "Create greenhouse"
+      },
+      {
+        "path": "/greenhouses/{id}",
+        "method": "GET",
+        "operation_id": "getGreenhouse",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "404"
+        ],
+        "summary": "Get greenhouse"
+      },
+      {
+        "path": "/greenhouses/{id}",
+        "method": "PATCH",
+        "operation_id": "updateGreenhouse",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "404"
+        ],
+        "summary": "Update greenhouse"
+      },
+      {
+        "path": "/greenhouses/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteGreenhouse",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete greenhouse"
+      },
+      {
+        "path": "/zones",
+        "method": "GET",
+        "operation_id": "listZones",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List zones"
+      },
+      {
+        "path": "/zones",
+        "method": "POST",
+        "operation_id": "createZone",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401",
+          "409"
+        ],
+        "summary": "Create zone"
+      },
+      {
+        "path": "/zones/{id}",
+        "method": "GET",
+        "operation_id": "getZone",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "404"
+        ],
+        "summary": "Get zone"
+      },
+      {
+        "path": "/zones/{id}",
+        "method": "PATCH",
+        "operation_id": "updateZone",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update zone"
+      },
+      {
+        "path": "/zones/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteZone",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete zone"
+      },
+      {
+        "path": "/crops",
+        "method": "GET",
+        "operation_id": "listCrops",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List crops"
+      },
+      {
+        "path": "/crops",
+        "method": "POST",
+        "operation_id": "createCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Create crop"
+      },
+      {
+        "path": "/crops/{id}",
+        "method": "GET",
+        "operation_id": "getCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "404"
+        ],
+        "summary": "Get crop"
+      },
+      {
+        "path": "/crops/{id}",
+        "method": "PATCH",
+        "operation_id": "updateCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update crop"
+      },
+      {
+        "path": "/crops/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete crop"
+      },
+      {
+        "path": "/zone-crops",
+        "method": "GET",
+        "operation_id": "listZoneCrops",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List zone crops (plantings)"
+      },
+      {
+        "path": "/zone-crops",
+        "method": "POST",
+        "operation_id": "createZoneCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "409"
+        ],
+        "summary": "Start/assign a planting to a zone (enforce 1 active)"
+      },
+      {
+        "path": "/zone-crops/{id}",
+        "method": "GET",
+        "operation_id": "getZoneCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401",
+          "404"
+        ],
+        "summary": "Get zone_crop"
+      },
+      {
+        "path": "/zone-crops/{id}",
+        "method": "PATCH",
+        "operation_id": "updateZoneCrop",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update/close planting"
+      },
+      {
+        "path": "/observations",
+        "method": "GET",
+        "operation_id": "listObservations",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List crop observations"
+      },
+      {
+        "path": "/observations",
+        "method": "POST",
+        "operation_id": "createObservation",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Add crop observation"
+      },
+      {
+        "path": "/observations/{id}",
+        "method": "PATCH",
+        "operation_id": "updateObservation",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update crop observation"
+      },
+      {
+        "path": "/observations/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteObservation",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete crop observation"
+      },
+      {
+        "path": "/observations/{id}/upload-url",
+        "method": "POST",
+        "operation_id": "generateObservationUploadUrl",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "403",
+          "404"
+        ],
+        "summary": "Generate presigned URL for image upload"
+      },
+      {
+        "path": "/controllers",
+        "method": "GET",
+        "operation_id": "listControllers",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List controllers"
+      },
+      {
+        "path": "/controllers",
+        "method": "POST",
+        "operation_id": "createController",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Create controller (admin)"
+      },
+      {
+        "path": "/controllers/{controller_id}",
+        "method": "GET",
+        "operation_id": "getController",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "404"
+        ],
+        "summary": "Get controller"
+      },
+      {
+        "path": "/controllers/{controller_id}",
+        "method": "PATCH",
+        "operation_id": "updateController",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "409"
+        ],
+        "summary": "Update controller (incl. is_climate_controller)"
+      },
+      {
+        "path": "/controllers/{controller_id}",
+        "method": "DELETE",
+        "operation_id": "deleteController",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete controller (revokes device_token)"
+      },
+      {
+        "path": "/sensors",
+        "method": "GET",
+        "operation_id": "listSensors",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List sensors"
+      },
+      {
+        "path": "/sensors",
+        "method": "POST",
+        "operation_id": "createSensor",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Create sensor"
+      },
+      {
+        "path": "/sensors/{id}",
+        "method": "GET",
+        "operation_id": "getSensor",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "404"
+        ],
+        "summary": "Get sensor"
+      },
+      {
+        "path": "/sensors/{id}",
+        "method": "PATCH",
+        "operation_id": "updateSensor",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update sensor"
+      },
+      {
+        "path": "/sensor-zone-maps",
+        "method": "POST",
+        "operation_id": "createSensorZoneMap",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "409"
+        ],
+        "summary": "Map a sensor to a zone (multi-zone supported)"
+      },
+      {
+        "path": "/sensor-zone-maps",
+        "method": "DELETE",
+        "operation_id": "deleteSensorZoneMap",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Unmap a sensor from a zone"
+      },
+      {
+        "path": "/actuators",
+        "method": "GET",
+        "operation_id": "listActuators",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List actuators"
+      },
+      {
+        "path": "/actuators",
+        "method": "POST",
+        "operation_id": "createActuator",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Create actuator"
+      },
+      {
+        "path": "/actuators/{id}",
+        "method": "GET",
+        "operation_id": "getActuator",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401",
+          "404"
+        ],
+        "summary": "Get actuator details"
+      },
+      {
+        "path": "/actuators/{id}",
+        "method": "PATCH",
+        "operation_id": "updateActuator",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update actuator"
+      },
+      {
+        "path": "/actuators/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteActuator",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete actuator"
+      },
+      {
+        "path": "/fan-groups",
+        "method": "GET",
+        "operation_id": "listFanGroups",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List fan groups"
+      },
+      {
+        "path": "/fan-groups",
+        "method": "POST",
+        "operation_id": "createFanGroup",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Create fan group"
+      },
+      {
+        "path": "/fan-groups/{id}/members",
+        "method": "POST",
+        "operation_id": "addFanGroupMember",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Add member actuator to fan group"
+      },
+      {
+        "path": "/fan-groups/{id}/members",
+        "method": "DELETE",
+        "operation_id": "removeFanGroupMember",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Remove member from fan group"
+      },
+      {
+        "path": "/fan-groups/{id}",
+        "method": "GET",
+        "operation_id": "getFanGroup",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401",
+          "404"
+        ],
+        "summary": "Get fan group details"
+      },
+      {
+        "path": "/fan-groups/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteFanGroup",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete fan group"
+      },
+      {
+        "path": "/buttons",
+        "method": "GET",
+        "operation_id": "listButtons",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List controller buttons"
+      },
+      {
+        "path": "/buttons",
+        "method": "POST",
+        "operation_id": "createButton",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "400",
+          "401"
+        ],
+        "summary": "Configure a controller button (manual override)"
+      },
+      {
+        "path": "/buttons/{id}",
+        "method": "GET",
+        "operation_id": "getButton",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401",
+          "404"
+        ],
+        "summary": "Get controller button details"
+      },
+      {
+        "path": "/buttons/{id}",
+        "method": "PATCH",
+        "operation_id": "updateButton",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update controller button"
+      },
+      {
+        "path": "/buttons/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteButton",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete controller button"
+      },
+      {
+        "path": "/state-machine-rows",
+        "method": "GET",
+        "operation_id": "listStateMachineRows",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401"
+        ],
+        "summary": "List state machine rows"
+      },
+      {
+        "path": "/state-machine-rows",
+        "method": "POST",
+        "operation_id": "createStateMachineRow",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "201",
+          "409"
+        ],
+        "summary": "Add/replace a state machine row (49 grid + fallback)"
+      },
+      {
+        "path": "/state-machine-rows/{id}",
+        "method": "GET",
+        "operation_id": "getStateMachineRow",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "401",
+          "404"
+        ],
+        "summary": "Get state machine row details"
+      },
+      {
+        "path": "/state-machine-rows/{id}",
+        "method": "PUT",
+        "operation_id": "updateStateMachineRow",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "401",
+          "404"
+        ],
+        "summary": "Update state machine row (idempotent)"
+      },
+      {
+        "path": "/state-machine-rows/{id}",
+        "method": "DELETE",
+        "operation_id": "deleteStateMachineRow",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "204",
+          "401",
+          "404"
+        ],
+        "summary": "Delete state machine row"
+      },
+      {
+        "path": "/state-machine-fallback/{id}",
+        "method": "PUT",
+        "operation_id": "setStateMachineFallback",
+        "tags": [
+          "CRUD"
+        ],
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "expected_responses": [
+          "200",
+          "400",
+          "404"
+        ],
+        "summary": "Set state machine fallback configuration"
+      }
+    ],
+    "Meta": [
+      {
+        "path": "/health",
+        "method": "GET",
+        "operation_id": "getHealthStatus",
+        "tags": [
+          "Meta"
+        ],
+        "security": [],
+        "expected_responses": [
+          "200",
+          "400",
+          "503"
+        ],
+        "summary": "Health check endpoint"
+      },
+      {
+        "path": "/meta/sensor-kinds",
+        "method": "GET",
+        "operation_id": "getSensorKinds",
+        "tags": [
+          "Meta"
+        ],
+        "security": [],
+        "expected_responses": [
+          "200",
+          "400",
+          "503"
+        ],
+        "summary": "Get available sensor kinds"
+      },
+      {
+        "path": "/meta/actuator-kinds",
+        "method": "GET",
+        "operation_id": "getActuatorKinds",
+        "tags": [
+          "Meta"
+        ],
+        "security": [],
+        "expected_responses": [
+          "200",
+          "400",
+          "503"
+        ],
+        "summary": "Get available actuator kinds"
+      }
+    ]
+  },
+  "security_breakdown": {
+    "user_jwt": [
+      "POST /auth/revoke-token",
+      "POST /controllers/{controller_id}/revoke-token",
+      "POST /controllers/{controller_id}/rotate-token",
+      "POST /controllers/claim",
+      "POST /greenhouses/{id}/config/publish",
+      "GET /greenhouses/{id}/config/diff",
+      "GET /greenhouses",
+      "POST /greenhouses",
+      "GET /greenhouses/{id}",
+      "PATCH /greenhouses/{id}",
+      "DELETE /greenhouses/{id}",
+      "GET /zones",
+      "POST /zones",
+      "GET /zones/{id}",
+      "PATCH /zones/{id}",
+      "DELETE /zones/{id}",
+      "GET /crops",
+      "POST /crops",
+      "GET /crops/{id}",
+      "PATCH /crops/{id}",
+      "DELETE /crops/{id}",
+      "GET /zone-crops",
+      "POST /zone-crops",
+      "GET /zone-crops/{id}",
+      "PATCH /zone-crops/{id}",
+      "GET /observations",
+      "POST /observations",
+      "PATCH /observations/{id}",
+      "DELETE /observations/{id}",
+      "POST /observations/{id}/upload-url",
+      "GET /controllers",
+      "POST /controllers",
+      "GET /controllers/{controller_id}",
+      "PATCH /controllers/{controller_id}",
+      "DELETE /controllers/{controller_id}",
+      "GET /sensors",
+      "POST /sensors",
+      "GET /sensors/{id}",
+      "PATCH /sensors/{id}",
+      "POST /sensor-zone-maps",
+      "DELETE /sensor-zone-maps",
+      "GET /actuators",
+      "POST /actuators",
+      "GET /actuators/{id}",
+      "PATCH /actuators/{id}",
+      "DELETE /actuators/{id}",
+      "GET /fan-groups",
+      "POST /fan-groups",
+      "POST /fan-groups/{id}/members",
+      "DELETE /fan-groups/{id}/members",
+      "GET /fan-groups/{id}",
+      "DELETE /fan-groups/{id}",
+      "GET /buttons",
+      "POST /buttons",
+      "GET /buttons/{id}",
+      "PATCH /buttons/{id}",
+      "DELETE /buttons/{id}",
+      "GET /state-machine-rows",
+      "POST /state-machine-rows",
+      "GET /state-machine-rows/{id}",
+      "PUT /state-machine-rows/{id}",
+      "DELETE /state-machine-rows/{id}",
+      "PUT /state-machine-fallback/{id}",
+      "GET /plans",
+      "POST /plans"
+    ],
+    "device_token": [
+      "GET /controllers/by-name/{device_name}/config",
+      "GET /controllers/{controller_id}/plan",
+      "GET /controllers/me/config",
+      "GET /controllers/me/plan",
+      "POST /telemetry/sensors",
+      "POST /telemetry/actuators",
+      "POST /telemetry/status",
+      "POST /telemetry/inputs",
+      "POST /telemetry/batch"
+    ],
+    "public": [
+      "POST /auth/register",
+      "POST /auth/login",
+      "GET /auth/csrf",
+      "POST /hello",
+      "POST /controllers/{controller_id}/token-exchange",
+      "GET /health",
+      "GET /meta/sensor-kinds",
+      "GET /meta/actuator-kinds"
+    ]
+  },
+  "status_codes": {
+    "201": 18,
+    "409": 11,
+    "422": 2,
+    "200": 48,
+    "401": 61,
+    "400": 34,
+    "204": 13,
+    "404": 42,
+    "403": 3,
+    "304": 4,
+    "202": 5,
+    "429": 5,
+    "503": 3
+  },
+  "implemented_operations": {
+    "disabled_routes": [
+      "# greenhouse_subrouter.include_router(climate.router, prefix=\"/climate\", tags=[\"climate\"])",
+      "# Note: zones.router removed - only top-level /zones/ per OpenAPI spec",
+      "# api_router.include_router(state_machine.router, prefix=\"/state-machine-rows\", tags=[\"CRUD\"])  # Temporarily disabled",
+      "# api_router.include_router(crops.router, prefix=\"/crops\", tags=[\"crops\"])  # Temporarily disabled",
+      "# api_router.include_router(telemetry.router, prefix=\"/telemetry\", tags=[\"Telemetry\"])  # Temporarily disabled",
+      "# api_router.include_router(zone_crops.router, prefix=\"/zone-crops\", tags=[\"Zone Crops\"])  # Temporarily disabled",
+      "# api_router.include_router(zones_crud.router, prefix=\"/zones\", tags=[\"CRUD\"])  # Temporarily disabled",
+      "# api_router.include_router(observations.router, prefix=\"/observations\", tags=[\"Observations\"])  # Temporarily disabled"
+    ],
+    "zones_crud": [
+      "@router.patch(\"/{zone_id}\", response_model=ZonePublic) -> update_zone",
+      "@router.delete(\"/{zone_id}\", status_code=status.HTTP_204_NO_CONTENT) -> delete_zone",
+      "@router.get(\"/\", response_model=ZonesPaginated) -> list_zones",
+      "@router.post(\"/\", response_model=ZonePublic, status_code=status.HTTP_201_CREATED) -> create_zone",
+      "@router.get(\"/{zone_id}\", response_model=ZonePublic) -> get_zone"
+    ],
+    "crops": [
+      "@router.get(\"/{crop_id}\", response_model=CropPublic) -> get_crop",
+      "@router.patch(\"/zones/{zone_id}/zone-crop/\", response_model=ZoneCropPublic) -> update_zone_crop",
+      "@router.delete(\"/zones/{zone_id}/zone-crop/\") -> harvest_crop_from_zone",
+      "@router.get( -> list_zone_crop_observations_by_id",
+      "@router.delete(\"/zones/{zone_id}/zone-crops/{zone_crop_id}\") -> permanently_delete_zone_crop",
+      "@router.post(\"/\", response_model=CropPublic, status_code=201) -> create_crop",
+      "@router.get( -> list_zone_crop_observations",
+      "@router.get(\"/zones/{zone_id}/zone-crop/\", response_model=ZoneCropPublic) -> get_zone_crop",
+      "@router.get(\"/\", response_model=CropsPaginated) -> list_crops",
+      "@router.post(\"/zones/{zone_id}/zone-crop/\", response_model=ZoneCropPublic) -> plant_crop_in_zone",
+      "@router.get(\"/zones/{zone_id}/crop-analytics/\") -> get_zone_crop_analytics",
+      "@router.get(\"/zones/{zone_id}/zone-crops/\", response_model=list[ZoneCropPublic]) -> list_zone_crop_history",
+      "@router.patch(\"/{crop_id}\", response_model=CropPublic) -> update_crop",
+      "@router.post(\"/zones/{zone_id}/observations/\", response_model=ZoneCropObservationPublic) -> create_zone_crop_observation",
+      "@router.delete(\"/{crop_id}\", status_code=204) -> delete_crop"
+    ],
+    "zone_crops": [],
+    "sensor_zone_maps": [
+      "@router.post(\"/\", response_model=SensorZoneMapPublic, status_code=201) -> create_sensor_zone_map",
+      "@router.delete(\"/\", status_code=204) -> delete_sensor_zone_map"
+    ],
+    "controller": [
+      "@router.delete(\"/{controller_id}\") -> delete_controller",
+      "@router.get(\"/\", response_model=list[ControllerPublic]) -> list_controllers",
+      "@router.post(\"/\", response_model=ControllerPublic) -> create_controller",
+      "@router.patch(\"/{controller_id}\", response_model=ControllerPublic) -> update_controller",
+      "@router.get(\"/{controller_id}\", response_model=ControllerPublic) -> get_controller"
+    ],
+    "fan_groups": [
+      "@router.patch(\"/{fan_group_id}\", response_model=FanGroupPublic) -> update_fan_group_endpoint",
+      "@router.post(\"/{fan_group_id}/members\", response_model=FanGroupMemberPublic, status_code=status.HTTP_201_CREATED) -> add_fan_group_member_endpoint",
+      "@router.delete(\"/{fan_group_id}\", status_code=status.HTTP_204_NO_CONTENT) -> delete_fan_group_endpoint",
+      "@router.post(\"/\", response_model=FanGroupPublic, status_code=status.HTTP_201_CREATED) -> create_fan_group_endpoint",
+      "@router.get(\"/{fan_group_id}\", response_model=FanGroupPublic) -> get_fan_group_endpoint",
+      "@router.get(\"/\", response_model=FanGroupsPaginated) -> list_fan_groups_endpoint",
+      "@router.delete(\"/{fan_group_id}/members\", status_code=status.HTTP_204_NO_CONTENT) -> remove_fan_group_member_endpoint"
+    ],
+    "sensors": [
+      "@router.patch(\"/{sensor_id}\", response_model=SensorPublic) -> update_sensor",
+      "@router.delete(\"/{sensor_id}\") -> delete_sensor",
+      "@router.post(\"/\", response_model=SensorPublic, status_code=status.HTTP_201_CREATED) -> create_sensor",
+      "@router.get(\"/{sensor_id}\", response_model=SensorPublic) -> get_sensor",
+      "@router.get(\"/\", response_model=SensorsPaginated) -> list_sensors_endpoint"
+    ],
+    "users": [
+      "@router.get(\"/{user_id}\", response_model=UserPublic) -> read_user_by_id",
+      "@router.post(\"/signup\", response_model=UserPublic) -> register_user",
+      "@router.patch(\"/me\", response_model=UserPublic) -> update_user_me",
+      "@router.delete(\"/me\", response_model=Message) -> delete_user_me",
+      "@router.post( -> create_user",
+      "@router.delete(\"/{user_id}\", dependencies=[Depends(get_current_active_superuser)]) -> delete_user",
+      "@router.get(\"/me\", response_model=UserPublic) -> read_user_me",
+      "@router.patch(\"/me/password\", response_model=Message) -> update_password_me"
+    ],
+    "observations": [],
+    "onboarding": [
+      "@router.post(\"/controllers/{controller_id}/revoke-token\", status_code=204, tags=[\"Authentication\"]) -> revoke_controller_token",
+      "@router.post(\"/controllers/claim\", response_model=ControllerClaimResponse, status_code=201, tags=[\"Onboarding\"]) -> claim_controller",
+      "@router.post(\"/controllers/{controller_id}/rotate-token\", response_model=TokenRotateResponse, tags=[\"Authentication\"]) -> rotate_controller_token",
+      "@router.post(\"/controllers/{controller_id}/token-exchange\", response_model=TokenExchangeResponse, tags=[\"Onboarding\"]) -> exchange_controller_token",
+      "@router.post(\"/hello\", response_model=HelloResponse, status_code=200, tags=[\"Onboarding\"]) -> announce_controller"
+    ],
+    "telemetry": [],
+    "controllers_crud": [
+      "@router.post(\"/\", response_model=ControllerPublic, status_code=status.HTTP_201_CREATED) -> create_controller",
+      "@router.patch(\"/{controller_id}\", response_model=ControllerPublic) -> update_controller",
+      "@router.get(\"/\", response_model=Paginated[ControllerPublic]) -> list_controllers",
+      "@router.get(\"/{controller_id}\", response_model=ControllerPublic) -> get_controller",
+      "@router.delete(\"/{controller_id}\", status_code=status.HTTP_204_NO_CONTENT) -> delete_controller"
+    ],
+    "actuators": [
+      "@router.patch(\"/{actuator_id}\", response_model=ActuatorPublic) -> update_actuator_endpoint",
+      "@router.post(\"/\", response_model=ActuatorPublic, status_code=status.HTTP_201_CREATED) -> create_actuator_endpoint",
+      "@router.get(\"/\", response_model=ActuatorsPaginated) -> list_actuators_endpoint",
+      "@router.get(\"/{actuator_id}\", response_model=ActuatorPublic) -> get_actuator_endpoint",
+      "@router.delete(\"/{actuator_id}\", status_code=status.HTTP_204_NO_CONTENT) -> delete_actuator_endpoint"
+    ],
+    "state_machine": [
+      "@router.post(\"/\", response_model=StateMachineRowPublic, status_code=201) -> create_state_machine_row_endpoint",
+      "@router.delete(\"/{id}\", status_code=204) -> delete_state_machine_row_endpoint",
+      "@router.put(\"/{id}\", response_model=StateMachineRowPublic) -> update_state_machine_row_endpoint",
+      "@router.get(\"/{id}\", response_model=StateMachineRowPublic) -> get_state_machine_row_endpoint",
+      "@router.get(\"/\", response_model=StateMachineRowsPaginated) -> list_state_machine_rows_endpoint"
+    ],
+    "auth_extras": [],
+    "greenhouses": [
+      "@router.get(\"/{greenhouse_id}/listsensors\", response_model=list[SensorPublic]) -> list_greenhouse_sensors",
+      "@router.get(\"/\", response_model=GreenhousesPaginated) -> read_greenhouses",
+      "@router.patch(\"/{greenhouse_id}\", response_model=GreenhousePublic) -> update_greenhouse",
+      "@router.post(\"/\", response_model=GreenhousePublic, status_code=status.HTTP_201_CREATED) -> create_greenhouse",
+      "@router.get(\"/{greenhouse_id}\", response_model=GreenhousePublic) -> read_greenhouse",
+      "@router.get(\"/{greenhouse_id}/unmapped-sensors\", response_model=list[SensorPublic]) -> list_unmapped_greenhouse_sensors",
+      "@router.delete(\"/{greenhouse_id}\", status_code=204) -> delete_greenhouse"
+    ],
+    "utils": [],
+    "buttons": [
+      "@router.delete(\"/{button_id}\", status_code=status.HTTP_204_NO_CONTENT) -> delete_controller_button_endpoint",
+      "@router.get(\"/{button_id}\", response_model=ControllerButtonPublic) -> get_controller_button_endpoint",
+      "@router.post(\"/\", response_model=ControllerButtonPublic, status_code=status.HTTP_201_CREATED) -> create_controller_button_endpoint",
+      "@router.patch(\"/{button_id}\", response_model=ControllerButtonPublic) -> update_controller_button_endpoint",
+      "@router.get(\"/\", response_model=ControllerButtonsPaginated) -> list_controller_buttons_endpoint"
+    ],
+    "plans": [],
+    "login": [
+      "@router.post(\"/reset-password/\") -> reset_password",
+      "@router.post(\"/password-recovery/{email}\") -> recover_password",
+      "@router.post(\"/access-token\") -> login_access_token",
+      "@router.post(\"/test-token\", response_model=UserPublic) -> test_token"
+    ],
+    "climate": [],
+    "config_admin": [],
+    "private": [
+      "@router.post(\"/users/\", response_model=UserPublic) -> create_user"
+    ],
+    "config_device": [],
+    "meta": []
+  }
+}

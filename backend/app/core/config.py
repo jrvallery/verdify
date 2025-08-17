@@ -16,7 +16,6 @@ from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
-
 # Load secrets from *_FILE pattern (Docker Swarm / Kubernetes style)
 for _secret_var in [
     "SECRET_KEY",
@@ -28,7 +27,7 @@ for _secret_var in [
     _path = os.getenv(_file_var)
     if _path and os.path.isfile(_path):
         try:
-            with open(_path, "r", encoding="utf-8") as _f:
+            with open(_path, encoding="utf-8") as _f:
                 _value = _f.read().strip()
                 if _value:
                     os.environ[_secret_var] = _value
@@ -72,6 +71,7 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str

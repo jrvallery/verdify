@@ -15,10 +15,10 @@ import {
 import { useState } from "react";
 import { FiPlus, FiUpload } from "react-icons/fi";
 
-import { 
+import {
   CropsService,
   ZonesService,
-  type ZonePublic 
+  type ZonePublic
 } from "@/client";
 import type { ApiError } from "@/client/core/ApiError";
 import useCustomToast from "@/hooks/useCustomToast";
@@ -54,8 +54,8 @@ const AddObservation = ({ zone }: AddObservationProps) => {
   // First check if the zone has a crop
   const { data: hasCrop } = useQuery({
     queryKey: ["zone-has-crop", zone.id],
-    queryFn: () => ZonesService.hasCrop({ 
-      zoneId: zone.id 
+    queryFn: () => ZonesService.hasCrop({
+      zoneId: zone.id
     }),
     enabled: isOpen,
     retry: false,
@@ -90,7 +90,7 @@ const AddObservation = ({ zone }: AddObservationProps) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setSelectedFile(file);
-    
+
     // Create preview URL
     if (file) {
       const url = URL.createObjectURL(file);
@@ -104,13 +104,13 @@ const AddObservation = ({ zone }: AddObservationProps) => {
     mutationFn: async (formData: FormData) => {
       // Create a custom fetch request for multipart data
       const token = localStorage.getItem('access_token');
-      
+
       // Log what we're sending for debugging
       console.log("Sending FormData with entries:");
       for (const [key, value] of formData.entries()) {
         console.log(`${key}:`, value);
       }
-      
+
       const response = await fetch(`/api/v1/crops/zones/${zone.id}/observations/`, {
         method: 'POST',
         headers: {
@@ -118,14 +118,14 @@ const AddObservation = ({ zone }: AddObservationProps) => {
         },
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Response status:", response.status);
         console.error("Response body:", errorText);
         throw new Error(`Failed to create observation: ${response.status} - ${errorText}`);
       }
-      
+
       return response.json();
     },
     onSuccess: () => {
@@ -146,15 +146,15 @@ const AddObservation = ({ zone }: AddObservationProps) => {
 
   const onSubmit: SubmitHandler<ObservationFormData> = (data) => {
     console.log("Form data received:", data);
-    
+
     if (!zoneCrop?.id) {
       console.error("No zone crop ID available");
       return;
     }
-    
+
     // Create FormData for multipart upload
     const formData = new FormData();
-    
+
     // Add form fields only if they have values - be more explicit about types
     if (data.notes && data.notes.trim()) {
       formData.append('notes', data.notes.trim());
@@ -165,12 +165,12 @@ const AddObservation = ({ zone }: AddObservationProps) => {
     if (data.health_score !== undefined && data.health_score !== null && !isNaN(data.health_score)) {
       formData.append('health_score', data.health_score.toString());
     }
-    
+
     // Add file if selected
     if (selectedFile) {
       formData.append('file', selectedFile);
     }
-    
+
     console.log("FormData prepared with file:", selectedFile?.name);
     mutation.mutate(formData);
   };
@@ -243,7 +243,7 @@ const AddObservation = ({ zone }: AddObservationProps) => {
                   type="number"
                   step="0.1"
                   min="0"
-                  {...register("height_cm", { 
+                  {...register("height_cm", {
                     valueAsNumber: true,
                     setValueAs: (value) => value === "" ? undefined : Number(value)
                   })}
@@ -261,7 +261,7 @@ const AddObservation = ({ zone }: AddObservationProps) => {
                   type="number"
                   min="1"
                   max="10"
-                  {...register("health_score", { 
+                  {...register("health_score", {
                     valueAsNumber: true,
                     setValueAs: (value) => value === "" ? undefined : Number(value),
                     min: { value: 1, message: "Minimum score is 1" },

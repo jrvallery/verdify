@@ -1,0 +1,1896 @@
+Project Dump - Sat Aug 16 22:57:46 MDT 2025
+Path: backend/app/models
+Excluded extensions: (none)
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/crops.py =====
+    """
+    Crop and ZoneCrop models for Verdify API.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING, Any
+
+    from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey
+    from sqlalchemy.sql import func
+    from sqlmodel import Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    if TYPE_CHECKING:
+        pass
+
+
+    # Import the new enum
+    from .enums import ObservationType
+
+
+    # -------------------------------------------------------
+    # CROP MODELS (Global crop templates)
+    # -------------------------------------------------------
+    class CropBase(SQLModel):
+        name: str = Field(
+            ..., max_length=255, description="Name of the crop (e.g., 'Tomato')"
+        )
+        description: str | None = Field(default=None, max_length=500)
+        expected_yield_per_sqm: float | None = Field(
+            default=None, description="Expected yield per square meter"
+        )
+        growing_days: int | None = Field(
+            default=None, description="Expected days from seed to harvest"
+        )
+
+
+    class Crop(CropBase, table=True):
+        __tablename__ = "crop"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        recipe: dict[str, Any] | None = Field(
+            default=None, sa_type=JSON, description="JSON recipe for the crop"
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class CropCreate(CropBase):
+        recipe: dict[str, Any] | None = None
+
+
+    class CropPublic(CropBase):
+        id: uuid.UUID
+        recipe: dict[str, Any] | None = None
+        created_at: datetime
+        updated_at: datetime
+
+
+    class CropUpdate(SQLModel):
+        name: str | None = Field(default=None, max_length=255)
+        description: str | None = Field(default=None, max_length=500)
+        recipe: dict[str, Any] | None = None
+        expected_yield_per_sqm: float | None = None
+        growing_days: int | None = None
+
+
+    # -------------------------------------------------------
+    # ZONE CROP MODELS (Zone-specific crop instance)
+    # -------------------------------------------------------
+    class ZoneCropBase(SQLModel):
+        start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        end_date: datetime | None = Field(default=None)
+        is_active: bool = Field(default=True)
+        final_yield: float | None = Field(default=None, description="Total yield produced")
+        area_sqm: float | None = Field(
+            default=None, description="Area used in square meters"
+        )
+
+
+    class ZoneCrop(ZoneCropBase, table=True):
+        __tablename__ = "zone_crop"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        crop_id: uuid.UUID | None = Field(  # Change to SET NULL for global crop templates
+            sa_column=Column(
+                "crop_id",
+                ForeignKey("crop.id", ondelete="SET NULL"),
+                nullable=True
+            )
+        )
+        zone_id: uuid.UUID = Field(
+            sa_column=Column(
+                "zone_id", ForeignKey("zone.id", ondelete="CASCADE"), nullable=False
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ZoneCropCreate(ZoneCropBase):
+        crop_id: uuid.UUID
+        zone_id: uuid.UUID
+        start_date: datetime  # Make required in create, remove default
+
+
+    class ZoneCropPublic(ZoneCropBase):
+        id: uuid.UUID
+        crop_id: uuid.UUID | None
+        zone_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class ZoneCropUpdate(SQLModel):
+        end_date: datetime | None = None
+        is_active: bool | None = None
+        final_yield: float | None = None
+        area_sqm: float | None = None
+
+
+    # -------------------------------------------------------
+    # ZONE CROP OBSERVATION MODELS
+    # -------------------------------------------------------
+    class ZoneCropObservationBase(SQLModel):
+        observed_at: datetime = Field(
+            default_factory=lambda: datetime.now(timezone.utc),
+            description="When observation was made",
+        )
+        observation_type: ObservationType | None = Field(
+            default=None,
+            description="Type of observation: growth, pest, disease, harvest, general"
+        )
+        notes: str | None = Field(default=None, max_length=2000)
+        image_url: str | None = Field(
+            default=None, max_length=500, description="URL to uploaded image"
+        )
+        height_cm: float | None = Field(default=None, description="Plant height in cm")
+        health_score: int | None = Field(
+            default=None, ge=1, le=10, description="Health score 1-10"
+        )
+
+
+    class ZoneCropObservation(ZoneCropObservationBase, table=True):
+        __tablename__ = "zone_crop_observation"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        zone_crop_id: uuid.UUID = Field(
+            sa_column=Column(
+                "zone_crop_id",
+                ForeignKey("zone_crop.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        # Override observation_type to ensure proper enum serialization
+        observation_type: ObservationType | None = Field(
+            default=None,
+            sa_column=Column("observation_type", Enum(ObservationType, values_callable=lambda obj: [e.value for e in obj]), nullable=True),
+            description="Type of observation: growth, pest, disease, harvest, general"
+        )
+        created_at: datetime = Field(
+            default_factory=lambda: datetime.now(timezone.utc),
+            sa_column=Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False)
+        )
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ZoneCropObservationCreate(ZoneCropObservationBase):
+        zone_crop_id: uuid.UUID
+
+
+    class ZoneCropObservationPublic(ZoneCropObservationBase):
+        id: uuid.UUID
+        zone_crop_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class ZoneCropObservationUpdate(SQLModel):
+        observation_type: ObservationType | None = None
+        notes: str | None = Field(default=None, max_length=2000)
+        image_url: str | None = Field(default=None, max_length=500)
+        height_cm: float | None = None
+        health_score: int | None = Field(default=None, ge=1, le=10)
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    CropsPaginated = Paginated[CropPublic]
+    ZoneCropsPaginated = Paginated[ZoneCropPublic]
+    ZoneCropObservationsPaginated = Paginated[ZoneCropObservationPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/crops.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/auth.py =====
+    """Authentication and messaging models for token handling."""
+
+    import re
+    import uuid
+    from datetime import datetime
+
+    from pydantic import field_validator
+    from sqlmodel import Field, SQLModel
+
+
+    # -------------------------------------------------------
+    # AUTHENTICATION MODELS
+    # -------------------------------------------------------
+    class Token(SQLModel):
+        """JSON payload containing access token."""
+        access_token: str
+        token_type: str = "bearer"
+
+
+    class TokenPayload(SQLModel):
+        """Contents of JWT token."""
+        sub: str | None = None
+
+
+    class NewPassword(SQLModel):
+        """Password reset model."""
+        token: str
+        new_password: str
+
+
+    class UserRegisterResponseUser(SQLModel):
+        """Minimal user info for registration response."""
+        id: uuid.UUID
+        email: str
+        full_name: str | None
+        created_at: datetime
+
+
+    class UserRegisterResponse(SQLModel):
+        """Response after successful user registration."""
+        user: UserRegisterResponseUser
+        access_token: str
+
+
+    # -------------------------------------------------------
+    # DEVICE TOKEN EXCHANGE MODELS
+    # -------------------------------------------------------
+    class TokenExchangeRequest(SQLModel):
+        device_name: str = Field(...)
+        claim_code: str = Field(...)
+
+        @field_validator('device_name')
+        @classmethod
+        def validate_device_name(cls, v: str) -> str:
+            if not re.match(r"^verdify-[0-9a-f]{6}$", v):
+                raise ValueError("device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit")
+            return v
+
+        @field_validator('claim_code')
+        @classmethod
+        def validate_claim_code(cls, v: str) -> str:
+            if not re.match(r"^\d{6}$", v):
+                raise ValueError("claim_code must be exactly 6 digits")
+            return v
+
+
+    class TokenExchangeResponse(SQLModel):
+        device_token: str
+        config_etag: str = Field(...)
+        plan_etag: str = Field(...)
+        expires_at: datetime
+
+        @field_validator('config_etag')
+        @classmethod
+        def validate_config_etag(cls, v: str) -> str:
+            if not re.match(r"^config:v[0-9]+:[0-9a-f]{8}$", v):
+                raise ValueError("config_etag must match pattern 'config:vN:XXXXXXXX'")
+            return v
+
+        @field_validator('plan_etag')
+        @classmethod
+        def validate_plan_etag(cls, v: str) -> str:
+            if not re.match(r"^plan:v[0-9]+:[0-9a-f]{8}$", v):
+                raise ValueError("plan_etag must match pattern 'plan:vN:XXXXXXXX'")
+            return v
+
+
+    class TokenRotateResponse(SQLModel):
+        device_token: str
+        expires_at: datetime
+
+
+    # -------------------------------------------------------
+    # MISC MODELS
+    # -------------------------------------------------------
+    class Message(SQLModel):
+        """Generic message response."""
+        message: str
+
+===== END FILE: /Users/jason/verdify/backend/app/models/auth.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/enums.py =====
+    """
+    Enum definitions for Verdify API models.
+    """
+    from enum import Enum
+
+
+    class LocationEnum(str, Enum):
+        N = "N"
+        NE = "NE"
+        E = "E"
+        SE = "SE"
+        S = "S"
+        SW = "SW"
+        W = "W"
+        NW = "NW"
+
+
+    class SensorType(str, Enum):
+        TEMPERATURE = "temperature"
+        HUMIDITY = "humidity"
+        CO2 = "co2"
+        LIGHT = "light"
+        SOIL_MOISTURE = "soil_moisture"
+
+
+    # -------------------------------------------------------
+    # NEW OPENAPI V2 ENUMS
+    # -------------------------------------------------------
+    class SensorKind(str, Enum):
+        """Sensor kind matching OpenAPI spec."""
+        TEMPERATURE = "temperature"
+        HUMIDITY = "humidity"
+        VPD = "vpd"
+        CO2 = "co2"
+        LIGHT = "light"
+        SOIL_MOISTURE = "soil_moisture"
+        WATER_FLOW = "water_flow"
+        WATER_TOTAL = "water_total"
+        DEW_POINT = "dew_point"
+        ABSOLUTE_HUMIDITY = "absolute_humidity"
+        ENTHALPY_DELTA = "enthalpy_delta"
+        AIR_PRESSURE = "air_pressure"
+        KWH = "kwh"
+        GAS_CONSUMPTION = "gas_consumption"
+        PPFD = "ppfd"
+        WIND_SPEED = "wind_speed"
+        RAINFALL = "rainfall"
+        POWER = "power"
+
+
+    class SensorScope(str, Enum):
+        ZONE = "zone"
+        GREENHOUSE = "greenhouse"
+        EXTERNAL = "external"
+
+
+    class ActuatorKind(str, Enum):
+        FAN = "fan"
+        HEATER = "heater"
+        VENT = "vent"
+        FOGGER = "fogger"
+        IRRIGATION_VALVE = "irrigation_valve"
+        FERTILIZER_VALVE = "fertilizer_valve"
+        PUMP = "pump"
+        LIGHT = "light"
+
+
+    class ButtonKind(str, Enum):
+        COOL = "cool"
+        HEAT = "heat"
+
+
+    class FailSafeState(str, Enum):
+        ON = "on"
+        OFF = "off"
+
+
+    class SensorValueType(str, Enum):
+        FLOAT = "float"
+        INT = "int"
+
+
+    class ObservationType(str, Enum):
+        """Types of crop observations that can be recorded"""
+        GROWTH = "growth"
+        PEST = "pest"
+        DISEASE = "disease"
+        HARVEST = "harvest"
+        GENERAL = "general"
+
+===== END FILE: /Users/jason/verdify/backend/app/models/enums.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/config.py =====
+    """Configuration and planning models for greenhouse configuration snapshots and plans."""
+
+    from __future__ import annotations
+
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING, Any
+
+    from sqlalchemy import JSON, Column, ForeignKey, UniqueConstraint
+    from sqlmodel import Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # CONFIG SNAPSHOT MODELS
+    # -------------------------------------------------------
+    class ConfigSnapshotBase(SQLModel):
+        version: int = Field(..., description="Config version number")
+        payload: dict[str, Any] = Field(..., sa_type=JSON, description="Configuration payload")
+        etag: str = Field(..., description="ETag for caching")
+
+
+    class ConfigSnapshot(ConfigSnapshotBase, table=True):
+        __tablename__ = "config_snapshot"
+        __table_args__ = (
+            UniqueConstraint("greenhouse_id", "version", name="uq_config_snapshot_greenhouse_version"),
+        )
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        greenhouse_id: uuid.UUID = Field(
+            sa_column=Column(
+                "greenhouse_id",
+                ForeignKey("greenhouse.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        created_by: uuid.UUID | None = Field(
+            sa_column=Column(
+                "created_by",
+                ForeignKey("app_user.id", ondelete="SET NULL"),
+                nullable=True,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ConfigSnapshotCreate(ConfigSnapshotBase):
+        greenhouse_id: uuid.UUID
+        created_by: uuid.UUID | None = None
+
+
+    class ConfigSnapshotPublic(ConfigSnapshotBase):
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID
+        created_by: uuid.UUID | None
+        created_at: datetime
+        updated_at: datetime
+
+
+    # -------------------------------------------------------
+    # PLAN MODELS
+    # -------------------------------------------------------
+    class PlanBase(SQLModel):
+        version: int = Field(..., description="Plan version number")
+        payload: dict[str, Any] = Field(..., sa_type=JSON, description="Plan payload")
+        is_active: bool = Field(default=False, description="Whether this plan is currently active")
+        effective_from: datetime = Field(..., description="When this plan becomes effective")
+        effective_to: datetime = Field(..., description="When this plan expires")
+
+
+    class Plan(PlanBase, table=True):
+        __tablename__ = "plan"
+        __table_args__ = (
+            UniqueConstraint("greenhouse_id", "version", name="uq_plan_greenhouse_version"),
+        )
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        etag: str = Field(..., description="ETag for caching")
+        greenhouse_id: uuid.UUID = Field(
+            sa_column=Column(
+                "greenhouse_id",
+                ForeignKey("greenhouse.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        created_by: uuid.UUID | None = Field(
+            sa_column=Column(
+                "created_by",
+                ForeignKey("app_user.id", ondelete="SET NULL"),
+                nullable=True,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class PlanCreate(PlanBase):
+        greenhouse_id: uuid.UUID
+        created_by: uuid.UUID | None = None
+
+
+    class PlanPublic(PlanBase):
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID
+        created_by: uuid.UUID | None
+        created_at: datetime
+        updated_at: datetime
+
+
+    class PlanUpdate(SQLModel):
+        is_active: bool | None = None
+        effective_from: datetime | None = None
+        effective_to: datetime | None = None
+        payload: dict[str, Any] | None = None
+
+
+    # -------------------------------------------------------
+    # CONFIG PUBLISH/DIFF DTOs
+    # -------------------------------------------------------
+    class ConfigPublishRequest(SQLModel):
+        """Request DTO for publishing greenhouse configuration."""
+        dry_run: bool = Field(default=False, description="If true, return preview without persisting")
+
+
+    class ConfigPublishResult(SQLModel):
+        """Result of config publish operation."""
+        published: bool = Field(..., description="Whether snapshot was actually persisted")
+        version: int = Field(..., description="Configuration version number")
+        errors: list[str] = Field(default_factory=list, description="Validation errors")
+        warnings: list[str] = Field(default_factory=list, description="Validation warnings")
+        payload: dict[str, Any] = Field(..., description="Complete configuration payload")
+
+
+    class ConfigDiff(SQLModel):
+        """JSON patch-like diff between current DB state and last published snapshot."""
+        added: list[str] = Field(default_factory=list, description="Added configuration paths")
+        removed: list[str] = Field(default_factory=list, description="Removed configuration paths")
+        changed: list[str] = Field(default_factory=list, description="Modified configuration paths")
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    ConfigSnapshotsPaginated = Paginated[ConfigSnapshotPublic]
+    PlansPaginated = Paginated[PlanPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/config.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/sensors.py =====
+    """
+    Sensor models for Verdify API.
+    """
+    from __future__ import annotations
+
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING
+
+    from sqlalchemy import Column, DateTime, ForeignKey, func
+    from sqlmodel import Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    from .enums import SensorKind, SensorScope, SensorValueType
+
+    # TYPE_CHECKING imports only - no runtime circular imports
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # SENSOR MODELS
+    # -------------------------------------------------------
+    class SensorBase(SQLModel):
+        name: str = Field(..., description="Sensor name/identifier")
+        kind: SensorKind = Field(..., description="Sensor kind from OpenAPI spec")
+        scope: SensorScope = Field(..., description="Sensor scope: zone, greenhouse, external")
+        include_in_climate_loop: bool = Field(default=False, description="Include in climate control")
+
+        # Modbus configuration
+        modbus_slave_id: int | None = Field(default=None, description="Modbus slave ID")
+        modbus_reg: int | None = Field(default=None, description="Modbus register")
+        value_type: SensorValueType | None = Field(default=None, description="Value type: float or int")
+        scale_factor: float = Field(default=1.0, description="Scale factor for raw values")
+        offset: float = Field(default=0.0, description="Offset for raw values")
+        poll_interval_s: int = Field(default=10, description="Polling interval in seconds")
+
+
+    class Sensor(SensorBase, table=True):
+        __tablename__ = "sensor"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        controller_id: uuid.UUID = Field(
+            sa_column=Column(
+                "controller_id",
+                ForeignKey("controller.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        created_at: datetime = Field(
+            sa_column=Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False)
+        )
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class SensorCreate(SensorBase):
+        controller_id: uuid.UUID
+
+
+    class SensorPublic(SensorBase):
+        id: uuid.UUID
+        controller_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class SensorUpdate(SQLModel):
+        name: str | None = None
+        include_in_climate_loop: bool | None = None
+        modbus_slave_id: int | None = None
+        modbus_reg: int | None = None
+        value_type: SensorValueType | None = None
+        scale_factor: float | None = None
+        offset: float | None = None
+        poll_interval_s: int | None = None
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    SensorsPaginated = Paginated[SensorPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/sensors.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/users.py =====
+    """
+    User-related models for Verdify API.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    from pydantic import EmailStr
+    from sqlmodel import Field, SQLModel
+
+
+    # -------------------------------------------------------
+    # USER MODELS
+    # -------------------------------------------------------
+    # Shared properties
+    class UserBase(SQLModel):
+        email: EmailStr = Field(unique=True, index=True, max_length=255)
+        is_active: bool = True
+        is_superuser: bool = False
+        full_name: str | None = Field(default=None, max_length=255)
+
+
+    # Properties to receive via API on creation
+    class UserCreate(UserBase):
+        password: str = Field(min_length=8, max_length=40)
+
+
+    class UserRegister(SQLModel):
+        email: EmailStr = Field(max_length=255)
+        password: str = Field(min_length=8, max_length=40)
+        full_name: str | None = Field(default=None, max_length=255)
+
+
+    # Properties to receive via API on update, all are optional
+    class UserUpdate(UserBase):
+        email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
+        password: str | None = Field(default=None, min_length=8, max_length=40)
+
+
+    class UserUpdateMe(SQLModel):
+        full_name: str | None = Field(default=None, max_length=255)
+        email: EmailStr | None = Field(default=None, max_length=255)
+
+
+    class UpdatePassword(SQLModel):
+        current_password: str = Field(min_length=8, max_length=40)
+        new_password: str = Field(min_length=8, max_length=40)
+
+
+    # Database model, database table inferred from class name
+    class User(UserBase, table=True):
+        __tablename__ = "app_user"  # Match the database schema
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        hashed_password: str
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    # Properties to return via API, id is always required
+    class UserPublic(UserBase):
+        id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    from app.utils_paging import Paginated
+
+    UsersPaginated = Paginated[UserPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/users.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/controllers.py =====
+    """
+    Controller and related models for Verdify API.
+    """
+    from __future__ import annotations
+
+    import re
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING
+
+    from pydantic import field_validator
+    from sqlalchemy import Column, ForeignKey, UniqueConstraint
+    from sqlmodel import Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    # TYPE_CHECKING imports only - no runtime circular imports
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # CONTROLLER MODELS
+    # -------------------------------------------------------
+    class ControllerBase(SQLModel):
+        device_name: str = Field(
+            ...,
+            description="Controller device name (verdify-XXXXXX)"
+        )
+        is_climate_controller: bool = Field(default=False)
+        label: str | None = Field(default=None, description="Optional human-readable label")
+        model: str | None = Field(default=None, description="Controller model/hardware")
+        fw_version: str | None = None
+        hw_version: str | None = None
+        last_seen: datetime | None = Field(default=None, description="Last communication timestamp")
+
+        @field_validator('device_name')
+        @classmethod
+        def validate_device_name(cls, v: str) -> str:
+            if not re.match(r"^verdify-[0-9a-f]{6}$", v):
+                raise ValueError("device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit")
+            return v
+
+
+    class Controller(ControllerBase, table=True):
+        __tablename__ = "controller"
+        __table_args__ = (UniqueConstraint("device_name", name="uq_controller_device_name"),)
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        greenhouse_id: uuid.UUID | None = Field(  # Nullable to support unclaimed controllers
+            default=None,
+            sa_column=Column(
+                "greenhouse_id",
+                ForeignKey("greenhouse.id", ondelete="CASCADE"),
+                nullable=True,  # Allow unclaimed controllers in DB
+            )
+        )
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ControllerCreate(ControllerBase):
+        greenhouse_id: uuid.UUID
+
+
+    class ControllerPublic(ControllerBase):
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID  # Non-nullable per spec - only claimed controllers exposed
+        last_seen: datetime | None = None
+
+
+    class ControllerUpdate(SQLModel):
+        device_name: str | None = Field(default=None)
+        label: str | None = None
+        model: str | None = None
+        is_climate_controller: bool | None = None
+        fw_version: str | None = None
+        hw_version: str | None = None
+        last_seen: datetime | None = None
+
+        @field_validator('device_name')
+        @classmethod
+        def validate_device_name(cls, v: str | None) -> str | None:
+            if v is not None and not re.match(r"^verdify-[0-9a-f]{6}$", v):
+                raise ValueError("device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit")
+            return v
+
+
+    # -------------------------------------------------------
+    # ONBOARDING DTOs
+    # -------------------------------------------------------
+    class HelloRequest(SQLModel):
+        device_name: str = Field(...)
+        claim_code: str = Field(...)
+        hardware_profile: str
+        firmware: str
+        ts_utc: datetime
+
+        @field_validator('device_name')
+        @classmethod
+        def validate_device_name(cls, v: str) -> str:
+            if not re.match(r"^verdify-[0-9a-f]{6}$", v):
+                raise ValueError("device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit")
+            return v
+
+        @field_validator('claim_code')
+        @classmethod
+        def validate_claim_code(cls, v: str) -> str:
+            if not re.match(r"^\d{6}$", v):
+                raise ValueError("claim_code must be exactly 6 digits")
+            return v
+
+
+    class HelloResponse(SQLModel):
+        status: str = Field(..., description="pending or claimed")
+        controller_uuid: uuid.UUID | None = None
+        greenhouse_id: uuid.UUID | None = None
+        retry_after_s: int | None = Field(default=None, ge=1)
+        message: str | None = None
+
+
+    class ControllerClaimRequest(SQLModel):
+        device_name: str = Field(...)
+        claim_code: str = Field(...)
+        greenhouse_id: uuid.UUID
+
+        @field_validator('device_name')
+        @classmethod
+        def validate_device_name(cls, v: str) -> str:
+            if not re.match(r"^verdify-[0-9a-f]{6}$", v):
+                raise ValueError("device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit")
+            return v
+
+        @field_validator('claim_code')
+        @classmethod
+        def validate_claim_code(cls, v: str) -> str:
+            if not re.match(r"^\d{6}$", v):
+                raise ValueError("claim_code must be exactly 6 digits")
+            return v
+
+
+    class ControllerClaimResponse(SQLModel):
+        controller: ControllerPublic
+        device_token: str
+        expires_at: datetime
+
+
+    class TokenExchangeRequest(SQLModel):
+        device_name: str = Field(...)
+        claim_code: str = Field(...)
+
+        @field_validator('device_name')
+        @classmethod
+        def validate_device_name(cls, v: str) -> str:
+            if not re.match(r"^verdify-[0-9a-f]{6}$", v):
+                raise ValueError("device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit")
+            return v
+
+        @field_validator('claim_code')
+        @classmethod
+        def validate_claim_code(cls, v: str) -> str:
+            if not re.match(r"^\d{6}$", v):
+                raise ValueError("claim_code must be exactly 6 digits")
+            return v
+
+
+    class TokenExchangeResponse(SQLModel):
+        device_token: str
+        config_etag: str = Field(...)
+        plan_etag: str = Field(...)
+        expires_at: datetime
+
+        @field_validator('config_etag')
+        @classmethod
+        def validate_config_etag(cls, v: str) -> str:
+            if not re.match(r"^config:v[0-9]+:[0-9a-f]{8}$", v):
+                raise ValueError("config_etag must match pattern 'config:vN:XXXXXXXX'")
+            return v
+
+        @field_validator('plan_etag')
+        @classmethod
+        def validate_plan_etag(cls, v: str) -> str:
+            if not re.match(r"^plan:v[0-9]+:[0-9a-f]{8}$", v):
+                raise ValueError("plan_etag must match pattern 'plan:vN:XXXXXXXX'")
+            return v
+
+
+    class TokenRotateResponse(SQLModel):
+        device_token: str
+        expires_at: datetime
+
+
+    # Combined model for simpler imports
+    class TokenExchange(SQLModel):
+        device_name: str
+        claim_code: str
+        device_token: str | None = None
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    ControllersPaginated = Paginated[ControllerPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/controllers.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/__init__.py =====
+    """
+    Aggregate imports of ALL mapped models so SQLAlchemy's class registry
+    sees them before any metadata/DB operations.
+    Import this module early in app startup, Alembic env.py, and tests.
+
+    Dependency order (order matters):
+    1. enums (no dependencies)
+    2. users (no dependencies)
+    3. greenhouses (-> users)
+    4. controllers (-> greenhouses)
+    5. sensors (-> controllers)
+    6. actuators (-> controllers)
+    7. crops (-> zones)
+    8. config, telemetry (-> prior domains)
+    9. auth (standalone)
+    10. links (-> all target classes) # association models imported LAST
+
+    Rationale: ensure all class names are importable/registered before links resolve.
+    """
+    from __future__ import annotations
+
+    # Re-export SQLModel for Alembic
+    from sqlmodel import SQLModel
+
+    # Import pagination utilities
+    from app.utils_paging import Paginated
+
+    from .actuators import *  # Actuators domain - references controllers
+    from .auth import *  # Auth models - standalone token/messaging
+    from .config import *  # Config and Plan models
+    from .controllers import *  # Controllers domain - may reference greenhouses
+    from .crops import *  # Crops domain
+
+    # Import enums first (no dependencies)
+    from .enums import (
+        ActuatorKind,
+        ButtonKind,
+        FailSafeState,
+        LocationEnum,
+        SensorKind,
+        SensorScope,
+        SensorType,
+        SensorValueType,
+    )
+
+    # Step 2: Primary domains with potential cross-references
+    from .greenhouses import *  # Greenhouses domain
+
+    # Step 4: Association/link models imported LAST (after all target classes exist)
+    from .links import *  # Cross-domain associations imported after all targets available
+    from .sensors import *  # Sensors domain - references controllers
+    from .state_machine import *  # State machine models - references greenhouses
+
+    # Step 3: Secondary domains that reference primary domains
+    from .telemetry import *  # Telemetry domain - references sensors and controllers
+
+    # Import domain models in dependency order
+    # Step 1: Independent domains (no cross-references)
+    from .users import *  # Users domain - referenced by many others
+
+
+    def bootstrap_mappers() -> None:
+        """
+        Idempotently force SQLAlchemy to resolve all string relationships
+        *after* all model classes have been imported into the registry.
+        """
+        from sqlalchemy.orm import configure_mappers
+        configure_mappers()
+
+
+    # T24.4 - Rebuild Pydantic models after imports (forward annotation safety net)
+    try:
+        for cls in [
+            User,
+            Greenhouse, Zone,
+            Controller,
+            Sensor,
+            Actuator, ControllerButton, FanGroup, Equipment,
+            SensorZoneMap, FanGroupMember,  # from links.py
+            Crop, ZoneCrop,
+            ConfigSnapshot, Plan,
+            IdempotencyKey,
+            StateMachineRow, StateMachineFallback,  # from state_machine.py
+        ]:
+            cls.model_rebuild()
+    except Exception:
+        # Non-fatal; helps in tests where namespaces differ
+        pass
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    # Define here as fallback since module-level assignments in sub-modules
+    # sometimes don't work with star imports
+    try:
+        # Core entities
+        UsersPaginated = Paginated[UserPublic]
+        GreenhousesPaginated = Paginated[GreenhousePublicAPI]
+        ZonesPaginated = Paginated[ZonePublic]
+        ControllersPaginated = Paginated[ControllerPublic]
+        # Sensors & Actuators
+        SensorsPaginated = Paginated[SensorPublic]
+        ActuatorsPaginated = Paginated[ActuatorPublic]
+        ControllerButtonsPaginated = Paginated[ControllerButtonPublic]
+        FanGroupsPaginated = Paginated[FanGroupPublic]
+        # Crops
+        CropsPaginated = Paginated[CropPublic]
+        ZoneCropsPaginated = Paginated[ZoneCropPublic]
+        ZoneCropObservationsPaginated = Paginated[ZoneCropObservationPublic]
+        # Config & Plans
+        ConfigSnapshotsPaginated = Paginated[ConfigSnapshotPublic]
+        PlansPaginated = Paginated[PlanPublic]
+        # State Machine
+        StateMachineRowsPaginated = Paginated[StateMachineRowPublic]
+    except NameError:
+        # Some types might not be available in certain contexts
+        pass
+
+===== END FILE: /Users/jason/verdify/backend/app/models/__init__.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/telemetry.py =====
+    """Telemetry and idempotency models for request deduplication."""
+
+    from __future__ import annotations
+
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING
+
+    from sqlalchemy import Column, ForeignKey, UniqueConstraint
+    from sqlmodel import Field, SQLModel
+
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # TELEMETRY DTO MODELS
+    # -------------------------------------------------------
+
+    class TelemetrySensorsReading(SQLModel):
+        """Individual sensor reading within a telemetry batch."""
+        sensor_index: int = Field(..., description="0-based sensor index")
+        timestamp: str = Field(..., description="ISO 8601 timestamp of reading")
+        value: float = Field(..., description="Sensor reading value")
+        unit: str = Field(..., description="Unit of measurement")
+
+
+    class TelemetrySensors(SQLModel):
+        """Sensor telemetry batch from device."""
+        readings: list[TelemetrySensorsReading] = Field(..., description="Array of sensor readings")
+
+
+    class TelemetryActuatorsEvent(SQLModel):
+        """Individual actuator event within a telemetry batch."""
+        actuator_index: int = Field(..., description="0-based actuator index")
+        timestamp: str = Field(..., description="ISO 8601 timestamp of event")
+        action: str = Field(..., description="Action performed (on/off/adjust)")
+        value: float | None = Field(None, description="Value if action was adjust")
+
+
+    class TelemetryActuators(SQLModel):
+        """Actuator telemetry batch from device."""
+        events: list[TelemetryActuatorsEvent] = Field(..., description="Array of actuator events")
+
+
+    class TelemetryStatusData(SQLModel):
+        """Controller status data."""
+        uptime_seconds: int = Field(..., description="Controller uptime in seconds")
+        memory_usage_kb: int = Field(..., description="Memory usage in kilobytes")
+        cpu_usage_percent: float = Field(..., description="CPU usage percentage")
+        network_connected: bool = Field(..., description="Network connectivity status")
+        last_reboot_reason: str = Field(..., description="Reason for last reboot")
+
+
+    class TelemetryStatus(SQLModel):
+        """Controller status telemetry."""
+        timestamp: str = Field(..., description="ISO 8601 timestamp")
+        status: TelemetryStatusData = Field(..., description="Status data")
+
+
+    class TelemetryInputsEvent(SQLModel):
+        """Individual input/button event."""
+        input_index: int = Field(..., description="0-based input index")
+        timestamp: str = Field(..., description="ISO 8601 timestamp of event")
+        event_type: str = Field(..., description="Event type (press/release)")
+        duration_ms: int | None = Field(None, description="Duration if applicable")
+
+
+    class TelemetryInputs(SQLModel):
+        """Input/button telemetry batch from device."""
+        events: list[TelemetryInputsEvent] = Field(..., description="Array of input events")
+
+
+    class TelemetryBatch(SQLModel):
+        """Mixed telemetry batch containing multiple types."""
+        sensors: TelemetrySensors | None = Field(None, description="Sensor readings if any")
+        actuators: TelemetryActuators | None = Field(None, description="Actuator events if any")
+        status: TelemetryStatus | None = Field(None, description="Status update if any")
+        inputs: TelemetryInputs | None = Field(None, description="Input events if any")
+
+
+    class IngestResult(SQLModel):
+        """Result of telemetry ingestion."""
+        success: bool = Field(..., description="Whether ingestion was successful")
+        message: str = Field(..., description="Human-readable result message")
+        records_processed: int = Field(..., description="Number of records processed")
+        request_id: str = Field(..., description="Request ID for tracking")
+
+
+    # -------------------------------------------------------
+    # IDEMPOTENCY KEY MODELS
+    # -------------------------------------------------------
+    class IdempotencyKeyBase(SQLModel):
+        key: str = Field(..., description="Idempotency key string")
+        body_hash: str = Field(..., description="Hash of request body")
+        response_status: int = Field(..., description="HTTP response status code")
+        response_body: str | None = Field(default=None, description="Response body")
+
+
+    class IdempotencyKey(IdempotencyKeyBase, table=True):
+        __tablename__ = "idempotency_key"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        expires_at: datetime = Field(..., description="When this key expires")
+        controller_id: uuid.UUID = Field(
+            sa_column=Column(
+                "controller_id",
+                ForeignKey("controller.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+        __table_args__ = (
+            UniqueConstraint("key", "controller_id", name="uq_idempotency_key_controller"),
+        )
+
+
+    class IdempotencyKeyCreate(IdempotencyKeyBase):
+        controller_id: uuid.UUID = Field(..., description="Controller that submitted the request")
+        expires_at: datetime
+
+
+    class IdempotencyKeyPublic(IdempotencyKeyBase):
+        id: uuid.UUID
+        controller_id: uuid.UUID  # Include for public representation
+        created_at: datetime
+        updated_at: datetime
+        expires_at: datetime
+
+===== END FILE: /Users/jason/verdify/backend/app/models/telemetry.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/links.py =====
+    """
+    Association/link models for cross-domain relationships.
+    Simple approach - just the association tables without complex bidirectional relationships.
+    """
+    from __future__ import annotations
+
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING
+
+    from sqlalchemy import Column, ForeignKey
+    from sqlmodel import Field, SQLModel
+
+    from .enums import SensorKind
+
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # BASE MODELS FOR DTOs
+    # -------------------------------------------------------
+    class SensorZoneMapBase(SQLModel):
+        """Base model for sensor zone mappings."""
+        sensor_id: uuid.UUID
+        zone_id: uuid.UUID
+        kind: SensorKind
+
+
+    class FanGroupMemberBase(SQLModel):
+        """Base model for fan group members."""
+        fan_group_id: uuid.UUID
+        actuator_id: uuid.UUID
+
+    # -------------------------------------------------------
+    # ASSOCIATION MODELS - simple association tables only
+    # -------------------------------------------------------
+    class SensorZoneMap(SensorZoneMapBase, table=True):
+        """Association table mapping sensors to zones they monitor."""
+        __tablename__ = "sensor_zone_map"
+
+        sensor_id: uuid.UUID = Field(
+            sa_column=Column(
+                "sensor_id",
+                ForeignKey("sensor.id", ondelete="CASCADE"),
+                primary_key=True,
+            )
+        )
+        zone_id: uuid.UUID = Field(
+            sa_column=Column(
+                "zone_id",
+                ForeignKey("zone.id", ondelete="CASCADE"),
+                primary_key=True,
+            )
+        )
+        kind: SensorKind = Field(primary_key=True, description="Sensor kind")
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class FanGroupMember(FanGroupMemberBase, table=True):
+        """Association table for fan group membership."""
+        __tablename__ = "fan_group_member"
+
+        fan_group_id: uuid.UUID = Field(
+            sa_column=Column(
+                "fan_group_id",
+                ForeignKey("fan_group.id", ondelete="CASCADE"),
+                primary_key=True,
+            )
+        )
+        actuator_id: uuid.UUID = Field(
+            sa_column=Column(
+                "actuator_id",
+                ForeignKey("actuator.id", ondelete="CASCADE"),
+                primary_key=True,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    # -------------------------------------------------------
+    # DTO MODELS FOR API
+    # -------------------------------------------------------
+    class SensorZoneMapCreate(SensorZoneMapBase):
+        """Create model for sensor zone mappings."""
+        pass
+
+
+    class SensorZoneMapPublic(SensorZoneMapBase):
+        """Public model for sensor zone mappings."""
+        created_at: datetime
+        updated_at: datetime
+
+
+    class SensorZoneMapUpdate(SQLModel):
+        """Update model for sensor zone mappings."""
+        kind: SensorKind | None = None
+
+
+    class FanGroupMemberCreate(FanGroupMemberBase):
+        """Create model for fan group members."""
+        pass
+
+
+    class FanGroupMemberPublic(FanGroupMemberBase):
+        """Public model for fan group members."""
+        created_at: datetime
+        updated_at: datetime
+
+===== END FILE: /Users/jason/verdify/backend/app/models/links.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/actuators.py =====
+    """
+    Actuator, FanGroup, and Button models for Verdify API.
+    """
+    from __future__ import annotations
+
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING
+
+    from sqlalchemy import Column, ForeignKey
+    from sqlmodel import Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    from .enums import ActuatorKind, ButtonKind, FailSafeState
+
+    # TYPE_CHECKING imports only - no runtime circular imports
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # ACTUATOR MODELS
+    # -------------------------------------------------------
+    class ActuatorBase(SQLModel):
+        name: str = Field(..., description="Actuator name")
+        kind: ActuatorKind = Field(..., description="Actuator kind")
+        relay_channel: int | None = Field(default=None, description="Relay channel number")
+        min_on_ms: int = Field(default=60000, description="Minimum on time in milliseconds")
+        min_off_ms: int = Field(default=60000, description="Minimum off time in milliseconds")
+        fail_safe_state: FailSafeState = Field(default=FailSafeState.OFF, description="Fail-safe state: on or off")
+        zone_id: uuid.UUID | None = Field(default=None, description="Associated zone ID")
+
+
+    class Actuator(ActuatorBase, table=True):
+        __tablename__ = "actuator"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        controller_id: uuid.UUID = Field(
+            sa_column=Column(
+                "controller_id",
+                ForeignKey("controller.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        zone_id: uuid.UUID | None = Field(
+            sa_column=Column(
+                "zone_id",
+                ForeignKey("zone.id", ondelete="SET NULL"),
+                nullable=True,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ActuatorCreate(ActuatorBase):
+        controller_id: uuid.UUID
+
+
+    class ActuatorPublic(ActuatorBase):
+        id: uuid.UUID
+        controller_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class ActuatorUpdate(SQLModel):
+        name: str | None = None
+        kind: ActuatorKind | None = None
+        relay_channel: int | None = None
+        min_on_ms: int | None = None
+        min_off_ms: int | None = None
+        fail_safe_state: FailSafeState | None = None
+        zone_id: uuid.UUID | None = None
+
+
+    # -------------------------------------------------------
+    # FAN GROUP MODELS
+    # -------------------------------------------------------
+    class FanGroupBase(SQLModel):
+        name: str = Field(..., description="Fan group name")
+
+
+    class FanGroup(FanGroupBase, table=True):
+        __tablename__ = "fan_group"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        controller_id: uuid.UUID = Field(
+            sa_column=Column(
+                "controller_id",
+                ForeignKey("controller.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class FanGroupCreate(FanGroupBase):
+        controller_id: uuid.UUID
+
+
+    class FanGroupPublic(FanGroupBase):
+        id: uuid.UUID
+        controller_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class FanGroupUpdate(SQLModel):
+        name: str | None = None
+
+
+    # -------------------------------------------------------
+    # CONTROLLER BUTTON MODELS
+    # -------------------------------------------------------
+    class ControllerButtonBase(SQLModel):
+        button_kind: ButtonKind = Field(..., description="Button kind")
+        target_temp_stage: int | None = Field(default=None, description="Target temperature stage")
+        target_humi_stage: int | None = Field(default=None, description="Target humidity stage")
+        timeout_s: int = Field(..., description="Timeout in seconds")
+
+
+    class ControllerButton(ControllerButtonBase, table=True):
+        __tablename__ = "controller_button"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        controller_id: uuid.UUID = Field(
+            sa_column=Column(
+                "controller_id",
+                ForeignKey("controller.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ControllerButtonCreate(ControllerButtonBase):
+        controller_id: uuid.UUID
+
+
+    class ControllerButtonPublic(ControllerButtonBase):
+        id: uuid.UUID
+        controller_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class ControllerButtonUpdate(SQLModel):
+        button_kind: ButtonKind | None = None
+        target_temp_stage: int | None = None
+        target_humi_stage: int | None = None
+        timeout_s: int | None = None
+
+
+    # -------------------------------------------------------
+    # EQUIPMENT MODELS (Legacy - for backward compatibility)
+    # -------------------------------------------------------
+    class EquipmentBase(SQLModel):
+        name: str = Field(..., description="Equipment name")
+        equipment_type: str = Field(..., description="Equipment type")
+
+
+    class Equipment(EquipmentBase, table=True):
+        __tablename__ = "equipment"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        controller_id: uuid.UUID = Field(
+            sa_column=Column(
+                "controller_id",
+                ForeignKey("controller.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class EquipmentCreate(EquipmentBase):
+        controller_id: uuid.UUID
+
+
+    class EquipmentPublic(EquipmentBase):
+        id: uuid.UUID
+        controller_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class EquipmentUpdate(SQLModel):
+        name: str | None = None
+        equipment_type: str | None = None
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    ActuatorsPaginated = Paginated[ActuatorPublic]
+    ControllerButtonsPaginated = Paginated[ControllerButtonPublic]
+    FanGroupsPaginated = Paginated[FanGroupPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/actuators.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/state_machine.py =====
+    """
+    State machine models for greenhouse climate control.
+    """
+    from __future__ import annotations
+
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING
+
+    from sqlalchemy import JSON, Column, ForeignKey, UniqueConstraint
+    from sqlmodel import Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    # TYPE_CHECKING imports only - no runtime circular imports
+    if TYPE_CHECKING:
+        pass
+
+
+    # -------------------------------------------------------
+    # STATE MACHINE ROW MODELS
+    # -------------------------------------------------------
+    class StateMachineRowBase(SQLModel):
+        """Base model for state machine configuration rows."""
+        temp_stage: int | None = Field(default=None, ge=-3, le=3, description="Temperature stage (-3 to 3)")
+        humi_stage: int | None = Field(default=None, ge=-3, le=3, description="Humidity stage (-3 to 3)")
+        is_fallback: bool = Field(default=False, description="Whether this is a fallback row")
+        must_on_actuators: list[str] = Field(default_factory=list, description="Actuator IDs that must be on")
+        must_off_actuators: list[str] = Field(default_factory=list, description="Actuator IDs that must be off")
+        must_on_fan_groups: list[dict] = Field(default_factory=list, description="Fan group configurations")
+
+
+    class StateMachineRow(StateMachineRowBase, table=True):
+        """State machine row database model - greenhouse scoped."""
+        __tablename__ = "state_machine_row"
+        __table_args__ = (
+            UniqueConstraint("greenhouse_id", "temp_stage", "humi_stage", name="uq_smrow_gh_temp_humi"),
+        )
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        greenhouse_id: uuid.UUID = Field(
+            sa_column=Column(
+                "greenhouse_id",
+                ForeignKey("greenhouse.id", ondelete="CASCADE"),
+                nullable=False
+            )
+        )
+        must_on_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
+        must_off_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
+        must_on_fan_groups: list[dict] = Field(default_factory=list, sa_type=JSON)  # {"fan_group_id": str, "on_count": int}
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class StateMachineRowCreate(StateMachineRowBase):
+        """Create model for state machine rows."""
+        greenhouse_id: uuid.UUID
+
+
+    class StateMachineRowUpdate(SQLModel):
+        """Update model for state machine rows."""
+        temp_stage: int | None = Field(default=None, ge=-3, le=3)
+        humi_stage: int | None = Field(default=None, ge=-3, le=3)
+        is_fallback: bool | None = None
+        must_on_actuators: list[str] | None = None
+        must_off_actuators: list[str] | None = None
+        must_on_fan_groups: list[dict] | None = None
+
+
+    class StateMachineRowPublic(StateMachineRowBase):
+        """Public model for state machine rows."""
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    # -------------------------------------------------------
+    # STATE MACHINE FALLBACK MODELS
+    # -------------------------------------------------------
+    class StateMachineFallbackBase(SQLModel):
+        """Base model for state machine fallback configuration."""
+        must_on_actuators: list[str] = Field(default_factory=list, description="Actuator IDs that must be on in fallback")
+        must_off_actuators: list[str] = Field(default_factory=list, description="Actuator IDs that must be off in fallback")
+        must_on_fan_groups: list[dict] = Field(default_factory=list, description="Fan group configurations for fallback")
+
+
+    class StateMachineFallback(StateMachineFallbackBase, table=True):
+        """State machine fallback database model - one per greenhouse."""
+        __tablename__ = "state_machine_fallback"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        greenhouse_id: uuid.UUID = Field(
+            sa_column=Column(
+                "greenhouse_id",
+                ForeignKey("greenhouse.id", ondelete="CASCADE"),
+                nullable=False,
+                unique=True
+            )
+        )
+        must_on_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
+        must_off_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
+        must_on_fan_groups: list[dict] = Field(default_factory=list, sa_type=JSON)  # {"fan_group_id": str, "on_count": int}
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class StateMachineFallbackCreate(StateMachineFallbackBase):
+        """Create model for state machine fallback."""
+        greenhouse_id: uuid.UUID
+
+
+    class StateMachineFallbackUpdate(SQLModel):
+        """Update model for state machine fallback."""
+        must_on_actuators: list[str] | None = None
+        must_off_actuators: list[str] | None = None
+        must_on_fan_groups: list[dict] | None = None
+
+
+    class StateMachineFallbackPublic(StateMachineFallbackBase):
+        """Public model for state machine fallback."""
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    StateMachineRowsPaginated = Paginated[StateMachineRowPublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/state_machine.py =====
+
+===== BEGIN FILE: /Users/jason/verdify/backend/app/models/greenhouses.py =====
+    """import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING, Any
+
+    from sqlalchemy import JSON, Column, DateTime, ForeignKey, func
+    from sqlmodel import Field, SQLModelhouse and Zone models for Verdify API.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from typing import TYPE_CHECKING, Any
+
+    from sqlalchemy import Column, DateTime, ForeignKey, func
+    from sqlmodel import JSON, Field, SQLModel
+
+    from app.utils_paging import Paginated
+
+    from .enums import LocationEnum
+
+    # Direct imports for forward reference resolution - these are available since
+    # greenhouses module is imported after users and crops in __init__.py dependency order
+
+    if TYPE_CHECKING:
+        pass
+
+
+
+
+
+    # -------------------------------------------------------
+    # GREENHOUSE MODELS
+    # -------------------------------------------------------
+    class GreenhouseBase(SQLModel):
+        title: str = Field(min_length=1, max_length=255)  # Updated field name to match OpenAPI spec
+        description: str | None = Field(default=None, max_length=255)
+        is_active: bool = Field(
+            default=True, description="Whether this greenhouse is active"
+        )
+
+        latitude: float | None = Field(
+            default=None, description="Latitude of greenhouse location"
+        )
+        longitude: float | None = Field(
+            default=None, description="Longitude of greenhouse location"
+        )
+
+        # Control parameters with defaults matching OpenAPI schema
+        min_temp_c: float = Field(
+            default=7.0, description="Minimum temperature in Celsius"
+        )
+        max_temp_c: float = Field(
+            default=35.0, description="Maximum temperature in Celsius"
+        )
+        min_vpd_kpa: float = Field(
+            default=0.3, description="Minimum VPD in kPa"
+        )
+        max_vpd_kpa: float = Field(
+            default=2.5, description="Maximum VPD in kPa"
+        )
+        enthalpy_open_kjkg: float = Field(
+            default=-2.0, description="Enthalpy threshold for opening in kJ/kg"
+        )
+        enthalpy_close_kjkg: float = Field(
+            default=1.0, description="Enthalpy threshold for closing in kJ/kg"
+        )
+        site_pressure_hpa: float = Field(
+            default=840.0, description="Site pressure in hPa"
+        )
+        context_text: str | None = Field(
+            default=None, max_length=4000, description="Additional context information"
+        )
+
+        # New OpenAPI v2 fields
+        rails_max_temp_c: float = Field(
+            default=50.0, description="Maximum rail/track temperature in Celsius"
+        )
+        rails_min_temp_c: float = Field(
+            default=-10.0, description="Minimum rail/track temperature in Celsius"
+        )
+        params: dict[str, Any] | None = Field(
+            default=None, sa_type=JSON, description="Additional greenhouse parameters"
+        )
+
+
+    class Greenhouse(GreenhouseBase, table=True):
+        __tablename__ = "greenhouse"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        user_id: uuid.UUID = Field(
+            sa_column=Column(
+                "user_id",
+                ForeignKey("app_user.id", ondelete="CASCADE"),
+                nullable=False
+            )
+        )
+        created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class GreenhouseCreate(GreenhouseBase):
+        pass
+
+
+    class GreenhouseUpdate(SQLModel):
+        title: str | None = Field(default=None, min_length=1, max_length=255)  # Updated field name to match OpenAPI spec
+        description: str | None = None
+        is_active: bool | None = None
+        latitude: float | None = None
+        longitude: float | None = None
+        min_temp_c: float | None = None
+        max_temp_c: float | None = None
+        min_vpd_kpa: float | None = None
+        max_vpd_kpa: float | None = None
+        enthalpy_open_kjkg: float | None = None
+        enthalpy_close_kjkg: float | None = None
+        site_pressure_hpa: float | None = None
+        context_text: str | None = Field(default=None, max_length=4000)
+        rails_max_temp_c: float | None = None
+        rails_min_temp_c: float | None = None
+        params: dict[str, Any] | None = None
+
+
+    class GreenhousePublic(GreenhouseBase):
+        id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class GreenhousePublicAPI(SQLModel):
+        """
+        Public greenhouse schema matching OpenAPI spec exactly.
+        Excludes internal fields: user_id, rails_*, params, created_at, updated_at.
+        """
+        id: uuid.UUID = Field(description="Greenhouse unique identifier")
+        title: str = Field(min_length=1, max_length=255)
+        description: str | None = Field(default=None, max_length=255)
+        is_active: bool = Field(default=True, description="Whether this greenhouse is active")
+        latitude: float | None = Field(default=None, description="Latitude of greenhouse location")
+        longitude: float | None = Field(default=None, description="Longitude of greenhouse location")
+        min_temp_c: float = Field(default=7.0, description="Minimum temperature in Celsius")
+        max_temp_c: float = Field(default=35.0, description="Maximum temperature in Celsius")
+        min_vpd_kpa: float = Field(default=0.3, description="Minimum VPD in kPa")
+        max_vpd_kpa: float = Field(default=2.5, description="Maximum VPD in kPa")
+        enthalpy_open_kjkg: float = Field(default=-2.0, description="Enthalpy threshold for opening in kJ/kg")
+        enthalpy_close_kjkg: float = Field(default=1.0, description="Enthalpy threshold for closing in kJ/kg")
+        site_pressure_hpa: float = Field(default=840.0, description="Site pressure in hPa")
+        context_text: str | None = Field(default=None, max_length=4000, description="Additional context information")
+
+
+
+
+    # -------------------------------------------------------
+    # ZONE MODELS
+    # -------------------------------------------------------
+    class ZoneBase(SQLModel):
+        zone_number: int = Field(..., description="Numeric identifier within greenhouse")
+        location: LocationEnum = Field(..., description="N, E, S, W, NE, SE, SW, NW")
+        is_active: bool = Field(default=True, description="Whether the zone is currently active")
+        context_text: str | None = Field(default=None, max_length=2000, description="Zone context or notes")
+
+
+    class Zone(ZoneBase, table=True):
+        __tablename__ = "zone"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        greenhouse_id: uuid.UUID = Field(
+            sa_column=Column(
+                "greenhouse_id",
+                ForeignKey("greenhouse.id", ondelete="CASCADE"),
+                nullable=False
+            )
+        )
+        created_at: datetime = Field(
+            sa_column=Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False)
+        )
+        updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+        # 🚫 No Relationship() here - use explicit foreign keys and manual queries
+
+
+    class ZoneCreate(ZoneBase):
+        greenhouse_id: uuid.UUID
+
+
+    class ZonePublic(ZoneBase):
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID
+        created_at: datetime
+        updated_at: datetime
+
+
+    class ZoneUpdate(SQLModel):
+        zone_number: int | None = None
+        location: LocationEnum | None = None
+        context_text: str | None = Field(default=None, max_length=2000)
+
+
+    class ZoneRead(ZoneBase):
+        id: uuid.UUID
+        greenhouse_id: uuid.UUID
+        # Remove created_at since it doesn't exist in DB yet
+        # created_at: datetime
+
+
+    class ZoneReading(SQLModel, table=True):
+        """Placeholder for zone sensor readings."""
+        __tablename__ = "zone_reading"
+
+        id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+        zone_id: uuid.UUID = Field(
+            sa_column=Column(
+                "zone_id",
+                ForeignKey("zone.id", ondelete="CASCADE"),
+                nullable=False,
+            )
+        )
+        reading_data: dict[str, Any] = Field(sa_type=JSON)
+
+
+    class ZoneSensorMap(SQLModel):
+        """Mapping between zones and sensors for readings."""
+        zone_id: uuid.UUID
+        sensor_ids: list[uuid.UUID]
+
+
+    # ===============================================
+    # PAGINATED TYPES
+    # ===============================================
+    GreenhousesPaginated = Paginated[GreenhousePublicAPI]  # Use API-compliant DTO
+    ZonesPaginated = Paginated[ZonePublic]
+
+===== END FILE: /Users/jason/verdify/backend/app/models/greenhouses.py =====

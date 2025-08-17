@@ -25,8 +25,8 @@ const CropHeader = ({ crop, zoneCrop, currentStage }: CropHeaderProps) => {
         </Text>
       </Box>
       <VStack gap={1} align="end">
-        <Badge 
-          colorPalette={zoneCrop.is_active ? "green" : "gray"} 
+        <Badge
+          colorPalette={zoneCrop.is_active ? "green" : "gray"}
           size="lg"
           variant="solid"
         >

@@ -58,10 +58,10 @@ const AddSensor = ({ controllerId }: AddSensorProps) => {
 
   const mutation = useMutation({
     mutationFn: (data: SensorCreate) =>
-      SensorsService.createSensor({ 
+      SensorsService.createSensor({
         controllerId,
         greenhouseId,
-        requestBody: data 
+        requestBody: data
       } as any),
     onSuccess: () => {
       showSuccessToast("Sensor created successfully.");

@@ -1,16 +1,17 @@
-from datetime import datetime, timedelta
-from typing import List
-from sqlalchemy import delete
-from sqlmodel import Session, select
 import uuid
+from datetime import datetime, timedelta
 from statistics import mean
 
+from sqlalchemy import delete
+from sqlmodel import Session, select
+
 from app.models import (
-    Zone,
     Greenhouse,
-    ZoneClimateHistory,
     GreenhouseClimateHistory,
+    Zone,
+    ZoneClimateHistory,
 )
+
 
 def record_zone_climate(
     session: Session,
@@ -29,16 +30,15 @@ def record_zone_climate(
     session.refresh(reading)
     return reading
 
+
 def record_greenhouse_climate(
     session: Session,
     greenhouse_id: uuid.UUID,
 ) -> GreenhouseClimateHistory:
     """Calculate and record mean climate for a greenhouse."""
     # Get all zones for this greenhouse
-    zones = session.exec(
-        select(Zone).where(Zone.greenhouse_id == greenhouse_id)
-    ).all()
-    
+    zones = session.exec(select(Zone).where(Zone.greenhouse_id == greenhouse_id)).all()
+
     # Get latest readings from each zone
     zone_readings = []
     for zone in zones:
@@ -49,17 +49,17 @@ def record_greenhouse_climate(
         ).first()
         if latest:
             zone_readings.append(latest)
-    
+
     if not zone_readings:
         return None
 
     # Calculate means
     mean_temp = mean(r.temperature for r in zone_readings)
     mean_humidity = mean(r.humidity for r in zone_readings)
-    
+
     # Get greenhouse for outside readings
     greenhouse = session.get(Greenhouse, greenhouse_id)
-    
+
     # Create and store reading
     reading = GreenhouseClimateHistory(
         greenhouse_id=greenhouse_id,
@@ -73,11 +73,12 @@ def record_greenhouse_climate(
     session.refresh(reading)
     return reading
 
+
 def get_zone_climate_history(
     session: Session,
     zone_id: uuid.UUID,
     hours: int = 24,
-) -> List[ZoneClimateHistory]:
+) -> list[ZoneClimateHistory]:
     """Get climate history for a zone for the specified time period."""
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     return session.exec(
@@ -87,11 +88,12 @@ def get_zone_climate_history(
         .order_by(ZoneClimateHistory.timestamp)
     ).all()
 
+
 def get_greenhouse_climate_history(
     session: Session,
     greenhouse_id: uuid.UUID,
     hours: int = 24,
-) -> List[GreenhouseClimateHistory]:
+) -> list[GreenhouseClimateHistory]:
     """Get climate history for a greenhouse for the specified time period."""
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     return session.exec(
@@ -101,21 +103,22 @@ def get_greenhouse_climate_history(
         .order_by(GreenhouseClimateHistory.timestamp)
     ).all()
 
+
 def cleanup_old_readings(
     session: Session,
     days: int = 30,
 ) -> None:
     """Remove readings older than specified days."""
     cutoff = datetime.now(datetime.timezone.utc) - timedelta(days=days)
-    
+
     session.exec(
-        delete(ZoneClimateHistory)
-        .where(ZoneClimateHistory.timestamp < cutoff)
+        delete(ZoneClimateHistory).where(ZoneClimateHistory.timestamp < cutoff)
     )
-    
+
     session.exec(
-        delete(GreenhouseClimateHistory)
-        .where(GreenhouseClimateHistory.timestamp < cutoff)
+        delete(GreenhouseClimateHistory).where(
+            GreenhouseClimateHistory.timestamp < cutoff
+        )
     )
-    
+
     session.commit()
