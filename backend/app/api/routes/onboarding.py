@@ -48,7 +48,11 @@ def generate_etag(content_type: str, version: int) -> str:
 
 
 @router.post(
-    "/hello", response_model=HelloResponse, status_code=200, tags=["Onboarding"]
+    "/hello",
+    operation_id="announceController",
+    response_model=HelloResponse,
+    status_code=200,
+    tags=["Onboarding"],
 )
 def announce_controller(
     request: HelloRequest,
@@ -76,7 +80,7 @@ def announce_controller(
     if controller:
         # Update last_seen and firmware info
         controller.last_seen = current_time
-        controller.firmware = request.firmware
+        controller.fw_version = request.firmware
         controller.hardware_profile = request.hardware_profile
 
         if controller.claim_code and controller.greenhouse_id:
@@ -104,7 +108,7 @@ def announce_controller(
             device_name=request.device_name,
             label=f"Controller {request.device_name}",
             hardware_profile=request.hardware_profile,
-            firmware=request.firmware,
+            fw_version=request.firmware,
             first_seen=current_time,
             last_seen=current_time,
             # Will be set during claim process
@@ -124,6 +128,7 @@ def announce_controller(
 
 @router.post(
     "/controllers/claim",
+    operation_id="claimController",
     response_model=ControllerClaimResponse,
     status_code=201,
     tags=["Onboarding"],

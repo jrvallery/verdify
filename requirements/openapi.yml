@@ -174,6 +174,305 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  # User Management CRUD
+  /users:
+    get:
+      operationId: listUsers
+      tags: [Authentication]
+      summary: List users
+      description: Retrieve users with pagination and filtering (admin only)
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paginated'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+    post:
+      operationId: createUser
+      tags: [Authentication]
+      summary: Create user (admin)
+      description: Create new user without the need to be logged in (admin only)
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/{user_id}:
+    get:
+      operationId: getUser
+      tags: [Authentication]
+      summary: Get user by ID
+      description: Get a specific user by id (admin only)
+      security:
+        - UserJWT: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: User retrieved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    patch:
+      operationId: updateUser
+      tags: [Authentication]
+      summary: Update user
+      description: Update a user (admin only)
+      security:
+        - UserJWT: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    delete:
+      operationId: deleteUser
+      tags: [Authentication]
+      summary: Delete user
+      description: Delete a user (admin only)
+      security:
+        - UserJWT: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: User deleted
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/me:
+    get:
+      operationId: getCurrentUser
+      tags: [Authentication]
+      summary: Get current user
+      description: Get current user profile
+      security:
+        - UserJWT: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+    patch:
+      operationId: updateCurrentUser
+      tags: [Authentication]
+      summary: Update current user
+      description: Update own user profile
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+    delete:
+      operationId: deleteCurrentUser
+      tags: [Authentication]
+      summary: Delete current user
+      description: Delete own user account
+      security:
+        - UserJWT: []
+      responses:
+        '204':
+          description: User deleted
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/me/password:
+    patch:
+      operationId: updateCurrentUserPassword
+      tags: [Authentication]
+      summary: Update current user password
+      description: Update own password
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordUpdate' }
+      responses:
+        '200':
+          description: Password updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/signup:
+    post:
+      operationId: registerUserPublic
+      tags: [Authentication]
+      summary: Public user registration
+      description: Create new user account (public endpoint)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserRegisterRequest' }
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # Enhanced Authentication Endpoints
+  /login/access-token:
+    post:
+      operationId: loginAccessToken
+      tags: [Authentication]
+      summary: OAuth2 compatible token login
+      description: OAuth2 compatible token login, get an access token for future requests
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+                grant_type: { type: string, default: "password" }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserLoginResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /login/test-token:
+    post:
+      operationId: testToken
+      tags: [Authentication]
+      summary: Test access token
+      description: Validate current access token and return user info
+      security:
+        - UserJWT: []
+      responses:
+        '200':
+          description: Token valid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /login/password-recovery/{email}:
+    post:
+      operationId: initiatePasswordRecovery
+      tags: [Authentication]
+      summary: Initiate password recovery
+      description: Send password recovery email to user
+      security: []
+      parameters:
+        - name: email
+          in: path
+          required: true
+          schema: { type: string, format: email }
+      responses:
+        '200':
+          description: Recovery email sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /login/password-recovery-html-content/{email}:
+    post:
+      operationId: initiatePasswordRecoveryHtml
+      tags: [Authentication]
+      summary: Initiate password recovery (HTML content)
+      description: Send password recovery email with HTML content to user
+      security: []
+      parameters:
+        - name: email
+          in: path
+          required: true
+          schema: { type: string, format: email }
+      responses:
+        '200':
+          description: Recovery email sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /login/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [Authentication]
+      summary: Reset password
+      description: Reset user password using recovery token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetRequest' }
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
   /hello:
     post:
       operationId: announceController
@@ -778,6 +1077,50 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  # Enhanced Greenhouse Operations
+  /greenhouses/{id}/sensors:
+    get:
+      operationId: listGreenhouseSensors
+      tags: [CRUD]
+      summary: List greenhouse sensors
+      description: List all sensors for a specific greenhouse
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Sensors retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paginated'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /greenhouses/{id}/unmapped-sensors:
+    get:
+      operationId: listUnmappedSensors
+      tags: [CRUD]
+      summary: List unmapped sensors
+      description: List all unmapped sensors for a specific greenhouse
+      security:
+        - UserJWT: []
+      parameters:
+        - $ref: '#/components/parameters/GreenhouseIdParam'
+      responses:
+        '200':
+          description: Unmapped sensors retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Sensor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # CRUD — Zone
   /zones:
     get:
@@ -1089,6 +1432,147 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  # Zone-specific crop management endpoints
+  /crops/zones/{zone_id}/zone-crops:
+    get:
+      operationId: listZoneCropsForZone
+      tags: [CRUD]
+      summary: List zone crops for specific zone
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Zone crops retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paginated'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /crops/zones/{zone_id}/zone-crop:
+    get:
+      operationId: getActiveZoneCrop
+      tags: [CRUD]
+      summary: Get active zone crop for zone
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Active zone crop retrieved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCrop' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /crops/zones/{zone_id}/zone-crops/{zone_crop_id}:
+    get:
+      operationId: getZoneCropByZone
+      tags: [CRUD]
+      summary: Get specific zone crop in zone
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: zone_crop_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Zone crop retrieved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneCrop' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /crops/zones/{zone_id}/observations:
+    get:
+      operationId: listObservationsForZone
+      tags: [CRUD]
+      summary: List observations for zone
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Observations retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paginated'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /crops/zone-crops/{zone_crop_id}/observations:
+    get:
+      operationId: listObservationsForZoneCrop
+      tags: [CRUD]
+      summary: List observations for zone crop
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_crop_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Observations retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paginated'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /crops/zones/{zone_id}/crop-analytics:
+    get:
+      operationId: getZoneCropAnalytics
+      tags: [CRUD]
+      summary: Get crop analytics for zone
+      security:
+        - UserJWT: []
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Crop analytics retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analytics: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /observations:
     get:
@@ -2098,6 +2582,54 @@ paths:
                     type: string
                 required: [error]
 
+  # Utility & Operations Endpoints
+  /utils/health-check:
+    get:
+      operationId: utilsHealthCheck
+      tags: [Meta]
+      summary: Extended health check
+      description: Comprehensive health check for monitoring systems
+      security: []
+      responses:
+        '200':
+          description: System healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  timestamp: { type: string, format: date-time }
+                  version: { type: string }
+        '503':
+          description: Service unavailable
+
+  /utils/test-email:
+    post:
+      operationId: testEmail
+      tags: [Meta]
+      summary: Test email system
+      description: Send test email to verify email system functionality
+      security:
+        - UserJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email_to: { type: string, format: email }
+                subject: { type: string }
+      responses:
+        '200':
+          description: Test email sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
 components:
   securitySchemes:
     UserJWT:
@@ -2465,6 +2997,54 @@ components:
         expires_in:
           type: integer
           description: Token expiry in seconds
+
+    # Enhanced User Management Schemas
+    UserCreate:
+      type: object
+      required: [email, password, full_name]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        full_name: { type: string }
+        is_active: { type: boolean, default: true }
+        is_superuser: { type: boolean, default: false }
+
+    UserUpdate:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        full_name: { type: string }
+        is_active: { type: boolean }
+        is_superuser: { type: boolean }
+
+    UserPublic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        is_active: { type: boolean }
+        is_superuser: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    PasswordUpdate:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string }
+        new_password: { type: string, minLength: 8 }
+
+    PasswordResetRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token: { type: string }
+        new_password: { type: string, minLength: 8 }
+
+    Message:
+      type: object
+      properties:
+        message: { type: string }
 
     # --- Onboarding ---
     HelloRequest:

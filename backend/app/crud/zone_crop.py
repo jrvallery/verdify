@@ -3,6 +3,10 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlmodel import Session, and_, func, select
 
+from app.api.permissions import (
+    ownership_or_membership_condition,
+    user_can_access_greenhouse,
+)
 from app.models import Greenhouse, Zone, ZoneCrop, ZoneCropCreate, ZoneCropUpdate
 
 
@@ -27,12 +31,12 @@ class CRUDZoneCrop:
         """Get multiple zone crops with filtering and sorting"""
         stmt = select(ZoneCrop)
 
-        # Apply user-scoped filtering through greenhouse ownership
+        # Apply user-scoped filtering through greenhouse ownership or membership
         if user_id:
             stmt = (
                 stmt.join(Zone, ZoneCrop.zone_id == Zone.id)
                 .join(Greenhouse, Zone.greenhouse_id == Greenhouse.id)
-                .where(Greenhouse.user_id == user_id)
+                .where(ownership_or_membership_condition(user_id))
             )
 
         # Apply filters
@@ -93,12 +97,12 @@ class CRUDZoneCrop:
         """Count zone crops with the same filters"""
         stmt = select(func.count(ZoneCrop.id))
 
-        # Apply user-scoped filtering through greenhouse ownership
+        # Apply user-scoped filtering through greenhouse ownership or membership
         if user_id:
             stmt = (
                 stmt.join(Zone, ZoneCrop.zone_id == Zone.id)
                 .join(Greenhouse, Zone.greenhouse_id == Greenhouse.id)
-                .where(Greenhouse.user_id == user_id)
+                .where(ownership_or_membership_condition(user_id))
             )
 
         if zone_id:
@@ -117,9 +121,9 @@ class CRUDZoneCrop:
     def create(
         self, session: Session, *, obj_in: ZoneCropCreate, user_id: UUID
     ) -> ZoneCrop:
-        """Create new zone crop with one-active-per-zone constraint"""
-        # Validate zone ownership
-        if not self.validate_zone_ownership(
+        """Create new zone crop with one-active-per-zone constraint (operators can create)"""
+        # Validate zone access (owner or operator)
+        if not self.validate_zone_access(
             session, zone_id=obj_in.zone_id, user_id=user_id
         ):
             raise HTTPException(
@@ -129,7 +133,7 @@ class CRUDZoneCrop:
         # Check if zone already has an active crop
         existing_active = session.exec(
             select(ZoneCrop).where(
-                and_(ZoneCrop.zone_id == obj_in.zone_id, ZoneCrop.is_active == True)
+                and_(ZoneCrop.zone_id == obj_in.zone_id, ZoneCrop.is_active is True)
             )
         ).first()
 
@@ -153,9 +157,9 @@ class CRUDZoneCrop:
         obj_in: ZoneCropUpdate,
         user_id: UUID,
     ) -> ZoneCrop:
-        """Update zone crop with ownership validation"""
-        # Validate zone ownership
-        if not self.validate_zone_ownership(
+        """Update zone crop with access validation (operators can update)"""
+        # Validate zone access (owner or operator)
+        if not self.validate_zone_access(
             session, zone_id=db_obj.zone_id, user_id=user_id
         ):
             raise HTTPException(
@@ -170,25 +174,36 @@ class CRUDZoneCrop:
         return db_obj
 
     def remove(self, session: Session, *, id: UUID, user_id: UUID) -> ZoneCrop | None:
-        """Delete zone crop with ownership validation"""
+        """Delete zone crop with ownership validation (owner only)"""
         obj = session.get(ZoneCrop, id)
         if obj:
-            # Validate zone ownership
+            # Validate zone ownership (owner only for delete)
             if not self.validate_zone_ownership(
                 session, zone_id=obj.zone_id, user_id=user_id
             ):
                 raise HTTPException(
-                    status_code=403, detail="Not authorized to access this zone"
+                    status_code=403,
+                    detail="Only greenhouse owners can delete zone crops",
                 )
 
             session.delete(obj)
             session.commit()
         return obj
 
+    def validate_zone_access(
+        self, session: Session, zone_id: UUID, user_id: UUID
+    ) -> bool:
+        """Validate that user can access the greenhouse containing the zone (owner or operator)"""
+        zone = session.get(Zone, zone_id)
+        if not zone:
+            return False
+
+        return user_can_access_greenhouse(session, zone.greenhouse_id, user_id)
+
     def validate_zone_ownership(
         self, session: Session, zone_id: UUID, user_id: UUID
     ) -> bool:
-        """Validate that user owns the greenhouse containing the zone"""
+        """Validate that user owns the greenhouse containing the zone (owner only)"""
         zone = session.get(Zone, zone_id)
         if not zone:
             return False

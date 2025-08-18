@@ -1,27 +1,122 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# dump.sh — Merge a set of text files into one shareable dump for code review.
-# - Handles nested/parent Git repos (uses `git -C` and restricts to the given path).
-# - Falls back to `find` when --no-git or when the path isn't inside a Git work tree.
-# - Portable on macOS (BSD utils) and Linux (GNU utils).
+# dump2.sh — Enhanced file bundling tool for code review and sharing
+# Version: 2.0
+# Author: Enhanced for home-infra project
+# Last Modified: August 17, 2025
+#
+# DESCRIPTION:
+#   Merges multiple text files into a single structured dump file for easy sharing,
+#   code review, or backup purposes. Supports both directory scanning and explicit
+#   file list modes with intelligent filtering and progress tracking.
+#
+# KEY FEATURES:
+#   - Directory scanning with Git-aware file discovery
+#   - Explicit file list mode for targeted bundling
+#   - Automatic binary file detection and exclusion
+#   - File size limits and extension filtering
+#   - Progress reporting for large operations
+#   - Portable across macOS (BSD) and Linux (GNU) systems
+#
+# MODES OF OPERATION:
+#   1. Directory Mode (-p): Scans a directory tree using Git or find
+#   2. File List Mode (-f): Processes an explicit list of files
+#   3. Auto Mode (default): Scans current directory with Git awareness
+#
+# OUTPUT FORMAT:
+#   Creates a structured text file with:
+#   - Header with timestamp, path/source, and filtering info
+#   - Each file delimited with clear BEGIN/END markers
+#   - 4-space indentation for all file content
+#   - Summary of files included/skipped
+#
+# ENHANCED FEATURES (v2):
+#   - File list support for targeted bundling
+#   - Improved error handling and validation
+#   - Better progress reporting
+#   - Enhanced documentation and examples
 
 usage() {
   cat <<'USAGE'
-Usage: dump.sh [-p PATH] [-o OUTPUT] [--progress] [--no-git] [--max-bytes N] [--ext-exclude EXT ...]
-Options:
-  -p, --path PATH          Root path to scan (default: .)
-  -o, --output FILE        Output file (default: project_dump_YYYYMMDD_HHMMSS.txt)
-      --no-git             Do not use git; always use find-based scanning
-      --progress           Print progress to stderr periodically
-      --max-bytes N        Skip files larger than N bytes (0 = unlimited)
-      --ext-exclude EXT    Exclude files with extension EXT (repeatable), e.g. --ext-exclude .md
-  -h, --help               Show this help
+Usage: dump2.sh [-p PATH] [-f FILE_LIST] [-o OUTPUT] [--progress] [--no-git] [--max-bytes N] [--ext-exclude EXT ...]
 
-Examples:
-  ./dump.sh
-  ./dump.sh -p backend/app --progress
-  ./dump.sh -p backend/app --no-git --progress -o app_dump.txt
+MODES:
+  Directory Mode:  Scans directory tree for files (default: current directory)
+  File List Mode:  Processes explicit list of files from a text file
+
+OPTIONS:
+  -p, --path PATH          Root path to scan for files (default: current directory)
+                          Ignored when using --file-list mode
+
+  -f, --file-list FILE     Text file containing list of files to bundle (one per line)
+                          Lines starting with # are treated as comments
+                          Relative paths are resolved from current working directory
+                          Takes precedence over --path option
+
+  -o, --output FILE        Output bundle file (default: project_dump_YYYYMMDD_HHMMSS.txt)
+                          Will be excluded from bundling to prevent recursion
+
+      --no-git             Force use of find instead of git for file discovery
+                          Useful for non-git directories or when git is unavailable
+
+      --progress           Display progress counter during processing
+                          Shows: Processed: N | Included: N | Skipped: N
+
+      --max-bytes N        Skip files larger than N bytes (0 = unlimited)
+                          Useful for avoiding large binary or generated files
+
+      --ext-exclude EXT    Exclude files with extension EXT (case-insensitive)
+                          Can be specified multiple times
+                          Example: --ext-exclude .jpg --ext-exclude .png
+
+  -h, --help               Show this help text and exit
+
+EXAMPLES:
+  # Bundle current directory using git file discovery
+  ./dump2.sh
+
+  # Bundle specific directory with progress tracking
+  ./dump2.sh -p backend/app --progress
+
+  # Bundle from explicit file list (recommended for targeted bundling)
+  ./dump2.sh -f my_project_files.txt -o project_bundle.txt
+
+  # Bundle with size limits and exclusions
+  ./dump2.sh -p src --max-bytes 1000000 --ext-exclude .min.js --ext-exclude .map
+
+  # Force find-based scanning (no git)
+  ./dump2.sh -p legacy_code --no-git --progress
+
+FILE LIST FORMAT:
+  When using --file-list mode, create a text file with one file path per line:
+
+  # Project core files
+  src/main.py
+  src/utils.py
+  config/settings.yaml
+  docs/README.md
+
+  # Lines starting with # are comments (ignored)
+  # Relative paths are resolved from current working directory
+  # Missing files generate warnings but don't stop processing
+
+OUTPUT FORMAT:
+  The bundle file contains:
+  - Header with timestamp and configuration
+  - Each file wrapped in clear delimiters:
+    ===== BEGIN FILE: /absolute/path/to/file =====
+        [file contents with 4-space indentation]
+    ===== END FILE: /absolute/path/to/file =====
+  - Summary of processing results
+
+FILTERING RULES:
+  Files are automatically excluded if they:
+  - Are binary (contain null bytes)
+  - Exceed --max-bytes limit
+  - Have excluded extensions
+  - Are the output file itself
+  - Don't exist (file list mode only)
 USAGE
 }
 
@@ -32,12 +127,14 @@ USE_GIT=1
 SHOW_PROGRESS=0
 MAX_BYTES=0
 EXCLUDE_EXTS=()
+FILE_LIST=""
 
 # Parse args
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     -p|--path) PATH_ROOT="${2:-.}"; shift 2 ;;
+    -f|--file-list) FILE_LIST="${2:-}"; shift 2 ;;
     -o|--output) OUTPUT_FILE="${2:-}"; shift 2 ;;
     --no-git) USE_GIT=0; shift ;;
     --progress) SHOW_PROGRESS=1; shift ;;
@@ -87,7 +184,11 @@ ABS_PATH_ROOT="$(abs_path "$PATH_ROOT")"
 # Output header
 {
   echo "Project Dump - $(date)"
-  echo "Path: $PATH_ROOT"
+  if [ -n "$FILE_LIST" ]; then
+    echo "Source: File list ($FILE_LIST)"
+  else
+    echo "Path: $PATH_ROOT"
+  fi
   if [ "${#EXCLUDE_EXTS[@]}" -gt 0 ] 2>/dev/null; then
     echo "Excluded extensions: ${EXCLUDE_EXTS[*]}"
   else
@@ -96,17 +197,19 @@ ABS_PATH_ROOT="$(abs_path "$PATH_ROOT")"
   if [ "$MAX_BYTES" -gt 0 ] 2>/dev/null; then
     echo "Max file size: ${MAX_BYTES} bytes"
   fi
+  echo "Generated by: dump2.sh v2.0 (enhanced with file list support)"
   echo
 } > "$OUTPUT_FILE"
 
-# Text/binary detection (portable)
+# Text/binary detection (portable across macOS/Linux)
+# Returns 0 for text files, 1 for binary files
 is_text_file() {
   local f="$1"
   # Heuristic: grep returns success for likely text; fails for binary (NULs)
   LC_ALL=C grep -Iq . "$f" 2>/dev/null
 }
 
-# Extension filter: returns 0 if has excluded ext
+# Extension filter: returns 0 if file has an excluded extension
 has_excluded_ext() {
   local f="$1"
   local name lc
@@ -122,12 +225,14 @@ has_excluded_ext() {
   return 1
 }
 
-# Stat file size portable (macOS vs GNU)
+# Get file size in bytes (portable across macOS BSD stat and Linux GNU stat)
 file_size_bytes() {
   local f="$1"
   if stat -f%z "$f" >/dev/null 2>&1; then
+    # macOS/BSD stat
     stat -f%z -- "$f"
   else
+    # Linux/GNU stat
     stat -c%s -- "$f"
   fi
 }
@@ -136,6 +241,7 @@ file_size_bytes() {
 TMP_LIST="$(mktemp -t dump_list.XXXXXX)"
 trap 'rm -f "$TMP_LIST"' EXIT
 
+# Git-based file discovery: finds files tracked by git within a specific path
 add_git_files() {
   local path="$1"  # absolute path to requested root
   # Check if within a git work tree (at or under)
@@ -165,14 +271,51 @@ add_git_files() {
   return 0
 }
 
+# Find-based file discovery: recursively finds all files, excluding .git directories
 add_find_files() {
   local path="$1"
   # Exclude .git directories; write NUL-delimited absolute paths
   find "$path" -type d -name .git -prune -o -type f -print0 >> "$TMP_LIST"
 }
 
+# File list processing: reads explicit file list and validates each entry
+add_file_list() {
+  local file_list="$1"
+  if [ ! -f "$file_list" ]; then
+    echo "Error: File list '$file_list' not found" >&2
+    return 1
+  fi
+
+  echo "Processing file list: $file_list" >&2
+  local line_count=0
+  local found_count=0
+
+  # Read each line from the file list and convert to absolute path
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_count=$((line_count + 1))
+
+    # Skip empty lines and comments
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+
+    # Convert to absolute path if it exists
+    if [ -f "$line" ]; then
+      abs_file="$(abs_path "$line")"
+      printf '%s\0' "$abs_file" >> "$TMP_LIST"
+      found_count=$((found_count + 1))
+    else
+      echo "Warning: File not found (line $line_count): $line" >&2
+    fi
+  done < "$file_list"
+
+  echo "File list processed: $found_count files found from $line_count lines" >&2
+}
+
 # Choose collection strategy
-if [ "$USE_GIT" -eq 1 ]; then
+if [ -n "$FILE_LIST" ]; then
+  add_file_list "$FILE_LIST"
+elif [ "$USE_GIT" -eq 1 ]; then
   if ! add_git_files "$ABS_PATH_ROOT"; then
     add_find_files "$ABS_PATH_ROOT"
   fi
@@ -244,6 +387,40 @@ fi
 # If no files, note it in the output (so you know the script ran)
 if [ "$files_included" -eq 0 ]; then
   echo "No qualifying files found." >> "$OUTPUT_FILE"
+  echo
+  echo "===== PROCESSING SUMMARY ====="
+  echo "No files were included in the bundle."
+  if [ -n "$FILE_LIST" ]; then
+    echo "Check that the file list '$FILE_LIST' contains valid file paths."
+  else
+    echo "Check the path '$PATH_ROOT' and filtering options."
+  fi
+else
+  # Add summary to output file
+  {
+    echo
+    echo "===== BUNDLE SUMMARY ====="
+    echo "Files included: $files_included"
+    echo "Files skipped: $files_skipped"
+    echo "Total processed: $processed"
+    if [ -n "$FILE_LIST" ]; then
+      echo "Source: File list ($FILE_LIST)"
+    else
+      echo "Source: Directory scan ($PATH_ROOT)"
+    fi
+    echo "Bundle generated: $(date)"
+  } >> "$OUTPUT_FILE"
 fi
 
 echo "Dump complete: $OUTPUT_FILE (${files_included} files included, ${files_skipped} skipped)"
+
+# Provide helpful next steps
+if [ "$files_included" -gt 0 ]; then
+  echo
+  echo "Next steps:"
+  echo "  - Review: cat $OUTPUT_FILE | head -50"
+  echo "  - Size: wc -l $OUTPUT_FILE"
+  if [ -n "$FILE_LIST" ]; then
+    echo "  - Files: grep 'BEGIN FILE:' $OUTPUT_FILE | wc -l"
+  fi
+fi

@@ -55,8 +55,7 @@ class CropCreate(CropBase):
 class CropPublic(CropBase):
     id: uuid.UUID
     recipe: dict[str, Any] | None = None
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 class CropUpdate(SQLModel):
@@ -84,9 +83,9 @@ class ZoneCrop(ZoneCropBase, table=True):
     __tablename__ = "zone_crop"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    crop_id: uuid.UUID | None = Field(  # Change to SET NULL for global crop templates
+    crop_id: uuid.UUID = Field(  # Non-nullable per OpenAPI spec requirement
         sa_column=Column(
-            "crop_id", ForeignKey("crop.id", ondelete="SET NULL"), nullable=True
+            "crop_id", ForeignKey("crop.id", ondelete="RESTRICT"), nullable=False
         )
     )
     zone_id: uuid.UUID = Field(
@@ -108,10 +107,9 @@ class ZoneCropCreate(ZoneCropBase):
 
 class ZoneCropPublic(ZoneCropBase):
     id: uuid.UUID
-    crop_id: uuid.UUID | None
+    crop_id: uuid.UUID  # Non-nullable per OpenAPI spec
     zone_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 class ZoneCropUpdate(SQLModel):
@@ -185,8 +183,7 @@ class ZoneCropObservationCreate(ZoneCropObservationBase):
 class ZoneCropObservationPublic(ZoneCropObservationBase):
     id: uuid.UUID
     zone_crop_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 class ZoneCropObservationUpdate(SQLModel):

@@ -10,10 +10,16 @@ import hashlib
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlmodel import Session, and_, desc, select
 
-from app.api.deps import CurrentDevice, CurrentUser, PaginationDep, SessionDep
+from app.api.deps import (
+    CurrentDevice,
+    CurrentUser,
+    PaginationDep,
+    SessionDep,
+    get_current_active_superuser,
+)
 from app.models import (
     Greenhouse,
     Plan,
@@ -42,7 +48,7 @@ def get_latest_active_plan(session: Session, greenhouse_id: str) -> Plan | None:
     """Get the latest active plan for a greenhouse."""
     statement = (
         select(Plan)
-        .where(and_(Plan.greenhouse_id == greenhouse_id, Plan.is_active == True))
+        .where(and_(Plan.greenhouse_id == greenhouse_id, Plan.is_active is True))
         .order_by(desc(Plan.version))
         .limit(1)
     )
@@ -63,7 +69,7 @@ def get_latest_plan(session: Session, greenhouse_id: str) -> Plan | None:
 def deactivate_existing_plans(session: Session, greenhouse_id: str) -> None:
     """Deactivate all existing active plans for a greenhouse."""
     statement = select(Plan).where(
-        and_(Plan.greenhouse_id == greenhouse_id, Plan.is_active == True)
+        and_(Plan.greenhouse_id == greenhouse_id, Plan.is_active is True)
     )
     existing_plans = session.exec(statement).all()
 
@@ -180,7 +186,7 @@ def list_plans(
             query = query.order_by(Plan.created_at)
 
     # Paginate results
-    return paginate_query(session, query, pagination, PlanPublic)
+    return paginate_query(session, query, pagination)
 
 
 @router.post(
@@ -198,16 +204,19 @@ def list_plans(
 )
 def create_plan(
     session: SessionDep,
-    current_user: CurrentUser,
     plan_create: PlanCreate,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_superuser)],
 ):
     """
     Create a new plan version.
 
+    Restricted to superusers only. In production, plan generation should be
+    handled by internal Celery tasks rather than direct API creation.
+
     Args:
         session: Database session
-        current_user: Current authenticated user
         plan_create: Plan creation data
+        current_user: Current authenticated superuser
 
     Returns:
         Created plan
@@ -228,7 +237,7 @@ def create_plan(
     next_version = (latest_plan.version + 1) if latest_plan else 1
 
     # Generate ETag
-    etag = generate_plan_etag(plan_create.payload, next_version)
+    etag = generate_plan_etag(plan_create.payload.model_dump(mode="json"), next_version)
 
     # If this plan should be active, deactivate existing active plans
     if plan_create.is_active:
@@ -238,7 +247,9 @@ def create_plan(
     db_plan = Plan(
         greenhouse_id=plan_create.greenhouse_id,
         version=next_version,
-        payload=plan_create.payload,
+        payload=plan_create.payload.model_dump(
+            mode="json"
+        ),  # Convert to dict for JSON storage
         etag=etag,
         is_active=plan_create.is_active,
         effective_from=plan_create.effective_from,

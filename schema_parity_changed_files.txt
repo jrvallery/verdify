@@ -1,0 +1,20 @@
+# Verdify Schema Parity Implementation - Changed Files
+# Files modified during Milestone 1-4 schema parity fixes (August 18, 2025)
+
+# Documentation created/updated
+VERDIFY_SCHEMA_PARITY_PLAN.md
+VERDIFY_CRUD_FIXES_CHECKLIST.md
+VERDIFY_IMPLEMENTATION_PROGRESS.md
+
+# Model fixes (title/name mapping)
+backend/app/models/greenhouses.py
+
+# API route fixes (DTO conformance)
+backend/app/api/routes/greenhouses.py
+
+# Migration skeletons created
+backend/app/alembic/versions/9f3a8e1d2c4b_schema_parity_fixes.py
+
+# Implementation templates/skeletons
+migration_skeleton_schema_parity_v1.py
+migration_skeleton_crops_naming.py

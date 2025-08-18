@@ -1,0 +1,27 @@
+# Verdify Models & Core Infrastructure Bundle
+# Domain models, enums, core services, and foundational components
+
+# Main documentation
+VERDIFY_DEVELOPMENT_SUMMARY.md
+
+# Core Models (domain layer)
+backend/app/models/__init__.py
+backend/app/models/enums.py
+backend/app/models/controllers.py
+backend/app/models/telemetry.py
+backend/app/models/greenhouses.py
+backend/app/models/sensors.py
+backend/app/models/actuators.py
+backend/app/models/crops.py
+backend/app/models/state_machine.py
+backend/app/models/users.py
+backend/app/models/auth.py
+backend/app/models/config.py
+backend/app/models/links.py
+
+# Core Infrastructure
+backend/app/main.py
+backend/app/core/config.py
+backend/app/core/db.py
+backend/app/core/security.py
+backend/app/utils_paging.py

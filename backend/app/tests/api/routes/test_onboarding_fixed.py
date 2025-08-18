@@ -3,7 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
-from app.core.db import get_db
+from app.api.deps import get_db
 from app.main import app
 from app.models import Controller
 

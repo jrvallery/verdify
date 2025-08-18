@@ -1,0 +1,21 @@
+# Phase B Expert Review Implementation Files - August 17, 2025
+# All files modified during the expert review implementation
+
+# Database Migration - Critical enum/timezone fixes
+backend/app/alembic/versions/28bf57b69a7f_fix_enum_case_for_greenhouse_rbac.py
+
+# Models - Enhanced with explicit enum columns and imports
+backend/app/models/greenhouses.py
+
+# CRUD Layer - Fixed sensor drift and zone mapping
+backend/app/crud/sensors.py
+
+# API Routes - Access consistency and error handling
+backend/app/api/routes/greenhouses.py
+
+# Test and Validation Files
+backend/test_enum_fixes.py
+backend/phase_b_expert_review_summary.py
+
+# Documentation and Next Steps
+backend/EXPERT_REVIEW_NEXT_STEPS.md

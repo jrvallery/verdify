@@ -2,15 +2,15 @@ import uuid
 
 from sqlmodel import Session, and_, select
 
+from app.api.permissions import ownership_or_membership_condition
 from app.models import (
     Controller,
     Greenhouse,
     Sensor,
     SensorCreate,
     SensorKind,
-    SensorsPaginated,
-    SensorType,
     SensorUpdate,
+    SensorZoneMap,
     Zone,
 )
 from app.utils_paging import PaginationParams, paginate_query
@@ -52,13 +52,13 @@ def list_sensors(
     controller_id: uuid.UUID | None = None,
     greenhouse_id: uuid.UUID | None = None,
     sort: str = "name",
-) -> SensorsPaginated:
-    """List sensors with filtering and pagination."""
-    # Base query - join with controller and greenhouse for ownership validation
+):
+    """List sensors with filtering and pagination using RBAC."""
+    # Base query - join with controller and greenhouse for access validation
     query = select(Sensor).join(Controller).join(Greenhouse)
 
-    # User ownership filter - users can only see sensors in their greenhouses
-    query = query.where(Greenhouse.user_id == user_id)
+    # User access filter - users can see sensors in owned or shared greenhouses
+    query = query.where(ownership_or_membership_condition(user_id))
 
     # Apply optional filters
     if kind:
@@ -92,18 +92,12 @@ def list_sensors(
 
 def list_sensors_by_zone(session: Session, zone_id: uuid.UUID) -> list[Sensor]:
     """List all sensors mapped to a specific zone."""
-    zone = session.get(Zone, zone_id)
-    if not zone:
-        return []
-
-    sensors = []
-    for sensor_type in SensorType:
-        sensor_id = getattr(zone, f"{sensor_type.value}_sensor_id")
-        if sensor_id:
-            sensor = session.get(Sensor, sensor_id)
-            if sensor:
-                sensors.append(sensor)
-    return sensors
+    # Use a single joined query to avoid N+1 problem
+    return session.exec(
+        select(Sensor)
+        .join(SensorZoneMap, SensorZoneMap.sensor_id == Sensor.id)
+        .where(SensorZoneMap.zone_id == zone_id)
+    ).all()
 
 
 def list_sensors_by_controller(
@@ -138,8 +132,6 @@ def update_sensor(session: Session, sensor: Sensor, s_in: SensorUpdate) -> Senso
 def delete_sensor(session: Session, sensor: Sensor) -> None:
     """Delete a sensor record."""
     # First, remove all zone mappings for this sensor
-    from app.models.links import SensorZoneMap
-
     sensor_mappings = session.exec(
         select(SensorZoneMap).where(SensorZoneMap.sensor_id == sensor.id)
     ).all()
@@ -157,74 +149,100 @@ def delete_sensor(session: Session, sensor: Sensor) -> None:
 
 
 def list_available_sensors(
-    session: Session, greenhouse_id: uuid.UUID, sensor_type: SensorType
+    session: Session, greenhouse_id: uuid.UUID, sensor_type: SensorKind
 ) -> list[Sensor]:
     """List all sensors of a specific type in a greenhouse."""
     # Now returns all sensors since they can be mapped to multiple zones
     all_sensors = session.exec(
         select(Sensor)
         .join(Controller)
-        .where(Controller.greenhouse_id == greenhouse_id, Sensor.type == sensor_type)
+        .where(Controller.greenhouse_id == greenhouse_id, Sensor.kind == sensor_type)
     ).all()
 
     return all_sensors
 
 
 def map_sensor_to_zone(
-    session: Session, zone_id: uuid.UUID, sensor_id: uuid.UUID, sensor_type: SensorType
-) -> Zone:
-    """Map a sensor to a zone for a specific type."""
+    session: Session, zone_id: uuid.UUID, sensor_id: uuid.UUID, sensor_type: SensorKind
+) -> SensorZoneMap:
+    """Map a sensor to a zone for a specific type using SensorZoneMap."""
     zone = session.get(Zone, zone_id)
     if not zone:
         raise ValueError("Zone not found")
 
     sensor = session.get(Sensor, sensor_id)
-    if not sensor or sensor.type != sensor_type:
+    if not sensor or sensor.kind != sensor_type:
         raise ValueError("Invalid sensor for this type")
 
-    # Check if this sensor type slot is already occupied
-    current_sensor_id = getattr(zone, f"{sensor_type.value}_sensor_id")
-    if current_sensor_id is not None:
+    # Check if this exact mapping already exists
+    existing_mapping = session.exec(
+        select(SensorZoneMap).where(
+            and_(
+                SensorZoneMap.zone_id == zone_id,
+                SensorZoneMap.sensor_id == sensor_id,
+                SensorZoneMap.kind == sensor_type,
+            )
+        )
+    ).first()
+
+    if existing_mapping:
+        raise ValueError(
+            f"Sensor is already mapped to this zone for {sensor_type.value}"
+        )
+
+    # Check if zone already has a sensor of this type mapped
+    existing_type_mapping = session.exec(
+        select(SensorZoneMap).where(
+            and_(SensorZoneMap.zone_id == zone_id, SensorZoneMap.kind == sensor_type)
+        )
+    ).first()
+
+    if existing_type_mapping:
         raise ValueError(
             f"Zone already has a {sensor_type.value} sensor mapped. Please unmap the existing sensor first."
         )
 
-    # Removed check for sensor.is_mapped since sensors can now be mapped to multiple zones
+    # Create the mapping
+    mapping = SensorZoneMap(sensor_id=sensor_id, zone_id=zone_id, kind=sensor_type)
 
-    setattr(zone, f"{sensor_type.value}_sensor_id", sensor_id)
-
-    session.add(zone)
+    session.add(mapping)
     session.commit()
-    session.refresh(zone)
-    return zone
+    session.refresh(mapping)
+    return mapping
 
 
 def unmap_sensor_from_zone(
-    session: Session, zone_id: uuid.UUID, sensor_type: SensorType
-) -> Zone:
-    """Remove sensor mapping from a zone for a specific type."""
+    session: Session, zone_id: uuid.UUID, sensor_type: SensorKind
+) -> bool:
+    """Remove sensor mapping from a zone for a specific type using SensorZoneMap."""
     zone = session.get(Zone, zone_id)
     if not zone:
         raise ValueError("Zone not found")
 
-    # Simply remove the sensor mapping from this zone
-    setattr(zone, f"{sensor_type.value}_sensor_id", None)
+    # Find the mapping to remove
+    mapping = session.exec(
+        select(SensorZoneMap).where(
+            and_(SensorZoneMap.zone_id == zone_id, SensorZoneMap.kind == sensor_type)
+        )
+    ).first()
 
-    session.add(zone)
+    if not mapping:
+        return False  # No mapping found to remove
+
+    session.delete(mapping)
     session.commit()
-    session.refresh(zone)
-    return zone
+    return True
 
 
 def list_unmapped_sensors_by_greenhouse(
     session: Session, greenhouse_id: uuid.UUID
 ) -> list[Sensor]:
-    """List all sensors for a specific greenhouse."""
-    # Since sensors can now be mapped to multiple zones, this returns all sensors
+    """List sensors that are not mapped to any zones in a specific greenhouse."""
     return session.exec(
         select(Sensor)
-        .join(Controller)
+        .join(Controller, Controller.id == Sensor.controller_id)
+        .outerjoin(SensorZoneMap, SensorZoneMap.sensor_id == Sensor.id)
         .where(
-            Controller.greenhouse_id == greenhouse_id,
+            Controller.greenhouse_id == greenhouse_id, SensorZoneMap.sensor_id.is_(None)
         )
     ).all()

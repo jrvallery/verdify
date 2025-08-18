@@ -2,6 +2,8 @@
 
 These instructions describe how to contribute code, tests, and docs for Verdify's FastAPI backend. Apply to **all** backend work.
 
+DO NOT USE models.py.  All models are located in the `app/models/` directory and are organized into separate files.
+
 ## Tech & Repository Reality
 
 - Python 3.12, FastAPI, SQLModel (with Pydantic), Alembic, PostgreSQL.
@@ -9,7 +11,7 @@ These instructions describe how to contribute code, tests, and docs for Verdify'
 - Tree of interest:
   - API routers: `app/api/routes/*.py`
   - Core infra: `app/core/{config,db,security}.py`
-  - Domain models: `app/models.py` (SQLModel + DTOs)
+  - Domain models: `app/models/*.py` (SQLModel + DTOs)
   - CRUD layer: `app/crud/*.py`
   - Tests: `app/tests/**`
   - Alembic: `app/alembic/**`

@@ -23,27 +23,29 @@ from __future__ import annotations
 # Import pagination utilities
 from app.utils_paging import Paginated
 
-from .actuators import *  # Actuators domain - references controllers
-from .auth import *  # Auth models - standalone token/messaging
-from .config import *  # Config and Plan models
-from .controllers import *  # Controllers domain - may reference greenhouses
-from .crops import *  # Crops domain
+from .actuators import *  # noqa: F403, F401
+from .auth import *  # noqa: F403, F401
+from .config import *  # noqa: F403, F401
+from .controllers import *  # noqa: F403, F401
+from .crops import *  # noqa: F403, F401
 
 # Import enums first (no dependencies)
+from .enums import *  # noqa: F403, F401
+
 # Step 2: Primary domains with potential cross-references
-from .greenhouses import *  # Greenhouses domain
+from .greenhouses import *  # noqa: F403, F401
 
 # Step 4: Association/link models imported LAST (after all target classes exist)
-from .links import *  # Cross-domain associations imported after all targets available
-from .sensors import *  # Sensors domain - references controllers
-from .state_machine import *  # State machine models - references greenhouses
+from .links import *  # noqa: F403, F401
+from .sensors import *  # noqa: F403, F401
+from .state_machine import *  # noqa: F403, F401
 
 # Step 3: Secondary domains that reference primary domains
-from .telemetry import *  # Telemetry domain - references sensors and controllers
+from .telemetry import *  # noqa: F403, F401
 
 # Import domain models in dependency order
 # Step 1: Independent domains (no cross-references)
-from .users import *  # Users domain - referenced by many others
+from .users import *  # noqa: F403, F401
 
 
 def bootstrap_mappers() -> None:
@@ -59,24 +61,26 @@ def bootstrap_mappers() -> None:
 # T24.4 - Rebuild Pydantic models after imports (forward annotation safety net)
 try:
     for cls in [
-        User,
-        Greenhouse,
-        Zone,
-        Controller,
-        Sensor,
-        Actuator,
-        ControllerButton,
-        FanGroup,
-        Equipment,
-        SensorZoneMap,
-        FanGroupMember,  # from links.py
-        Crop,
-        ZoneCrop,
-        ConfigSnapshot,
-        Plan,
-        IdempotencyKey,
-        StateMachineRow,
-        StateMachineFallback,  # from state_machine.py
+        User,  # noqa: F405
+        Greenhouse,  # noqa: F405
+        GreenhouseMember,  # noqa: F405
+        GreenhouseInvite,  # noqa: F405
+        Zone,  # noqa: F405
+        Controller,  # noqa: F405
+        Sensor,  # noqa: F405
+        Actuator,  # noqa: F405
+        ControllerButton,  # noqa: F405
+        FanGroup,  # noqa: F405
+        Equipment,  # noqa: F405
+        SensorZoneMap,  # noqa: F405
+        FanGroupMember,  # noqa: F405  # from links.py
+        Crop,  # noqa: F405
+        ZoneCrop,  # noqa: F405
+        ConfigSnapshot,  # noqa: F405
+        Plan,  # noqa: F405
+        IdempotencyKey,  # noqa: F405
+        StateMachineRow,  # noqa: F405
+        StateMachineFallback,  # noqa: F405  # from state_machine.py
     ]:
         cls.model_rebuild()
 except Exception:
@@ -91,24 +95,26 @@ except Exception:
 # sometimes don't work with star imports
 try:
     # Core entities
-    UsersPaginated = Paginated[UserPublic]
-    GreenhousesPaginated = Paginated[GreenhousePublicAPI]
-    ZonesPaginated = Paginated[ZonePublic]
-    ControllersPaginated = Paginated[ControllerPublic]
+    UsersPaginated = Paginated[UserPublic]  # noqa: F405
+    GreenhousesPaginated = Paginated[GreenhousePublicAPI]  # noqa: F405
+    GreenhouseMembersPaginated = Paginated[GreenhouseMemberPublic]  # noqa: F405
+    GreenhouseInvitesPaginated = Paginated[GreenhouseInvitePublic]  # noqa: F405
+    ZonesPaginated = Paginated[ZonePublic]  # noqa: F405
+    ControllersPaginated = Paginated[ControllerPublic]  # noqa: F405
     # Sensors & Actuators
-    SensorsPaginated = Paginated[SensorPublic]
-    ActuatorsPaginated = Paginated[ActuatorPublic]
-    ControllerButtonsPaginated = Paginated[ControllerButtonPublic]
-    FanGroupsPaginated = Paginated[FanGroupPublic]
+    SensorsPaginated = Paginated[SensorPublic]  # noqa: F405
+    ActuatorsPaginated = Paginated[ActuatorPublic]  # noqa: F405
+    ControllerButtonsPaginated = Paginated[ControllerButtonPublic]  # noqa: F405
+    FanGroupsPaginated = Paginated[FanGroupPublic]  # noqa: F405
     # Crops
-    CropsPaginated = Paginated[CropPublic]
-    ZoneCropsPaginated = Paginated[ZoneCropPublic]
-    ZoneCropObservationsPaginated = Paginated[ZoneCropObservationPublic]
+    CropsPaginated = Paginated[CropPublic]  # noqa: F405
+    ZoneCropsPaginated = Paginated[ZoneCropPublic]  # noqa: F405
+    ZoneCropObservationsPaginated = Paginated[ZoneCropObservationPublic]  # noqa: F405
     # Config & Plans
-    ConfigSnapshotsPaginated = Paginated[ConfigSnapshotPublic]
-    PlansPaginated = Paginated[PlanPublic]
+    ConfigSnapshotsPaginated = Paginated[ConfigSnapshotPublic]  # noqa: F405
+    PlansPaginated = Paginated[PlanPublic]  # noqa: F405
     # State Machine
-    StateMachineRowsPaginated = Paginated[StateMachineRowPublic]
+    StateMachineRowsPaginated = Paginated[StateMachineRowPublic]  # noqa: F405
 except NameError:
     # Some types might not be available in certain contexts
     pass

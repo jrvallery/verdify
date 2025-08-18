@@ -1,0 +1,281 @@
+UPLOAD_DIR set to: static/uploads/observations
+{"timestamp": "2025-08-18 10:24:09,454", "level": "INFO", "message": "FastAPI application starting", "module": "main", "function": "<module>", "line": 120}
+{"timestamp": "2025-08-18 10:24:09,454", "level": "INFO", "message": "CORS middleware enabled", "module": "main", "function": "<module>", "line": 149}
+/Users/jason/verdify/backend/app/tests/integration/test_complete_end_to_end_v2.py:1260: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "ts_utc": datetime.utcnow().replace(tzinfo=None).isoformat(),  # naive!
+🚀 EXECUTING COMPLETE END-TO-END API TEST SUITE
+This will test EVERY endpoint, EVERY CRUD operation, EVERY feature...
+
+🚀 STARTING COMPLETE END-TO-END API TEST SUITE
+======================================================================
+
+🔐 PHASE 1: USER REGISTRATION & AUTHENTICATION
+----------------------------------------------------------------------
+✅ User Registration: User created: fulltest-8e51627a@example.com
+✅ User Login: Token received, expires in: 691200s
+✅ Token Validation: Token valid for user: fulltest-8e51627a@example.com
+
+🏡 PHASE 2A: GREENHOUSE CRUD OPERATIONS
+----------------------------------------------------------------------
+✅ Create Greenhouse: Created: Full Test Greenhouse fbd346af (ID: 7af13cf7-9788-46f9-a3b4-cb2d19f3ead1)
+✅ List Greenhouses: Found=True, EnvelopeOK=True, Total=1
+✅ Get Greenhouse: Retrieved: Full Test Greenhouse fbd346af (no internal leak: True)
+✅ Update Greenhouse: Updated max_temp_c to 32.0
+
+🌱 PHASE 2B: ZONE CRUD OPERATIONS
+----------------------------------------------------------------------
+✅ Create Zone: Created zone 1 in greenhouse 7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+✅ List Zones: Found 1 zones, our zone: found
+✅ Get Zone: Retrieved zone 1 (no is_active in DTO: True)
+✅ Update Zone: Updated title: North A Updated
+
+🎮 PHASE 2C: CONTROLLER CRUD OPERATIONS
+----------------------------------------------------------------------
+✅ Create Controller: Created: Full Test Controller 4f5a (Device: verdify-76fb0a)
+Setting up device auth for controller verdify-76fb0a (7d73c597-910a-49fd-8783-213878ac543a)
+Device auth setup successful
+✅ List Controllers: Controllers found=True, all claimed=True
+✅ Get Controller: Retrieved: Full Test Controller 4f5a
+✅ Update Controller: Updated fw_version to 1.6.0
+
+📊 PHASE 2D: SENSOR CRUD OPERATIONS
+----------------------------------------------------------------------
+✅ Create Sensor: Created: Full Test Temperature Sensor a30367a7 (Kind: temperature)
+✅ List Sensors: Found 1 sensors, ours: found
+✅ Get Sensor: Retrieved: Full Test Temperature Sensor a30367a7
+✅ Update Sensor: Updated modbus_reg to 30002
+
+⚙️ PHASE 2E: ACTUATOR CRUD OPERATIONS
+----------------------------------------------------------------------
+✅ Create Actuator: Created: Full Test Exhaust Fan a26ab632 (Kind: fan, Relay: 1)
+✅ List Actuators: Found 1 actuators, ours: found
+✅ Get Actuator: Retrieved: Full Test Exhaust Fan a26ab632
+✅ Update Actuator: Updated name
+
+🥬 PHASE 2F: CROPS / ZONE-CROPS / OBSERVATIONS
+----------------------------------------------------------------------
+✅ Create Crop: Created crop Tomato 9d25b1 (public timestamps hidden=True)
+✅ Create ZoneCrop: Created zone crop for zone b3296caa-dc02-4c46-a939-f473a1c2abb3 with crop f206e4cb-5afc-4aad-9e55-a1f7a235175c
+✅ Create Observation: Enum present=True, timestamps hidden=True
+✅ Update ZoneCrop: Ended cycle with final yield
+
+🌀 PHASE 2G: FAN GROUPS & CONTROLLER BUTTONS
+----------------------------------------------------------------------
+✅ Create FanGroup: Created fan group FG-4ebf
+✅ Create ControllerButton: Created COOL button
+✅ Button Kind Uniqueness: Rejected duplicate kind with 400
+
+📋 PHASE 3A: PLANS OPERATIONS
+----------------------------------------------------------------------
+✅ Create Plan: Correctly rejected non-superuser (403)
+
+⚙️ PHASE 3B: CONFIGURATION FETCH (BY DEVICE NAME)
+----------------------------------------------------------------------
+❌ Get Config by Device: Status: 500, Response: {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.259697Z","request_id":"8cda131b-bb67-4804-afd2-c60643854c56"}
+
+📡 PHASE 3C: TELEMETRY V2 OPERATIONS
+----------------------------------------------------------------------
+❌ Telemetry Sensors Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.269960Z","request_id":"c3ac5622-b05a-4caf-a1f9-e254cfae326f"}
+❌ Telemetry Status Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.280146Z","request_id":"bfbf8c5d-9470-4541-93ed-c1dd830535ab"}
+❌ Telemetry Inputs Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.290807Z","request_id":"3ea16cc2-3efd-4466-bbc3-2b9cdd504414"}
+❌ Telemetry Inputs Invalid Action: Expected 422 on invalid action, got 500
+
+🔁 PHASE 3D: STATE MACHINE
+----------------------------------------------------------------------
+❌ Create SM Row: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.317370Z","request_id":"a6f4764e-3c30-4c4c-a562-b66a96b905f7"}
+❌ Create SM Fallback: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.341030Z","request_id":"66b22041-4dcc-409e-9e7d-d4200c74b083"}
+
+📟 PHASE 3E: CONTROLLER HELLO VALIDATION
+----------------------------------------------------------------------
+❌ Hello Naive TS: Expected 422, got 200 body={"status":"pending","controller_uuid":null,"greenhouse_id":null,"retry_after_s":30,"message":"Waiting for user claim"}
+✅ Hello OK: Status=pending
+
+🚨 PHASE 4: EDGE CASES & ERROR SCENARIOS
+----------------------------------------------------------------------
+✅ Invalid Token: Correctly rejected with 403
+✅ Non-existent Resource: Correctly returned 404 for non-existent resource
+✅ Invalid Data Validation: Correctly rejected invalid data with 422
+
+🔒 PHASE 4B: UNIQUENESS & INVARIANTS
+----------------------------------------------------------------------
+✅ Unique Zone Number: Rejected duplicate zone_number with 400
+✅ Unique Actuator Relay: Rejected duplicate relay channel with 400
+✅ Unique Sensor Modbus: Rejected duplicate modbus pair with 400
+
+📄 PHASE 5: PAGINATION & NORMALIZATION
+----------------------------------------------------------------------
+✅ Pagination Structure: Pagination keys present: True, Total: 1
+✅ Invalid Pagination Normalized: Normalized to page=1, page_size=50
+
+======================================================================
+🎯 COMPLETE END-TO-END TEST RESULTS
+======================================================================
+📊 Total Tests Executed: 48
+✅ Tests Passed: 40
+❌ Tests Failed: 8
+📈 Success Rate: 83.3%
+🔗 Unique Endpoints Tested: 46
+
+🎯 API ENDPOINTS COVERED (46):
+----------------------------------------
+  ✅ GET /api/v1/actuators/
+  ✅ GET /api/v1/actuators/f94ca1ad-897b-4b92-820a-a04495266d3c
+  ✅ GET /api/v1/controllers/
+  ✅ GET /api/v1/controllers/7d73c597-910a-49fd-8783-213878ac543a
+  ✅ GET /api/v1/controllers/by-name/verdify-76fb0a/config
+  ✅ GET /api/v1/greenhouses/
+  ✅ GET /api/v1/greenhouses/ (invalid token)
+  ✅ GET /api/v1/greenhouses/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ GET /api/v1/greenhouses/?page=0&page_size=-1
+  ✅ GET /api/v1/greenhouses/?page=1&page_size=10
+  ✅ GET /api/v1/greenhouses/d40f8a5b-86d4-4f19-b434-be29d9977642
+  ✅ GET /api/v1/sensors/
+  ✅ GET /api/v1/sensors/140f36c3-1826-46e3-b3cf-a311eebab837
+  ✅ GET /api/v1/zones/
+  ✅ GET /api/v1/zones/b3296caa-dc02-4c46-a939-f473a1c2abb3
+  ✅ PATCH /api/v1/actuators/f94ca1ad-897b-4b92-820a-a04495266d3c
+  ✅ PATCH /api/v1/controllers/7d73c597-910a-49fd-8783-213878ac543a
+  ✅ PATCH /api/v1/greenhouses/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ PATCH /api/v1/sensors/140f36c3-1826-46e3-b3cf-a311eebab837
+  ✅ PATCH /api/v1/zones/b3296caa-dc02-4c46-a939-f473a1c2abb3
+  ✅ POST /api/v1/actuators/
+  ✅ POST /api/v1/actuators/ (dup relay_channel)
+  ✅ POST /api/v1/auth/login
+  ✅ POST /api/v1/auth/register
+  ✅ POST /api/v1/auth/test-token
+  ✅ POST /api/v1/buttons/
+  ✅ POST /api/v1/buttons/ (duplicate kind)
+  ✅ POST /api/v1/controllers/
+  ✅ POST /api/v1/crops/
+  ✅ POST /api/v1/fan-groups/
+  ✅ POST /api/v1/greenhouses/
+  ✅ POST /api/v1/greenhouses/ (invalid data)
+  ✅ POST /api/v1/hello
+  ✅ POST /api/v1/observations
+  ✅ POST /api/v1/plans/
+  ✅ POST /api/v1/sensors/
+  ✅ POST /api/v1/sensors/ (dup modbus pair)
+  ✅ POST /api/v1/state-machine-rows/
+  ✅ POST /api/v1/telemetry/inputs
+  ✅ POST /api/v1/telemetry/sensors
+  ✅ POST /api/v1/telemetry/status
+  ✅ POST /api/v1/zone-crops/
+  ✅ POST /api/v1/zones/
+  ✅ POST /api/v1/zones/ (dup zone_number)
+  ✅ PUT /api/v1/state-machine-fallback/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ PUT /api/v1/zone-crops/c7c02b4c-b451-4a61-a967-4ef57766f3a9
+
+❌ ERRORS ENCOUNTERED (8):
+----------------------------------------
+  ❌ Get Config by Device: Status: 500, Response: {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.259697Z","request_id":"8cda131b-bb67-4804-afd2-c60643854c56"}
+  ❌ Telemetry Sensors Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.269960Z","request_id":"c3ac5622-b05a-4caf-a1f9-e254cfae326f"}
+  ❌ Telemetry Status Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.280146Z","request_id":"bfbf8c5d-9470-4541-93ed-c1dd830535ab"}
+  ❌ Telemetry Inputs Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.290807Z","request_id":"3ea16cc2-3efd-4466-bbc3-2b9cdd504414"}
+  ❌ Telemetry Inputs Invalid Action: Expected 422 on invalid action, got 500
+  ❌ Create SM Row: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.317370Z","request_id":"a6f4764e-3c30-4c4c-a562-b66a96b905f7"}
+  ❌ Create SM Fallback: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.341030Z","request_id":"66b22041-4dcc-409e-9e7d-d4200c74b083"}
+  ❌ Hello Naive TS: Expected 422, got 200 body={"status":"pending","controller_uuid":null,"greenhouse_id":null,"retry_after_s":30,"message":"Waiting for user claim"}
+
+🚀 TEST COMPLETION STATUS:
+----------------------------------------
+  ⚠️  8 tests failed - review errors above
+======================================================================
+
+🗑️ CLEANUP OPERATIONS
+----------------------------------------------------------------------
+✅ Delete ControllerButton: Deleted
+✅ Delete FanGroup: Deleted
+✅ Delete Observation: Deleted
+✅ Delete ZoneCrop: Deleted
+✅ Delete Crop: Deleted
+✅ Delete Actuator: Deleted
+✅ Delete Sensor: Deleted
+✅ Delete Controller: Deleted
+✅ Delete Zone: Deleted
+✅ Delete Greenhouse: Deleted
+
+======================================================================
+🎯 COMPLETE END-TO-END TEST RESULTS
+======================================================================
+📊 Total Tests Executed: 58
+✅ Tests Passed: 50
+❌ Tests Failed: 8
+📈 Success Rate: 86.2%
+🔗 Unique Endpoints Tested: 56
+
+🎯 API ENDPOINTS COVERED (56):
+----------------------------------------
+  ✅ DELETE /api/v1/actuators/f94ca1ad-897b-4b92-820a-a04495266d3c
+  ✅ DELETE /api/v1/buttons/c6aaf823-9018-49c5-a756-8888af4ed8f3
+  ✅ DELETE /api/v1/controllers/7d73c597-910a-49fd-8783-213878ac543a
+  ✅ DELETE /api/v1/crops/f206e4cb-5afc-4aad-9e55-a1f7a235175c
+  ✅ DELETE /api/v1/fan-groups/d92a1504-151c-4877-9bd8-4b79b6a987ec
+  ✅ DELETE /api/v1/greenhouses/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ DELETE /api/v1/observations/e7beac66-65ca-408f-bcc5-2edd02f6deab
+  ✅ DELETE /api/v1/sensors/140f36c3-1826-46e3-b3cf-a311eebab837
+  ✅ DELETE /api/v1/zone-crops/c7c02b4c-b451-4a61-a967-4ef57766f3a9
+  ✅ DELETE /api/v1/zones/b3296caa-dc02-4c46-a939-f473a1c2abb3
+  ✅ GET /api/v1/actuators/
+  ✅ GET /api/v1/actuators/f94ca1ad-897b-4b92-820a-a04495266d3c
+  ✅ GET /api/v1/controllers/
+  ✅ GET /api/v1/controllers/7d73c597-910a-49fd-8783-213878ac543a
+  ✅ GET /api/v1/controllers/by-name/verdify-76fb0a/config
+  ✅ GET /api/v1/greenhouses/
+  ✅ GET /api/v1/greenhouses/ (invalid token)
+  ✅ GET /api/v1/greenhouses/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ GET /api/v1/greenhouses/?page=0&page_size=-1
+  ✅ GET /api/v1/greenhouses/?page=1&page_size=10
+  ✅ GET /api/v1/greenhouses/d40f8a5b-86d4-4f19-b434-be29d9977642
+  ✅ GET /api/v1/sensors/
+  ✅ GET /api/v1/sensors/140f36c3-1826-46e3-b3cf-a311eebab837
+  ✅ GET /api/v1/zones/
+  ✅ GET /api/v1/zones/b3296caa-dc02-4c46-a939-f473a1c2abb3
+  ✅ PATCH /api/v1/actuators/f94ca1ad-897b-4b92-820a-a04495266d3c
+  ✅ PATCH /api/v1/controllers/7d73c597-910a-49fd-8783-213878ac543a
+  ✅ PATCH /api/v1/greenhouses/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ PATCH /api/v1/sensors/140f36c3-1826-46e3-b3cf-a311eebab837
+  ✅ PATCH /api/v1/zones/b3296caa-dc02-4c46-a939-f473a1c2abb3
+  ✅ POST /api/v1/actuators/
+  ✅ POST /api/v1/actuators/ (dup relay_channel)
+  ✅ POST /api/v1/auth/login
+  ✅ POST /api/v1/auth/register
+  ✅ POST /api/v1/auth/test-token
+  ✅ POST /api/v1/buttons/
+  ✅ POST /api/v1/buttons/ (duplicate kind)
+  ✅ POST /api/v1/controllers/
+  ✅ POST /api/v1/crops/
+  ✅ POST /api/v1/fan-groups/
+  ✅ POST /api/v1/greenhouses/
+  ✅ POST /api/v1/greenhouses/ (invalid data)
+  ✅ POST /api/v1/hello
+  ✅ POST /api/v1/observations
+  ✅ POST /api/v1/plans/
+  ✅ POST /api/v1/sensors/
+  ✅ POST /api/v1/sensors/ (dup modbus pair)
+  ✅ POST /api/v1/state-machine-rows/
+  ✅ POST /api/v1/telemetry/inputs
+  ✅ POST /api/v1/telemetry/sensors
+  ✅ POST /api/v1/telemetry/status
+  ✅ POST /api/v1/zone-crops/
+  ✅ POST /api/v1/zones/
+  ✅ POST /api/v1/zones/ (dup zone_number)
+  ✅ PUT /api/v1/state-machine-fallback/7af13cf7-9788-46f9-a3b4-cb2d19f3ead1
+  ✅ PUT /api/v1/zone-crops/c7c02b4c-b451-4a61-a967-4ef57766f3a9
+
+❌ ERRORS ENCOUNTERED (8):
+----------------------------------------
+  ❌ Get Config by Device: Status: 500, Response: {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.259697Z","request_id":"8cda131b-bb67-4804-afd2-c60643854c56"}
+  ❌ Telemetry Sensors Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.269960Z","request_id":"c3ac5622-b05a-4caf-a1f9-e254cfae326f"}
+  ❌ Telemetry Status Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.280146Z","request_id":"bfbf8c5d-9470-4541-93ed-c1dd830535ab"}
+  ❌ Telemetry Inputs Ingest: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.290807Z","request_id":"3ea16cc2-3efd-4466-bbc3-2b9cdd504414"}
+  ❌ Telemetry Inputs Invalid Action: Expected 422 on invalid action, got 500
+  ❌ Create SM Row: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.317370Z","request_id":"a6f4764e-3c30-4c4c-a562-b66a96b905f7"}
+  ❌ Create SM Fallback: Status: 500, {"error_code":"E500_INTERNAL_SERVER_ERROR","message":"Internal server error","details":"An unexpected error occurred. Please try again later.","timestamp":"2025-08-18T16:24:10.341030Z","request_id":"66b22041-4dcc-409e-9e7d-d4200c74b083"}
+  ❌ Hello Naive TS: Expected 422, got 200 body={"status":"pending","controller_uuid":null,"greenhouse_id":null,"retry_after_s":30,"message":"Waiting for user claim"}
+
+🚀 TEST COMPLETION STATUS:
+----------------------------------------
+  ⚠️  8 tests failed - review errors above
+======================================================================
+
+❌ FAILURE: 8 tests failed

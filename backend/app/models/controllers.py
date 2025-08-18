@@ -14,6 +14,8 @@ from sqlmodel import Field, SQLModel
 
 from app.utils_paging import Paginated
 
+from .enums import ControllerStatus
+
 # TYPE_CHECKING imports only - no runtime circular imports
 if TYPE_CHECKING:
     pass
@@ -29,6 +31,9 @@ class ControllerBase(SQLModel):
     model: str | None = Field(default=None, description="Controller model/hardware")
     fw_version: str | None = None
     hw_version: str | None = None
+    hardware_profile: str | None = Field(
+        default=None, description="Hardware profile identifier"
+    )
     last_seen: datetime | None = Field(
         default=None, description="Last communication timestamp"
     )
@@ -63,6 +68,28 @@ class Controller(ControllerBase, table=True):
         )
     )
 
+    # Onboarding and device authentication fields
+    first_seen: datetime | None = Field(
+        default=None, description="First announcement timestamp"
+    )
+    claim_code: str | None = Field(default=None, description="6-digit claim code")
+    claim_code_expires_at: datetime | None = Field(
+        default=None, description="Claim code expiry"
+    )
+    device_token_hash: str | None = Field(
+        default=None, description="Hashed device token"
+    )
+    token_expires_at: datetime | None = Field(
+        default=None, description="Device token expiry"
+    )
+    token_exchange_completed: bool = Field(
+        default=False, description="Token exchange completed"
+    )
+    claimed_at: datetime | None = Field(default=None, description="Claim timestamp")
+    claimed_by: uuid.UUID | None = Field(
+        default=None, description="User who claimed this controller"
+    )
+
     # 🚫 No Relationship() here - use explicit foreign keys and manual queries
 
 
@@ -77,22 +104,12 @@ class ControllerPublic(ControllerBase):
 
 
 class ControllerUpdate(SQLModel):
-    device_name: str | None = Field(default=None)
     label: str | None = None
     model: str | None = None
     is_climate_controller: bool | None = None
     fw_version: str | None = None
     hw_version: str | None = None
     last_seen: datetime | None = None
-
-    @field_validator("device_name")
-    @classmethod
-    def validate_device_name(cls, v: str | None) -> str | None:
-        if v is not None and not re.match(r"^verdify-[0-9a-f]{6}$", v):
-            raise ValueError(
-                "device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit"
-            )
-        return v
 
 
 # -------------------------------------------------------
@@ -121,9 +138,16 @@ class HelloRequest(SQLModel):
             raise ValueError("claim_code must be exactly 6 digits")
         return v
 
+    @field_validator("ts_utc")
+    @classmethod
+    def validate_ts_utc(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("ts_utc must be timezone-aware (include timezone info)")
+        return v
+
 
 class HelloResponse(SQLModel):
-    status: str = Field(..., description="pending or claimed")
+    status: ControllerStatus = Field(..., description="Controller hello status")
     controller_uuid: uuid.UUID | None = None
     greenhouse_id: uuid.UUID | None = None
     retry_after_s: int | None = Field(default=None, ge=1)
@@ -158,58 +182,7 @@ class ControllerClaimResponse(SQLModel):
     expires_at: datetime
 
 
-class TokenExchangeRequest(SQLModel):
-    device_name: str = Field(...)
-    claim_code: str = Field(...)
-
-    @field_validator("device_name")
-    @classmethod
-    def validate_device_name(cls, v: str) -> str:
-        if not re.match(r"^verdify-[0-9a-f]{6}$", v):
-            raise ValueError(
-                "device_name must match pattern 'verdify-XXXXXX' where X is a lowercase hex digit"
-            )
-        return v
-
-    @field_validator("claim_code")
-    @classmethod
-    def validate_claim_code(cls, v: str) -> str:
-        if not re.match(r"^\d{6}$", v):
-            raise ValueError("claim_code must be exactly 6 digits")
-        return v
-
-
-class TokenExchangeResponse(SQLModel):
-    device_token: str
-    config_etag: str = Field(...)
-    plan_etag: str = Field(...)
-    expires_at: datetime
-
-    @field_validator("config_etag")
-    @classmethod
-    def validate_config_etag(cls, v: str) -> str:
-        if not re.match(r"^config:v[0-9]+:[0-9a-f]{8}$", v):
-            raise ValueError("config_etag must match pattern 'config:vN:XXXXXXXX'")
-        return v
-
-    @field_validator("plan_etag")
-    @classmethod
-    def validate_plan_etag(cls, v: str) -> str:
-        if not re.match(r"^plan:v[0-9]+:[0-9a-f]{8}$", v):
-            raise ValueError("plan_etag must match pattern 'plan:vN:XXXXXXXX'")
-        return v
-
-
-class TokenRotateResponse(SQLModel):
-    device_token: str
-    expires_at: datetime
-
-
-# Combined model for simpler imports
-class TokenExchange(SQLModel):
-    device_name: str
-    claim_code: str
-    device_token: str | None = None
+# TokenExchange models moved to auth.py to avoid duplication
 
 
 # ===============================================

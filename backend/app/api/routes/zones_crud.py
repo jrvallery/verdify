@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, SessionDep
 from app.crud.zone import (
@@ -27,6 +28,7 @@ from app.crud.zone import (
     validate_greenhouse_ownership,
 )
 from app.models import (
+    Greenhouse,
     Zone,
     ZoneCreate,
     ZonePublic,
@@ -147,7 +149,19 @@ def create_zone(
                 detail="Not enough permissions to create zone in this greenhouse",
             )
 
-    return crud_create_zone(session, zone_in)
+    try:
+        return crud_create_zone(session, zone_in)
+    except IntegrityError as e:
+        session.rollback()
+        if "uq_zone_number_per_greenhouse" in str(e.orig):
+            raise HTTPException(
+                status_code=400,
+                detail="Zone with this zone number already exists in this greenhouse",
+            )
+        # Handle other potential integrity errors
+        raise HTTPException(
+            status_code=400, detail="Failed to create zone due to constraint violation"
+        )
 
 
 @router.get("/{zone_id}", response_model=ZonePublic)
@@ -166,7 +180,9 @@ def get_zone(
 
     # Validate ownership through greenhouse
     if not current_user.is_superuser:
-        if not zone.greenhouse or zone.greenhouse.user_id != current_user.id:
+        # Get greenhouse manually since we use foreign-key-only mapping
+        greenhouse = session.get(Greenhouse, zone.greenhouse_id)
+        if not greenhouse or greenhouse.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
             )
@@ -191,7 +207,9 @@ def update_zone(
 
     # Validate ownership through greenhouse
     if not current_user.is_superuser:
-        if not zone.greenhouse or zone.greenhouse.user_id != current_user.id:
+        # Get greenhouse manually since we use foreign-key-only mapping
+        greenhouse = session.get(Greenhouse, zone.greenhouse_id)
+        if not greenhouse or greenhouse.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
             )
@@ -215,7 +233,9 @@ def delete_zone(
 
     # Validate ownership through greenhouse
     if not current_user.is_superuser:
-        if not zone.greenhouse or zone.greenhouse.user_id != current_user.id:
+        # Get greenhouse manually since we use foreign-key-only mapping
+        greenhouse = session.get(Greenhouse, zone.greenhouse_id)
+        if not greenhouse or greenhouse.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
             )

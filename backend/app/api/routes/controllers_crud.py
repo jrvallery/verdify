@@ -72,7 +72,7 @@ def list_controllers(
     if not current_user.is_superuser:
         # Join with greenhouse to filter by ownership
         base_query = base_query.join(Greenhouse).where(
-            Greenhouse.owner_id == current_user.id
+            Greenhouse.user_id == current_user.id
         )
 
     # Apply greenhouse filter if provided
@@ -81,7 +81,7 @@ def list_controllers(
         greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
         if not greenhouse:
             raise HTTPException(status_code=404, detail="Greenhouse not found")
-        if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+        if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
             raise HTTPException(status_code=403, detail="Not enough permissions")
 
         base_query = base_query.where(Controller.greenhouse_id == greenhouse_id)
@@ -130,7 +130,7 @@ def create_controller(
     greenhouse = crud_get_greenhouse(session=session, id=controller_in.greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Check device_name uniqueness
@@ -149,7 +149,7 @@ def create_controller(
             select(Controller).where(
                 and_(
                     Controller.greenhouse_id == controller_in.greenhouse_id,
-                    Controller.is_climate_controller == True,
+                    Controller.is_climate_controller is True,
                 )
             )
         ).first()
@@ -182,7 +182,7 @@ def get_controller(
     greenhouse = crud_get_greenhouse(session=session, id=controller.greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Controller not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     return controller
@@ -212,7 +212,7 @@ def update_controller(
     greenhouse = crud_get_greenhouse(session=session, id=controller.greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Controller not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # If changing is_climate_controller to True, check uniqueness
@@ -224,7 +224,7 @@ def update_controller(
             select(Controller).where(
                 and_(
                     Controller.greenhouse_id == controller.greenhouse_id,
-                    Controller.is_climate_controller == True,
+                    Controller.is_climate_controller is True,
                     Controller.id != controller_id,
                 )
             )
@@ -259,7 +259,7 @@ def delete_controller(
     greenhouse = crud_get_greenhouse(session=session, id=controller.greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Controller not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     crud_delete_controller(session, controller)

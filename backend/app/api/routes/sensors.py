@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, SessionDep
 from app.crud.controller import get_controller as crud_get_controller
@@ -71,12 +72,31 @@ def create_sensor(
     controller = crud_get_controller(session, s_in.controller_id)
     if not controller:
         raise HTTPException(status_code=404, detail="Controller not found")
-    if not (
-        current_user.is_superuser or controller.greenhouse.user_id == current_user.id
-    ):
+
+    # Get greenhouse manually (foreign-key-only mapping)
+    from app.models import Greenhouse
+
+    greenhouse = session.get(Greenhouse, controller.greenhouse_id)
+    if not greenhouse:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    return crud_create_sensor(session, s_in)
+    try:
+        return crud_create_sensor(session, s_in)
+    except IntegrityError as e:
+        session.rollback()
+        if "uq_sensor_modbus_per_controller" in str(e.orig):
+            raise HTTPException(
+                status_code=400,
+                detail="Sensor with this modbus slave ID and register already exists for this controller",
+            )
+        # Handle other potential integrity errors
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to create sensor due to constraint violation",
+        )
 
 
 @router.get("/{sensor_id}", response_model=SensorPublic)
@@ -116,7 +136,7 @@ def update_sensor(
     return crud_update_sensor(session, sensor, s_in)
 
 
-@router.delete("/{sensor_id}")
+@router.delete("/{sensor_id}", status_code=204)
 def delete_sensor(
     sensor_id: uuid.UUID,
     session: SessionDep,
@@ -132,4 +152,4 @@ def delete_sensor(
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     crud_delete_sensor(session, sensor)
-    return {"ok": True}
+    return Response(status_code=204)

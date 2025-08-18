@@ -68,9 +68,11 @@ def list_controllers(
         conditions.append(Controller.is_climate_controller == is_climate_controller)
 
     if owner_id:
-        # Join with greenhouse to filter by owner
-        query = query.join(Controller.greenhouse)
-        conditions.append(Controller.greenhouse.has(owner_id=owner_id))
+        # Join with greenhouse to filter by owner using explicit FK join
+        from app.models import Greenhouse
+
+        query = query.join(Greenhouse, Controller.greenhouse_id == Greenhouse.id)
+        conditions.append(Greenhouse.user_id == owner_id)
 
     if conditions:
         query = query.where(and_(*conditions))
@@ -126,7 +128,7 @@ def validate_climate_controller_uniqueness(
     query = select(Controller).where(
         and_(
             Controller.greenhouse_id == greenhouse_id,
-            Controller.is_climate_controller == True,
+            Controller.is_climate_controller is True,
         )
     )
 

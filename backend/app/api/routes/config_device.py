@@ -8,7 +8,8 @@ or using the "me" alias.
 
 import gzip
 import json
-from typing import Annotated
+import uuid
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Response
 from sqlmodel import Session, select
@@ -32,12 +33,26 @@ def get_latest_config_snapshot(
     return session.exec(statement).first()
 
 
+def convert_uuids_to_strings(obj: Any) -> Any:
+    """Recursively convert UUID objects to strings for JSON serialization."""
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_uuids_to_strings(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_uuids_to_strings(item) for item in obj]
+    else:
+        return obj
+
+
 def create_config_response(
     snapshot: ConfigSnapshot,
     accept_encoding: str | None = None,
 ) -> tuple[dict, dict[str, str]]:
     """Create config response with proper headers and optional gzip compression."""
-    payload = snapshot.payload
+    # Convert all UUIDs to strings for JSON serialization
+    payload = convert_uuids_to_strings(snapshot.payload)
+
     headers = {
         "ETag": f'"{snapshot.etag}"',
         "Last-Modified": snapshot.created_at.strftime("%a, %d %b %Y %H:%M:%S GMT"),
@@ -57,6 +72,7 @@ def create_config_response(
 
 @router.get(
     "/controllers/by-name/{device_name}/config",
+    operation_id="getConfigByDeviceName",
     summary="Get config by device name",
     description="Fetch configuration for controller by device name. Uses ETag for caching.",
     responses={

@@ -7,7 +7,9 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from app.crud.greenhouses import validate_user_owns_greenhouse
+from app.crud.greenhouses import (
+    assert_user_owns_greenhouse,
+)
 from app.models import (
     Greenhouse,
     StateMachineFallback,
@@ -124,7 +126,7 @@ def create_state_machine_row(
 ) -> dict[str, Any]:
     """Create a new state machine row."""
     # Validate user owns the greenhouse
-    validate_user_owns_greenhouse(session, row_data.greenhouse_id, user_id)
+    assert_user_owns_greenhouse(session, row_data.greenhouse_id, user_id)
 
     # Check for duplicate grid position (except for fallback rows)
     if not row_data.is_fallback:
@@ -133,7 +135,7 @@ def create_state_machine_row(
                 StateMachineRow.greenhouse_id == row_data.greenhouse_id,
                 StateMachineRow.temp_stage == row_data.temp_stage,
                 StateMachineRow.humi_stage == row_data.humi_stage,
-                StateMachineRow.is_fallback == False,
+                StateMachineRow.is_fallback is False,
             )
         ).first()
         if existing:
@@ -149,7 +151,13 @@ def create_state_machine_row(
         is_fallback=row_data.is_fallback,
         must_on_actuators=[str(uuid_obj) for uuid_obj in row_data.must_on_actuators],
         must_off_actuators=[str(uuid_obj) for uuid_obj in row_data.must_off_actuators],
-        must_on_fan_groups=row_data.must_on_fan_groups,
+        must_on_fan_groups=[
+            {"fan_group_id": str(fg.fan_group_id), "on_count": fg.on_count}
+            for fg in row_data.must_on_fan_groups
+        ],
+        must_off_fan_groups=[
+            str(uuid_obj) for uuid_obj in row_data.must_off_fan_groups
+        ],
     )
     session.add(row)
     session.commit()
@@ -195,7 +203,7 @@ def update_state_machine_row(
                 StateMachineRow.greenhouse_id == row.greenhouse_id,
                 StateMachineRow.temp_stage == new_temp_stage,
                 StateMachineRow.humi_stage == new_humi_stage,
-                StateMachineRow.is_fallback == False,
+                StateMachineRow.is_fallback is False,
                 StateMachineRow.id != row_id,  # Exclude current row
             )
         ).first()
@@ -257,7 +265,7 @@ def get_state_machine_fallback(
 ) -> dict[str, Any] | None:
     """Get state machine fallback for a greenhouse."""
     # Validate user owns the greenhouse
-    validate_user_owns_greenhouse(session, greenhouse_id, user_id)
+    assert_user_owns_greenhouse(session, greenhouse_id, user_id)
 
     query = select(StateMachineFallback).where(
         StateMachineFallback.greenhouse_id == greenhouse_id
@@ -266,6 +274,7 @@ def get_state_machine_fallback(
 
     if fallback:
         return {
+            "id": fallback.id,
             "greenhouse_id": fallback.greenhouse_id,
             "must_on_actuators": [
                 uuid.UUID(uuid_str) for uuid_str in fallback.must_on_actuators
@@ -286,7 +295,7 @@ def set_state_machine_fallback(
 ) -> dict[str, Any]:
     """Set/update state machine fallback for a greenhouse."""
     # Validate user owns the greenhouse
-    validate_user_owns_greenhouse(session, greenhouse_id, user_id)
+    assert_user_owns_greenhouse(session, greenhouse_id, user_id)
 
     # Check if fallback already exists
     existing = session.exec(
@@ -306,6 +315,24 @@ def set_state_machine_fallback(
                     str(uuid_obj) for uuid_obj in converted_data[field]
                 ]
 
+        # Convert must_off_fan_groups UUID list to strings
+        if (
+            "must_off_fan_groups" in converted_data
+            and converted_data["must_off_fan_groups"] is not None
+        ):
+            converted_data["must_off_fan_groups"] = [
+                str(uuid_obj) for uuid_obj in converted_data["must_off_fan_groups"]
+            ]
+
+        # Convert UUIDs in must_on_fan_groups to strings
+        if (
+            "must_on_fan_groups" in converted_data
+            and converted_data["must_on_fan_groups"] is not None
+        ):
+            for fan_group_on in converted_data["must_on_fan_groups"]:
+                if isinstance(fan_group_on, dict) and "fan_group_id" in fan_group_on:
+                    fan_group_on["fan_group_id"] = str(fan_group_on["fan_group_id"])
+
         for field, value in converted_data.items():
             setattr(existing, field, value)
 
@@ -315,6 +342,7 @@ def set_state_machine_fallback(
 
         # Return dict with UUID conversion
         return {
+            "id": existing.id,
             "greenhouse_id": existing.greenhouse_id,
             "must_on_actuators": [
                 uuid.UUID(uuid_str) for uuid_str in existing.must_on_actuators
@@ -322,7 +350,16 @@ def set_state_machine_fallback(
             "must_off_actuators": [
                 uuid.UUID(uuid_str) for uuid_str in existing.must_off_actuators
             ],
-            "must_on_fan_groups": existing.must_on_fan_groups,
+            "must_on_fan_groups": [
+                {
+                    "fan_group_id": uuid.UUID(fg["fan_group_id"]),
+                    "on_count": fg["on_count"],
+                }
+                for fg in existing.must_on_fan_groups
+            ],
+            "must_off_fan_groups": [
+                uuid.UUID(uuid_str) for uuid_str in existing.must_off_fan_groups
+            ],
         }
     else:
         # Create new fallback
@@ -336,6 +373,24 @@ def set_state_machine_fallback(
                     str(uuid_obj) for uuid_obj in fallback_data[field]
                 ]
 
+        # Convert must_off_fan_groups UUID list to strings
+        if (
+            "must_off_fan_groups" in fallback_data
+            and fallback_data["must_off_fan_groups"] is not None
+        ):
+            fallback_data["must_off_fan_groups"] = [
+                str(uuid_obj) for uuid_obj in fallback_data["must_off_fan_groups"]
+            ]
+
+        # Convert UUIDs in must_on_fan_groups to strings
+        if (
+            "must_on_fan_groups" in fallback_data
+            and fallback_data["must_on_fan_groups"] is not None
+        ):
+            for fan_group_on in fallback_data["must_on_fan_groups"]:
+                if isinstance(fan_group_on, dict) and "fan_group_id" in fan_group_on:
+                    fan_group_on["fan_group_id"] = str(fan_group_on["fan_group_id"])
+
         fallback = StateMachineFallback(**fallback_data)
         session.add(fallback)
         session.commit()
@@ -343,6 +398,7 @@ def set_state_machine_fallback(
 
         # Return dict with UUID conversion
         return {
+            "id": fallback.id,
             "greenhouse_id": fallback.greenhouse_id,
             "must_on_actuators": [
                 uuid.UUID(uuid_str) for uuid_str in fallback.must_on_actuators
@@ -350,5 +406,14 @@ def set_state_machine_fallback(
             "must_off_actuators": [
                 uuid.UUID(uuid_str) for uuid_str in fallback.must_off_actuators
             ],
-            "must_on_fan_groups": fallback.must_on_fan_groups,
+            "must_on_fan_groups": [
+                {
+                    "fan_group_id": uuid.UUID(fg["fan_group_id"]),
+                    "on_count": fg["on_count"],
+                }
+                for fg in fallback.must_on_fan_groups
+            ],
+            "must_off_fan_groups": [
+                uuid.UUID(uuid_str) for uuid_str in fallback.must_off_fan_groups
+            ],
         }

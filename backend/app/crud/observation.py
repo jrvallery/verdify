@@ -3,6 +3,10 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlmodel import Session, func, select
 
+from app.api.permissions import (
+    ownership_or_membership_condition,
+    user_can_access_greenhouse,
+)
 from app.models import (
     Greenhouse,
     Zone,
@@ -35,13 +39,13 @@ class CRUDObservation:
         """Get multiple observations with filtering and sorting"""
         stmt = select(ZoneCropObservation)
 
-        # Apply user-scoped filtering through greenhouse ownership
+        # Apply user-scoped filtering through greenhouse ownership or membership
         if user_id:
             stmt = (
                 stmt.join(ZoneCrop, ZoneCropObservation.zone_crop_id == ZoneCrop.id)
                 .join(Zone, ZoneCrop.zone_id == Zone.id)
                 .join(Greenhouse, Zone.greenhouse_id == Greenhouse.id)
-                .where(Greenhouse.user_id == user_id)
+                .where(ownership_or_membership_condition(user_id))
             )
 
         # Apply filters
@@ -111,13 +115,13 @@ class CRUDObservation:
         """Count observations with the same filters"""
         stmt = select(func.count(ZoneCropObservation.id))
 
-        # Apply user-scoped filtering through greenhouse ownership
+        # Apply user-scoped filtering through greenhouse ownership or membership
         if user_id:
             stmt = (
                 stmt.join(ZoneCrop, ZoneCropObservation.zone_crop_id == ZoneCrop.id)
                 .join(Zone, ZoneCrop.zone_id == Zone.id)
                 .join(Greenhouse, Zone.greenhouse_id == Greenhouse.id)
-                .where(Greenhouse.user_id == user_id)
+                .where(ownership_or_membership_condition(user_id))
             )
 
         if zone_crop_id:
@@ -149,9 +153,9 @@ class CRUDObservation:
     def create(
         self, session: Session, *, obj_in: ZoneCropObservationCreate, user_id: UUID
     ) -> ZoneCropObservation:
-        """Create new observation with ownership validation"""
-        # Validate zone crop ownership
-        if not self.validate_zone_crop_ownership(
+        """Create new observation with access validation (operators can create)"""
+        # Validate zone crop access (owner or operator)
+        if not self.validate_zone_crop_access(
             session, zone_crop_id=obj_in.zone_crop_id, user_id=user_id
         ):
             raise HTTPException(
@@ -172,9 +176,9 @@ class CRUDObservation:
         obj_in: ZoneCropObservationUpdate,
         user_id: UUID,
     ) -> ZoneCropObservation:
-        """Update observation with ownership validation"""
-        # Validate zone crop ownership
-        if not self.validate_zone_crop_ownership(
+        """Update observation with access validation (operators can update)"""
+        # Validate zone crop access (owner or operator)
+        if not self.validate_zone_crop_access(
             session, zone_crop_id=db_obj.zone_crop_id, user_id=user_id
         ):
             raise HTTPException(
@@ -191,25 +195,40 @@ class CRUDObservation:
     def remove(
         self, session: Session, *, id: UUID, user_id: UUID
     ) -> ZoneCropObservation | None:
-        """Delete observation with ownership validation"""
+        """Delete observation with ownership validation (owner only)"""
         obj = session.get(ZoneCropObservation, id)
         if obj:
-            # Validate zone crop ownership
+            # Validate zone crop ownership (owner only for delete)
             if not self.validate_zone_crop_ownership(
                 session, zone_crop_id=obj.zone_crop_id, user_id=user_id
             ):
                 raise HTTPException(
-                    status_code=403, detail="Not authorized to access this zone crop"
+                    status_code=403,
+                    detail="Only greenhouse owners can delete observations",
                 )
 
             session.delete(obj)
             session.commit()
         return obj
 
+    def validate_zone_crop_access(
+        self, session: Session, zone_crop_id: UUID, user_id: UUID
+    ) -> bool:
+        """Validate that user can access the greenhouse containing the zone crop (owner or operator)"""
+        zone_crop = session.get(ZoneCrop, zone_crop_id)
+        if not zone_crop:
+            return False
+
+        zone = session.get(Zone, zone_crop.zone_id)
+        if not zone:
+            return False
+
+        return user_can_access_greenhouse(session, zone.greenhouse_id, user_id)
+
     def validate_zone_crop_ownership(
         self, session: Session, zone_crop_id: UUID, user_id: UUID
     ) -> bool:
-        """Validate that user owns the greenhouse containing the zone crop"""
+        """Validate that user owns the greenhouse containing the zone crop (owner only)"""
         zone_crop = session.get(ZoneCrop, zone_crop_id)
         if not zone_crop:
             return False

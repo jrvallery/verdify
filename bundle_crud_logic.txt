@@ -1,0 +1,20 @@
+# Verdify CRUD & Business Logic Bundle
+# All CRUD operations and business logic layer
+
+# CRUD Operations (business logic layer)
+backend/app/crud/__init__.py
+backend/app/crud/greenhouses.py
+backend/app/crud/state_machine.py
+backend/app/crud/sensors.py
+backend/app/crud/actuator.py
+backend/app/crud/controller.py
+backend/app/crud/crop.py
+backend/app/crud/zone.py
+backend/app/crud/auth.py
+backend/app/crud/buttons.py
+backend/app/crud/fan_groups.py
+backend/app/crud/observation.py
+backend/app/crud/zone_crop.py
+backend/app/crud/sensor_zone_map.py
+backend/app/crud/idempotency.py
+backend/app/crud/climate.py

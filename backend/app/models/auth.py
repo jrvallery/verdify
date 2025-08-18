@@ -18,6 +18,14 @@ class Token(SQLModel):
     token_type: str = "bearer"
 
 
+class UserLoginResponse(SQLModel):
+    """Response for user login matching OpenAPI spec."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int = Field(..., description="Token expiry in seconds")
+
+
 class TokenPayload(SQLModel):
     """Contents of JWT token."""
 

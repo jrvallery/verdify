@@ -1,0 +1,93 @@
+# Verdify Development Code Bundle - Accurate File List
+# Generated for comprehensive documentation of Phase A, Phase B, and Test Validation work
+
+# Main documentation
+VERDIFY_DEVELOPMENT_SUMMARY.md
+
+# Core Models (key changes and implementations)
+backend/app/models/__init__.py
+backend/app/models/enums.py
+backend/app/models/controllers.py
+backend/app/models/telemetry.py
+backend/app/models/greenhouses.py
+backend/app/models/sensors.py
+backend/app/models/actuators.py
+backend/app/models/crops.py
+backend/app/models/state_machine.py
+backend/app/models/users.py
+backend/app/models/auth.py
+backend/app/models/config.py
+backend/app/models/links.py
+
+# CRUD Operations (business logic layer)
+backend/app/crud/__init__.py
+backend/app/crud/greenhouses.py
+backend/app/crud/state_machine.py
+backend/app/crud/sensors.py
+backend/app/crud/actuator.py
+backend/app/crud/controller.py
+backend/app/crud/crop.py
+backend/app/crud/zone.py
+backend/app/crud/auth.py
+backend/app/crud/buttons.py
+backend/app/crud/fan_groups.py
+backend/app/crud/observation.py
+backend/app/crud/zone_crop.py
+backend/app/crud/sensor_zone_map.py
+backend/app/crud/idempotency.py
+backend/app/crud/climate.py
+
+# API Routes (REST endpoints)
+backend/app/api/__init__.py
+backend/app/api/main.py
+backend/app/api/deps.py
+backend/app/api/permissions.py
+backend/app/api/routes/__init__.py
+backend/app/api/routes/greenhouses.py
+backend/app/api/routes/controllers_crud.py
+backend/app/api/routes/controller.py
+backend/app/api/routes/sensors.py
+backend/app/api/routes/actuators.py
+backend/app/api/routes/zones_crud.py
+backend/app/api/routes/zones.py
+backend/app/api/routes/crops.py
+backend/app/api/routes/telemetry.py
+backend/app/api/routes/state_machine.py
+backend/app/api/routes/onboarding.py
+backend/app/api/routes/auth_extras.py
+backend/app/api/routes/buttons.py
+backend/app/api/routes/fan_groups.py
+backend/app/api/routes/observations.py
+backend/app/api/routes/zone_crops.py
+backend/app/api/routes/plans.py
+backend/app/api/routes/config_device.py
+backend/app/api/routes/config_admin.py
+backend/app/api/routes/sensor_zone_maps.py
+backend/app/api/routes/users.py
+backend/app/api/routes/climate.py
+backend/app/api/routes/meta.py
+
+# Test Infrastructure (validation and quality assurance)
+backend/app/tests/integration/test_complete_end_to_end_v2.py
+backend/app/tests/api/routes/test_state_machine.py
+backend/app/tests/api/routes/test_telemetry.py
+backend/app/tests/api/routes/test_greenhouses.py
+backend/app/tests/api/routes/test_controllers.py
+backend/app/tests/api/routes/test_sensors.py
+backend/app/tests/api/routes/test_actuators.py
+
+# Core Infrastructure
+backend/app/main.py
+backend/app/core/config.py
+backend/app/core/db.py
+backend/app/core/security.py
+backend/app/utils_paging.py
+
+# Configuration Files
+backend/pyproject.toml
+backend/alembic.ini
+
+# Key database migrations
+backend/app/alembic/versions/0108966434fc_openapi_v2_models.py
+backend/app/alembic/versions/1b24db7aa5bc_add_crop_models.py
+backend/app/alembic/versions/52e718e4b837_redesign_state_machine_models_to_match_.py

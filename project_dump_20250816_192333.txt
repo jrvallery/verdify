@@ -1,3 +1,0 @@
-Project Dump - Sat Aug 16 19:23:33 MDT 2025
-Path: backend/app
-Excluded extensions: (none)

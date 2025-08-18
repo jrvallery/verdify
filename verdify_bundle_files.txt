@@ -1,0 +1,66 @@
+# Verdify Development Code Bundle - File List
+# Generated for comprehensive documentation of Phase A, Phase B, and Test Validation work
+
+# Main documentation
+VERDIFY_DEVELOPMENT_SUMMARY.md
+
+# Core Models (key changes and implementations)
+backend/app/models/enums.py
+backend/app/models/controllers.py
+backend/app/models/telemetry.py
+backend/app/models/greenhouses.py
+backend/app/models/zones.py
+backend/app/models/sensors.py
+backend/app/models/actuators.py
+backend/app/models/crops.py
+backend/app/models/observations.py
+backend/app/models/state_machine.py
+backend/app/models/user.py
+backend/app/models/auth.py
+backend/app/models/__init__.py
+
+# CRUD Operations (business logic layer)
+backend/app/crud/greenhouses.py
+backend/app/crud/state_machine.py
+backend/app/crud/sensors.py
+backend/app/crud/actuators.py
+backend/app/crud/controllers.py
+backend/app/crud/crops.py
+backend/app/crud/telemetry.py
+backend/app/crud/zones.py
+backend/app/crud/users.py
+
+# API Routes (REST endpoints)
+backend/app/api/routes/greenhouses.py
+backend/app/api/routes/controllers_crud.py
+backend/app/api/routes/sensors.py
+backend/app/api/routes/actuators.py
+backend/app/api/routes/zones.py
+backend/app/api/routes/crops.py
+backend/app/api/routes/telemetry.py
+backend/app/api/routes/state_machine.py
+backend/app/api/routes/onboarding.py
+backend/app/api/routes/auth.py
+backend/app/api/main.py
+
+# Test Infrastructure (validation and quality assurance)
+backend/app/tests/integration/test_complete_end_to_end_v2.py
+backend/app/tests/api/routes/test_state_machine.py
+backend/app/tests/api/routes/test_telemetry.py
+
+# Core Infrastructure
+backend/app/main.py
+backend/app/core/config.py
+backend/app/core/db.py
+backend/app/core/security.py
+backend/app/api/deps.py
+backend/app/utils_paging.py
+
+# Configuration Files
+backend/pyproject.toml
+backend/alembic.ini
+
+# Documentation and Requirements
+requirements/API.md
+requirements/openapi.yml
+requirements/DATABASE.md

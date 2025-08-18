@@ -2,11 +2,11 @@ import uuid
 
 from sqlmodel import Session, and_, select
 
+from app.api.permissions import ownership_or_membership_condition
 from app.models import (
     Actuator,
     ActuatorCreate,
     ActuatorKind,
-    ActuatorsPaginated,
     ActuatorUpdate,
     Controller,
     Greenhouse,
@@ -49,14 +49,14 @@ def list_actuators(
     controller_id: uuid.UUID | None = None,
     kind: ActuatorKind | None = None,
     sort: str = "name",
-) -> ActuatorsPaginated:
-    """List actuators with filtering and pagination."""
-    # Base query - join with controller and greenhouse for ownership validation
+):
+    """List actuators with filtering and pagination using RBAC."""
+    # Base query - join with controller and greenhouse for access validation
     query = (
         select(Actuator)
         .join(Controller)
         .join(Greenhouse)
-        .where(Greenhouse.user_id == user_id)
+        .where(ownership_or_membership_condition(user_id))
     )
 
     # Apply filters

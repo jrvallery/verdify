@@ -18,6 +18,16 @@ if TYPE_CHECKING:
 
 
 # -------------------------------------------------------
+# STATE MACHINE TYPED MODELS
+# -------------------------------------------------------
+class FanGroupOn(SQLModel):
+    """Typed model for fan group on configuration."""
+
+    fan_group_id: uuid.UUID = Field(..., description="Fan group UUID")
+    on_count: int = Field(..., ge=0, description="Number of fans to turn on")
+
+
+# -------------------------------------------------------
 # STATE MACHINE ROW MODELS
 # -------------------------------------------------------
 class StateMachineRowBase(SQLModel):
@@ -38,8 +48,11 @@ class StateMachineRowBase(SQLModel):
     must_off_actuators: list[str] = Field(
         default_factory=list, description="Actuator IDs that must be off"
     )
-    must_on_fan_groups: list[dict] = Field(
+    must_on_fan_groups: list[FanGroupOn] = Field(
         default_factory=list, description="Fan group configurations"
+    )
+    must_off_fan_groups: list[uuid.UUID] = Field(
+        default_factory=list, description="Fan group IDs that must be off"
     )
 
 
@@ -63,9 +76,10 @@ class StateMachineRow(StateMachineRowBase, table=True):
     )
     must_on_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
     must_off_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
-    must_on_fan_groups: list[dict] = Field(
+    must_on_fan_groups: list[FanGroupOn] = Field(
         default_factory=list, sa_type=JSON
-    )  # {"fan_group_id": str, "on_count": int}
+    )  # Typed as FanGroupOn objects
+    must_off_fan_groups: list[uuid.UUID] = Field(default_factory=list, sa_type=JSON)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -86,7 +100,8 @@ class StateMachineRowUpdate(SQLModel):
     is_fallback: bool | None = None
     must_on_actuators: list[str] | None = None
     must_off_actuators: list[str] | None = None
-    must_on_fan_groups: list[dict] | None = None
+    must_on_fan_groups: list[FanGroupOn] | None = None
+    must_off_fan_groups: list[uuid.UUID] | None = None
 
 
 class StateMachineRowPublic(StateMachineRowBase):
@@ -94,8 +109,7 @@ class StateMachineRowPublic(StateMachineRowBase):
 
     id: uuid.UUID
     greenhouse_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 # -------------------------------------------------------
@@ -110,8 +124,11 @@ class StateMachineFallbackBase(SQLModel):
     must_off_actuators: list[str] = Field(
         default_factory=list, description="Actuator IDs that must be off in fallback"
     )
-    must_on_fan_groups: list[dict] = Field(
+    must_on_fan_groups: list[FanGroupOn] = Field(
         default_factory=list, description="Fan group configurations for fallback"
+    )
+    must_off_fan_groups: list[uuid.UUID] = Field(
+        default_factory=list, description="Fan group IDs that must be off in fallback"
     )
 
 
@@ -131,9 +148,10 @@ class StateMachineFallback(StateMachineFallbackBase, table=True):
     )
     must_on_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
     must_off_actuators: list[str] = Field(default_factory=list, sa_type=JSON)
-    must_on_fan_groups: list[dict] = Field(
+    must_on_fan_groups: list[FanGroupOn] = Field(
         default_factory=list, sa_type=JSON
-    )  # {"fan_group_id": str, "on_count": int}
+    )  # Typed as FanGroupOn objects
+    must_off_fan_groups: list[uuid.UUID] = Field(default_factory=list, sa_type=JSON)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -151,7 +169,8 @@ class StateMachineFallbackUpdate(SQLModel):
 
     must_on_actuators: list[str] | None = None
     must_off_actuators: list[str] | None = None
-    must_on_fan_groups: list[dict] | None = None
+    must_on_fan_groups: list[FanGroupOn] | None = None
+    must_off_fan_groups: list[uuid.UUID] | None = None
 
 
 class StateMachineFallbackPublic(StateMachineFallbackBase):
@@ -159,8 +178,7 @@ class StateMachineFallbackPublic(StateMachineFallbackBase):
 
     id: uuid.UUID
     greenhouse_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 # ===============================================

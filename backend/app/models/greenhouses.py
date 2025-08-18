@@ -1,20 +1,25 @@
-"""import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+"""Greenhouse and Zone models for Verdify API."""
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, func
-from sqlmodel import Field, SQLModelhouse and Zone models for Verdify API.
-"""
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Column, DateTime, ForeignKey, func
-from sqlmodel import JSON, Field, SQLModel
+from pydantic import EmailStr, field_validator
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy import Enum as SAEnum
+from sqlmodel import Field, SQLModel
 
 from app.utils_paging import Paginated
 
-from .enums import LocationEnum
+from .enums import GreenhouseRole, InviteStatus, LocationEnum
 
 # Direct imports for forward reference resolution - these are available since
 # greenhouses module is imported after users and crops in __init__.py dependency order
@@ -28,8 +33,10 @@ if TYPE_CHECKING:
 # -------------------------------------------------------
 class GreenhouseBase(SQLModel):
     title: str = Field(
-        min_length=1, max_length=255
-    )  # Updated field name to match OpenAPI spec
+        min_length=1,
+        max_length=255,
+        sa_column=Column("name", String(255), nullable=False),
+    )  # API field 'title' maps to DB column 'name'
     description: str | None = Field(default=None, max_length=255)
     is_active: bool = Field(
         default=True, description="Whether this greenhouse is active"
@@ -160,6 +167,9 @@ class GreenhousePublicAPI(SQLModel):
 class ZoneBase(SQLModel):
     zone_number: int = Field(..., description="Numeric identifier within greenhouse")
     location: LocationEnum = Field(..., description="N, E, S, W, NE, SE, SW, NW")
+    title: str | None = Field(
+        default=None, max_length=255, description="Optional zone title"
+    )
     is_active: bool = Field(
         default=True, description="Whether the zone is currently active"
     )
@@ -196,16 +206,25 @@ class ZoneCreate(ZoneBase):
     greenhouse_id: uuid.UUID
 
 
-class ZonePublic(ZoneBase):
+class ZonePublic(SQLModel):
+    """Zone public response - excludes is_active per OpenAPI spec."""
+
     id: uuid.UUID
     greenhouse_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    zone_number: int = Field(..., description="Numeric identifier within greenhouse")
+    location: LocationEnum = Field(..., description="N, E, S, W, NE, SE, SW, NW")
+    title: str | None = Field(
+        default=None, max_length=255, description="Optional zone title"
+    )
+    context_text: str | None = Field(
+        default=None, max_length=2000, description="Zone context or notes"
+    )
 
 
 class ZoneUpdate(SQLModel):
     zone_number: int | None = None
     location: LocationEnum | None = None
+    title: str | None = Field(default=None, max_length=255)
     context_text: str | None = Field(default=None, max_length=2000)
 
 
@@ -237,6 +256,141 @@ class ZoneSensorMap(SQLModel):
 
     zone_id: uuid.UUID
     sensor_ids: list[uuid.UUID]
+
+
+# -------------------------------------------------------
+# GREENHOUSE RBAC MODELS
+# -------------------------------------------------------
+class GreenhouseMember(SQLModel, table=True):
+    """Table for greenhouse role-based access control."""
+
+    __tablename__ = "greenhouse_member"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    greenhouse_id: uuid.UUID = Field(
+        sa_column=Column(
+            "greenhouse_id",
+            ForeignKey("greenhouse.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    user_id: uuid.UUID = Field(
+        sa_column=Column(
+            "user_id",
+            ForeignKey("app_user.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    role: GreenhouseRole = Field(
+        sa_column=Column(SAEnum(GreenhouseRole, name="greenhouserole"), nullable=False),
+        description="User role in the greenhouse",
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint("greenhouse_id", "user_id", name="uq_greenhouse_member"),
+    )
+
+
+class GreenhouseInvite(SQLModel, table=True):
+    """Table for greenhouse access invitations."""
+
+    __tablename__ = "greenhouse_invite"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    greenhouse_id: uuid.UUID = Field(
+        sa_column=Column(
+            "greenhouse_id",
+            ForeignKey("greenhouse.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    email: EmailStr = Field(max_length=255, description="Email address of invited user")
+    role: GreenhouseRole = Field(
+        sa_column=Column(SAEnum(GreenhouseRole, name="greenhouserole"), nullable=False),
+        description="Role being offered to the invited user",
+    )
+    token: str = Field(
+        max_length=255, unique=True, description="Unique invitation token"
+    )
+    expires_at: datetime = Field(description="When the invitation expires")
+    invited_by_user_id: uuid.UUID | None = Field(
+        sa_column=Column(
+            "invited_by_user_id",
+            ForeignKey("app_user.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        description="User who sent the invitation",
+    )
+    status: InviteStatus = Field(
+        sa_column=Column(SAEnum(InviteStatus, name="invitestatus"), nullable=False),
+        default=InviteStatus.PENDING,
+        description="Current status of the invitation",
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Note: Uniqueness is enforced by partial unique index for pending invites only
+    # See Alembic migration 28bf57b69a7f for the index definition
+
+
+# DTO Models for RBAC
+class GreenhouseMemberUser(SQLModel):
+    """User info for greenhouse member - avoids forward reference issues."""
+
+    id: uuid.UUID
+    email: str
+    full_name: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class GreenhouseMemberPublic(SQLModel):
+    """Public representation of greenhouse member."""
+
+    user: GreenhouseMemberUser
+    role: GreenhouseRole
+    added_at: datetime = Field(alias="created_at")
+
+    class Config:
+        from_attributes = True
+
+
+class GreenhouseInvitePublic(SQLModel):
+    """Public representation of greenhouse invite."""
+
+    id: uuid.UUID
+    greenhouse_id: uuid.UUID
+    email: EmailStr
+    role: GreenhouseRole
+    status: InviteStatus
+    expires_at: datetime
+    created_at: datetime
+
+
+class GreenhouseMemberCreate(SQLModel):
+    """Request to add a member to greenhouse."""
+
+    email: EmailStr = Field(max_length=255)
+    role: GreenhouseRole = Field(
+        description="Role to assign (owner role not allowed via API)"
+    )
+
+    @field_validator("role")
+    @classmethod
+    def validate_role_not_owner(cls, v):
+        if v == GreenhouseRole.OWNER:
+            raise ValueError("Cannot assign owner role via API")
+        return v
+
+
+class GreenhouseInviteAccept(SQLModel):
+    """Request to accept a greenhouse invitation."""
+
+    pass  # No additional fields needed
 
 
 # ===============================================

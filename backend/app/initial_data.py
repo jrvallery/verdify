@@ -80,7 +80,7 @@ def create_seed_data(session: Session) -> dict[str, Any]:
     controller_data = ControllerCreate(
         greenhouse_id=greenhouse.id,
         label="Seed Climate Controller",
-        device_name="verdify-seed01",
+        device_name="verdify-abc123",
         is_climate_controller=True,
         hw_version="2.1",
         fw_version="1.5.2",

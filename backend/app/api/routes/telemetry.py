@@ -13,6 +13,7 @@ Endpoints:
 """
 
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -51,6 +52,18 @@ async def _get_request_body_hash(request: Request) -> str:
     """Get hash of request body for idempotency checking."""
     body = await request.body()
     return hash_request_body(body)
+
+
+def _convert_uuids_to_strings(obj: Any) -> Any:
+    """Recursively convert UUID objects to strings for JSON serialization."""
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: _convert_uuids_to_strings(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_uuids_to_strings(item) for item in obj]
+    else:
+        return obj
 
 
 async def _handle_idempotency(
@@ -152,7 +165,7 @@ async def _store_response(
             controller_id=controller.id,
             body_hash=body_hash,
             response_status=202,
-            response_body=json.dumps(response_body),
+            response_body=json.dumps(_convert_uuids_to_strings(response_body)),
         )
 
         # Force commit to ensure it's persisted
@@ -170,7 +183,7 @@ def _process_sensor_telemetry(
     """
     accepted = 0
     rejected = 0
-    warnings = []
+    errors = []
 
     # Validate and count readings
     for reading in sensors_data.readings:
@@ -181,11 +194,15 @@ def _process_sensor_telemetry(
             accepted += 1
         except Exception as e:
             rejected += 1
-            warnings.append(
-                f"Failed to process sensor reading {reading.sensor_id}: {str(e)}"
+            errors.append(
+                {
+                    "error_code": "SENSOR_PROCESSING_ERROR",
+                    "message": f"Failed to process sensor reading {reading.sensor_id}: {str(e)}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
             )
 
-    return IngestResult(accepted=accepted, rejected=rejected, warnings=warnings)
+    return IngestResult(accepted=accepted, rejected=rejected, errors=errors)
 
 
 def _process_actuator_telemetry(
@@ -199,7 +216,7 @@ def _process_actuator_telemetry(
     """
     accepted = 0
     rejected = 0
-    warnings = []
+    errors = []
 
     # Validate and count events
     for event in actuators_data.events:
@@ -210,11 +227,15 @@ def _process_actuator_telemetry(
             accepted += 1
         except Exception as e:
             rejected += 1
-            warnings.append(
-                f"Failed to process actuator event {event.actuator_id}: {str(e)}"
+            errors.append(
+                {
+                    "error_code": "ACTUATOR_PROCESSING_ERROR",
+                    "message": f"Failed to process actuator event {event.actuator_id}: {str(e)}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
             )
 
-    return IngestResult(accepted=accepted, rejected=rejected, warnings=warnings)
+    return IngestResult(accepted=accepted, rejected=rejected, errors=errors)
 
 
 def _process_status_telemetry(
@@ -239,11 +260,19 @@ def _process_status_telemetry(
             )
 
         # In production: store status data
-        return IngestResult(accepted=1, rejected=0, warnings=[])
+        return IngestResult(accepted=1, rejected=0, errors=[])
 
     except Exception as e:
         return IngestResult(
-            accepted=0, rejected=1, warnings=[f"Failed to process status: {str(e)}"]
+            accepted=0,
+            rejected=1,
+            errors=[
+                {
+                    "error_code": "STATUS_PROCESSING_ERROR",
+                    "message": f"Failed to process status: {str(e)}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ],
         )
 
 
@@ -258,22 +287,26 @@ def _process_input_telemetry(
     """
     accepted = 0
     rejected = 0
-    warnings = []
+    errors = []
 
     # Validate and count events
-    for event in inputs_data.events:
+    for event in inputs_data.inputs:  # Fixed: inputs_data.inputs not .events
         try:
-            # Basic validation - button exists and belongs to controller
-            # In production: validate button_id against controller's buttons
+            # Basic validation - button kind is valid
+            # In production: validate button configuration exists for controller
             # For now: just count as accepted
             accepted += 1
         except Exception as e:
             rejected += 1
-            warnings.append(
-                f"Failed to process input event {event.button_id}: {str(e)}"
+            errors.append(
+                {
+                    "error_code": "INPUT_PROCESSING_ERROR",
+                    "message": f"Failed to process input event {event.button_kind}: {str(e)}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
             )
 
-    return IngestResult(accepted=accepted, rejected=rejected, warnings=warnings)
+    return IngestResult(accepted=accepted, rejected=rejected, errors=errors)
 
 
 @router.post(
@@ -677,7 +710,7 @@ async def ingest_telemetry_batch(
     # Process each type of telemetry in the batch
     total_accepted = 0
     total_rejected = 0
-    all_warnings = []
+    all_errors = []
 
     # Process sensors
     if batch_data.sensors:
@@ -689,7 +722,7 @@ async def ingest_telemetry_batch(
         result = _process_sensor_telemetry(sensors_batch, controller)
         total_accepted += result.accepted
         total_rejected += result.rejected
-        all_warnings.extend([f"sensors: {w}" for w in result.warnings])
+        all_errors.extend([{**e, "context": "sensors"} for e in result.errors])
 
     # Process actuators
     if batch_data.actuators:
@@ -701,14 +734,14 @@ async def ingest_telemetry_batch(
         result = _process_actuator_telemetry(actuators_batch, controller)
         total_accepted += result.accepted
         total_rejected += result.rejected
-        all_warnings.extend([f"actuators: {w}" for w in result.warnings])
+        all_errors.extend([{**e, "context": "actuators"} for e in result.errors])
 
     # Process status
     if batch_data.status:
         result = _process_status_telemetry(batch_data.status, controller)
         total_accepted += result.accepted
         total_rejected += result.rejected
-        all_warnings.extend([f"status: {w}" for w in result.warnings])
+        all_errors.extend([{**e, "context": "status"} for e in result.errors])
 
     # Process inputs
     if batch_data.inputs:
@@ -720,11 +753,11 @@ async def ingest_telemetry_batch(
         result = _process_input_telemetry(inputs_batch, controller)
         total_accepted += result.accepted
         total_rejected += result.rejected
-        all_warnings.extend([f"inputs: {w}" for w in result.warnings])
+        all_errors.extend([{**e, "context": "inputs"} for e in result.errors])
 
     # Create aggregate result
     aggregate_result = IngestResult(
-        accepted=total_accepted, rejected=total_rejected, warnings=all_warnings
+        accepted=total_accepted, rejected=total_rejected, errors=all_errors
     )
 
     # Store response for idempotency

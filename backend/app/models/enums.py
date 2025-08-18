@@ -15,14 +15,6 @@ class LocationEnum(str, Enum):
     NW = "NW"
 
 
-class SensorType(str, Enum):
-    TEMPERATURE = "temperature"
-    HUMIDITY = "humidity"
-    CO2 = "co2"
-    LIGHT = "light"
-    SOIL_MOISTURE = "soil_moisture"
-
-
 # -------------------------------------------------------
 # NEW OPENAPI V2 ENUMS
 # -------------------------------------------------------
@@ -69,6 +61,12 @@ class ActuatorKind(str, Enum):
 class ButtonKind(str, Enum):
     COOL = "cool"
     HEAT = "heat"
+    HUMID = "humid"
+
+
+class ButtonAction(str, Enum):
+    PRESSED = "pressed"
+    RELEASED = "released"
 
 
 class FailSafeState(str, Enum):
@@ -89,3 +87,26 @@ class ObservationType(str, Enum):
     DISEASE = "disease"
     HARVEST = "harvest"
     GENERAL = "general"
+
+
+class ControllerStatus(str, Enum):
+    """Controller hello response status values"""
+
+    PENDING = "pending"
+    CLAIMED = "claimed"
+
+
+class GreenhouseRole(str, Enum):
+    """RBAC roles for greenhouse access."""
+
+    OWNER = "owner"
+    OPERATOR = "operator"
+
+
+class InviteStatus(str, Enum):
+    """Status of greenhouse invitations."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REVOKED = "revoked"
+    EXPIRED = "expired"

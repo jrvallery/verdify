@@ -5,7 +5,10 @@ import uuid
 from datetime import datetime, timezone
 
 from pydantic import EmailStr
+from sqlalchemy import Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
+
+from app.utils_paging import Paginated
 
 
 # -------------------------------------------------------
@@ -13,7 +16,9 @@ from sqlmodel import Field, SQLModel
 # -------------------------------------------------------
 # Shared properties
 class UserBase(SQLModel):
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
+    email: EmailStr = Field(
+        index=True, max_length=255
+    )  # Remove unique=True, handled at DB level
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
@@ -49,8 +54,12 @@ class UpdatePassword(SQLModel):
 # Database model, database table inferred from class name
 class User(UserBase, table=True):
     __tablename__ = "app_user"  # Match the database schema
+    __table_args__ = (UniqueConstraint("email", name="uq_user_email"),)
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    email: EmailStr = Field(
+        sa_column=Column("email", String(255), nullable=False, index=True)
+    )
     hashed_password: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -68,6 +77,5 @@ class UserPublic(UserBase):
 # ===============================================
 # PAGINATED TYPES
 # ===============================================
-from app.utils_paging import Paginated
 
 UsersPaginated = Paginated[UserPublic]

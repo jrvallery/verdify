@@ -14,9 +14,7 @@ from app.core.db import engine
 from app.models import Controller, TokenPayload, User
 from app.utils_paging import PaginationParams, create_pagination_dependency
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/login/access-token"
-)
+reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -88,37 +86,100 @@ def get_current_device(
             headers={"WWW-Authenticate": "X-Device-Token"},
         )
 
-    # For now, implement basic token verification
-    # In a full implementation, this would:
-    # 1. Hash the provided token using security.create_device_token_hash()
-    # 2. Query controller_token table for matching hash
-    # 3. Check expiry and revocation status
-    # 4. Return associated controller
+    # Hash the provided token and look up controller
+    from datetime import datetime, timezone
 
-    # Simplified implementation: treat token as controller ID for now
-    # This allows testing the endpoint structure before full token table implementation
-    try:
-        # Parse token as UUID (temporary implementation)
-        import uuid
+    from sqlmodel import select
 
-        controller_id = uuid.UUID(x_device_token)
+    from app.core.security import create_device_token_hash
 
-        # Look up controller by ID
-        controller = session.get(Controller, controller_id)
-        if not controller:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Controller not found",
-            )
+    token_hash = create_device_token_hash(x_device_token)
 
-        return controller
+    # Find controller by device token hash
+    controller = session.exec(
+        select(Controller).where(Controller.device_token_hash == token_hash)
+    ).first()
 
-    except (ValueError, TypeError):
+    if not controller:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid device token format",
+            detail="Invalid device token",
             headers={"WWW-Authenticate": "X-Device-Token"},
         )
 
+    # Check token expiry
+    current_time = datetime.now(timezone.utc)
+    if controller.token_expires_at:
+        # Ensure both datetimes are timezone-aware for comparison
+        token_expires_at = controller.token_expires_at
+        if token_expires_at.tzinfo is None:
+            # If stored datetime is naive, assume it's UTC
+            token_expires_at = token_expires_at.replace(tzinfo=timezone.utc)
+
+        if token_expires_at < current_time:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Device token expired",
+                headers={"WWW-Authenticate": "X-Device-Token"},
+            )
+
+    # Update last_seen timestamp
+    controller.last_seen = current_time
+    session.add(controller)
+    session.commit()
+
+    return controller
+
 
 CurrentDevice = Annotated[Controller, Depends(get_current_device)]
+
+
+# RBAC Permission Dependencies
+def require_owner(greenhouse_id: str):
+    """Dependency factory that requires owner permission for a greenhouse."""
+
+    def _require_owner(
+        session: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> None:
+        """Check if current user is owner of the greenhouse."""
+        import uuid
+
+        from app.api.permissions import require_owner_permission
+
+        try:
+            greenhouse_uuid = uuid.UUID(greenhouse_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid greenhouse ID format",
+            )
+
+        require_owner_permission(session, greenhouse_uuid, current_user.id)
+
+    return _require_owner
+
+
+def require_access(greenhouse_id: str):
+    """Dependency factory that requires access permission (owner or operator) for a greenhouse."""
+
+    def _require_access(
+        session: Annotated[Session, Depends(get_db)],
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> None:
+        """Check if current user has access to the greenhouse."""
+        import uuid
+
+        from app.api.permissions import require_access_permission
+
+        try:
+            greenhouse_uuid = uuid.UUID(greenhouse_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid greenhouse ID format",
+            )
+
+        require_access_permission(session, greenhouse_uuid, current_user.id)
+
+    return _require_access

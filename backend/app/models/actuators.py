@@ -67,8 +67,7 @@ class ActuatorCreate(ActuatorBase):
 class ActuatorPublic(ActuatorBase):
     id: uuid.UUID
     controller_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 class ActuatorUpdate(SQLModel):
@@ -126,12 +125,12 @@ class FanGroupUpdate(SQLModel):
 class ControllerButtonBase(SQLModel):
     button_kind: ButtonKind = Field(..., description="Button kind")
     target_temp_stage: int | None = Field(
-        default=None, description="Target temperature stage"
+        default=None, ge=-3, le=3, description="Target temperature stage (-3 to 3)"
     )
     target_humi_stage: int | None = Field(
-        default=None, description="Target humidity stage"
+        default=None, ge=-3, le=3, description="Target humidity stage (-3 to 3)"
     )
-    timeout_s: int = Field(..., description="Timeout in seconds")
+    timeout_s: int = Field(..., ge=1, description="Timeout in seconds (minimum 1)")
 
 
 class ControllerButton(ControllerButtonBase, table=True):
@@ -158,8 +157,7 @@ class ControllerButtonCreate(ControllerButtonBase):
 class ControllerButtonPublic(ControllerButtonBase):
     id: uuid.UUID
     controller_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 class ControllerButtonUpdate(SQLModel):

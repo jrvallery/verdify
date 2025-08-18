@@ -19,6 +19,8 @@ from app.crud.auth import (
     update_user as crud_update_user,
 )
 from app.models import (
+    Greenhouse,
+    GreenhousePublicAPI,
     Message,
     UpdatePassword,
     User,
@@ -234,3 +236,44 @@ def delete_user(
     session.delete(user)
     session.commit()
     return Message(message="User deleted successfully")
+
+
+@router.get("/me/greenhouses", response_model=Paginated[GreenhousePublicAPI])
+def get_my_greenhouses(
+    session: SessionDep,
+    current_user: CurrentUser,
+    page: int = 1,
+    page_size: int = 50,
+) -> Any:
+    """Get greenhouses owned or shared with current user."""
+    from app.crud.greenhouses import get_user_greenhouses
+    from app.models import GreenhousePublicAPI
+    from app.utils_paging import PaginationParams
+
+    # Create pagination params
+    pagination = PaginationParams(page=page, page_size=page_size)
+
+    # Get greenhouses using RBAC-enabled function
+    greenhouses = get_user_greenhouses(
+        session=session,
+        user=current_user,
+        skip=pagination.skip,
+        limit=pagination.page_size,
+    )
+
+    # Convert to public API format
+    greenhouse_public = [GreenhousePublicAPI.model_validate(gh) for gh in greenhouses]
+
+    # Get total count - simplified for now
+    from app.api.permissions import ownership_or_membership_condition
+
+    count_stmt = (
+        select(func.count())
+        .select_from(Greenhouse)
+        .where(ownership_or_membership_condition(current_user.id))
+    )
+    total = session.exec(count_stmt).one()
+
+    return Paginated[GreenhousePublicAPI](
+        data=greenhouse_public, page=page, page_size=page_size, total=total
+    )

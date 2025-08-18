@@ -74,8 +74,7 @@ class SensorCreate(SensorBase):
 class SensorPublic(SensorBase):
     id: uuid.UUID
     controller_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    # Removed: created_at, updated_at per OpenAPI spec
 
 
 class SensorUpdate(SQLModel):
