@@ -5,3 +5,17 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 .venv/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Voice Notes processing artifacts
+VoiceNotes/audio/
+VoiceNotes/transcripts/
+VoiceNotes/notes/
+VoiceNotes/logs/
+VoiceNotes/state/
+VoiceNotes/staging/
+VoiceNotes/_index.json

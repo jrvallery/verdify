@@ -1,0 +1,21 @@
+participants:
+  - name: "Alex Thompson"
+    role: "interviewer"
+  - name: "Jordan Williams"
+    role: "candidate"
+
+tags: ["interview", "hiring", "senior-developer"]
+
+profile: "call"
+split_channels: true
+is_call: false
+
+speaker_labels:
+  left: "Alex Thompson"
+  right: "Jordan Williams"
+
+title: "Senior Developer Interview - Jordan Williams"
+location: "Office - Interview Room 2"
+project: "hiring"
+meeting_type: "interview"
+summary: "Technical interview for senior developer position"
