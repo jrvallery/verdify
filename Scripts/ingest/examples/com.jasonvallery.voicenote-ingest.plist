@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jasonvallery.voicenote-ingest</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/path/to/verdify/Scripts/ingest/__main__.py</string>
+        <string>watch</string>
+        <string>--vault-path</string>
+        <string>/path/to/VoiceNotes</string>
+        <string>--downloads-path</string>
+        <string>/Users/username/Downloads</string>
+        <string>--verbose</string>
+    </array>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>/tmp/voicenote-ingest.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/tmp/voicenote-ingest.error.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/username</string>
+    
+    <!-- Optional: Only run when user is logged in -->
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    
+    <!-- Optional: Throttle to prevent excessive resource usage -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    
+</dict>
+</plist>

@@ -1,0 +1,28 @@
+# Basic voice note sidecar file
+# Place this alongside your audio file with the same name but .yml extension
+# Example: recording.m4a -> recording.yml
+
+title: "Quick Voice Note"
+tags:
+  - voice-note
+  - personal
+  - ideas
+
+location: "home office"
+
+summary: "Quick thoughts about project planning and next steps"
+
+key_points:
+  - "Need to review project timeline"
+  - "Consider additional resources"
+  - "Schedule follow-up meeting"
+
+actions:
+  - "Review budget by Friday"
+  - "Email team about timeline changes"
+  - "Research new tools"
+
+# Optional: Force specific processing settings
+# audio_profile: "auto"    # auto, call, wind, wide
+# force_split: false       # Force split-channel processing
+# use_diarization: false   # Force speaker diarization

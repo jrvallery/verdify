@@ -1,0 +1,47 @@
+# Call recording sidecar file
+# For phone calls, interviews, or conversations
+
+title: "Call with John Smith - Project Update"
+is_call: true
+audio_profile: "call"
+
+tags:
+  - call
+  - business
+  - project-alpha
+  - client
+
+# Speaker information
+speaker_names:
+  - "Me"
+  - "John Smith"
+
+location: "office"
+
+# People involved
+people:
+  - "John Smith"
+  - "Sarah (mentioned)"
+
+summary: "Weekly project update call discussing progress, challenges, and next milestones"
+
+key_points:
+  - "Project is 75% complete and on schedule"
+  - "Need additional budget for phase 3"
+  - "Client is happy with current progress"
+  - "Timeline may need adjustment for holiday season"
+
+decisions:
+  - "Approved $5K additional budget for phase 3"
+  - "Will extend deadline by 1 week due to holidays"
+  - "Sarah will join the team as consultant"
+
+actions:
+  - "Send budget amendment to accounting (John)"
+  - "Update project timeline in system (Me)"
+  - "Schedule Sarah's onboarding call (Me)"
+  - "Prepare phase 3 proposal (John)"
+
+# Optional: Custom processing
+# force_split: true        # If L/R channels have different speakers
+# use_diarization: true    # If multiple speakers in same channel

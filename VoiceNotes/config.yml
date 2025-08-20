@@ -1,0 +1,133 @@
+# Voice Notes Configuration
+
+# Default Audio Processing Settings
+audio:
+  default_profile: "auto"  # auto, call, wind, wide
+  normalization:
+    target_level: -16      # dB LUFS
+    sample_rate: 16000     # Hz
+    channels: 1            # Force mono for transcription
+  
+  profiles:
+    auto:
+      highpass: 60         # Hz
+      lowpass: 16000       # Hz
+      compression: 0.9     # Ratio
+      limiting: 0.9        # Threshold
+    
+    call:
+      highpass: 80         # Hz - more aggressive for telephony
+      lowpass: 8000        # Hz - speech range only
+      compression: 0.9     # Strong compression
+      limiting: 0.9        # Conservative limiting
+    
+    wind:
+      highpass: 120        # Hz - remove wind noise
+      lowpass: 12000       # Hz
+      noise_reduction: 10  # dB
+      compression: 0.85    # Gentle compression
+      limiting: 0.85       # Conservative limiting
+    
+    wide:
+      highpass: 20         # Hz - minimal processing
+      lowpass: 20000       # Hz - full spectrum
+      compression: 0.95    # Very gentle
+      limiting: 0.95       # Conservative
+
+# Transcription Settings
+transcription:
+  model: "large-v3"        # Whisper model
+  language: "auto"         # Auto-detect or specific language code
+  
+  diarization:
+    auto_enable_threshold: 120  # seconds - auto-enable for recordings longer than this
+    min_speaker_duration: 5     # seconds - minimum segment duration
+  
+  split_channel:
+    auto_enable_threshold: 30   # seconds - auto-enable for stereo recordings longer than this
+    channel_balance_threshold: 0.3  # Enable if L/R levels differ significantly
+
+# Note Generation Settings
+notes:
+  template: "templates/note.md"
+  
+  filename_pattern: "{date}__{title_slug}__{hash8}.md"
+  
+  auto_sections:
+    summary: true          # Auto-generate summary from transcript
+    key_points: false      # Require manual identification
+    decisions: false       # Require manual identification  
+    actions: false         # Require manual identification
+    people: true           # Auto-extract from speaker names and transcript
+
+# File Management
+files:
+  # Extensions to monitor
+  supported_extensions:
+    - ".m4a"
+    - ".mp3" 
+    - ".wav"
+    - ".aac"
+    - ".flac"
+    - ".caf"
+    - ".mp4"
+    - ".mov"
+    - ".opus"
+    - ".ogg"
+    - ".webm"
+  
+  # Cleanup settings
+  cleanup:
+    keep_originals: true   # Keep original files in audio/ directory
+    compress_old: false    # Compress old audio files (>30 days)
+    archive_threshold: 365 # Days before archiving old recordings
+
+# Processing Pipeline
+pipeline:
+  crash_safety: true      # Use lock files and atomic operations
+  parallel_processing: false  # Process files sequentially for safety
+  
+  debounce:
+    file_stable_time: 5    # seconds - wait for file to stop changing
+    retry_attempts: 3      # Retry failed processing
+    retry_delay: 60        # seconds between retries
+
+# Integration Settings
+integration:
+  downloads_path: "~/Downloads"
+  
+  file_watcher:
+    enabled: true
+    check_interval: 5      # seconds
+    debounce_time: 5       # seconds
+  
+  # macOS LaunchAgent settings
+  launchd:
+    enabled: false         # Enable automatic startup
+    check_interval: 300    # seconds - how often to check for new files
+
+# Default Tags
+tags:
+  auto_tags:
+    - "voice-note"
+  
+  conditional_tags:
+    call_recordings: ["call"]
+    long_recordings: ["meeting"]  # >30 minutes
+    short_recordings: ["memo"]    # <2 minutes
+
+# Metadata Extraction
+metadata:
+  extract_from_filename: true
+  extract_from_sidecar: true
+  extract_from_system: true     # Use mdls on macOS
+  
+  auto_location_detection: true
+  auto_device_detection: true
+
+# Quality Settings
+quality:
+  min_duration: 1            # seconds - skip very short recordings
+  max_duration: 14400        # seconds (4 hours) - warn on very long recordings
+  
+  transcription_confidence_threshold: 0.7  # Warn if confidence is low

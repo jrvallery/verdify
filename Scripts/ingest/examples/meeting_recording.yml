@@ -1,0 +1,54 @@
+# Meeting recording sidecar file
+# For team meetings, conferences, or group discussions
+
+title: "Weekly Team Standup - Engineering"
+tags:
+  - meeting
+  - team
+  - engineering
+  - weekly-standup
+
+# Multiple speakers
+speaker_names:
+  - "Alice (Lead)"
+  - "Bob (Backend)"
+  - "Charlie (Frontend)"
+  - "Dana (QA)"
+
+use_diarization: true
+location: "conference room B"
+
+# People involved
+people:
+  - "Alice Johnson"
+  - "Bob Wilson"  
+  - "Charlie Davis"
+  - "Dana Martinez"
+
+summary: "Weekly engineering standup covering sprint progress, blockers, and upcoming work"
+
+key_points:
+  - "Sprint 23 is 80% complete"
+  - "API integration causing delays"
+  - "Frontend redesign ahead of schedule"
+  - "QA found critical bug in payment flow"
+
+decisions:
+  - "Extend sprint by 2 days for API fixes"
+  - "Deploy frontend changes to staging"
+  - "Hotfix payment bug before weekend"
+  - "Add extra testing for payment flows"
+
+actions:
+  - "Fix API integration issues (Bob) - Due: Wed"
+  - "Deploy frontend to staging (Charlie) - Due: Today"
+  - "Create hotfix branch for payment bug (Alice) - Due: Tomorrow"
+  - "Expand payment test suite (Dana) - Due: Next sprint"
+  - "Schedule post-mortem for payment bug (Alice) - Due: Next week"
+
+# Meeting metadata
+meeting:
+  type: "standup"
+  duration_planned: "30 minutes"
+  recurring: true
+  frequency: "weekly"
