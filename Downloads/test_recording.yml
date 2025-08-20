@@ -1,0 +1,18 @@
+title: "Test Voice Note"
+tags:
+  - test
+  - demo
+  - voice-note
+
+location: "demo environment"
+
+summary: "This is a demonstration of the voice note ingestion pipeline with a mock audio file."
+
+key_points:
+  - "System successfully processes audio files"
+  - "Creates structured Obsidian notes"
+  - "Maintains master index"
+
+actions:
+  - "Review system functionality"
+  - "Test with real audio files"
