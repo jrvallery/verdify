@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jasonvallery.voicenote-ingest</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/ingest</string>
+        <string>watch</string>
+        <string>--daemon</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/jason</string>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/jason/VoiceNotes/logs/launchd.out</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/jason/VoiceNotes/logs/launchd.err</string>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/jason/Scripts/ingest</string>
+    </dict>
+    
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/jason/Downloads</string>
+    </array>
+    
+    <!-- Only run when user is logged in -->
+    <key>LimitLoadToSessionType</key>
+    <array>
+        <string>Aqua</string>
+    </array>
+</dict>
+</plist>

@@ -1,0 +1,80 @@
+# VoiceNotes Configuration
+
+# Default settings for voice note processing
+processing:
+  # Audio processing profiles
+  profiles:
+    auto:
+      description: "Automatic profile detection based on audio characteristics"
+      filters:
+        - "highpass=f=80"
+        - "lowpass=f=8000" 
+        - "dynaudnorm"
+        - "alimiter=limit=0.9"
+    
+    call:
+      description: "Optimized for phone calls and conferencing"
+      filters:
+        - "highpass=f=300"
+        - "lowpass=f=3400"
+        - "dynaudnorm=p=0.9"
+        - "alimiter=limit=0.8"
+    
+    wind:
+      description: "Reduces wind noise for outdoor recordings"
+      filters:
+        - "highpass=f=120" 
+        - "lowpass=f=7000"
+        - "afftdn=nr=20"
+        - "dynaudnorm"
+        - "alimiter=limit=0.9"
+    
+    wide:
+      description: "Full frequency range for music and high-quality audio"
+      filters:
+        - "highpass=f=20"
+        - "lowpass=f=20000"
+        - "dynaudnorm=p=0.7"
+        - "alimiter=limit=0.95"
+
+  # Default processing settings
+  default_profile: "auto"
+  sample_rate: 16000
+  channels: 1  # mono
+  format: "wav"
+  
+  # Transcription settings
+  transcription:
+    model: "base.en"  # whisper model
+    language: "en"
+    fp16: true
+    threads: 4
+    
+# File organization
+vault:
+  base_path: "VoiceNotes"
+  templates_path: "templates"
+  
+# Supported file formats
+supported_formats:
+  - ".m4a"
+  - ".mp3" 
+  - ".wav"
+  - ".aac"
+  - ".flac"
+  - ".caf"
+  - ".mp4"
+  - ".mov"
+  - ".opus"
+
+# Watch settings
+watcher:
+  watch_path: "~/Downloads"
+  debounce_seconds: 2
+  
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_max_bytes: 10485760  # 10MB
+  file_backup_count: 5

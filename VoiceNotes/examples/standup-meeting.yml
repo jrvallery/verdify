@@ -1,0 +1,24 @@
+participants:
+  - name: "Dr. Sarah Chen"
+    role: "project lead"
+  - name: "Mike Rodriguez"
+    role: "engineer"
+  - name: "Lisa Park"
+    role: "designer"
+
+tags: ["standup", "project-beta", "weekly-sync"]
+
+profile: "auto"
+split_channels: false
+is_call: true
+
+speaker_labels:
+  speaker_0: "Dr. Sarah Chen"
+  speaker_1: "Mike Rodriguez"
+  speaker_2: "Lisa Park"
+
+title: "Project Beta Weekly Standup"
+location: "Conference Room B"
+project: "Beta Initiative"
+meeting_type: "standup"
+summary: "Weekly progress update and planning session for Project Beta"
