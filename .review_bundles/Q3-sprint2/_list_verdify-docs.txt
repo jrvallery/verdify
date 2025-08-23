@@ -1,0 +1,4 @@
+verdify-docs/.obsidian/app.json
+verdify-docs/.obsidian/appearance.json
+verdify-docs/.obsidian/core-plugins.json
+verdify-docs/.obsidian/workspace.json

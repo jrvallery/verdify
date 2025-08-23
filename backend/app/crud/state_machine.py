@@ -22,6 +22,25 @@ from app.models import (
 from app.utils_paging import PaginationParams, paginate_query
 
 
+def _deserialize_row(row: StateMachineRow) -> dict[str, Any]:
+    """Convert a StateMachineRow to dict with proper UUID conversion."""
+    return {
+        "id": row.id,
+        "greenhouse_id": row.greenhouse_id,
+        "temp_stage": row.temp_stage,
+        "humi_stage": row.humi_stage,
+        "is_fallback": row.is_fallback,
+        "must_on_actuators": [uuid.UUID(x) for x in (row.must_on_actuators or [])],
+        "must_off_actuators": [uuid.UUID(x) for x in (row.must_off_actuators or [])],
+        "must_on_fan_groups": [
+            {"fan_group_id": uuid.UUID(fg["fan_group_id"]), "on_count": fg["on_count"]}
+            for fg in (row.must_on_fan_groups or [])
+        ],
+        "must_off_fan_groups": [uuid.UUID(x) for x in (row.must_off_fan_groups or [])],
+        "created_at": row.created_at,
+    }
+
+
 def _convert_uuid_lists_to_strings(data: dict) -> dict:
     """Convert UUID lists to string lists for JSON storage."""
     converted = data.copy()
@@ -94,7 +113,7 @@ def list_state_machine_rows(
     )
 
     # Apply pagination and return
-    return paginate_query(session, query, pagination)
+    return paginate_query(session, query, pagination, transform=_deserialize_row)
 
 
 def get_state_machine_row(
@@ -102,23 +121,7 @@ def get_state_machine_row(
 ) -> dict[str, Any]:
     """Get a state machine row by ID."""
     row = validate_user_owns_state_machine_row(session, user_id, row_id)
-
-    # Return dict with UUID conversion for API response
-    return {
-        "id": row.id,
-        "greenhouse_id": row.greenhouse_id,
-        "temp_stage": row.temp_stage,
-        "humi_stage": row.humi_stage,
-        "is_fallback": row.is_fallback,
-        "must_on_actuators": [
-            uuid.UUID(uuid_str) for uuid_str in row.must_on_actuators
-        ],
-        "must_off_actuators": [
-            uuid.UUID(uuid_str) for uuid_str in row.must_off_actuators
-        ],
-        "must_on_fan_groups": row.must_on_fan_groups,
-        "created_at": row.created_at,
-    }
+    return _deserialize_row(row)
 
 
 def create_state_machine_row(
@@ -135,7 +138,7 @@ def create_state_machine_row(
                 StateMachineRow.greenhouse_id == row_data.greenhouse_id,
                 StateMachineRow.temp_stage == row_data.temp_stage,
                 StateMachineRow.humi_stage == row_data.humi_stage,
-                StateMachineRow.is_fallback is False,
+                StateMachineRow.is_fallback.is_(False),
             )
         ).first()
         if existing:
@@ -163,22 +166,7 @@ def create_state_machine_row(
     session.commit()
     session.refresh(row)
 
-    # Return a dict that can be used to create StateMachineRowPublic
-    return {
-        "id": row.id,
-        "greenhouse_id": row.greenhouse_id,
-        "temp_stage": row.temp_stage,
-        "humi_stage": row.humi_stage,
-        "is_fallback": row.is_fallback,
-        "must_on_actuators": [
-            uuid.UUID(uuid_str) for uuid_str in row.must_on_actuators
-        ],
-        "must_off_actuators": [
-            uuid.UUID(uuid_str) for uuid_str in row.must_off_actuators
-        ],
-        "must_on_fan_groups": row.must_on_fan_groups,
-        "created_at": row.created_at,
-    }
+    return _deserialize_row(row)
 
 
 def update_state_machine_row(
@@ -203,7 +191,7 @@ def update_state_machine_row(
                 StateMachineRow.greenhouse_id == row.greenhouse_id,
                 StateMachineRow.temp_stage == new_temp_stage,
                 StateMachineRow.humi_stage == new_humi_stage,
-                StateMachineRow.is_fallback is False,
+                StateMachineRow.is_fallback.is_(False),
                 StateMachineRow.id != row_id,  # Exclude current row
             )
         ).first()
@@ -229,21 +217,7 @@ def update_state_machine_row(
     session.refresh(row)
 
     # Return a dict with UUID conversion for API response
-    return {
-        "id": row.id,
-        "greenhouse_id": row.greenhouse_id,
-        "temp_stage": row.temp_stage,
-        "humi_stage": row.humi_stage,
-        "is_fallback": row.is_fallback,
-        "must_on_actuators": [
-            uuid.UUID(uuid_str) for uuid_str in row.must_on_actuators
-        ],
-        "must_off_actuators": [
-            uuid.UUID(uuid_str) for uuid_str in row.must_off_actuators
-        ],
-        "must_on_fan_groups": row.must_on_fan_groups,
-        "created_at": row.created_at,
-    }
+    return _deserialize_row(row)
 
 
 def delete_state_machine_row(

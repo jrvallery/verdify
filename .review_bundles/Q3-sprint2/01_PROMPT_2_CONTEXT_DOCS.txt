@@ -1,0 +1,2 @@
+# PROMPT 2 — Context Docs
+_No context docs found in docs/ (architecture.md, charter.md, mvp.md, requirements.md, vision.md)._

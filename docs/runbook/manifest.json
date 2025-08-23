@@ -1,0 +1,25 @@
+{
+    "generated_at": "2025-08-21T00:00:00Z",
+    "tasks": [
+        {
+            "task": "T00",
+            "description": "Repo sanity & scaffolding",
+            "files": [
+                "backend/pyproject.toml",
+                "backend/tests/test_smoke.py",
+                "docs/runbook/worklog.md",
+                "docs/runbook/manifest.json",
+                ".env.example"
+            ]
+        },
+        {
+            "task": "T01",
+            "description": "Requirements reconciliation snapshot",
+            "files": [
+                "docs/decisions/0001-requirements-reconciliation.md",
+                "docs/runbook/worklog.md",
+                "docs/runbook/manifest.json"
+            ]
+        }
+    ]
+}

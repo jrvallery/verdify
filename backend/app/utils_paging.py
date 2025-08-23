@@ -88,7 +88,7 @@ def page_to_offset(page: int, page_size: int) -> tuple[int, int]:
 
 
 def paginate_query(
-    session: Session, statement: Select, pagination: PaginationParams
+    session: Session, statement: Select, pagination: PaginationParams, transform=None
 ) -> Paginated[T]:
     """
     Execute a paginated query and return standardized Paginated response.
@@ -97,6 +97,7 @@ def paginate_query(
         session: SQLModel database session
         statement: Base SELECT statement to paginate
         pagination: Pagination parameters
+        transform: Optional function to transform each result item
 
     Returns:
         Paginated response with data, page, page_size, and total
@@ -123,6 +124,10 @@ def paginate_query(
 
     # Execute and get results
     results = session.exec(paginated_statement).all()
+    
+    # Apply transform if provided
+    if transform:
+        results = [transform(item) for item in results]
 
     return Paginated(
         data=results, page=pagination.page, page_size=pagination.page_size, total=total

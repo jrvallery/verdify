@@ -36,10 +36,20 @@ class StructuredFormatter(logging.Formatter):
     - module: Python module name
     - function: Function name where log was called
     """
+    
+    _std = {
+        "name","msg","args","levelname","levelno","pathname","filename","module",
+        "exc_info","exc_text","stack_info","lineno","funcName","created","msecs",
+        "relativeCreated","thread","threadName","processName","process","message",
+    }
+
+    def formatTime(self, record, datefmt=None):
+        # ISO 8601 with timezone
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
 
     def format(self, record: logging.LogRecord) -> str:
-        # Create base log entry
-        log_entry = {
+        base = {
             "timestamp": self.formatTime(record),
             "level": record.levelname,
             "message": record.getMessage(),
@@ -48,30 +58,26 @@ class StructuredFormatter(logging.Formatter):
             "line": record.lineno,
         }
 
-        # Add request ID if available
+        # Contexts
         request_id = _request_id_context.get()
         if request_id:
-            log_entry["request_id"] = request_id
-
-        # Add user context if available
+            base["request_id"] = request_id
         user_context = _user_context.get()
         if user_context:
-            log_entry["user"] = user_context
-
-        # Add device context if available
+            base["user"] = user_context
         device_context = _device_context.get()
         if device_context:
-            log_entry["device"] = device_context
+            base["device"] = device_context
 
-        # Add any extra fields from the log record
-        if hasattr(record, "extra"):
-            log_entry.update(record.extra)
+        # Merge custom extras (anything added via logger(..., extra={...}))
+        for k, v in record.__dict__.items():
+            if k not in self._std and k not in base and not k.startswith("_"):
+                base[k] = v
 
-        # Handle exceptions
         if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
+            base["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_entry, default=str)
+        return json.dumps(base, default=str)
 
 
 def setup_logging(log_level: str = "INFO") -> None:

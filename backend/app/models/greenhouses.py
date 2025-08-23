@@ -10,7 +10,6 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
-    String,
     UniqueConstraint,
     func,
 )
@@ -35,8 +34,7 @@ class GreenhouseBase(SQLModel):
     title: str = Field(
         min_length=1,
         max_length=255,
-        sa_column=Column("name", String(255), nullable=False),
-    )  # API field 'title' maps to DB column 'name'
+    )  # API field 'title' maps to DB column 'title'
     description: str | None = Field(default=None, max_length=255)
     is_active: bool = Field(
         default=True, description="Whether this greenhouse is active"
@@ -167,12 +165,6 @@ class GreenhousePublicAPI(SQLModel):
 class ZoneBase(SQLModel):
     zone_number: int = Field(..., description="Numeric identifier within greenhouse")
     location: LocationEnum = Field(..., description="N, E, S, W, NE, SE, SW, NW")
-    title: str | None = Field(
-        default=None, max_length=255, description="Optional zone title"
-    )
-    is_active: bool = Field(
-        default=True, description="Whether the zone is currently active"
-    )
     context_text: str | None = Field(
         default=None, max_length=2000, description="Zone context or notes"
     )
@@ -207,15 +199,12 @@ class ZoneCreate(ZoneBase):
 
 
 class ZonePublic(SQLModel):
-    """Zone public response - excludes is_active per OpenAPI spec."""
+    """Zone public response - matches database schema."""
 
     id: uuid.UUID
     greenhouse_id: uuid.UUID
     zone_number: int = Field(..., description="Numeric identifier within greenhouse")
     location: LocationEnum = Field(..., description="N, E, S, W, NE, SE, SW, NW")
-    title: str | None = Field(
-        default=None, max_length=255, description="Optional zone title"
-    )
     context_text: str | None = Field(
         default=None, max_length=2000, description="Zone context or notes"
     )
@@ -224,7 +213,6 @@ class ZonePublic(SQLModel):
 class ZoneUpdate(SQLModel):
     zone_number: int | None = None
     location: LocationEnum | None = None
-    title: str | None = Field(default=None, max_length=255)
     context_text: str | None = Field(default=None, max_length=2000)
 
 

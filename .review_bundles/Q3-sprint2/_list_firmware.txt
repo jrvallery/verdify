@@ -1,0 +1,3 @@
+firmware/docs/CONTROLLER.md
+firmware/docs/DATABASE.md
+firmware/docs/openapi.yml

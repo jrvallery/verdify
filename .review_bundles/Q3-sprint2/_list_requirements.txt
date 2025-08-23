@@ -1,0 +1,8 @@
+requirements/API.md
+requirements/AUTHENTICATION.md
+requirements/CONFIGURATION.md
+requirements/CONTROLLER.md
+requirements/DATABASE.md
+requirements/FORMATTING_STANDARDS.md
+requirements/openapi.yml
+requirements/PLANNER.md

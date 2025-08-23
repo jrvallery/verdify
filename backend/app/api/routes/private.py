@@ -1,9 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, get_current_active_superuser
 from app.core.security import get_password_hash
 from app.models import (
     User,
@@ -20,7 +20,7 @@ class PrivateUserCreate(BaseModel):
     is_verified: bool = False
 
 
-@router.post("/users/", response_model=UserPublic)
+@router.post("/users/", response_model=UserPublic, dependencies=[Depends(get_current_active_superuser)])
 def create_user(user_in: PrivateUserCreate, session: SessionDep) -> Any:
     """
     Create a new user.
@@ -29,6 +29,7 @@ def create_user(user_in: PrivateUserCreate, session: SessionDep) -> Any:
     user = User(
         email=user_in.email,
         full_name=user_in.full_name,
+        is_verified=user_in.is_verified,
         hashed_password=get_password_hash(user_in.password),
     )
 

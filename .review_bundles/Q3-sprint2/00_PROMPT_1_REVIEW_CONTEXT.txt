@@ -1,0 +1,23 @@
+# PROMPT 1 — Review Context & Instructions
+
+You will receive this review as a multi-part sequence of messages.
+Please read this message fully, then wait for subsequent parts.
+
+## Scope
+- Repo root: /Users/jason/Code/verdify
+- Range: origin/main .. HEAD
+- Generated: 2025-08-21T14:37:23-06:00
+
+## What you'll receive next
+2) Context docs (architecture/charter/mvp/requirements/vision)
+3) Manifest (file status, line deltas) + concise commit list
+4..N) Bundles of code/logs grouped by locality, each under a size cap
+N+1) Finalizer prompt with the requested structured output format
+
+## Please acknowledge each part with 'ACK n/N'.
+Do not produce the final review until the FINALIZER prompt arrives.
+
+## Notes
+- Renames are detected to avoid miscounting (git --find-renames).
+- Bundles may repeat a tiny shared context to reduce context thrash.
+

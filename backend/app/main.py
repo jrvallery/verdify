@@ -1,5 +1,7 @@
 import sentry_sdk
 from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from starlette.middleware.cors import CORSMiddleware
@@ -134,7 +136,10 @@ app.openapi = custom_openapi
 # 1. Request ID middleware (generates/preserves request IDs)
 app.add_middleware(RequestIdMiddleware)
 
-# 2. Logging middleware (logs requests with correlation)
+# 2. GZip compression middleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# 3. Logging middleware (logs requests with correlation)
 setup_logging_middleware(app)
 
 # 3. CORS middleware
@@ -153,6 +158,7 @@ if settings.all_cors_origins:
 # Register exception handlers for standardized error responses
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(ValidationError, validation_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
 # Include API routes

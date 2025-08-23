@@ -1,0 +1,13 @@
+.github/copilot-instructions.md
+.github/instructions/api-contract.instructions.md
+.github/instructions/backend.instructions.md
+.github/instructions/db-migrations.instructions.md
+.github/instructions/etag-config.instructions.md
+.github/instructions/general-coding.instructions.md
+.github/instructions/sqlmodel.instructions.md
+.github/instructions/telemetry.instructions.md
+.github/instructions/tests.instructions.md
+.github/prompts/generate-migration.prompt.md
+.github/prompts/implement-endpoint.prompt.md
+.github/prompts/implement-route.prompt.md
+.github/prompts/refactor-model.prompt.md

@@ -1,0 +1,41 @@
+{
+  "generated_at": "2025-08-21T00:00:00Z",
+  "tasks": [
+    {
+      "task": "T00",
+      "description": "Repo sanity and scaffolding",
+      "files_created": [
+        "backend/docs/runbook/worklog.md",
+        "backend/docs/runbook/manifest.json",
+        "backend/docs/test-reports/",
+        "backend/docs/log-samples/",
+        "backend/tests/conftest.py",
+        "backend/.env.example"
+      ],
+      "files_modified": []
+    }
+    ,
+    {
+      "task": "T02",
+      "description": "Database DDL & Alembic Migrations (Timescale + Core)",
+      "files_created": [
+        "backend/tests/test_db_migration.py"
+      ],
+      "files_modified": [
+        "backend/docs/runbook/worklog.md"
+      ]
+    }
+    ,
+    {
+      "task": "T03",
+      "description": "Core App Factory, Error Model & Logging",
+      "files_created": [
+        "backend/tests/test_meta_and_errors.py"
+      ],
+      "files_modified": [
+        "backend/app/main.py",
+        "backend/docs/runbook/worklog.md"
+      ]
+    }
+  ]
+}

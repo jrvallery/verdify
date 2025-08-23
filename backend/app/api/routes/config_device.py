@@ -20,6 +20,13 @@ from app.models import ConfigSnapshot
 router = APIRouter()
 
 
+def _matches_etag(if_none_match: str, etag: str) -> bool:
+    """Handle comma-separated values, weak etags (W/), and quotes."""
+    candidates = [part.strip() for part in if_none_match.split(",")]
+    normalized = [c.strip('"').removeprefix("W/").strip('"') for c in candidates]
+    return etag in normalized
+
+
 def get_latest_config_snapshot(
     session: Session, greenhouse_id: str
 ) -> ConfigSnapshot | None:
@@ -49,7 +56,7 @@ def create_config_response(
     snapshot: ConfigSnapshot,
     accept_encoding: str | None = None,
 ) -> tuple[dict, dict[str, str]]:
-    """Create config response with proper headers and optional gzip compression."""
+    """Create config response with proper headers."""
     # Convert all UUIDs to strings for JSON serialization
     payload = convert_uuids_to_strings(snapshot.payload)
 
@@ -59,13 +66,7 @@ def create_config_response(
         "Cache-Control": "private, must-revalidate",
     }
 
-    # Optional gzip compression (phase-2 feature)
-    if accept_encoding and "gzip" in accept_encoding:
-        json_content = json.dumps(payload, separators=(",", ":"))
-        compressed_content = gzip.compress(json_content.encode("utf-8"))
-        headers["Content-Encoding"] = "gzip"
-        # Note: FastAPI will handle the actual gzip response automatically
-        # This is a placeholder for future implementation
+    # Compression is handled by global GZipMiddleware; do not set Content-Encoding here.
 
     return payload, headers
 

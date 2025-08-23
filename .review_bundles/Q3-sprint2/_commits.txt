@@ -1,0 +1,3 @@
+e0ecc3a 2025-08-20 02:10:00 -0600 Jason Vallery Add Obsidian configuration for verdify-docs
+2db5e38 2025-08-18 15:16:09 -0600 Jason Vallery feat: Complete backend schema parity and API readiness for frontend
+462b698 2025-08-16 23:03:24 -0600 Jason Vallery feat: Complete model architecture overhaul and data integrity improvements

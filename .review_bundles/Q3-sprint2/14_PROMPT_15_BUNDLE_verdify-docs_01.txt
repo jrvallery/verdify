@@ -1,0 +1,222 @@
+# PROMPT 15 — Bundle: verdify-docs (01)
+
+===== BEGIN FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/app.json =====
+    {}
+===== END FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/app.json =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/appearance.json =====
+    {}
+===== END FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/appearance.json =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/core-plugins.json =====
+    {
+      "file-explorer": true,
+      "global-search": true,
+      "switcher": true,
+      "graph": true,
+      "backlink": true,
+      "canvas": true,
+      "outgoing-link": true,
+      "tag-pane": true,
+      "footnotes": false,
+      "properties": false,
+      "page-preview": true,
+      "daily-notes": true,
+      "templates": true,
+      "note-composer": true,
+      "command-palette": true,
+      "slash-command": false,
+      "editor-status": true,
+      "bookmarks": true,
+      "markdown-importer": false,
+      "zk-prefixer": false,
+      "random-note": false,
+      "outline": true,
+      "word-count": true,
+      "slides": false,
+      "audio-recorder": false,
+      "workspaces": false,
+      "file-recovery": true,
+      "publish": false,
+      "sync": true,
+      "bases": true,
+      "webviewer": false
+    }
+===== END FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/core-plugins.json =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/workspace.json =====
+    {
+      "main": {
+        "id": "1814756b22a41a4a",
+        "type": "split",
+        "children": [
+          {
+            "id": "ae9de026395bbc94",
+            "type": "tabs",
+            "children": [
+              {
+                "id": "777071618446a801",
+                "type": "leaf",
+                "state": {
+                  "type": "markdown",
+                  "state": {
+                    "file": "Test note.md",
+                    "mode": "source",
+                    "source": false
+                  },
+                  "icon": "lucide-file",
+                  "title": "Test note"
+                }
+              }
+            ]
+          }
+        ],
+        "direction": "vertical"
+      },
+      "left": {
+        "id": "94ceae2d55e58dde",
+        "type": "split",
+        "children": [
+          {
+            "id": "0aa6180198a15c71",
+            "type": "tabs",
+            "children": [
+              {
+                "id": "295f36bf69c90392",
+                "type": "leaf",
+                "state": {
+                  "type": "file-explorer",
+                  "state": {
+                    "sortOrder": "alphabetical",
+                    "autoReveal": false
+                  },
+                  "icon": "lucide-folder-closed",
+                  "title": "Files"
+                }
+              },
+              {
+                "id": "2d52d652d9602468",
+                "type": "leaf",
+                "state": {
+                  "type": "search",
+                  "state": {
+                    "query": "",
+                    "matchingCase": false,
+                    "explainSearch": false,
+                    "collapseAll": false,
+                    "extraContext": false,
+                    "sortOrder": "alphabetical"
+                  },
+                  "icon": "lucide-search",
+                  "title": "Search"
+                }
+              },
+              {
+                "id": "2795b6b86a39d8f2",
+                "type": "leaf",
+                "state": {
+                  "type": "bookmarks",
+                  "state": {},
+                  "icon": "lucide-bookmark",
+                  "title": "Bookmarks"
+                }
+              }
+            ]
+          }
+        ],
+        "direction": "horizontal",
+        "width": 300
+      },
+      "right": {
+        "id": "50588c071bbed112",
+        "type": "split",
+        "children": [
+          {
+            "id": "5f237405a6eab259",
+            "type": "tabs",
+            "children": [
+              {
+                "id": "cfa8e45cea41b857",
+                "type": "leaf",
+                "state": {
+                  "type": "backlink",
+                  "state": {
+                    "collapseAll": false,
+                    "extraContext": false,
+                    "sortOrder": "alphabetical",
+                    "showSearch": false,
+                    "searchQuery": "",
+                    "backlinkCollapsed": false,
+                    "unlinkedCollapsed": true
+                  },
+                  "icon": "links-coming-in",
+                  "title": "Backlinks"
+                }
+              },
+              {
+                "id": "4cba94cf5b20e3b3",
+                "type": "leaf",
+                "state": {
+                  "type": "outgoing-link",
+                  "state": {
+                    "linksCollapsed": false,
+                    "unlinkedCollapsed": true
+                  },
+                  "icon": "links-going-out",
+                  "title": "Outgoing links"
+                }
+              },
+              {
+                "id": "0fb89a95aa27a186",
+                "type": "leaf",
+                "state": {
+                  "type": "tag",
+                  "state": {
+                    "sortOrder": "frequency",
+                    "useHierarchy": true,
+                    "showSearch": false,
+                    "searchQuery": ""
+                  },
+                  "icon": "lucide-tags",
+                  "title": "Tags"
+                }
+              },
+              {
+                "id": "4f2b704e195da43c",
+                "type": "leaf",
+                "state": {
+                  "type": "outline",
+                  "state": {
+                    "followCursor": false,
+                    "showSearch": false,
+                    "searchQuery": ""
+                  },
+                  "icon": "lucide-list",
+                  "title": "Outline"
+                }
+              }
+            ]
+          }
+        ],
+        "direction": "horizontal",
+        "width": 300,
+        "collapsed": true
+      },
+      "left-ribbon": {
+        "hiddenItems": {
+          "switcher:Open quick switcher": false,
+          "graph:Open graph view": false,
+          "canvas:Create new canvas": false,
+          "daily-notes:Open today's daily note": false,
+          "templates:Insert template": false,
+          "command-palette:Open command palette": false,
+          "bases:Create new base": false
+        }
+      },
+      "active": "777071618446a801",
+      "lastOpenFiles": [
+        "Test note.md"
+      ]
+    }
+===== END FILE: /Users/jason/Code/verdify/verdify-docs/.obsidian/workspace.json =====
+

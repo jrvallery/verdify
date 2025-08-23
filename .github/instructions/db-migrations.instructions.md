@@ -10,3 +10,7 @@ description: "Safe Alembic migration patterns"
 - Provide upgrade & downgrade.
 - Data migrations: write idempotent SQL/ORM code guarded by existence checks.
 - Test: `uv run alembic upgrade head` on a fresh DB; ensure app boots.
+- Every schema change must include a new revision with **upgrade** and **downgrade**.
+- Add/maintain unique constraints and indexes matching invariants.
+- Include data migrations if needed (safe, idempotent).
+- Never mutate old revisions.

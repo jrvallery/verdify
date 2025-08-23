@@ -5,7 +5,9 @@ description: "Telemetry ingestion guarantees"
 
 # Telemetry Ingest
 
-- Idempotency: honor `Idempotency-Key`; do not reprocess identical bodies keyed by (controller, key, body hash). Return the same result with 202 if repeated.
-- Rate limit: token-bucket per controller; return `429` with `X-RateLimit-*` and `Retry-After`.
-- Security: require `X-Device-Token`. Map token → controller → greenhouse.
-- Do not accept controller identity in body for security; derive from token.
+- Require `X-Device-Token` for telemetry/config fetch. 401/403 if missing/bad.
+- Sensors endpoint: batch accepts `readings[]` with strict enum validation; accept bulk, reject invalid items with 422.
+- `Idempotency-Key`: dedupe identical payloads + key; re‑serve stored response.
+- Status endpoint: ensure schema parity with docs; record plan/config version, override/fallback flags.
+- Config fetch by controller device name honors `If-None-Match` and returns `ETag`.
+- Plan payload.version must equal entity version on update; reject mismatches (409/422). Single active plan enforced.

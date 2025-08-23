@@ -1,0 +1,17 @@
+# FINALIZER — Please produce the structured review now
+
+When you have received all prior parts and replied with 'ACK n/N' each time,
+use the full context to produce a structured review with the following sections:
+
+1) Executive Summary (bullet points)
+2) Correctness & Design (APIs, invariants, error handling; call out risky areas)
+3) Security & Secrets (hardcoded credentials, auth flows, dependency risks)
+4) Performance (hot paths, memory/disk I/O, N+1 queries, caching opportunities)
+5) Testing & Verification (coverage gaps, flaky areas, missing cases)
+6) Maintainability (readability, modularity, dead code, naming, comments)
+7) Observability (logging, metrics, tracing, feature flags, config)
+8) Migration/Rollback (DB/schema changes, compat, flags)
+9) Changelist Risks (large deltas, renames, cross-cutting refactors)
+10) Actionable Next Steps (prioritized checklist with owners if known)
+
+If critical context seems missing, list explicit follow-up questions.

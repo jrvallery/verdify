@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schemas.github.com/copilot/agent-environment.json",
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONUNBUFFERED": "1",
+    "UV_SYSTEM_PYTHON": "1",
+    "VERDIFY_BASE_URL": "http://127.0.0.1:8000"
+  },
+  "firewall": {
+    "network": "localhost",
+    "allowCommands": [
+      "uv run --directory backend fastapi dev app/main.py --host 127.0.0.1 --port 8000",
+      "uv run --directory backend pytest -q",
+      "uv run --directory backend ruff check .",
+      "uv run --directory backend ruff format .",
+      "uv run --directory backend alembic upgrade head",
+      "code -r ."
+    ],
+    "denyCommands": [
+      "rm -rf *",
+      "wget *",
+      "curl *"
+    ]
+  }
+}

@@ -39,7 +39,7 @@ def create_controller(
     greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Override greenhouse_id from URL path
@@ -57,7 +57,7 @@ def list_controllers(
     greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Return controllers ONLY for this specific greenhouse
@@ -85,7 +85,7 @@ def get_controller(
     greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return controller
 
@@ -112,7 +112,7 @@ def update_controller(
     greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return crud_update_controller(session, controller, c_in)
 
@@ -138,7 +138,7 @@ def delete_controller(
     greenhouse = crud_get_greenhouse(session=session, id=greenhouse_id)
     if not greenhouse:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    if not (current_user.is_superuser or greenhouse.owner_id == current_user.id):
+    if not (current_user.is_superuser or greenhouse.user_id == current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     crud_delete_controller(session, controller)
     return {"ok": True}

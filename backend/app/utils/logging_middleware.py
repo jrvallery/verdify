@@ -39,7 +39,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             skip_paths: List of paths to skip logging (e.g., health checks)
         """
         super().__init__(app)
-        self.skip_paths = skip_paths or ["/health", "/docs", "/redoc", "/openapi.json"]
+        self.skip_paths = skip_paths or ["/health", "/health-check", "/utils/health-check", "/docs", "/redoc", "/openapi.json"]
         self.logger = get_structured_logger("verdify.middleware")
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -83,7 +83,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                     "exception_type": type(e).__name__,
                     "exception_message": str(e),
                 },
-                exc_info=e,
+                exc_info=True,
             )
 
             # Re-raise the exception to be handled by other middleware/handlers

@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
+from sqlalchemy import text
 
 from app.core import security
 from app.core.config import settings
@@ -42,6 +43,12 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    # Set session variable for RLS policies
+    try:
+        session.exec(text("SET LOCAL app.current_user_id = :uid").bindparams(uid=str(user.id)))
+    except Exception:
+        # Non-fatal in environments without the helper function/policy yet
+        pass
     return user
 
 
@@ -122,6 +129,17 @@ def get_current_device(
                 detail="Device token expired",
                 headers={"WWW-Authenticate": "X-Device-Token"},
             )
+
+    # Set session variable for RLS policies (controller scope)
+    try:
+        session.exec(
+            text("SET LOCAL app.current_controller_id = :cid").bindparams(
+                cid=str(controller.id)
+            )
+        )
+    except Exception:
+        # Non-fatal if DB helper not present yet
+        pass
 
     # Update last_seen timestamp
     controller.last_seen = current_time

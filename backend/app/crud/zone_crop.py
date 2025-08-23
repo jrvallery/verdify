@@ -133,7 +133,7 @@ class CRUDZoneCrop:
         # Check if zone already has an active crop
         existing_active = session.exec(
             select(ZoneCrop).where(
-                and_(ZoneCrop.zone_id == obj_in.zone_id, ZoneCrop.is_active is True)
+                and_(ZoneCrop.zone_id == obj_in.zone_id, ZoneCrop.is_active.is_(True))
             )
         ).first()
 

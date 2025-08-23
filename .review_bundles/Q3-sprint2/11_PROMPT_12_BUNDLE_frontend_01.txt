@@ -1,0 +1,3431 @@
+# PROMPT 12 — Bundle: frontend (01)
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/.gitignore =====
+    # Logs
+    logs
+    *.log
+    npm-debug.log*
+    yarn-debug.log*
+    yarn-error.log*
+    pnpm-debug.log*
+    lerna-debug.log*
+    
+    node_modules
+    dist
+    dist-ssr
+    *.local
+    openapi.json
+    
+    # Editor directories and files
+    .vscode/*
+    !.vscode/extensions.json
+    .idea
+    .DS_Store
+    *.suo
+    *.ntvs*
+    *.njsproj
+    *.sln
+    *.sw?
+    /test-results/
+    /playwright-report/
+    /blob-report/
+    /playwright/.cache/
+    /playwright/.auth/
+
+===== END FILE: /Users/jason/Code/verdify/frontend/.gitignore =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/AddObservation.tsx =====
+    import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+    import { type SubmitHandler, useForm } from "react-hook-form";
+    
+    import {
+      Button,
+      DialogActionTrigger,
+      DialogTitle,
+      Input,
+      Textarea,
+      Text,
+      VStack,
+      Box,
+      Image,
+    } from "@chakra-ui/react";
+    import { useState } from "react";
+    import { FiPlus, FiUpload } from "react-icons/fi";
+    
+    import {
+      CropsService,
+      ZonesService,
+      type ZonePublic
+    } from "@/client";
+    import type { ApiError } from "@/client/core/ApiError";
+    import useCustomToast from "@/hooks/useCustomToast";
+    import { handleError } from "@/utils";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import { Field } from "../ui/field";
+    
+    interface AddObservationProps {
+      zone: ZonePublic;
+    }
+    
+    interface ObservationFormData {
+      notes: string;
+      height_cm: number | undefined;
+      health_score: number | undefined;
+    }
+    
+    const AddObservation = ({ zone }: AddObservationProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const [selectedFile, setSelectedFile] = useState<File | null>(null);
+      const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+      const queryClient = useQueryClient();
+      const { showSuccessToast } = useCustomToast();
+    
+      // First check if the zone has a crop
+      const { data: hasCrop } = useQuery({
+        queryKey: ["zone-has-crop", zone.id],
+        queryFn: () => ZonesService.hasCrop({
+          zoneId: zone.id
+        }),
+        enabled: isOpen,
+        retry: false,
+        staleTime: 0,
+      });
+    
+      // Get the active zone crop to get the zone_crop_id (only if we know there's a crop)
+      const { data: zoneCrop } = useQuery({
+        queryKey: ["zone-crop", zone.id],
+        queryFn: () => CropsService.getZoneCrop({ zoneId: zone.id }),
+        enabled: isOpen && hasCrop === true, // Only fetch if dialog is open and zone has crop
+        retry: false, // Don't retry on 404
+        staleTime: 0, // Always fetch fresh data
+        throwOnError: false, // Handle errors gracefully
+      });
+    
+      const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors, isSubmitting },
+      } = useForm<ObservationFormData>({
+        mode: "onBlur",
+        criteriaMode: "all",
+        defaultValues: {
+          notes: "",
+          height_cm: undefined,
+          health_score: undefined,
+        },
+      });
+    
+      const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] || null;
+        setSelectedFile(file);
+    
+        // Create preview URL
+        if (file) {
+          const url = URL.createObjectURL(file);
+          setPreviewUrl(url);
+        } else {
+          setPreviewUrl(null);
+        }
+      };
+    
+      const mutation = useMutation({
+        mutationFn: async (formData: FormData) => {
+          // Create a custom fetch request for multipart data
+          const token = localStorage.getItem('access_token');
+    
+          // Log what we're sending for debugging
+          console.log("Sending FormData with entries:");
+          for (const [key, value] of formData.entries()) {
+            console.log(`${key}:`, value);
+          }
+    
+          const response = await fetch(`/api/v1/crops/zones/${zone.id}/observations/`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+          });
+    
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Response status:", response.status);
+            console.error("Response body:", errorText);
+            throw new Error(`Failed to create observation: ${response.status} - ${errorText}`);
+          }
+    
+          return response.json();
+        },
+        onSuccess: () => {
+          showSuccessToast("Observation added successfully.");
+          reset();
+          setSelectedFile(null);
+          setPreviewUrl(null);
+          setIsOpen(false);
+        },
+        onError: (err: Error) => {
+          console.error("Observation creation error:", err);
+          handleError(err as ApiError);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["crop-observations", zone.id] });
+        },
+      });
+    
+      const onSubmit: SubmitHandler<ObservationFormData> = (data) => {
+        console.log("Form data received:", data);
+    
+        if (!zoneCrop?.id) {
+          console.error("No zone crop ID available");
+          return;
+        }
+    
+        // Create FormData for multipart upload
+        const formData = new FormData();
+    
+        // Add form fields only if they have values - be more explicit about types
+        if (data.notes && data.notes.trim()) {
+          formData.append('notes', data.notes.trim());
+        }
+        if (data.height_cm !== undefined && data.height_cm !== null && !isNaN(data.height_cm)) {
+          formData.append('height_cm', data.height_cm.toString());
+        }
+        if (data.health_score !== undefined && data.health_score !== null && !isNaN(data.health_score)) {
+          formData.append('health_score', data.health_score.toString());
+        }
+    
+        // Add file if selected
+        if (selectedFile) {
+          formData.append('file', selectedFile);
+        }
+    
+        console.log("FormData prepared with file:", selectedFile?.name);
+        mutation.mutate(formData);
+      };
+    
+      const resetForm = () => {
+        reset();
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+      };
+    
+      // Don't show the button if zone doesn't have a crop
+      if (hasCrop === false) {
+        return null;
+      }
+    
+      // Don't show the button if we can't get zone crop data or if there's an error
+      if (!zoneCrop) {
+        return null;
+      }
+    
+      return (
+        <DialogRoot
+          size={{ base: "sm", md: "md" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => {
+            setIsOpen(open);
+            if (!open) {
+              resetForm();
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" colorPalette="blue">
+              <FiPlus fontSize="12px" />
+              Add Observation
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <DialogHeader>
+                <DialogTitle>Add Crop Observation</DialogTitle>
+              </DialogHeader>
+              <DialogBody>
+                <Text mb={4}>Record an observation for the crop in Zone {zone.zone_number}.</Text>
+                <VStack gap={4}>
+                  <Field
+                    invalid={!!errors.notes}
+                    errorText={errors.notes?.message}
+                    label="Notes (Optional)"
+                  >
+                    <Textarea
+                      id="notes"
+                      {...register("notes")}
+                      placeholder="Observations about the crop..."
+                      rows={3}
+                    />
+                  </Field>
+    
+                  <Field
+                    invalid={!!errors.height_cm}
+                    errorText={errors.height_cm?.message}
+                    label="Height (cm) - Optional"
+                  >
+                    <Input
+                      id="height_cm"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      {...register("height_cm", {
+                        valueAsNumber: true,
+                        setValueAs: (value) => value === "" ? undefined : Number(value)
+                      })}
+                      placeholder="Plant height in centimeters"
+                    />
+                  </Field>
+    
+                  <Field
+                    invalid={!!errors.health_score}
+                    errorText={errors.health_score?.message}
+                    label="Health Score (1-10) - Optional"
+                  >
+                    <Input
+                      id="health_score"
+                      type="number"
+                      min="1"
+                      max="10"
+                      {...register("health_score", {
+                        valueAsNumber: true,
+                        setValueAs: (value) => value === "" ? undefined : Number(value),
+                        min: { value: 1, message: "Minimum score is 1" },
+                        max: { value: 10, message: "Maximum score is 10" }
+                      })}
+                      placeholder="Rate plant health from 1-10"
+                    />
+                  </Field>
+    
+                  <Field label="Image (Optional)">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      size="sm"
+                    />
+                    {selectedFile && (
+                      <Text fontSize="sm" color="gray.600" mt={1}>
+                        Selected: {selectedFile.name}
+                      </Text>
+                    )}
+                  </Field>
+    
+                  {previewUrl && (
+                    <Box>
+                      <Text fontSize="sm" fontWeight="medium" mb={2} color="gray.700">
+                        Image Preview
+                      </Text>
+                      <Image
+                        src={previewUrl}
+                        alt="Preview"
+                        maxW="200px"
+                        maxH="150px"
+                        objectFit="cover"
+                        rounded="md"
+                        border="1px"
+                        borderColor="gray.200"
+                      />
+                    </Box>
+                  )}
+                </VStack>
+              </DialogBody>
+    
+              <DialogFooter gap={2}>
+                <DialogActionTrigger asChild>
+                  <Button
+                    variant="subtle"
+                    colorPalette="gray"
+                    disabled={isSubmitting}
+                    onClick={resetForm}
+                  >
+                    Cancel
+                  </Button>
+                </DialogActionTrigger>
+                <Button
+                  variant="solid"
+                  type="submit"
+                  loading={isSubmitting}
+                >
+                  <FiUpload fontSize="14px" />
+                  Add Observation
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default AddObservation;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/AddObservation.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/CropDetails.tsx =====
+    import {
+      Button,
+      DialogActionTrigger,
+      DialogTitle,
+      Text,
+      VStack,
+      Box,
+      Flex,
+      Badge,
+      Separator,
+    } from "@chakra-ui/react";
+    import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+    import { useState } from "react";
+    import { FiEye, FiHeart } from "react-icons/fi";
+    
+    import {
+      CropsService,
+      type ZonePublic,
+      type ZoneCropPublic,
+      type CropPublic,
+      type ZoneCropObservationPublic
+    } from "@/client";
+    import useCustomToast from "@/hooks/useCustomToast";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import AddObservation from "./AddObservation";
+    
+    interface CropDetailsProps {
+      zone: ZonePublic;
+      zoneCrop: ZoneCropPublic;
+      crop: CropPublic;
+    }
+    
+    const CropDetails = ({ zone, zoneCrop, crop }: CropDetailsProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const queryClient = useQueryClient();
+      const { showSuccessToast, showErrorToast } = useCustomToast();
+    
+      // Get observations for this crop (only fetch if we have a valid zone crop)
+      const { data: observations } = useQuery({
+        queryKey: ["crop-observations", zone.id],
+        queryFn: () => CropsService.listZoneCropObservations({ zoneId: zone.id }),
+        enabled: isOpen && !!zoneCrop.id,
+        throwOnError: false,
+      });
+    
+      const harvestMutation = useMutation({
+        mutationFn: () => CropsService.harvestCropFromZone({ zoneId: zone.id }),
+        onSuccess: () => {
+          showSuccessToast("Crop harvested successfully.");
+          setIsOpen(false);
+    
+          // Force remove the zone crop data from cache to prevent 404s
+          queryClient.removeQueries({ queryKey: ["zone-crop", zone.id] });
+          queryClient.removeQueries({ queryKey: ["crop-observations", zone.id] });
+          queryClient.removeQueries({ queryKey: ["zone-has-crop", zone.id] }); // Also remove hasCrop cache
+    
+          // Invalidate related queries to refetch fresh data
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+        },
+        onError: () => {
+          showErrorToast("Error harvesting crop.");
+        },
+      });
+    
+      const getDaysGrowing = () => {
+        if (!zoneCrop.start_date) return 0;
+    
+        const startDate = new Date(zoneCrop.start_date);
+        const endDate = zoneCrop.end_date ? new Date(zoneCrop.end_date) : new Date();
+        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
+      };
+    
+      return (
+        <DialogRoot
+          size={{ base: "md", md: "lg" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" variant="ghost">
+              <FiEye fontSize="12px" />
+              View Crop
+            </Button>
+          </DialogTrigger>
+    
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {crop.name} - Zone {zone.zone_number}
+              </DialogTitle>
+            </DialogHeader>
+    
+            <DialogBody>
+              <VStack gap={6} align="stretch">
+                {/* Crop Info */}
+                <Box>
+                  <Text fontWeight="bold" mb={2}>Crop Information</Text>
+                  <VStack gap={2} align="stretch">
+                    <Flex justify="space-between">
+                      <Text color={{ base: "gray.600", _dark: "gray.400" }}>Status:</Text>
+                      <Badge colorPalette={zoneCrop.is_active ? "green" : "gray"}>
+                        {zoneCrop.is_active ? "Active" : "Harvested"}
+                      </Badge>
+                    </Flex>
+                    <Flex justify="space-between">
+                      <Text color={{ base: "gray.600", _dark: "gray.400" }}>Days Growing:</Text>
+                      <Text color={{ base: "gray.800", _dark: "gray.200" }}>{getDaysGrowing()} days</Text>
+                    </Flex>
+                    <Flex justify="space-between">
+                      <Text color={{ base: "gray.600", _dark: "gray.400" }}>Area:</Text>
+                      <Text color={{ base: "gray.800", _dark: "gray.200" }}>{zoneCrop.area_sqm ? `${zoneCrop.area_sqm} sq m` : "Not specified"}</Text>
+                    </Flex>
+                    {zoneCrop.final_yield && (
+                      <Flex justify="space-between">
+                        <Text color={{ base: "gray.600", _dark: "gray.400" }}>Final Yield:</Text>
+                        <Text color={{ base: "gray.800", _dark: "gray.200" }}>{zoneCrop.final_yield} kg</Text>
+                      </Flex>
+                    )}
+                    {crop.description && (
+                      <Box>
+                        <Text color={{ base: "gray.600", _dark: "gray.400" }} fontWeight="medium">Description:</Text>
+                        <Text fontSize="sm" color={{ base: "gray.800", _dark: "gray.200" }}>{crop.description}</Text>
+                      </Box>
+                    )}
+                  </VStack>
+                </Box>
+    
+                <Separator />
+    
+                {/* Observations */}
+                <Box>
+                  <Flex justify="space-between" align="center" mb={4}>
+                    <Text fontWeight="bold" color={{ base: "gray.800", _dark: "gray.200" }}>Observations ({observations?.length || 0})</Text>
+                    {zoneCrop.is_active && (
+                      <AddObservation zone={zone} />
+                    )}
+                  </Flex>
+    
+                  {observations && observations.length > 0 ? (
+                    <VStack gap={3} align="stretch" maxH="200px" overflowY="auto">
+                      {observations.map((obs: ZoneCropObservationPublic) => (
+                        <Box
+                          key={obs.id}
+                          p={3}
+                          border="1px"
+                          borderColor={{ base: "gray.200", _dark: "gray.600" }}
+                          rounded="md"
+                          bg={{ base: "gray.50", _dark: "gray.700" }}
+                        >
+                          <Flex justify="space-between" align="center" mb={1}>
+                            <Text fontSize="sm" fontWeight="medium" color={{ base: "gray.800", _dark: "gray.200" }}>
+                              {obs.observed_at ? new Date(obs.observed_at).toLocaleDateString() : "Date unknown"}
+                            </Text>
+                            {obs.health_score && (
+                              <Flex align="center" gap={1}>
+                                <FiHeart size={12} />
+                                <Text fontSize="sm" color={{ base: "gray.800", _dark: "gray.200" }}>{obs.health_score}/10</Text>
+                              </Flex>
+                            )}
+                          </Flex>
+                          {obs.height_cm && (
+                            <Text fontSize="sm" color={{ base: "gray.600", _dark: "gray.400" }}>
+                              Height: {obs.height_cm} cm
+                            </Text>
+                          )}
+                          {obs.notes && (
+                            <Text fontSize="sm" mt={1} color={{ base: "gray.800", _dark: "gray.200" }}>{obs.notes}</Text>
+                          )}
+                        </Box>
+                      ))}
+                    </VStack>
+                  ) : (
+                    <Text color={{ base: "gray.500", _dark: "gray.400" }} fontSize="sm">No observations recorded yet</Text>
+                  )}
+                </Box>
+              </VStack>
+            </DialogBody>
+    
+            <DialogFooter gap={2}>
+              {zoneCrop.is_active && (
+                <Button
+                  colorPalette="orange"
+                  onClick={() => harvestMutation.mutate()}
+                  loading={harvestMutation.isPending}
+                >
+                  Harvest Crop
+                </Button>
+              )}
+              <DialogActionTrigger asChild>
+                <Button variant="subtle" colorPalette="gray">
+                  Close
+                </Button>
+              </DialogActionTrigger>
+            </DialogFooter>
+    
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default CropDetails;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/CropDetails.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/CropHeader.tsx =====
+    import { Box, Text, VStack, Badge, Flex } from "@chakra-ui/react";
+    import { CropPublic, ZoneCropPublic } from "@/client";
+    import { isCropRecipe } from "@/types/cropRecipe";
+    
+    interface CropHeaderProps {
+      crop: CropPublic;
+      zoneCrop: ZoneCropPublic;
+      currentStage?: { name: string } | null;
+    }
+    
+    const CropHeader = ({ crop, zoneCrop, currentStage }: CropHeaderProps) => {
+      const recipe = crop.recipe && isCropRecipe(crop.recipe) ? crop.recipe : null;
+    
+      return (
+        <Flex justify="space-between" align="center" mb={2}>
+          <Box>
+            <Text fontSize="2xl" fontWeight="bold" color={{ base: "gray.800", _dark: "gray.100" }}>
+              {crop.name}
+            </Text>
+            <Text fontSize="sm" color={{ base: "gray.600", _dark: "gray.400" }}>
+              {recipe?.species || 'Species unknown'}
+            </Text>
+            <Text fontSize="sm" color={{ base: "gray.600", _dark: "gray.400" }}>
+              Planted: {zoneCrop.start_date ? new Date(zoneCrop.start_date).toLocaleDateString() : "Unknown"}
+            </Text>
+          </Box>
+          <VStack gap={1} align="end">
+            <Badge
+              colorPalette={zoneCrop.is_active ? "green" : "gray"}
+              size="lg"
+              variant="solid"
+            >
+              {zoneCrop.is_active ? "Growing" : "Harvested"}
+            </Badge>
+            {currentStage && (
+              <Badge colorPalette="blue" size="sm">
+                {currentStage.name}
+              </Badge>
+            )}
+          </VStack>
+        </Flex>
+      );
+    };
+    
+    export default CropHeader;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/CropHeader.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/PlantCrop.tsx =====
+    import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+    import { type SubmitHandler, useForm } from "react-hook-form";
+    import { useEffect } from "react";
+    
+    import {
+      Button,
+      DialogActionTrigger,
+      DialogTitle,
+      Text,
+      VStack,
+    } from "@chakra-ui/react";
+    import { useState } from "react";
+    import { FiPlus } from "react-icons/fi";
+    
+    import {
+      type ZoneCropCreate,
+      CropsService,
+      type CropPublic,
+      type ZonePublic
+    } from "@/client";
+    import type { ApiError } from "@/client/core/ApiError";
+    import useCustomToast from "@/hooks/useCustomToast";
+    import { handleError } from "@/utils";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import { Field } from "../ui/field";
+    
+    interface PlantCropProps {
+      zone: ZonePublic;
+    }
+    
+    const PlantCrop = ({ zone }: PlantCropProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const queryClient = useQueryClient();
+      const { showSuccessToast } = useCustomToast();
+    
+      // Hook to refresh the page when a crop is planted
+      useEffect(() => {
+        if (!isOpen) {
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+          queryClient.invalidateQueries({ queryKey: ["zone-crop", zone.id] });
+        }
+      }, [isOpen, queryClient, zone.id]);
+    
+      // Get available crop templates
+      const { data: crops } = useQuery({
+        queryKey: ["crops"],
+        queryFn: () => CropsService.listCrops(),
+        enabled: isOpen,
+      });
+    
+      const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors, isValid, isSubmitting },
+      } = useForm<ZoneCropCreate>({
+        mode: "onBlur",
+        criteriaMode: "all",
+        defaultValues: {
+          crop_id: "",
+          zone_id: zone.id,
+          area_sqm: undefined,
+        },
+      });
+    
+      const mutation = useMutation({
+        mutationFn: (data: ZoneCropCreate) =>
+          CropsService.plantCropInZone({
+            zoneId: zone.id,
+            requestBody: data
+          }),
+        onSuccess: () => {
+          showSuccessToast("Crop planted successfully.");
+          reset();
+          setIsOpen(false);
+        },
+        onError: (err: ApiError) => {
+          handleError(err);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+          queryClient.invalidateQueries({ queryKey: ["zone-crop", zone.id] });
+        },
+      });
+    
+      const onSubmit: SubmitHandler<ZoneCropCreate> = (data) => {
+        mutation.mutate({ ...data, zone_id: zone.id });
+      };
+    
+      return (
+        <DialogRoot
+          size={{ base: "sm", md: "md" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" colorPalette="green">
+              <FiPlus fontSize="12px" />
+              Plant Crop
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <DialogHeader>
+                <DialogTitle>Plant Crop in Zone {zone.zone_number}</DialogTitle>
+              </DialogHeader>
+              <DialogBody>
+                <Text mb={4}>Select a crop to plant in this zone.</Text>
+                <VStack gap={4}>
+                  <Field
+                    required
+                    invalid={!!errors.crop_id}
+                    errorText={errors.crop_id?.message}
+                    label="Crop Template"
+                  >
+                    <select
+                      id="crop_id"
+                      {...register("crop_id", { required: "Please select a crop." })}
+                    >
+                      <option value="">Select a crop...</option>
+                      {crops?.map((crop: CropPublic) => (
+                        <option key={crop.id} value={crop.id}>
+                          {crop.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+    
+                  <Field
+                    invalid={!!errors.area_sqm}
+                    errorText={errors.area_sqm?.message}
+                    label="Area (sq meters)"
+                  >
+                    <input
+                      id="area_sqm"
+                      type="number"
+                      step="0.1"
+                      {...register("area_sqm", { valueAsNumber: true })}
+                      placeholder="Optional area in square meters"
+                    />
+                  </Field>
+                </VStack>
+              </DialogBody>
+    
+              <DialogFooter gap={2}>
+                <DialogActionTrigger asChild>
+                  <Button
+                    variant="subtle"
+                    colorPalette="gray"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                </DialogActionTrigger>
+                <Button
+                  variant="solid"
+                  type="submit"
+                  disabled={!isValid}
+                  loading={isSubmitting}
+                >
+                  Plant Crop
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default PlantCrop;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/PlantCrop.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/ViewObservations.tsx =====
+    import { useQuery } from "@tanstack/react-query";
+    import {
+      Button,
+      DialogTitle,
+      Text,
+      VStack,
+      Box,
+      Flex,
+      Badge,
+      HStack,
+      Heading,
+      Separator,
+      Image,
+    } from "@chakra-ui/react";
+    import { useState } from "react";
+    import { FiEye, FiCamera, FiCalendar, FiBarChart, FiHeart } from "react-icons/fi";
+    import { format } from "date-fns";
+    
+    import {
+      CropsService,
+      type ZonePublic,
+      type ZoneCropObservationPublic,
+    } from "@/client";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    
+    interface ViewObservationsProps {
+      zone: ZonePublic;
+      zoneCropId?: string; // Optional: for viewing specific historical crop observations
+      cropName?: string;   // Optional: for displaying crop name in title
+    }
+    
+    const ViewObservations = ({ zone, zoneCropId, cropName }: ViewObservationsProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+    
+      // If zoneCropId is provided, fetch observations for that specific crop
+      // Otherwise, fetch observations for the current active crop in the zone
+      const { data: observations, isLoading } = useQuery<ZoneCropObservationPublic[]>({
+        queryKey: ["crop-observations", zone.id, zoneCropId],
+        queryFn: async (): Promise<ZoneCropObservationPublic[]> => {
+          if (zoneCropId) {
+            // Fetch observations for specific historical crop
+            const token = localStorage.getItem('access_token');
+    
+            if (!token) {
+              throw new Error('No authentication token found');
+            }
+    
+            const response = await fetch(`/api/v1/crops/zone-crops/${zoneCropId}/observations/`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+    
+            if (!response.ok) {
+              if (response.status === 401) {
+                throw new Error('Authentication failed - please log in again');
+              }
+              if (response.status === 404) {
+                throw new Error('Zone crop not found');
+              }
+              throw new Error(`Failed to fetch observations: ${response.status}`);
+            }
+            return response.json();
+          } else {
+            // Default behavior - fetch for current active crop
+            return CropsService.listZoneCropObservations({ zoneId: zone.id });
+          }
+        },
+        enabled: isOpen,
+      });
+    
+      const formatDate = (dateString: string) => {
+        return format(new Date(dateString), "MMM dd, yyyy 'at' h:mm a");
+      };
+    
+      const getHealthScoreColor = (score: number) => {
+        if (score >= 8) return "green";
+        if (score >= 6) return "yellow";
+        if (score >= 4) return "orange";
+        return "red";
+      };
+    
+      const getDialogTitle = () => {
+        if (cropName && zoneCropId) {
+          return `${cropName} Observations - Zone ${zone.zone_number}`;
+        }
+        return `Crop Observations - Zone ${zone.zone_number}`;
+      };
+    
+      const getButtonText = () => {
+        if (zoneCropId) {
+          return "Observations";
+        }
+        return "View Observations";
+      };
+    
+      const getButtonSize = () => {
+        if (zoneCropId) {
+          return "xs"; // Smaller button for historical crops
+        }
+        return "sm"; // Normal size for current crop
+      };
+    
+      return (
+        <DialogRoot
+          size={{ base: "md", md: "xl" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button
+              size={getButtonSize()}
+              colorPalette="blue"
+              variant={"solid"}
+              onClick={(e) => e.stopPropagation()} // Prevent parent click events
+            >
+              <FiEye fontSize="12px" />
+              {getButtonText()}
+            </Button>
+          </DialogTrigger>
+    
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{getDialogTitle()}</DialogTitle>
+            </DialogHeader>
+    
+            <DialogBody>
+              {isLoading ? (
+                <Flex justify="center" align="center" h="200px">
+                  <Text>Loading observations...</Text>
+                </Flex>
+              ) : !observations || observations.length === 0 ? (
+                <Flex justify="center" align="center" h="200px">
+                  <VStack gap={2}>
+                    <Text color="gray.500" fontSize="lg">No observations found</Text>
+                    <Text color="gray.400" fontSize="sm">
+                      {zoneCropId
+                        ? "No observations were recorded for this crop."
+                        : "No observations have been recorded for this crop yet."
+                      }
+                    </Text>
+                  </VStack>
+                </Flex>
+              ) : (
+                <VStack gap={6} align="stretch" maxH="600px" overflowY="auto">
+                  {/* Summary Stats */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Overview</Heading>
+                    <HStack gap={6} wrap="wrap">
+                      <Box textAlign="center">
+                        <Text fontSize="2xl" fontWeight="bold" color="blue.500">{observations.length}</Text>
+                        <Text fontSize="sm" color="gray.600">Total Observations</Text>
+                      </Box>
+                      <Box textAlign="center">
+                        <Text fontSize="2xl" fontWeight="bold" color="green.500">
+                          {observations?.filter((obs: ZoneCropObservationPublic) => obs.image_url).length || 0}
+                        </Text>
+                        <Text fontSize="sm" color="gray.600">With Photos</Text>
+                      </Box>
+                      <Box textAlign="center">
+                        <Text fontSize="2xl" fontWeight="bold" color="purple.500">
+                          {observations?.filter((obs: ZoneCropObservationPublic) => obs.health_score).length > 0
+                            ? Math.round(
+                                observations
+                                  .filter((obs: ZoneCropObservationPublic) => obs.health_score)
+                                  .reduce((sum: number, obs: ZoneCropObservationPublic) => sum + (obs.health_score || 0), 0) /
+                                observations.filter((obs: ZoneCropObservationPublic) => obs.health_score).length
+                              )
+                            : "N/A"
+                          }
+                        </Text>
+                        <Text fontSize="sm" color="gray.600">Avg Health Score</Text>
+                      </Box>
+                    </HStack>
+                  </Box>
+    
+                  <Separator />
+    
+                  {/* Observations List */}
+                  <Box>
+                    <Heading size="md" mb={4} color="grey.600">
+                      <Flex align="center" gap={2}>
+                        <FiCalendar />
+                        {zoneCropId ? "Historical Observations" : "Recent Observations"}
+                      </Flex>
+                    </Heading>
+                    <VStack gap={4} align="stretch">
+                      {observations
+                        ?.filter((obs: ZoneCropObservationPublic) => obs.observed_at)
+                        .sort((a: ZoneCropObservationPublic, b: ZoneCropObservationPublic) =>
+                          new Date(b.observed_at!).getTime() - new Date(a.observed_at!).getTime()
+                        )
+                        .map((observation: ZoneCropObservationPublic) => (
+                        <Box
+                          key={observation.id}
+                          border="1px"
+                          borderColor="gray.200"
+                          rounded="lg"
+                          p={4}
+                          bg="white"
+                          _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+                          shadow="sm"
+                        >
+                          {/* Header with date and image indicator */}
+                          <Flex justify="space-between" align="start" mb={3}>
+                            <VStack align="start" gap={1}>
+                              <Text fontSize="sm" fontWeight="bold" color="blue.400">
+                                {observation.observed_at ? formatDate(observation.observed_at) : "Date unknown"}
+                              </Text>
+                              <HStack gap={2}>
+                                {observation.health_score && (
+                                  <Badge
+                                    colorPalette={getHealthScoreColor(observation.health_score)}
+                                    variant="solid"
+                                    size="sm"
+                                  >
+                                    <FiHeart fontSize="10px" />
+                                    Health: {observation.health_score}/10
+                                  </Badge>
+                                )}
+                              </HStack>
+                            </VStack>
+    
+                            {observation.height_cm && (
+                              <VStack align="end" gap={1}>
+                                <Flex align="center" gap={1} color="gray.600">
+                                  <FiBarChart fontSize="12px" />
+                                  <Text fontSize="sm" fontWeight="medium">
+                                    {observation.height_cm} cm
+                                  </Text>
+                                </Flex>
+                              </VStack>
+                            )}
+                          </Flex>
+    
+                          {/* Notes */}
+                          {observation.notes && (
+                            <Box mb={3}>
+                              <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.300" }}>
+                                {observation.notes}
+                              </Text>
+                            </Box>
+                          )}
+    
+                          {/* Image - Display the actual image if available */}
+                          {observation.image_url && (
+                            <Box mb={3}>
+                              <Text fontSize="sm" fontWeight="medium" mb={2} color="gray.700" _dark={{ color: "gray.300" }}>
+                                <Flex align="center" gap={1}>
+                                  <FiCamera fontSize="12px" />
+                                  Photo
+                                </Flex>
+                              </Text>
+                              <Image
+                                src={observation.image_url}
+                                alt="Crop observation"
+                                maxW="100%"
+                                maxH="300px"
+                                objectFit="cover"
+                                rounded="md"
+                                border="1px"
+                                borderColor="gray.200"
+                                _dark={{ borderColor: "gray.600" }}
+                                cursor="pointer"
+                                _hover={{ opacity: 0.8 }}
+                                onClick={() => observation.image_url && window.open(observation.image_url, '_blank')}
+                              />
+                            </Box>
+                          )}
+    
+                          {/* Metrics Summary */}
+                          <Box mt={3} p={3} bg="gray.50" rounded="md" _dark={{ bg: "gray.700" }}>
+                            <HStack gap={4} wrap="wrap" fontSize="sm">
+                              {observation.height_cm && (
+                                <Flex align="center" gap={1}>
+                                  <FiBarChart color="#6B7280" />
+                                  <Text>Height: {observation.height_cm} cm</Text>
+                                </Flex>
+                              )}
+                              {observation.health_score && (
+                                <Flex align="center" gap={1}>
+                                  <FiHeart color="#6B7280" />
+                                  <Text>Health: {observation.health_score}/10</Text>
+                                </Flex>
+                              )}
+                              {!observation.height_cm && !observation.health_score && (
+                                <Text color="gray.500" fontSize="xs">No metrics recorded</Text>
+                              )}
+                            </HStack>
+                          </Box>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </Box>
+    
+                  {/* Growth Trend Summary */}
+                  {observations && observations.filter((obs: ZoneCropObservationPublic) => obs.height_cm).length > 1 && (
+                    <>
+                      <Separator />
+                      <Box>
+                        <Heading size="sm" mb={3} color="green.600">
+                          Growth Trend
+                        </Heading>
+                        <Box p={3} bg="green.50" rounded="md" _dark={{ bg: "green.900" }}>
+                          {(() => {
+                            const heightObservations = observations
+                              .filter((obs: ZoneCropObservationPublic) => obs.height_cm && obs.observed_at)
+                              .sort((a: ZoneCropObservationPublic, b: ZoneCropObservationPublic) =>
+                                new Date(a.observed_at!).getTime() - new Date(b.observed_at!).getTime()
+                              );
+    
+                            const firstHeight = heightObservations[0]?.height_cm || 0;
+                            const lastHeight = heightObservations[heightObservations.length - 1]?.height_cm || 0;
+                            const growth = lastHeight - firstHeight;
+    
+                            return (
+                              <VStack align="start" gap={2}>
+                                <Text fontSize="sm" fontWeight="medium">
+                                  Total Growth: {growth.toFixed(1)} cm
+                                </Text>
+                                <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>
+                                  From {firstHeight} cm to {lastHeight} cm over {heightObservations.length} measurements
+                                </Text>
+                              </VStack>
+                            );
+                          })()}
+                        </Box>
+                      </Box>
+                    </>
+                  )}
+                </VStack>
+              )}
+            </DialogBody>
+    
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+    
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default ViewObservations;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Crops/ViewObservations.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Greenhouses/GHSidebarItems.tsx =====
+    import { Box, Flex, Icon, Text } from "@chakra-ui/react"
+    import { useQueryClient, useQuery } from "@tanstack/react-query"
+    import { Link as RouterLink, useParams } from "@tanstack/react-router"
+    import {
+        FiHome,
+        FiThermometer,
+        FiGrid,
+        FiTool,
+        FiBarChart2,
+        FiSettings,
+        FiUsers,
+      } from "react-icons/fi";
+    
+    import { GreenhousesService } from "@/client"
+    import type { IconType } from "react-icons/lib"
+    
+    import type { UserPublic } from "@/client"
+    
+    const items = [
+        { icon: FiHome, title: "greenhouseName", path: "/greenhouses/$greenhouseId" },
+        { icon: FiGrid, title: "Zones", path: "/greenhouses/$greenhouseId/zones" },
+        { icon: FiThermometer, title: "Climate", path: "/greenhouses/$greenhouseId/climate" },
+        { icon: FiTool, title: "Controller", path: "/greenhouses/$greenhouseId/controller" },
+        { icon: FiBarChart2, title: "Graphs", path: "/greenhouses/$greenhouseId/graphs" },
+        { icon: FiSettings, title: "Settings", path: "/greenhouses/$greenhouseId/settings" },
+    ]
+    
+    interface SidebarItemsProps {
+      onClose?: () => void
+    }
+    
+    interface Item {
+      icon: IconType
+      title: string
+      path: string
+    }
+    
+    const GHSidebarItems = ({ onClose }: SidebarItemsProps) => {
+      const queryClient = useQueryClient()
+      const currentUser = queryClient.getQueryData<UserPublic>(["currentUser"])
+    
+      // Get greenhouseId from route and fetch greenhouse
+      const { greenhouseId } = useParams({ from: "/greenhouses/$greenhouseId" })
+      const { data: greenhouse } = useQuery({
+        queryKey: ["greenhouse", greenhouseId],
+        queryFn: () => GreenhousesService.readGreenhouse({ greenhouseId }),
+        enabled: !!greenhouseId,
+      })
+    
+      // Exclude the first item (dashboard link) and keep the rest
+      const baseMenu: Item[] = items.slice(1)
+    
+      const finalItems: Item[] = currentUser?.is_superuser
+        ? [...baseMenu, { icon: FiUsers, title: "Admin", path: "/admin" }]
+        : baseMenu
+    
+      const listItems = finalItems.map(({ icon, title, path }) => (
+        <RouterLink key={title} to={path} onClick={onClose}>
+          <Flex
+            gap={4}
+            px={4}
+            py={2}
+            _hover={{ background: "gray.subtle" }}
+            alignItems="center"
+            fontSize="sm"
+          >
+            <Icon as={icon} alignSelf="center" />
+            <Text ml={2}>{title}</Text>
+          </Flex>
+        </RouterLink>
+      ))
+    
+      return (
+        <>
+          <Box px={4} py={3}>
+            <Text fontSize="lg" fontWeight="bold" truncate>
+              {greenhouse?.title ?? "Greenhouse"}
+            </Text>
+          </Box>
+          <Box>{listItems}</Box>
+        </>
+      )
+    }
+    
+    export default GHSidebarItems
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Greenhouses/GHSidebarItems.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Sensors/AddSensor.tsx =====
+    import { useMutation, useQueryClient } from "@tanstack/react-query";
+    import { type SubmitHandler, useForm } from "react-hook-form";
+    import { useParams } from "@tanstack/react-router";
+    
+    import {
+      Button,
+      DialogActionTrigger,
+      DialogTitle,
+      Input,
+      Text,
+      VStack,
+    } from "@chakra-ui/react";
+    import { useState } from "react";
+    import { FaPlus } from "react-icons/fa";
+    
+    import { type SensorCreate, SensorType, SensorsService } from "@/client";
+    import type { ApiError } from "@/client/core/ApiError";
+    import useCustomToast from "@/hooks/useCustomToast";
+    import { handleError } from "@/utils";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import { Field } from "../ui/field";
+    
+    interface AddSensorProps {
+      controllerId: string;
+    }
+    
+    const AddSensor = ({ controllerId }: AddSensorProps) => {
+      const { greenhouseId } = useParams({ from: "/greenhouses/$greenhouseId" });
+      const [isOpen, setIsOpen] = useState(false);
+      const queryClient = useQueryClient();
+      const { showSuccessToast } = useCustomToast();
+    
+      const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors, isValid, isSubmitting },
+      } = useForm<SensorCreate>({
+        mode: "onBlur",
+        criteriaMode: "all",
+        defaultValues: {
+          name: "",
+          type: "temperature" as SensorType,
+          model: "",
+          value: 0,
+          unit: "",
+          controller_id: controllerId,
+        },
+      });
+    
+      const mutation = useMutation({
+        mutationFn: (data: SensorCreate) =>
+          SensorsService.createSensor({
+            controllerId,
+            greenhouseId,
+            requestBody: data
+          } as any),
+        onSuccess: () => {
+          showSuccessToast("Sensor created successfully.");
+          reset();
+          setIsOpen(false);
+        },
+        onError: (err: ApiError) => {
+          handleError(err);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["sensors", controllerId] });
+        },
+      });
+    
+      const onSubmit: SubmitHandler<SensorCreate> = (data) => {
+        mutation.mutate({ ...data, controller_id: controllerId });
+      };
+    
+      return (
+        <DialogRoot
+          size={{ base: "xs", md: "md" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button value="add-sensor" size="sm">
+              <FaPlus fontSize="12px" />
+              Add Sensor
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <DialogHeader>
+                <DialogTitle>Add Sensor</DialogTitle>
+              </DialogHeader>
+              <DialogBody>
+                <Text mb={4}>Fill in the details to add a new sensor.</Text>
+                <VStack gap={4}>
+                  <Field
+                    required
+                    invalid={!!errors.name}
+                    errorText={errors.name?.message}
+                    label="Name"
+                  >
+                    <Input
+                      id="name"
+                      {...register("name", {
+                        required: "Name is required.",
+                      })}
+                      placeholder="Sensor name"
+                      type="text"
+                    />
+                  </Field>
+    
+                  <Field
+                    required
+                    invalid={!!errors.type}
+                    errorText={errors.type?.message}
+                    label="Type"
+                  >
+                    <select id="type" {...register("type", { required: "Type is required." })}>
+                      <option value="temperature">Temperature</option>
+                      <option value="humidity">Humidity</option>
+                      <option value="co2">CO2</option>
+                      <option value="light">Light</option>
+                      <option value="soil_moisture">Soil Moisture</option>
+                    </select>
+                  </Field>
+    
+                  <Field
+                    invalid={!!errors.model}
+                    errorText={errors.model?.message}
+                    label="Model"
+                  >
+                    <Input
+                      id="model"
+                      {...register("model")}
+                      placeholder="Sensor model (optional)"
+                      type="text"
+                    />
+                  </Field>
+    
+                  <Field
+                    invalid={!!errors.value}
+                    errorText={errors.value?.message}
+                    label="Initial Value"
+                  >
+                    <Input
+                      id="value"
+                      type="number"
+                      step="any"
+                      {...register("value", { valueAsNumber: true })}
+                      placeholder="0"
+                    />
+                  </Field>
+    
+                  <Field
+                    invalid={!!errors.unit}
+                    errorText={errors.unit?.message}
+                    label="Unit"
+                  >
+                    <Input
+                      id="unit"
+                      {...register("unit")}
+                      placeholder="e.g., °C, %, ppm"
+                      type="text"
+                    />
+                  </Field>
+                </VStack>
+              </DialogBody>
+    
+              <DialogFooter gap={2}>
+                <DialogActionTrigger asChild>
+                  <Button
+                    variant="subtle"
+                    colorPalette="gray"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                </DialogActionTrigger>
+                <Button
+                  variant="solid"
+                  type="submit"
+                  disabled={!isValid}
+                  loading={isSubmitting}
+                >
+                  Save
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default AddSensor;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Sensors/AddSensor.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/shared/EnvironmentalGrid.tsx =====
+    import { SimpleGrid } from "@chakra-ui/react";
+    import { FiThermometer, FiDroplet } from "react-icons/fi";
+    import MetricCard from "./MetricCard";
+    import { ZonePublic } from "@/client";
+    import { CropRecipe } from "@/types/cropRecipe";
+    
+    export interface EnvironmentalGridProps {
+      zone: ZonePublic;
+      idealConditions?: CropRecipe['ideal_conditions'] | null;
+    }
+    
+    const EnvironmentalGrid = ({ zone, idealConditions }: EnvironmentalGridProps) => {
+      return (
+        <SimpleGrid columns={2} gap={4}>
+          <MetricCard
+            title="Temperature"
+            value={zone.temperature || "--"}
+            unit={zone.temperature ? "°C" : ""}
+            icon={<FiThermometer size={18} />}
+            gradient="linear-gradient(135deg,rgb(195, 21, 21) 0%, #FF8E8E 100%)"
+            idealRange={
+              idealConditions?.temperature_C
+                ? `${idealConditions.temperature_C.min}-${idealConditions.temperature_C.max}°C`
+                : undefined
+            }
+          />
+    
+          <MetricCard
+            title="Humidity"
+            value={zone.humidity || "--"}
+            unit={zone.humidity ? "%" : ""}
+            icon={<FiDroplet size={18} />}
+            gradient="linear-gradient(135deg,rgb(95, 78, 205) 0%, #6EE8E0 100%)"
+            idealRange={
+              idealConditions?.['humidity_%']
+                ? `${idealConditions['humidity_%'].min}-${idealConditions['humidity_%'].max}%`
+                : undefined
+            }
+          />
+        </SimpleGrid>
+      );
+    };
+    
+    export default EnvironmentalGrid;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/shared/EnvironmentalGrid.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/shared/MetricCard.tsx =====
+    import { Box, Flex, Text } from "@chakra-ui/react";
+    import { ReactNode } from "react";
+    
+    interface MetricCardProps {
+      title: string;
+      value: string | number;
+      unit?: string;
+      icon?: ReactNode;
+      gradient?: string;
+      idealRange?: string;
+      size?: "sm" | "md" | "lg";
+      textColor?: string;
+    }
+    
+    const MetricCard = ({
+      title,
+      value,
+      unit,
+      icon,
+      gradient = "linear-gradient(135deg, #6B73FF 0%, #9B59B6 100%)",
+      idealRange,
+      size = "md",
+      textColor = "white"
+    }: MetricCardProps) => {
+      const sizeStyles = {
+        sm: {
+          p: 3,
+          titleSize: "xs" as const,
+          valueSize: "lg" as const,
+          iconSize: 16
+        },
+        md: {
+          p: 4,
+          titleSize: "sm" as const,
+          valueSize: "2xl" as const,
+          iconSize: 18
+        },
+        lg: {
+          p: 5,
+          titleSize: "md" as const,
+          valueSize: "3xl" as const,
+          iconSize: 20
+        }
+      };
+    
+      const styles = sizeStyles[size];
+    
+      return (
+        <Box
+          bg={gradient}
+          rounded="lg"
+          p={styles.p}
+          color={textColor}
+          position="relative"
+        >
+          <Flex align="center" gap={2} mb={1}>
+            {icon}
+            <Text fontSize={styles.titleSize} fontWeight="medium">
+              {title}
+            </Text>
+          </Flex>
+          <Text fontSize={styles.valueSize} fontWeight="bold">
+            {value}{unit}
+          </Text>
+          {idealRange && (
+            <Text fontSize="xs" mt={1} opacity={0.9}>
+              Ideal: {idealRange}
+            </Text>
+          )}
+        </Box>
+      );
+    };
+    
+    export default MetricCard;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/shared/MetricCard.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/UserSettings/Appearance.tsx =====
+    import { Container, Heading, Stack } from "@chakra-ui/react"
+    import { useTheme } from "next-themes"
+    
+    import { Radio, RadioGroup } from "@/components/ui/radio"
+    
+    const Appearance = () => {
+      const { theme, setTheme } = useTheme()
+      // Always use a non-null string for the radio group value
+      const currentTheme = theme ?? "system"
+    
+      return (
+        <Container maxW="full">
+          <Heading size="sm" py={4}>
+            Appearance
+          </Heading>
+    
+          <RadioGroup
+            value={currentTheme}
+            // Ensure setTheme only ever receives a string
+            onValueChange={({ value }) => setTheme(value ?? "system")}
+            colorPalette="teal"
+          >
+            <Stack>
+              <Radio value="system">System</Radio>
+              <Radio value="light">Light Mode</Radio>
+              <Radio value="dark">Dark Mode</Radio>
+            </Stack>
+          </RadioGroup>
+        </Container>
+      )
+    }
+    
+    export default Appearance
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/UserSettings/Appearance.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Zones/AddZone.tsx =====
+    import { useMutation, useQueryClient } from "@tanstack/react-query";
+    import { type SubmitHandler, useForm } from "react-hook-form";
+    
+    import {
+      Button,
+      DialogActionTrigger,
+      DialogTitle,
+      Input,
+      Text,
+      VStack,
+    } from "@chakra-ui/react";
+    import { useState } from "react";
+    import { FaPlus } from "react-icons/fa";
+    
+    import { type ZoneCreate, LocationEnum, ZonesService } from "@/client";
+    import type { ApiError } from "@/client/core/ApiError";
+    import useCustomToast from "@/hooks/useCustomToast";
+    import { handleError } from "@/utils";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import { Field } from "../ui/field";
+    
+    interface AddZoneProps {
+      greenhouseId: string;
+    }
+    
+    const AddZone = ({ greenhouseId }: AddZoneProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const queryClient = useQueryClient();
+      const { showSuccessToast } = useCustomToast();
+    
+      const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors, isValid, isSubmitting },
+      } = useForm<ZoneCreate>({
+        mode: "onBlur",
+        criteriaMode: "all",
+        defaultValues: {
+          zone_number: 1,
+          location: "N" as LocationEnum,
+          temperature: undefined,
+          humidity: undefined,
+          greenhouse_id: greenhouseId,
+        },
+      });
+    
+      const mutation = useMutation({
+        mutationFn: (data: ZoneCreate) =>
+            ZonesService.createZone({ greenhouseId, requestBody: data } as any),
+        onSuccess: () => {
+          showSuccessToast("Zone created successfully.");
+          reset();
+          setIsOpen(false);
+        },
+        onError: (err: ApiError) => {
+          handleError(err);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+        },
+      });
+    
+      const onSubmit: SubmitHandler<ZoneCreate> = (data) => {
+        mutation.mutate({ ...data, greenhouse_id: greenhouseId });
+      };
+    
+      const locations = [
+        { value: "N", label: "North" },
+        { value: "NE", label: "Northeast" },
+        { value: "E", label: "East" },
+        { value: "SE", label: "Southeast" },
+        { value: "S", label: "South" },
+        { value: "SW", label: "Southwest" },
+        { value: "W", label: "West" },
+        { value: "NW", label: "Northwest" },
+      ];
+    
+      return (
+        <DialogRoot
+          size={{ base: "xs", md: "md" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button value="add-zone" my={4}>
+              <FaPlus fontSize="16px" />
+              Add Zone
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <DialogHeader>
+                <DialogTitle>Add Zone</DialogTitle>
+              </DialogHeader>
+              <DialogBody>
+                <Text mb={4}>Fill in the details to add a new zone.</Text>
+                <VStack gap={4}>
+                  <Field
+                    required
+                    invalid={!!errors.zone_number}
+                    errorText={errors.zone_number?.message}
+                    label="Zone Number"
+                  >
+                    <Input
+                      id="zone_number"
+                      type="number"
+                      {...register("zone_number", {
+                        required: "Zone number is required.",
+                        valueAsNumber: true,
+                        min: { value: 1, message: "Zone number must be at least 1" }
+                      })}
+                      placeholder="1"
+                    />
+                  </Field>
+    
+                  <Field
+                    required
+                    invalid={!!errors.location}
+                    errorText={errors.location?.message}
+                    label="Location"
+                  >
+                    <select
+                      id="location"
+                      {...register("location", { required: "Location is required." })}
+                    >
+                      {locations.map((location) => (
+                        <option key={location.value} value={location.value}>
+                          {location.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </VStack>
+              </DialogBody>
+    
+              <DialogFooter gap={2}>
+                <DialogActionTrigger asChild>
+                  <Button
+                    variant="subtle"
+                    colorPalette="gray"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                </DialogActionTrigger>
+                <Button
+                  variant="solid"
+                  type="submit"
+                  disabled={!isValid}
+                  loading={isSubmitting}
+                >
+                  Save
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default AddZone;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Zones/AddZone.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Zones/ViewPastCrops.tsx =====
+    import { useQuery } from "@tanstack/react-query";
+    import {
+      Button,
+      DialogTitle,
+      Text,
+      VStack,
+      Box,
+      Flex,
+      Badge,
+      HStack,
+      Heading,
+      Separator,
+    } from "@chakra-ui/react";
+    import { useState } from "react";
+    import { FiCalendar, FiClock, FiTrendingUp, FiEye } from "react-icons/fi";
+    import { format, differenceInDays } from "date-fns";
+    
+    import {
+      CropsService,
+      type ZonePublic,
+      type ZoneCropPublic
+    } from "@/client";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import ViewObservations from "../Crops/ViewObservations";
+    
+    interface ViewPastCropsProps {
+      zone: ZonePublic;
+    }
+    
+    const ViewPastCrops = ({ zone }: ViewPastCropsProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+    
+      const { data: pastCrops, isLoading } = useQuery({
+        queryKey: ["zone-crop-history", zone.id],
+        queryFn: () => CropsService.listZoneCropHistory({ zoneId: zone.id }),
+        enabled: isOpen,
+      });
+    
+      // Fetch crop details for each zone crop to get the crop names
+      const { data: cropDetails } = useQuery({
+        queryKey: ["crop-details", pastCrops?.map(c => c.crop_id)],
+        queryFn: async () => {
+          if (!pastCrops?.length) return {};
+    
+          const cropDetailsMap: Record<string, any> = {};
+    
+          // Fetch crop details for each unique crop_id
+          const uniqueCropIds = [...new Set(pastCrops.map(c => c.crop_id))];
+    
+          await Promise.all(
+            uniqueCropIds.map(async (cropId) => {
+              try {
+                const cropDetail = await CropsService.getCrop({ cropId });
+                cropDetailsMap[cropId] = cropDetail;
+              } catch (error) {
+                console.error(`Failed to fetch crop ${cropId}:`, error);
+                cropDetailsMap[cropId] = { name: "Unknown Crop" };
+              }
+            })
+          );
+    
+          return cropDetailsMap;
+        },
+        enabled: isOpen && !!pastCrops?.length,
+      });
+    
+      const getCropName = (zoneCrop: ZoneCropPublic) => {
+        return cropDetails?.[zoneCrop.crop_id]?.name || "Loading...";
+      };
+    
+      const getCropStatusBadge = (crop: ZoneCropPublic) => {
+        if (crop.is_active) {
+          return <Badge colorPalette="green" variant="solid" size="sm">Active</Badge>;
+        }
+        return <Badge colorPalette="gray" variant="outline" size="sm">Completed</Badge>;
+      };
+    
+      const formatDate = (dateString: string) => {
+        return format(new Date(dateString), "MMM dd, yyyy");
+      };
+    
+      const getDurationText = (crop: ZoneCropPublic) => {
+        if (!crop.start_date) return "N/A";
+        const start = new Date(crop.start_date);
+        const end = crop.end_date ? new Date(crop.end_date) : new Date();
+        const days = differenceInDays(end, start);
+        return `${days} days`;
+      };
+    
+      const activeCrops = pastCrops?.filter(crop => crop.is_active) || [];
+      const completedCrops = pastCrops?.filter(crop => !crop.is_active) || [];
+    
+      return (
+        <DialogRoot
+          size={{ base: "md", md: "xl" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" colorPalette="blue">
+              <FiEye fontSize="12px" />
+              View Past Crops
+            </Button>
+          </DialogTrigger>
+    
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Crop History - Zone {zone.zone_number}</DialogTitle>
+            </DialogHeader>
+    
+            <DialogBody>
+              {isLoading ? (
+                <Flex justify="center" align="center" h="200px">
+                  <Text>Loading crop history...</Text>
+                </Flex>
+              ) : !pastCrops || pastCrops.length === 0 ? (
+                <Flex justify="center" align="center" h="200px">
+                  <VStack gap={2}>
+                    <Text color="gray.500" fontSize="lg">No crops found</Text>
+                    <Text color="gray.400" fontSize="sm">This zone has no crop history yet.</Text>
+                  </VStack>
+                </Flex>
+              ) : (
+                <VStack gap={6} align="stretch" maxH="600px" overflowY="auto">
+                  {/* Summary Stats */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Overview</Heading>
+                    <HStack gap={6} wrap="wrap">
+                      <Box textAlign="center">
+                        <Text fontSize="2xl" fontWeight="bold" color="blue.500">{pastCrops.length}</Text>
+                        <Text fontSize="sm" color="gray.600">Total Crops</Text>
+                      </Box>
+                      <Box textAlign="center">
+                        <Text fontSize="2xl" fontWeight="bold" color="green.500">{activeCrops.length}</Text>
+                        <Text fontSize="sm" color="gray.600">Active</Text>
+                      </Box>
+                      <Box textAlign="center">
+                        <Text fontSize="2xl" fontWeight="bold" color="purple.500">
+                            {pastCrops.reduce((total, crop) => {
+                                if (!crop.start_date) return total;
+                                const start = new Date(crop.start_date);
+                                const end = crop.end_date ? new Date(crop.end_date) : new Date();
+                                return total + differenceInDays(end, start);
+                            }, 0)}
+                        </Text>
+                        <Text fontSize="sm" color="gray.600">Total Days</Text>
+                      </Box>
+                    </HStack>
+                  </Box>
+    
+                  <Separator />
+    
+                  {/* Active Crops */}
+                  {activeCrops.length > 0 && (
+                    <Box>
+                      <Heading size="md" mb={4} color="green.600">
+                        <Flex align="center" gap={2}>
+                          <FiTrendingUp />
+                          Active Crops
+                        </Flex>
+                      </Heading>
+                      <VStack gap={3} align="stretch">
+                        {activeCrops.map((crop) => (
+                          <Box
+                            key={crop.id}
+                            border="2px"
+                            borderColor="green.200"
+                            rounded="lg"
+                            p={4}
+                            bg="green.50"
+                            _dark={{ bg: "green.900", borderColor: "green.700" }}
+                            _hover={{
+                              shadow: "md",
+                              borderColor: "green.300",
+                              cursor: "pointer"
+                            }}
+                            onClick={() => {
+                              // Handle click to view observations
+                            }}
+                          >
+                            <Flex justify="space-between" align="start" mb={3}>
+                              <VStack align="start" gap={1}>
+                                <Text fontWeight="bold">{getCropName(crop)}</Text>
+                                {getCropStatusBadge(crop)}
+                              </VStack>
+                              <VStack align="end" gap={1}>
+                                <Text fontSize="sm" color="gray.500">
+                                  Started {crop.start_date ? formatDate(crop.start_date) : "N/A"}
+                                </Text>
+                                <ViewObservations
+                                  zone={zone}
+                                  zoneCropId={crop.id}
+                                  cropName={getCropName(crop)}
+                                />
+                              </VStack>
+                            </Flex>
+    
+                            <HStack gap={4} wrap="wrap" fontSize="sm">
+                              <Flex align="center" gap={1}>
+                                <FiClock color="#6B7280" />
+                                <Text>{getDurationText(crop)} growing</Text>
+                              </Flex>
+                              {crop.area_sqm && (
+                                <Text>Area: {crop.area_sqm} m²</Text>
+                              )}
+                            </HStack>
+                          </Box>
+                        ))}
+                      </VStack>
+                    </Box>
+                  )}
+    
+                  {/* Completed Crops */}
+                  {completedCrops.length > 0 && (
+                    <Box>
+                      <Heading size="md" mb={4} color="gray.600">
+                        <Flex align="center" gap={2}>
+                          <FiCalendar />
+                          Completed Crops
+                        </Flex>
+                      </Heading>
+                      <VStack gap={3} align="stretch">
+                        {completedCrops
+                          .sort((a, b) => new Date(b.end_date!).getTime() - new Date(a.end_date!).getTime())
+                          .map((crop) => (
+                          <Box
+                            key={crop.id}
+                            border="1px"
+                            borderColor="gray.200"
+                            rounded="lg"
+                            p={4}
+                            bg="white"
+                            _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+                            _hover={{
+                              shadow: "md",
+                              borderColor: "gray.300",
+                              cursor: "pointer"
+                            }}
+                          >
+                            <Flex justify="space-between" align="start" mb={3}>
+                              <VStack align="start" gap={1}>
+                                <Text fontWeight="bold">{getCropName(crop)}</Text>
+                                {getCropStatusBadge(crop)}
+                              </VStack>
+                              <VStack align="end" gap={1}>
+                                <Text fontSize="xs" color="gray.500">
+                                  {crop.start_date ? formatDate(crop.start_date) : "N/A"} - {crop.end_date ? formatDate(crop.end_date) : "Ongoing"}
+                                </Text>
+                                <Text fontSize="xs" color="gray.400">
+                                  {getDurationText(crop)}
+                                </Text>
+                                <ViewObservations
+                                  zone={zone}
+                                  zoneCropId={crop.id}
+                                  cropName={getCropName(crop)}
+                                />
+                              </VStack>
+                            </Flex>
+                          </Box>
+                        ))}
+                      </VStack>
+                    </Box>
+                  )}
+                </VStack>
+              )}
+            </DialogBody>
+    
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+    
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default ViewPastCrops;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Zones/ViewPastCrops.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/components/Zones/ZoneSettings.tsx =====
+    import {
+      Button,
+      DialogActionTrigger,
+      DialogTitle,
+      Text,
+      VStack,
+      Box,
+      Flex,
+      Badge,
+    } from "@chakra-ui/react";
+    import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+    import { useState } from "react";
+    import { useForm } from "react-hook-form";
+    import { FiSettings, FiTrash2, FiPlus, FiMinus } from "react-icons/fi";
+    
+    import {
+      ZonePublic,
+      SensorType,
+      ZonesService,
+      GreenhousesService,
+      CropsService
+    } from "@/client";
+    import {
+      DialogBody,
+      DialogCloseTrigger,
+      DialogContent,
+      DialogFooter,
+      DialogHeader,
+      DialogRoot,
+      DialogTrigger,
+    } from "../ui/dialog";
+    import useCustomToast from "@/hooks/useCustomToast";
+    import ViewPastCrops from "./ViewPastCrops";
+    
+    interface ZoneSettingsProps {
+      zone: ZonePublic;
+    }
+    
+    const ZoneSettings = ({ zone }: ZoneSettingsProps) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const queryClient = useQueryClient();
+      const { showSuccessToast, showErrorToast } = useCustomToast();
+    
+      const {
+        handleSubmit,
+        formState: { isSubmitting },
+      } = useForm();
+    
+      // Get unmapped sensors for this greenhouse
+      const { data: unmappedSensors } = useQuery({
+        queryKey: ["unmapped-sensors", zone.greenhouse_id],
+        queryFn: () => GreenhousesService.listUnmappedGreenhouseSensors({
+          greenhouseId: zone.greenhouse_id
+        }),
+        enabled: isOpen,
+      });
+    
+      // Get currently mapped sensors for this zone
+      const { data: mappedSensors } = useQuery({
+        queryKey: ["zone-sensors", zone.id],
+        queryFn: () => ZonesService.listZoneSensors({ greenhouseId: zone.greenhouse_id, zoneId: zone.id } as any),
+        enabled: isOpen,
+      });
+    
+      // Get the zone crop data to check if there's an active crop
+      const { data: zoneCrop } = useQuery({
+        queryKey: ["zone-crop", zone.id],
+        queryFn: () => CropsService.getZoneCrop({ zoneId: zone.id }),
+        enabled: isOpen,
+        retry: false,
+        throwOnError: false,
+      });
+    
+      const deleteZoneMutation = useMutation({
+        mutationFn: (zoneId: string) =>
+          ZonesService.deleteZone({ greenhouseId: zone.greenhouse_id, zoneId }),
+        onSuccess: () => {
+          showSuccessToast("Zone deleted successfully.");
+          setIsOpen(false);
+        },
+        onError: () => {
+          showErrorToast("An error occurred while deleting the zone.");
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+        },
+      });
+    
+      const harvestMutation = useMutation({
+        mutationFn: () => CropsService.harvestCropFromZone({ zoneId: zone.id }),
+        onSuccess: () => {
+          showSuccessToast("Crop harvested successfully.");
+          queryClient.removeQueries({ queryKey: ["zone-crop", zone.id] });
+          queryClient.removeQueries({ queryKey: ["crop-observations", zone.id] });
+          queryClient.removeQueries({ queryKey: ["zone-has-crop", zone.id] });
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+        },
+        onError: () => {
+          showErrorToast("An error occurred while harvesting the crop.");
+        },
+      });
+    
+      const mapSensorMutation = useMutation({
+        mutationFn: ({ sensorId, sensorType }: { sensorId: string; sensorType: SensorType }) =>
+          ZonesService.mapSensorToZoneEndpoint({
+            greenhouseId: zone.greenhouse_id,
+            zoneId: zone.id,
+            requestBody: { sensor_id: sensorId, type: sensorType }
+          } as any),
+        onSuccess: () => {
+          showSuccessToast("Sensor mapped successfully.");
+        },
+        onError: () => {
+          showErrorToast("An error occurred while mapping the sensor.");
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["zone-sensors", zone.id] });
+          queryClient.invalidateQueries({ queryKey: ["unmapped-sensors", zone.greenhouse_id] });
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+        },
+      });
+    
+      const unmapSensorMutation = useMutation({
+        mutationFn: (sensorType: SensorType) =>
+          ZonesService.unmapSensorFromZoneEndpoint({
+            greenhouseId: zone.greenhouse_id,
+            zoneId: zone.id,
+            sensorType
+          } as any),
+        onSuccess: () => {
+          showSuccessToast("Sensor unmapped successfully.");
+        },
+        onError: () => {
+          showErrorToast("An error occurred while unmapping the sensor.");
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ["zone-sensors", zone.id] });
+          queryClient.invalidateQueries({ queryKey: ["unmapped-sensors", zone.greenhouse_id] });
+          queryClient.invalidateQueries({ queryKey: ["zones"] });
+        },
+      });
+    
+      const onDeleteZone = () => {
+        deleteZoneMutation.mutate(zone.id);
+      };
+    
+      const getSensorTypeColor = (type: string) => {
+        const colors = {
+          temperature: "red",
+          humidity: "blue",
+          co2: "green",
+          light: "yellow",
+          soil_moisture: "brown",
+        }
+        return colors[type as keyof typeof colors] || "gray"
+      };
+    
+      const getAvailableSensorsForType = (sensorType: SensorType) => {
+        return unmappedSensors?.filter(sensor => sensor.type === sensorType) || [];
+      };
+    
+      const getMappedSensorForType = (sensorType: SensorType) => {
+        return mappedSensors?.find(sensor => sensor.type === sensorType);
+      };
+    
+      const sensorTypes: SensorType[] = ["temperature", "humidity", "co2", "light", "soil_moisture"];
+    
+      return (
+        <DialogRoot
+          size={{ base: "sm", md: "lg" }}
+          placement="center"
+          open={isOpen}
+          onOpenChange={({ open }) => setIsOpen(open)}
+        >
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <FiSettings fontSize="18px" />
+            </Button>
+          </DialogTrigger>
+    
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Zone {zone.zone_number} Settings</DialogTitle>
+            </DialogHeader>
+    
+            <DialogBody>
+              <VStack gap={6} align="stretch">
+                {/* Zone Info */}
+                <Box>
+                  <Flex justify="space-between" align="center" mb={4}>
+                    <Text>Location: {zone.location}</Text>
+                    <ViewPastCrops zone={zone} />
+                  </Flex>
+                </Box>
+    
+                {/* Sensor Mapping */}
+                <Box>
+                  <Text fontWeight="bold" mb={4}>Sensor Mapping</Text>
+                  <VStack gap={4} align="stretch">
+                    {sensorTypes.map((sensorType) => {
+                      const mappedSensor = getMappedSensorForType(sensorType);
+                      const availableSensors = getAvailableSensorsForType(sensorType);
+    
+                      return (
+                        <Box
+                          key={sensorType}
+                          border="2px"
+                          borderColor={{ base: "gray.200", _dark: "gray.600" }}
+                          rounded="xl"
+                          p={6}
+                          shadow="md"
+                          bg={{ base: "white", _dark: "gray.800" }}
+                          _hover={{
+                            shadow: "lg",
+                            borderColor: { base: "gray.300", _dark: "gray.500" }
+                          }}
+                        >
+                          <Flex justify="space-between" align="center" mb={4}>
+                            <Box>
+                              <Badge colorPalette={getSensorTypeColor(sensorType)} size="lg">
+                                {sensorType}
+                              </Badge>
+                            </Box>
+                          </Flex>
+    
+                          {mappedSensor ? (
+                            <Flex justify="space-between" align="center">
+                              <Box>
+                                <Text fontWeight="medium" color={{ base: "gray.800", _dark: "gray.200" }}>
+                                  {mappedSensor.name}
+                                </Text>
+                                <Text fontSize="sm" color={{ base: "gray.600", _dark: "gray.400" }}>
+                                  {mappedSensor.model || "No model specified"}
+                                </Text>
+                              </Box>
+                              <Button
+                                variant="ghost"
+                                colorPalette="red"
+                                size="sm"
+                                onClick={() => unmapSensorMutation.mutate(sensorType)}
+                                loading={unmapSensorMutation.isPending}
+                              >
+                                <FiMinus />
+                              </Button>
+                            </Flex>
+                          ) : (
+                            <Box>
+                              <Text fontSize="sm" color={{ base: "gray.500", _dark: "gray.400" }} mb={3}>
+                                No sensor mapped
+                              </Text>
+                              {availableSensors.length > 0 ? (
+                                <VStack gap={3} align="stretch">
+                                  {availableSensors.map((sensor) => (
+                                    <Box
+                                      key={sensor.id}
+                                      border="1px"
+                                      borderColor={{ base: "gray.300", _dark: "gray.600" }}
+                                      rounded="lg"
+                                      p={3}
+                                      bg={{ base: "gray.50", _dark: "gray.700" }}
+                                    >
+                                      <Flex justify="space-between" align="center">
+                                        <Box>
+                                          <Text fontSize="sm" fontWeight="medium" color={{ base: "gray.800", _dark: "gray.200" }}>
+                                            {sensor.name}
+                                          </Text>
+                                          <Text fontSize="xs" color={{ base: "gray.600", _dark: "gray.400" }}>
+                                            {sensor.model || "No model"}
+                                          </Text>
+                                        </Box>
+                                        <Button
+                                          variant="ghost"
+                                          colorPalette="green"
+                                          size="sm"
+                                          onClick={() => mapSensorMutation.mutate({
+                                            sensorId: sensor.id,
+                                            sensorType
+                                          })}
+                                          loading={mapSensorMutation.isPending}
+                                        >
+                                          <FiPlus />
+                                        </Button>
+                                      </Flex>
+                                    </Box>
+                                  ))}
+                                </VStack>
+                              ) : (
+                                <Text fontSize="sm" color={{ base: "gray.400", _dark: "gray.500" }}>
+                                  No available {sensorType} sensors
+                                </Text>
+                              )}
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </VStack>
+                </Box>
+    
+                {/* Delete Zone */}
+                <Box pt={4} borderTop="1px" borderColor="gray.200">
+                  <Text fontWeight="bold" color="red.500" mb={4}>Danger Zone</Text>
+    
+                  {/* Harvest Crop Button - only show if there's an active crop */}
+                  {zoneCrop?.is_active && (
+                    <Box mb={4}>
+                      <Text fontSize="sm" color="gray.600" mb={2}>
+                        Harvest the current crop to remove it from this zone (preserves historical data)
+                      </Text>
+                      <Button
+                        variant="solid"
+                        colorPalette="orange"
+                        size="sm"
+                        onClick={() => harvestMutation.mutate()}
+                        loading={harvestMutation.isPending}
+                      >
+                        <FiTrash2 />
+                        Harvest Crop
+                      </Button>
+                    </Box>
+                  )}
+    
+                  {/* Delete Zone Button */}
+                  <Box>
+                    <Text fontSize="sm" color="gray.600" mb={2}>
+                      Permanently delete this zone and all its data
+                    </Text>
+                    <form onSubmit={handleSubmit(onDeleteZone)}>
+                      <Button
+                        variant="solid"
+                        colorPalette="red"
+                        size="sm"
+                        type="submit"
+                        loading={isSubmitting}
+                      >
+                        <FiTrash2 />
+                        Delete Zone
+                      </Button>
+                    </form>
+                  </Box>
+                </Box>
+              </VStack>
+            </DialogBody>
+    
+            <DialogFooter>
+              <DialogActionTrigger asChild>
+                <Button variant="subtle" colorPalette="gray">
+                  Close
+                </Button>
+              </DialogActionTrigger>
+            </DialogFooter>
+    
+            <DialogCloseTrigger />
+          </DialogContent>
+        </DialogRoot>
+      );
+    };
+    
+    export default ZoneSettings;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/components/Zones/ZoneSettings.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/hooks/useCropStageData.ts =====
+    import { useMemo } from "react";
+    import { ZoneCropPublic, CropPublic, ZoneCropObservationPublic } from "@/client";
+    import { isCropRecipe } from "@/types/cropRecipe";
+    
+    export const useCropStageData = (
+      zoneCrop: ZoneCropPublic | undefined,
+      crop: CropPublic | undefined,
+      observations: ZoneCropObservationPublic[] | undefined
+    ) => {
+      return useMemo(() => {
+        const getDaysGrowing = () => {
+          if (!zoneCrop?.start_date) return 0;
+    
+          const startDate = new Date(zoneCrop.start_date);
+          const endDate = zoneCrop.end_date ? new Date(zoneCrop.end_date) : new Date();
+          const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return diffDays;
+        };
+    
+        const getCurrentStage = () => {
+          if (!zoneCrop?.start_date || !crop?.recipe || !isCropRecipe(crop.recipe)) return null;
+    
+          const daysGrown = getDaysGrowing();
+          return crop.recipe.stages.find((stage) =>
+            daysGrown >= stage.duration_days.start_day && daysGrown <= stage.duration_days.end_day
+          );
+        };
+    
+        const getNextStage = () => {
+          if (!zoneCrop?.start_date || !crop?.recipe || !isCropRecipe(crop.recipe)) return null;
+    
+          const daysGrown = getDaysGrowing();
+          return crop.recipe.stages.find((stage) =>
+            daysGrown < stage.duration_days.start_day
+          );
+        };
+    
+        const getDaysUntilNextStage = () => {
+          const nextStage = getNextStage();
+          if (!nextStage) return null;
+    
+          const daysGrown = getDaysGrowing();
+          return nextStage.duration_days.start_day - daysGrown;
+        };
+    
+        const getGrowthProgress = () => {
+          if (!crop?.recipe || !isCropRecipe(crop.recipe) || !zoneCrop?.start_date) return 0;
+    
+          const daysGrown = getDaysGrowing();
+          const progress = (daysGrown / crop.recipe.growth_duration_days) * 100;
+          return Math.min(progress, 100);
+        };
+    
+        const getLatestObservation = () => {
+          if (!observations || observations.length === 0) return null;
+          return observations.sort((a, b) =>
+            new Date(b.observed_at || 0).getTime() - new Date(a.observed_at || 0).getTime()
+          )[0];
+        };
+    
+        const getCurrentTasks = () => {
+          const currentStage = getCurrentStage();
+          return currentStage?.tasks || [];
+        };
+    
+        const getExpectedYield = () => {
+          if (!crop?.recipe || !isCropRecipe(crop.recipe)) return null;
+          const { min, max } = crop.recipe.expected_yield_kg;
+          return `${min}-${max} kg`;
+        };
+    
+        const daysGrowing = getDaysGrowing();
+        const currentStage = getCurrentStage();
+        const nextStage = getNextStage();
+        const daysUntilNext = getDaysUntilNextStage();
+        const progress = getGrowthProgress();
+        const latestObs = getLatestObservation();
+        const currentTasks = getCurrentTasks();
+        const expectedYield = getExpectedYield();
+    
+        return {
+          daysGrowing,
+          currentStage,
+          nextStage,
+          daysUntilNext,
+          progress,
+          latestObs,
+          currentTasks,
+          expectedYield,
+          getDaysGrowing,
+          getCurrentStage,
+          getNextStage,
+          getDaysUntilNextStage,
+          getGrowthProgress,
+          getLatestObservation,
+          getCurrentTasks,
+          getExpectedYield
+        };
+      }, [zoneCrop, crop, observations]);
+    };
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/hooks/useCropStageData.ts =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/routes/_layout/greenhouses.tsx =====
+    import {
+      Box,
+      Container,
+      Flex,
+      Grid,
+      Heading,
+      Icon,
+      Text,
+      VStack,
+    } from "@chakra-ui/react"
+    import { useQuery } from "@tanstack/react-query"
+    import { createFileRoute, useNavigate } from "@tanstack/react-router"
+    import { FiCheck, FiX } from "react-icons/fi"
+    import { GreenhousesService } from "@/client"
+    import PendingItems from "@/components/Pending/PendingItems"
+    import AddGreenhouse from "@/components/Greenhouses/AddGreenhouse"
+    
+    const PER_PAGE = 5
+    
+    function getGreenhousesQueryOptions({ page }: { page: number }) {
+      return {
+        queryFn: () =>
+          GreenhousesService.readGreenhouses({
+            skip: (page - 1) * PER_PAGE,
+            limit: PER_PAGE,
+          }),
+        queryKey: ["greenhouses", { page }],
+      }
+    }
+    
+    export const Route = createFileRoute("/_layout/greenhouses")({
+      component: Greenhouses,
+    })
+    
+    function Greenhouses() {
+      const navigate = useNavigate()
+      const { data, isLoading, error } = useQuery({
+        ...getGreenhousesQueryOptions({ page: 1 }),
+      })
+    
+      const greenhouses = data?.data ?? []
+    
+      if (isLoading) {
+        return <PendingItems />
+      }
+    
+      if (error) {
+        return (
+          <VStack textAlign="center" gap={4} mt={8}>
+            <Text fontSize="lg" color="red.500">
+              Failed to load greenhouses. Please try again later.
+            </Text>
+          </VStack>
+        )
+      }
+    
+      return (
+        <Container maxW="full" py={8}>
+          <Flex justifyContent="space-between" alignItems="center" mb={6}>
+            <VStack align="start">
+              <Heading size="lg">Greenhouses Management</Heading>
+              <Text color="gray.600">Manage and monitor your greenhouses efficiently.</Text>
+            </VStack>
+            <AddGreenhouse />
+          </Flex>
+          {greenhouses.length === 0 ? (
+            <VStack textAlign="center" gap={4}>
+              <Text fontSize="lg" color="gray.600">
+                You don’t have any greenhouses yet.
+              </Text>
+              <Text color="gray.500">Add a new greenhouse to get started.</Text>
+            </VStack>
+          ) : (
+            <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" }} gap={6}>
+              {greenhouses.map((gh) => (
+                <Box
+                  key={gh.id}
+                  p={4}
+                  borderWidth="1px"
+                  borderRadius="lg"
+                  boxShadow="sm"
+                  _hover={{ boxShadow: "md", transform: "scale(1.02)", cursor: "pointer" }}
+                  transition="all 0.2s"
+                  onClick={() => navigate({ to: `/greenhouses/${gh.id}`, params: { greenhouseId: gh.id } })}
+                >
+                  <Heading size="md" mb={2}>
+                    {gh.title}
+                  </Heading>
+                  <Text color="gray.600" mb={4}>
+                    {gh.description || "No description available."}
+                  </Text>
+                  <Flex justifyContent="space-between" alignItems="center">
+                    <Text fontWeight="bold" color={gh.is_active ? "green.500" : "red.500"}>
+                      {gh.is_active ? "Active" : "Inactive"}
+                    </Text>
+                    <Icon as={gh.is_active ? FiCheck : FiX} boxSize={5} />
+                  </Flex>
+                </Box>
+              ))}
+            </Grid>
+          )}
+        </Container>
+      )
+    }
+    
+    export default Greenhouses
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/routes/_layout/greenhouses.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId.tsx =====
+    // frontend/src/routes/greenhouses/$greenhouseId.tsx
+    import { Outlet } from '@tanstack/react-router';
+    import {
+        Box,
+        Flex,
+        Spinner,
+        Text,
+      } from "@chakra-ui/react";
+      import { createFileRoute } from "@tanstack/react-router";
+      import { useQuery } from "@tanstack/react-query";
+      import { z } from "zod";
+    
+      import Navbar from "@/components/Common/Navbar";
+      import Sidebar from "@/components/Greenhouses/GHSidebar";
+      import { GreenhousesService } from "@/client";
+      //import EditGreenhouse from "@/components/Greenhouses/EditGreenhouse";
+    
+      export const Route = createFileRoute("/greenhouses/$greenhouseId")({
+        component: GreenhouseDetail,
+        parseParams: (raw) => z.object({ greenhouseId: z.string() }).parse(raw),
+      });
+    
+      function GreenhouseDetail() {
+        const { greenhouseId } = Route.useParams();
+        const { data, isLoading, error } = useQuery({
+          queryKey: ["greenhouse", greenhouseId],
+          queryFn: () =>
+            GreenhousesService.readGreenhouse({ greenhouseId }),
+        });
+    
+        if (isLoading) return (
+          <Flex h="100vh" align="center" justify="center">
+            <Spinner size="xl" />
+          </Flex>
+        );
+        if (error || !data) return (
+          <Flex h="100vh" align="center" justify="center">
+            <Text color="red.500">{error ? "Failed to load." : "Not found."}</Text>
+          </Flex>
+        );
+        return (
+            <Flex direction="column" h="100vh">
+              <Navbar />
+              <Flex flex="1" overflow="hidden">
+                <Sidebar />
+                <Box as="main" flex="1" overflowY="auto" p={{ base: 4, md: 8 }}>
+                  <Outlet />
+                </Box>
+              </Flex>
+            </Flex>
+          );
+        }
+    
+      export default GreenhouseDetail;
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/controller.tsx =====
+    import { createFileRoute } from '@tanstack/react-router'
+    import {
+      Box,
+      Container,
+      Flex,
+      Heading,
+      Table,
+      Text,
+      Badge,
+    } from "@chakra-ui/react"
+    import { useQuery } from "@tanstack/react-query"
+    
+    import { ControllersService, SensorsService, SensorPublic, ControllerPublic } from "@/client"
+    import AddController from "@/components/Controllers/AddController"
+    import DeleteController from "@/components/Controllers/DeleteController"
+    import AddSensor from "@/components/Sensors/AddSensor"
+    import DeleteSensor from "@/components/Sensors/DeleteSensor"
+    
+    export const Route = createFileRoute('/greenhouses/$greenhouseId/controller')({
+      component: Controller
+    })
+    
+    function Controller() {
+      const { greenhouseId } = Route.useParams()
+    
+      const {
+        data: controllers,
+        isLoading,
+        isError,
+      } = useQuery({
+        queryKey: ["controllers", greenhouseId],
+        queryFn: () => ControllersService.listControllers({ greenhouseId }),
+      })
+    
+      if (isLoading) return <Text>Loading...</Text>
+      if (isError) return <Text>Error loading controllers</Text>
+    
+      return (
+        <Container maxW="full">
+          <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
+            Controllers Management
+          </Heading>
+    
+          <AddController greenhouseId={greenhouseId} />
+    
+          {controllers?.map((controller: ControllerPublic) => (
+            <Box
+              key={controller.id}
+              border="2px"
+              borderColor={{ base: "gray.200", _dark: "gray.600" }}
+              rounded="xl"
+              p={6}
+              mb={6}
+              shadow="md"
+              bg={{ base: "white", _dark: "gray.800" }}
+              _hover={{
+                shadow: "lg",
+                borderColor: { base: "gray.300", _dark: "gray.500" }
+              }}
+            >
+              <Flex justify="space-between" align="center" mb={4}>
+                <Box>
+                  <Heading size="lg" color={{ base: "gray.800", _dark: "gray.100" }}>
+                    {controller.name}
+                  </Heading>
+                  {controller.model && (
+                    <Text color={{ base: "gray.600", _dark: "gray.400" }}>
+                      {controller.model}
+                    </Text>
+                  )}
+                </Box>
+                <Flex gap={2}>
+                  <AddSensor controllerId={controller.id} />
+                  <DeleteController id={controller.id} />
+                </Flex>
+              </Flex>
+    
+              <ControllerSensors controllerId={controller.id} greenhouseId={greenhouseId} />
+            </Box>
+          ))}
+        </Container>
+      )
+    }
+    
+    function ControllerSensors({ controllerId, greenhouseId }: { controllerId: string, greenhouseId: string }) {
+      const {
+        data: sensors,
+        isLoading,
+      } = useQuery({
+        queryKey: ["sensors", controllerId],
+        queryFn: () => SensorsService.listSensors({ controllerId, greenhouseId } as any),
+      })
+    
+      const getSensorTypeColor = (type: string) => {
+        const colors = {
+          temperature: "red",
+          humidity: "blue",
+          co2: "green",
+          light: "yellow",
+          soil_moisture: "brown",
+        }
+        return colors[type as keyof typeof colors] || "gray"
+      }
+    
+      if (isLoading) return <Text>Loading sensors...</Text>
+    
+      return (
+        <Box>
+          <Text
+            fontWeight="bold"
+            mb={2}
+            color={{ base: "gray.700", _dark: "gray.200" }}
+          >
+            Sensors ({sensors?.length || 0})
+          </Text>
+          {sensors && sensors.length > 0 ? (
+            <Box
+              overflowX="auto"
+              bg={{ base: "gray.50", _dark: "gray.900" }}
+              rounded="lg"
+              p={2}
+            >
+              <Table.Root size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
+                      Name
+                    </Table.ColumnHeader>
+                    <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
+                      Type
+                    </Table.ColumnHeader>
+                    <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
+                      Model
+                    </Table.ColumnHeader>
+                    <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
+                      Value
+                    </Table.ColumnHeader>
+                    <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
+                      Unit
+                    </Table.ColumnHeader>
+                    <Table.ColumnHeader color={{ base: "gray.600", _dark: "gray.300" }}>
+                      Actions
+                    </Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {sensors.map((sensor: SensorPublic) => (
+                    <Table.Row
+                      key={sensor.id}
+                      _hover={{
+                        bg: { base: "gray.100", _dark: "gray.700" }
+                      }}
+                    >
+                      <Table.Cell color={{ base: "gray.800", _dark: "gray.200" }}>
+                        {sensor.name}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Badge colorPalette={getSensorTypeColor(sensor.type)}>
+                          {sensor.type}
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell color={{ base: "gray.600", _dark: "gray.400" }}>
+                        {sensor.model || "-"}
+                      </Table.Cell>
+                      <Table.Cell color={{ base: "gray.600", _dark: "gray.400" }}>
+                        {sensor.value || "-"}
+                      </Table.Cell>
+                      <Table.Cell color={{ base: "gray.600", _dark: "gray.400" }}>
+                        {sensor.unit || "-"}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <DeleteSensor id={sensor.id} controllerId={controllerId} />
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table.Root>
+            </Box>
+          ) : (
+            <Text color={{ base: "gray.500", _dark: "gray.400" }}>
+              No sensors added yet
+            </Text>
+          )}
+        </Box>
+      )
+    }
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/controller.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/graphs.tsx =====
+    import { createFileRoute } from '@tanstack/react-router'
+    
+    export const Route = createFileRoute('/greenhouses/$greenhouseId/graphs')({
+      component: () => <div>Hello /greenhouses/$greenhouseId/graphs!</div>
+    })
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/graphs.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/settings.tsx =====
+    import { createFileRoute } from "@tanstack/react-router";
+    import GHSettings from "@/components/Greenhouses/GHSettings";
+    
+    export const Route = createFileRoute("/greenhouses/$greenhouseId/settings")({
+      component: GHSettings,
+    });
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/settings.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/zones.tsx =====
+    import { createFileRoute } from '@tanstack/react-router'
+    import {
+      Box,
+      Container,
+      Flex,
+      Heading,
+      Text,
+      Badge,
+      SimpleGrid,
+      VStack,
+    } from "@chakra-ui/react"
+    import { useQuery } from "@tanstack/react-query"
+    
+    import { ZonesService, ZonePublic } from "@/client"
+    import AddZone from "@/components/Zones/AddZone"
+    import ZoneSettings from "@/components/Zones/ZoneSettings"
+    import PlantCrop from "@/components/Crops/PlantCrop"
+    import AddObservation from "@/components/Crops/AddObservation"
+    import ViewObservations from "@/components/Crops/ViewObservations"
+    import { useCropQueries } from "@/hooks/useCropQueries";
+    import { useCropStageData } from "@/hooks/useCropStageData";
+    import EnvironmentalGrid from "@/components/shared/EnvironmentalGrid";
+    import CropHeader from "@/components/Crops/CropHeader";
+    import { isCropRecipe } from "@/types/cropRecipe";
+    
+    export const Route = createFileRoute('/greenhouses/$greenhouseId/zones')({
+      component: Zones
+    })
+    
+    function Zones() {
+      const { greenhouseId } = Route.useParams()
+    
+      const {
+        data: zones,
+        isLoading,
+        isError,
+      } = useQuery({
+        queryKey: ["zones", greenhouseId],
+        queryFn: () => ZonesService.listZones({ greenhouseId }),
+      })
+    
+      if (isLoading) return <Text>Loading...</Text>
+      if (isError) return <Text>Error loading zones</Text>
+    
+      return (
+        <Container maxW="full">
+          <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
+            {"Zones Management"}
+          </Heading>
+          <AddZone greenhouseId={greenhouseId} />
+    
+          <SimpleGrid minChildWidth="400px" gap={6} mt={6}>
+            {zones?.map((zone: ZonePublic) => (
+              <ZoneCard key={zone.id} zone={zone} />
+            ))}
+          </SimpleGrid>
+        </Container>
+      )
+    }
+    
+    function ZoneCard({ zone }: { zone: ZonePublic }) {
+      // Use our custom hook for all crop-related queries
+      const {
+        zoneCrop,
+        crop,
+        observations,
+        isLoading,
+        hasNoCrop
+      } = useCropQueries(zone);
+    
+      // Use our custom hook for stage calculations
+      const {
+        currentStage,
+        nextStage,
+        daysUntilNext,
+        progress,
+        daysGrowing
+      } = useCropStageData(zoneCrop, crop, observations);
+    
+    
+      // Safely access recipe data
+      const recipe = crop?.recipe && isCropRecipe(crop.recipe) ? crop.recipe : null;
+      const idealConditions = recipe?.ideal_conditions || null;
+    
+      return (
+        <Box
+          border="2px"
+          borderColor={{ base: "gray.200", _dark: "gray.600" }}
+          rounded="xl"
+          p={{ base: 4, md: 6 }}
+          shadow="lg"
+          bg={{ base: "white", _dark: "gray.800" }}
+          _hover={{
+            shadow: "xl",
+            transform: "translateY(-2px)",
+            borderColor: { base: "gray.300", _dark: "gray.500" }
+          }}
+          position="relative"
+          minH={{ base: "auto", md: "600px" }}
+          h="fit-content"
+          transition="all 0.2s ease"
+          overflow="hidden"
+        >
+          <Box position="absolute" top={4} right={4} zIndex={1}>
+            <ZoneSettings zone={zone} />
+          </Box>
+    
+          <Box mb={6} pr={12}>
+            <Heading
+              size={{ base: "lg", md: "xl" }}
+              color={{ base: "gray.800", _dark: "gray.100" }}
+              mb={2}
+              lineClamp={1}
+            >
+              Zone {zone.zone_number}
+            </Heading>
+            <Badge colorPalette="yellow" size={{ base: "md", md: "lg" }} variant="subtle">
+              {zone.location}
+            </Badge>
+          </Box>
+    
+          <Box mb={6}>
+            <EnvironmentalGrid zone={zone} idealConditions={idealConditions} />
+          </Box>
+    
+          <Box
+            border="2px"
+            borderColor={{ base: "green.200", _dark: "green.600" }}
+            rounded="xl"
+            p={{ base: 3, md: 5 }}
+            bg="linear-gradient(135deg, #f0fff4 0%, #e6fffa 100%)"
+            _dark={{ bg: "linear-gradient(135deg, #1a2f1a 0%, #1a2e2a 100%)" }}
+            minH={{ base: "300px", md: "400px" }}
+          >
+            {isLoading ? (
+              <Flex justify="center" align="center" h="200px">
+                <Text
+                  color={{ base: "gray.500", _dark: "gray.400" }}
+                  fontSize={{ base: "md", md: "lg" }}
+                  textAlign="center"
+                >
+                  Loading crop data...
+                </Text>
+              </Flex>
+            ) : zoneCrop && crop && !hasNoCrop ? (
+              <VStack gap={{ base: 3, md: 5 }} align="stretch" h="full">
+                <CropHeader
+                  crop={crop}
+                  zoneCrop={zoneCrop}
+                  currentStage={currentStage}
+                />
+    
+                {/* Growth Progress */}
+                {recipe?.growth_duration_days && zoneCrop.is_active && (
+                  <Box
+                    bg={{ base: "white", _dark: "gray.700" }}
+                    border="1px"
+                    borderColor={{ base: "green.300", _dark: "green.600" }}
+                    rounded="lg"
+                    p={{ base: 3, md: 4 }}
+                  >
+                    <Flex justify="space-between" align="center" mb={2} wrap="wrap" gap={2}>
+                      <Text
+                        fontSize={{ base: "xs", md: "sm" }}
+                        fontWeight="medium"
+                        color={{ base: "gray.700", _dark: "gray.300" }}
+                      >
+                        Growth Progress
+                      </Text>
+                      <Text
+                        fontSize={{ base: "xs", md: "sm" }}
+                        color={{ base: "gray.600", _dark: "gray.400" }}
+                      >
+                        {progress.toFixed(1)}%
+                      </Text>
+                    </Flex>
+                    <Box
+                      bg={{ base: "gray.200", _dark: "gray.600" }}
+                      rounded="full"
+                      h="3"
+                      mb={2}
+                    >
+                      <Box
+                        bg="linear-gradient(90deg, #22C55E 0%, #16A34A 100%)"
+                        h="full"
+                        rounded="full"
+                        w={`${progress}%`}
+                        transition="width 0.3s ease"
+                      />
+                    </Box>
+                    <Flex
+                      justify="space-between"
+                      fontSize="xs"
+                      color={{ base: "gray.500", _dark: "gray.400" }}
+                      wrap="wrap"
+                      gap={1}
+                    >
+                      <Text>{daysGrowing} days grown</Text>
+                      <Text>{recipe.growth_duration_days - daysGrowing} days remaining</Text>
+                    </Flex>
+                    {nextStage && daysUntilNext && (
+                      <Text
+                        fontSize="xs"
+                        color={{ base: "blue.600", _dark: "blue.400" }}
+                        mt={1}
+                        lineClamp={2}
+                      >
+                        Next stage: {nextStage.name} in {daysUntilNext} days
+                      </Text>
+                    )}
+                  </Box>
+                )}
+    
+                {/* Action Buttons */}
+                <Box pt={2}>
+                  <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3}>
+                    {zoneCrop.is_active && (
+                      <>
+                        <AddObservation zone={zone} />
+                        <ViewObservations zone={zone} />
+                      </>
+                    )}
+                    {!zoneCrop.is_active && (
+                      <Box gridColumn={{ base: "span 1", sm: "span 2" }}>
+                        <PlantCrop zone={zone} />
+                      </Box>
+                    )}
+                  </SimpleGrid>
+                </Box>
+              </VStack>
+            ) : (
+              <Flex direction="column" justify="center" align="center" h="200px" gap={4}>
+                <Text
+                  color={{ base: "gray.500", _dark: "gray.400" }}
+                  fontSize={{ base: "md", md: "lg" }}
+                  textAlign="center"
+                  px={2}
+                >
+                  No crop currently planted
+                </Text>
+                <PlantCrop zone={zone} />
+              </Flex>
+            )}
+          </Box>
+        </Box>
+      )
+    }
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/routes/greenhouses/$greenhouseId/zones.tsx =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/src/types/cropRecipe.ts =====
+    export interface CropRecipe {
+      name: string;
+      species: string;
+      growth_duration_days: number;
+      ideal_conditions: {
+        temperature_C: { min: number; max: number };
+        'humidity_%': { min: number; max: number };
+        vpd_kPa: { min: number; max: number };
+        light_hours: number;
+        ppfd_umol_m2_s: { min: number; max: number };
+        dli_mol_m2_day: { min: number; max: number };
+        co2_ppm: { min: number; max: number };
+        nutrient_ec_dS_m: { min: number; max: number };
+        nutrient_pH: { min: number; max: number };
+      };
+      stages: Array<{
+        name: string;
+        duration_days: { start_day: number; end_day: number };
+        conditions: {
+          temperature_C: { min: number; max: number };
+          'humidity_%': { min: number; max: number };
+          vpd_kPa: { min: number; max: number };
+          light_hours: number;
+          ppfd_umol_m2_s?: { min: number; max: number };
+          nutrient_ec_dS_m?: { min: number; max: number };
+          water_ml_per_plant_day?: number;
+        };
+        tasks: string[];
+        health_metrics: {
+          healthy: string;
+          red_flags: string;
+        };
+      }>;
+      expected_yield_kg: { min: number; max: number };
+    }
+    
+    // Type guard to check if recipe has the expected structure
+    export const isCropRecipe = (recipe: any): recipe is CropRecipe => {
+      return recipe &&
+        typeof recipe === 'object' &&
+        typeof recipe.growth_duration_days === 'number' &&
+        Array.isArray(recipe.stages) &&
+        recipe.expected_yield_kg &&
+        typeof recipe.expected_yield_kg.min === 'number';
+    };
+
+===== END FILE: /Users/jason/Code/verdify/frontend/src/types/cropRecipe.ts =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/tests/login.spec.ts =====
+    import { type Page, expect, test } from "@playwright/test"
+    import { firstSuperuser, firstSuperuserPassword } from "./config.ts"
+    import { randomPassword } from "./utils/random.ts"
+    
+    test.use({ storageState: { cookies: [], origins: [] } })
+    
+    type OptionsType = {
+      exact?: boolean
+    }
+    
+    const fillForm = async (page: Page, email: string, password: string) => {
+      await page.getByPlaceholder("Email").fill(email)
+      await page.getByPlaceholder("Password", { exact: true }).fill(password)
+    }
+    
+    const verifyInput = async (
+      page: Page,
+      placeholder: string,
+      options?: OptionsType,
+    ) => {
+      const input = page.getByPlaceholder(placeholder, options)
+      await expect(input).toBeVisible()
+      await expect(input).toHaveText("")
+      await expect(input).toBeEditable()
+    }
+    
+    test("Inputs are visible, empty and editable", async ({ page }) => {
+      await page.goto("/login")
+    
+      await verifyInput(page, "Email")
+      await verifyInput(page, "Password", { exact: true })
+    })
+    
+    test("Log In button is visible", async ({ page }) => {
+      await page.goto("/login")
+    
+      await expect(page.getByRole("button", { name: "Log In" })).toBeVisible()
+    })
+    
+    test("Forgot Password link is visible", async ({ page }) => {
+      await page.goto("/login")
+    
+      await expect(
+        page.getByRole("link", { name: "Forgot password?" }),
+      ).toBeVisible()
+    })
+    
+    test("Log in with valid email and password ", async ({ page }) => {
+      await page.goto("/login")
+    
+      await fillForm(page, firstSuperuser, firstSuperuserPassword)
+      await page.getByRole("button", { name: "Log In" }).click()
+    
+      await page.waitForURL("/")
+    
+      await expect(
+        page.getByText("Welcome back, nice to see you again!"),
+      ).toBeVisible()
+    })
+    
+    test("Log in with invalid email", async ({ page }) => {
+      await page.goto("/login")
+    
+      await fillForm(page, "invalidemail", firstSuperuserPassword)
+      await page.getByRole("button", { name: "Log In" }).click()
+    
+      await expect(page.getByText("Invalid email address")).toBeVisible()
+    })
+    
+    test("Log in with invalid password", async ({ page }) => {
+      const password = randomPassword()
+    
+      await page.goto("/login")
+      await fillForm(page, firstSuperuser, password)
+      await page.getByRole("button", { name: "Log In" }).click()
+    
+      await expect(page.getByText("Incorrect email or password")).toBeVisible()
+    })
+    
+    // Log out
+    
+    test("Successful log out", async ({ page }) => {
+      await page.goto("/login")
+    
+      await fillForm(page, firstSuperuser, firstSuperuserPassword)
+      await page.getByRole("button", { name: "Log In" }).click()
+    
+      await page.waitForURL("/")
+    
+      await expect(
+        page.getByText("Welcome back, nice to see you again!"),
+      ).toBeVisible()
+    
+      await page.getByTestId("user-menu").click()
+      await page.getByRole("menuitem", { name: "Log out" }).click()
+      await page.waitForURL("/login")
+    })
+    
+    test("Logged-out user cannot access protected routes", async ({ page }) => {
+      await page.goto("/login")
+    
+      await fillForm(page, firstSuperuser, firstSuperuserPassword)
+      await page.getByRole("button", { name: "Log In" }).click()
+    
+      await page.waitForURL("/")
+    
+      await expect(
+        page.getByText("Welcome back, nice to see you again!"),
+      ).toBeVisible()
+    
+      await page.getByTestId("user-menu").click()
+      await page.getByRole("menuitem", { name: "Log out" }).click()
+      await page.waitForURL("/login")
+    
+      await page.goto("/settings")
+      await page.waitForURL("/login")
+    })
+    
+    test("Redirects to /login when token is wrong", async ({ page }) => {
+      await page.goto("/settings")
+      await page.evaluate(() => {
+        localStorage.setItem("access_token", "invalid_token")
+      })
+      await page.goto("/settings")
+      await page.waitForURL("/login")
+      await expect(page).toHaveURL("/login")
+    })
+
+===== END FILE: /Users/jason/Code/verdify/frontend/tests/login.spec.ts =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/frontend/tsconfig.json =====
+    {
+      "compilerOptions": {
+        "target": "ES2020",
+        "useDefineForClassFields": true,
+        "lib": ["ES2020", "DOM", "DOM.Iterable"],
+        "module": "ESNext",
+        "skipLibCheck": true,
+        /* Bundler mode */
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "jsx": "react-jsx",
+        /* Linting */
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "paths": {
+          "@/*": ["./src/*"]
+        }
+      },
+      "include": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "tests/**/*.ts",
+        "tests/**/*.tsx",
+        "playwright.config.ts"
+      ],
+      "references": [
+        {
+          "path": "./tsconfig.node.json"
+        }
+      ]
+    }
+
+===== END FILE: /Users/jason/Code/verdify/frontend/tsconfig.json =====
+

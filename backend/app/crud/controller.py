@@ -128,7 +128,7 @@ def validate_climate_controller_uniqueness(
     query = select(Controller).where(
         and_(
             Controller.greenhouse_id == greenhouse_id,
-            Controller.is_climate_controller is True,
+            Controller.is_climate_controller.is_(True),
         )
     )
 

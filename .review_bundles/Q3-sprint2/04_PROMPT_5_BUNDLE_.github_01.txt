@@ -1,0 +1,360 @@
+# PROMPT 5 — Bundle: .github (01)
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/copilot-instructions.md =====
+    # Verdify Backend — Copilot Global Instructions
+    
+    These instructions apply to **all** backend work.
+    
+    ## Project Reality
+    
+    - Python 3.12, FastAPI, SQLModel (with Pydantic), Alembic, PostgreSQL.
+    - Use **uv** for env & commands (`uv run ...`), not bare `python`/`pip`.
+    - Key paths:
+      - API routers: `app/api/routes/*.py`
+      - Core infra: `app/core/{config,db,security}.py`
+      - Domain models: `app/models/*.py`  (**Do not** use `app/models.py`)
+      - CRUD layer: `app/crud/*.py`
+      - Tests: `app/tests/**`
+      - Alembic migrations: `app/alembic/**`
+    - Running: backend dev server is `uv run fastapi dev app/main.py`; tests are `uv run pytest -q`.
+    
+    ## API Contract & DB
+    
+    Treat the repo docs (in `requirements/`) as **source of truth**:
+    - `requirements/API.md`, `requirements/openapi.yml`, `requirements/DATABASE.md`
+    - Respect exactly:
+      - Paths, methods, params, request/response bodies, headers
+      - Security schemes: **UserJWT** (Authorization: Bearer), **DeviceToken** (`X-Device-Token`)
+      - Error envelope `ErrorResponse` { `error_code`, `message`, `timestamp`, `request_id` }
+      - Pagination envelope `{data, page, page_size, total}`
+      - ETag + `If-None-Match` semantics (Config/Plan)
+      - Idempotency-Key + telemetry rate‑limiting semantics
+      - Field names & types
+      - Normalized timestamps in UTC (RFC 3339/ISO 8601 with timezone)
+    
+    ## Conventions
+    
+    - Full typing; avoid `Any`. Use `uuid.UUID` for IDs; use timezone‑aware `datetime` (UTC).
+    - **SQLModel/Pydantic** separation:
+      - DB: `table=True` classes (`Greenhouse`, `Zone`, `Controller`, `Sensor`, `Actuator`, `FanGroup`, `Plan`, `ConfigSnapshot`, `ZoneCrop`, `Observation`, State machine rows/fallback, etc.)
+      - Wire DTOs: `*Create`, `*Update`, `*Public` or `*List`
+    - Pagination query: `?page=&page_size=`; normalize invalid input to safe defaults.
+    - Errors: always return the standard `ErrorResponse` envelope; never leak internals.
+    - **Auth**:
+      - 401 if unauthenticated; 403 if authenticated but unauthorized (ownership boundary).
+      - Device flows must accept `X-Device-Token`. Never mix device tokens with user JWT.
+    - **Uniqueness** constraints enforced in DB + business logic (zone_number per greenhouse; sensor `(slave, reg)` per controller; actuator relay channel per controller; single active plan per greenhouse; single active zone-crop per zone).
+    - **ETag**:
+      - Strong ETag format: `config:v<version>:<sha8>` or `plan:v<version>:<sha8>`
+      - Honor `If-None-Match` with `304`.
+    - **Idempotency / Telemetry**:
+      - Respect `Idempotency-Key` (store hash of body + key; re‑serve response).
+      - Token bucket or equivalent; reply 429 with informative headers when throttled.
+    - **Security**: never echo secrets; scrub device tokens in logs; no `eval()` or shelling out in request handlers.
+    
+    ## Tests & Definition of Done
+    
+    - Add/extend **Pytest** coverage (unit + route tests) under `app/tests`.
+    - Keep/extend the E2E suite `end_to_end_v3.py`. A PR is **ready** only if:
+      1) Unit & route tests pass, 2) E2E passes (no critical failures), 3) Coverage not lower.
+    - Every schema change ships with an Alembic migration (no mutation of past revisions).
+    - Update OpenAPI schema + docs if wire shapes change (avoid unless necessary).
+    
+    ## Implementation Guardrails for Copilot
+    
+    - Prefer **minimal diffs**; preserve interfaces.
+    - For new endpoints: Add DTOs → CRUD → Router → Tests → Docs → (optional) E2E touchpoint.
+    - For telemetry and config/plan endpoints: re‑check idempotency, ETag, pagination invariants.
+    - **Never** create or use `app/models.py`. All models live in `app/models/*.py`.
+    - Use `app/api/deps.py` for dependencies (DB, auth, pagination).
+    - Use `sqlmodel.Session` from `app/core/db.py`. No ad‑hoc engines.
+    - Return DTOs that **hide** DB‑internal fields (e.g., `user_id`, `params`, `updated_at`, `is_active` when required).
+    
+    ## Common Tasks (expectations)
+    
+    - CRUD endpoint:
+      - Request/response models with Pydantic (`*Create`, `*Update`, `*Public`).
+      - DB layer via SQLModel, unique constraints mirrored in DB & validated in code (raise 409/422).
+      - Route tests under `app/tests/api/test_<resource>.py`.
+    - Alembic migration:
+      - Autogenerate, review, add **unique constraints**, **indexes**, **FKs** as needed.
+      - Upgrade & downgrade paths must be correct.
+    - Telemetry:
+      - Validate enums strictly; reject unknown actions w/ 422.
+      - Enforce device token requirement; 401/403 for failures.
+    - Plans & Config:
+      - Single active plan per greenhouse; payload.version must match entity version on PATCH.
+      - Config device fetch supports `ETag` and `If-None-Match`.
+    
+
+===== END FILE: /Users/jason/Code/verdify/.github/copilot-instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/api-contract.instructions.md =====
+    ---
+    applyTo: "**"
+    description: "Enforce strict OpenAPI contract across endpoints"
+    ---
+    
+    # Contract Fidelity
+    
+    - **Request**: exact body shape and header names (`X-Device-Token`, `If-None-Match`, `Idempotency-Key`).
+    - **Response**: exact shapes; use `response_model` to enforce DTOs.
+    - **Status codes**: follow spec per path. Prefer `201` for creates, `204` for deletes, `304` for ETag match, correct 4xx codes for errors.
+    - **Pagination**: accept `page`, `page_size`; respond with `{data, page, page_size, total}`.
+    - **Errors**: return `ErrorResponse` with `error_code` enum.
+    - **Security**:
+      - User endpoints → Bearer JWT.
+      - Device endpoints → `X-Device-Token` (API key style). Validate and map to controller identity.
+
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/api-contract.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/backend.instructions.md =====
+    ---
+    applyTo: "**"
+    description: "Backend style: FastAPI + SQLModel + Alembic + Postgres"
+    ---
+    
+    # Backend Conventions
+    
+    - **Routers** live in `app/api/routes/*.py`. Add `APIRouter`, include tags, `responses` stubs, security deps, and explicit `response_model`.
+    - **CRUD layer** is in `app/crud/*.py`. Keep routers thin: parameter handling + orchestration only.
+    - **SQLModel**:
+      - Foreign keys define `ondelete="CASCADE"` where parent removal should cascade.
+      - Use `Relationship(..., sa_relationship_kwargs={"passive_deletes": True})`.
+      - Avoid N+1: use `selectinload` when list endpoints include children.
+    - **Transactions**: Keep each request scoped to a short transaction; commit once; rollback on exceptions.
+    - **Validation**: prefer DTO classes (`*Create`/`*Update`) with Pydantic `Field()` constraints matching the spec (min/max/enum).
+    - **Timestamps**: always UTC (`datetime.now(timezone.utc)`).
+
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/backend.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/db-migrations.instructions.md =====
+    ---
+    applyTo: "**"
+    description: "Safe Alembic migration patterns"
+    ---
+    
+    # Alembic
+    
+    - Never edit an existing revision; create a new one per schema change.
+    - Use autogenerate but inspect diffs; add `op.create_index`, `unique=True`, and FKs with `ondelete`.
+    - Provide upgrade & downgrade.
+    - Data migrations: write idempotent SQL/ORM code guarded by existence checks.
+    - Test: `uv run alembic upgrade head` on a fresh DB; ensure app boots.
+    - Every schema change must include a new revision with **upgrade** and **downgrade**.
+    - Add/maintain unique constraints and indexes matching invariants.
+    - Include data migrations if needed (safe, idempotent).
+    - Never mutate old revisions.
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/db-migrations.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/etag-config.instructions.md =====
+    ---
+    applyTo: "**"
+    description: "ETag & config/plan delivery"
+    ---
+    
+    # ETag + Materialization
+    
+    - Generate **strong ETags**: `config:v<version>:<sha8>` / `plan:v<version>:<sha8>`.
+    - Support `If-None-Match` → return `304` when unchanged.
+    - `Last-Modified` header should reflect materialization time.
+    - Config/Plan payloads must match schemas; exclude volatile fields from hash.
+
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/etag-config.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/general-coding.instructions.md =====
+    ---
+    applyTo: "**/*.py"
+    ---
+    # General Coding Standards for Project Verdify Backend Refactoring
+    
+    Follow these guidelines for all code changes:
+    - Align all models, routes, and features with the provided OpenAPI specification (see docs/openapi.yaml). Do not deviate from schemas like Greenhouse (add fields like min_temp_c), Sensor (use SensorKind enum), etc.
+    - Use SQLModel for database models with table=True, UUID primary keys (default_factory=uuid.uuid4), and cascading deletes (ondelete="CASCADE", passive_deletes=True).
+    - For FastAPI routes: Use Pydantic for request/response models, dependencies like get_current_user for auth, and tags from the spec (e.g., [CRUD]).
+    - Implement security: UserJWT (Bearer) for user endpoints, DeviceToken (X-Device-Token) for device ones.
+    - Handle errors with standardized ErrorResponse schema (error_code like E400_BAD_REQUEST).
+    - Project goals: Refactor existing files (e.g., app/models.py, api/routes/greenhouses.py) to match spec; add new features like telemetry ingestion with rate limiting and ETags for config/plan.
+    - Constraints: No new external deps without updating pyproject.toml; use existing libs (FastAPI, SQLModel, Alembic); ensure code is Python 3.12 compatible.
+    - Best practices: Short functions, type hints, docstrings referencing spec sections.
+
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/general-coding.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/sqlmodel.instructions.md =====
+    ---
+    applyTo: "app/models/**"
+    ---
+    
+    # Models — Copilot Instructions
+    
+    - **Do not** create or modify `app/models.py`. Use separate files per domain in `app/models/*.py`.
+    - SQLModel table classes: `table=True`. Primary keys as `uuid.UUID`.
+    - Create matching DTOs (`*Create`, `*Update`, `*Public`).
+    - Add `__tablename__` explicitly and indexes/uniques mirroring business rules:
+      - `(greenhouse_id, zone_number)` unique
+      - `(controller_id, modbus_slave_id, modbus_reg)` unique
+      - `(controller_id, relay_channel)` unique
+      - Single active plan per greenhouse; single active zone‑crop per zone enforced via partial index or code + transaction.
+    - Timestamps are UTC aware `datetime`.
+
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/sqlmodel.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/telemetry.instructions.md =====
+    ---
+    applyTo: "**"
+    description: "Telemetry ingestion guarantees"
+    ---
+    
+    # Telemetry Ingest
+    
+    - Require `X-Device-Token` for telemetry/config fetch. 401/403 if missing/bad.
+    - Sensors endpoint: batch accepts `readings[]` with strict enum validation; accept bulk, reject invalid items with 422.
+    - `Idempotency-Key`: dedupe identical payloads + key; re‑serve stored response.
+    - Status endpoint: ensure schema parity with docs; record plan/config version, override/fallback flags.
+    - Config fetch by controller device name honors `If-None-Match` and returns `ETag`.
+    - Plan payload.version must equal entity version on update; reject mismatches (409/422). Single active plan enforced.
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/telemetry.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/instructions/tests.instructions.md =====
+    ---
+    applyTo: "**"
+    description: "Testing patterns & expectations"
+    ---
+    
+    # Tests
+    
+    - Tests live in `app/tests/**`. For each new route:
+      - Unit tests for CRUD logic.
+      - API tests for all HTTP statuses defined in the spec (success + failure paths).
+    - Use factory helpers/fixtures when available; otherwise create minimal seed data in setup.
+    - Ensure JWT/device token auth paths are covered.
+    - CI acceptance: `uv run pytest -q` must pass.
+
+===== END FILE: /Users/jason/Code/verdify/.github/instructions/tests.instructions.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/prompts/generate-migration.prompt.md =====
+    ---
+    mode: 'agent'
+    tools: ['codebase', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'terminalSelection', 'terminalLastCommand', 'openSimpleBrowser', 'fetch', 'findTestFiles', 'searchResults', 'githubRepo', 'extensions', 'runTests', 'editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'copilotCodingAgent', 'activePullRequest', 'getPythonEnvironmentInfo', 'getPythonExecutableCommand', 'installPythonPackage', 'configurePythonEnvironment']
+    description: 'Generate Alembic migration for model changes'
+    ---
+    Generate an Alembic migration script for recent model changes in app/models.py.
+    
+    Reference: [general-coding.instructions.md](../instructions/general-coding.instructions.md)
+    
+    Steps:
+    1. Assume changes from ${selection} (e.g., added fields to Greenhouse).
+    2. Run conceptual `alembic revision --autogenerate -m "description"` equivalent: Create upgrade/downgrade functions.
+    3. Handle adds (add_column), renames (alter_column), relationships (create_foreign_key with ondelete='CASCADE').
+    4. Place in app/alembic/versions/{new_file}.py.
+    5. Output the full migration file content.
+    
+    Constraints: Use op from alembic.operations; no actual run—code only.
+    
+    Validate: Migration applies changes without data loss; matches spec schema evolution.
+
+===== END FILE: /Users/jason/Code/verdify/.github/prompts/generate-migration.prompt.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/prompts/implement-endpoint.prompt.md =====
+    ---
+    mode: 'agent'
+    model: GPT-4o
+    tools: ['codebase', 'terminal']
+    description: 'Implement a REST endpoint from Verdify OpenAPI'
+    ---
+    
+    Use the OpenAPI spec in this workspace to implement one endpoint end-to-end (router, CRUD, DTOs, tests), adhering to:
+    
+    - [../instructions/api-contract.instructions.md](../instructions/api-contract.instructions.md)
+    - [../instructions/backend.instructions.md](../instructions/backend.instructions.md)
+    - [../instructions/tests.instructions.md](../instructions/tests.instructions.md)
+    
+    ## Inputs
+    - Endpoint path: ${input:path}
+    - Method: ${input:method}
+    - Success model name: ${input:response_model_name}
+    - Error cases to cover: ${input:error_cases}
+    
+    ## Task
+    1) Locate or create router under `app/api/routes/<resource>.py`. Add FastAPI route:
+       - Security deps (UserJWT or DeviceToken as per spec).
+       - `response_model` set to DTO matching spec.
+       - Validate query/path/body per spec (including enums and formats).
+    
+    2) CRUD:
+       - Implement or extend `app/crud/<resource>.py` functions.
+       - Use `sqlmodel.Session` from the project DB helpers. Keep router thin.
+    
+    3) DTOs:
+       - If needed, add/update DTOs in `app/models.py` to match the wire schema naming & shapes in the spec.
+    
+    4) Tests:
+       - Add API tests to `app/tests/api/routes/test_<resource>.py`.
+       - Cover success + all declared error variants and pagination when relevant.
+    
+    5) Run:
+       - `uv run pytest -q`
+       - `scripts/format.sh && scripts/lint.sh` (if present)
+    
+    ## Constraints
+    - Do not change unrelated public endpoints.
+    - Keep models backwards compatible unless migration is required (then use the migration prompt).
+    - Use precise field names/types per spec.
+    
+    ## Acceptance
+    - Tests added and passing; endpoint returns exact shapes and status codes.
+    - OpenAPI served by the app shows the new endpoint and correct schemas (if the app auto-generates).
+
+===== END FILE: /Users/jason/Code/verdify/.github/prompts/implement-endpoint.prompt.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/prompts/implement-route.prompt.md =====
+    ---
+    mode: 'agent'
+    tools: ['codebase', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'terminalSelection', 'terminalLastCommand', 'openSimpleBrowser', 'fetch', 'findTestFiles', 'searchResults', 'githubRepo', 'extensions', 'runTests', 'editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'copilotCodingAgent', 'activePullRequest', 'getPythonEnvironmentInfo', 'getPythonExecutableCommand', 'installPythonPackage', 'configurePythonEnvironment']
+    description: 'Implement or refactor FastAPI routes based on OpenAPI spec'
+    ---
+    Implement or refactor a FastAPI route in app/api/routes/{file}.py to match the OpenAPI spec endpoint.
+    
+    Reference: [general-coding.instructions.md](../instructions/general-coding.instructions.md)
+    
+    Input: Endpoint path (e.g., /greenhouses/{id}/config/publish POST) from ${input:endpoint}.
+    
+    Approach:
+    1. Use APIRouter with prefix="/api/v1", tags from spec (e.g., [Config]).
+    2. Add dependencies: get_current_user for UserJWT, get_current_device for DeviceToken.
+    3. Use Pydantic models for request/response (e.g., ConfigPublishResult).
+    4. Implement logic: For POST, handle dry_run, materialize config from DB, compute ETag.
+    5. Add features: ETags (If-None-Match), rate limiting (slowapi), compression (gzip).
+    6. Update crud/{model}.py for DB operations if needed.
+    7. Output: Updated route code, including imports and router mounting in api/main.py if new file.
+    
+    Constraints: Align with spec responses (e.g., 201 for publish with headers); use existing deps.py.
+    
+    Success: Code handles spec parameters, security, and returns matching schemas.
+
+===== END FILE: /Users/jason/Code/verdify/.github/prompts/implement-route.prompt.md =====
+
+===== BEGIN FILE: /Users/jason/Code/verdify/.github/prompts/refactor-model.prompt.md =====
+    ---
+    mode: 'agent'
+    tools: ['codebase', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'terminalSelection', 'terminalLastCommand', 'openSimpleBrowser', 'fetch', 'findTestFiles', 'searchResults', 'githubRepo', 'extensions', 'runTests', 'editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'copilotCodingAgent', 'activePullRequest', 'getPythonEnvironmentInfo', 'getPythonExecutableCommand', 'installPythonPackage', 'configurePythonEnvironment']
+    description: 'Refactor SQLModel classes to match OpenAPI schemas'
+    ---
+    Your goal is to refactor or add SQLModel classes in app/models.py based on the OpenAPI spec schemas.
+    
+    Reference these instructions: [general-coding.instructions.md](../instructions/general-coding.instructions.md)
+    
+    Steps:
+    1. Identify the target model (e.g., Greenhouse, Zone) from ${selection} or user input.
+    2. Compare current model in app/models.py to spec schema (e.g., add min_temp_c to GreenhouseBase).
+    3. Update Base and table classes: Add fields with Field(...), enums, relationships with back_populates and cascade.
+    4. Remove deprecated (e.g., direct sensor FKs in Zone; use SensorZoneMap instead).
+    5. Ensure UUID PK, JSON fields for dicts/lists (sa_type=JSON).
+    6. Output only the updated code snippet for models.py.
+    
+    Example: For Greenhouse, add fields like min_vpd_kpa: float = Field(default=0.3).
+    
+    Validate: Matches spec types/defaults; no breaking changes to existing relationships.
+
+===== END FILE: /Users/jason/Code/verdify/.github/prompts/refactor-model.prompt.md =====
+
