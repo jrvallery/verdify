@@ -4,7 +4,7 @@ from typing import List
 from datetime import datetime, timezone
 
 from app.api.deps import get_current_user, SessionDep
-from app.crud.crops import crops
+from app.crud.crop import crops
 from app.models import (
     User, Zone, Greenhouse,
     Crop, CropCreate, CropPublic, CropUpdate,
