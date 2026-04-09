@@ -1,0 +1,15 @@
+-- Migration 047: Materialized view refresh scheduling
+--
+-- pg_cron is NOT available in timescale/timescaledb:latest-pg16.
+-- Instead, refresh is handled via host cron (added to jason's crontab):
+--
+-- */5 * * * * docker exec verdify-timescaledb psql -U verdify -d verdify \
+--   -c "SELECT refresh_relay_stuck(); SELECT refresh_climate_merged();" \
+--   >> /srv/verdify/state/matview-refresh.log 2>&1
+--
+-- Both functions already exist (created in earlier migrations).
+-- This migration is documentation only — no SQL changes needed.
+--
+-- Views refreshed:
+--   v_relay_stuck       — equipment stuck detection (materialized)
+--   v_climate_merged    — hourly climate bucketing (materialized)

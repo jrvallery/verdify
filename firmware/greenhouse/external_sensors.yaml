@@ -1,0 +1,402 @@
+# Ensure JSON component is available for parse_json()
+json:
+
+###############################################################################
+# external_sensors.yaml — Tempest UDP + Shelly HTTP direct integrations
+#
+# Replaces HA-dependent data paths:
+#   - Tempest weather: UDP broadcast on port 50222 (obs_st every 60s)
+#   - Shelly EM50: HTTP poll every 300s for energy data
+#
+# This eliminates tempest_sync and shelly_sync ingestor tasks.
+# The ESP32 becomes the single data aggregator for all greenhouse telemetry.
+###############################################################################
+
+# ═══════════════════════════════════════════════════════════════════
+# TEMPEST WEATHER — UDP listener on port 50222
+# WeatherFlow Tempest hub broadcasts JSON packets on the local network.
+# We parse obs_st (full observation, every 60s) and rapid_wind (every 3s).
+# ═══════════════════════════════════════════════════════════════════
+
+# Globals to hold parsed Tempest values (updated on each obs_st packet)
+globals:
+  - id: tempest_temp_f
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_rh_pct
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_wind_speed_mph
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_wind_dir_deg
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_wind_gust_mph
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_wind_lull_mph
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_pressure_hpa
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_solar_w_m2
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_uv_index
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_lux
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_precip_mm_min
+    type: float
+    restore_value: no
+    initial_value: "0"
+  - id: tempest_lightning_count
+    type: float
+    restore_value: no
+    initial_value: "0"
+  - id: tempest_lightning_dist_km
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  - id: tempest_battery_v
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+  # Shelly globals
+  - id: shelly_total_power_w
+    type: float
+    restore_value: no
+    initial_value: "0"
+  - id: shelly_ch0_power_w
+    type: float
+    restore_value: no
+    initial_value: "0"
+  - id: shelly_ch1_power_w
+    type: float
+    restore_value: no
+    initial_value: "0"
+  - id: shelly_voltage
+    type: float
+    restore_value: no
+    initial_value: "NAN"
+
+# UDP listener for Tempest broadcasts
+udp:
+  port:
+    listen_port: 50222
+    broadcast_port: 50222
+  listen_address: 255.255.255.255
+
+  on_receive:
+    then:
+      - lambda: |-
+          // Parse Tempest UDP JSON packet
+          std::string payload(data.begin(), data.end());
+
+          // Quick type check before full JSON parse
+          if (payload.find("\"obs_st\"") != std::string::npos) {
+            // Full observation (every ~60s)
+            // obs_st.obs[0] = [ts, wind_lull, wind_avg, wind_gust, wind_dir, wind_interval,
+            //                  pressure_mb, temp_c, rh, lux, uv, solar_w_m2, rain_mm_min,
+            //                  precip_type, lightning_dist_km, lightning_count, battery_v, interval_min]
+            json::parse_json(payload, [](JsonObject root) -> bool {
+              if (!root.containsKey("obs") || root["obs"].size() == 0) return false;
+              JsonArray obs = root["obs"][0];
+              if (obs.size() < 18) return false;
+
+              // Wind (m/s to mph: multiply by 2.237)
+              float wind_lull = obs[1].as<float>() * 2.237f;
+              float wind_avg  = obs[2].as<float>() * 2.237f;
+              float wind_gust = obs[3].as<float>() * 2.237f;
+              float wind_dir  = obs[4].as<float>();
+
+              // Pressure (MB to hPa: 1:1)
+              float pressure = obs[6].as<float>();
+
+              // Temp (C to F)
+              float temp_c = obs[7].as<float>();
+              float temp_f = temp_c * 9.0f / 5.0f + 32.0f;
+
+              // Humidity (%)
+              float rh = obs[8].as<float>();
+
+              // Light
+              float lux = obs[9].as<float>();
+              float uv  = obs[10].as<float>();
+              float solar = obs[11].as<float>();
+
+              // Precipitation
+              float rain = obs[12].as<float>();
+
+              // Lightning
+              float lt_dist  = obs[14].as<float>();
+              float lt_count = obs[15].as<float>();
+
+              // Battery
+              float battery = obs[16].as<float>();
+
+              // Store in globals
+              id(tempest_temp_f) = temp_f;
+              id(tempest_rh_pct) = rh;
+              id(tempest_wind_speed_mph) = wind_avg;
+              id(tempest_wind_dir_deg) = wind_dir;
+              id(tempest_wind_gust_mph) = wind_gust;
+              id(tempest_wind_lull_mph) = wind_lull;
+              id(tempest_pressure_hpa) = pressure;
+              id(tempest_solar_w_m2) = solar;
+              id(tempest_uv_index) = uv;
+              id(tempest_lux) = lux;
+              id(tempest_precip_mm_min) = rain;
+              id(tempest_lightning_count) = lt_count;
+              id(tempest_lightning_dist_km) = lt_dist;
+              id(tempest_battery_v) = battery;
+
+              ESP_LOGI("tempest", "obs_st: %.1f°F, %.0f%% RH, wind %.1f mph, solar %.0f W/m², pressure %.1f hPa",
+                       temp_f, rh, wind_avg, solar, pressure);
+              return true;
+            });
+          }
+          else if (payload.find("\"rapid_wind\"") != std::string::npos) {
+            // Rapid wind (every 3s) — just update wind speed/direction
+            json::parse_json(payload, [](JsonObject root) -> bool {
+              if (!root.containsKey("ob") || root["ob"].size() < 3) return false;
+              JsonArray ob = root["ob"];
+              id(tempest_wind_speed_mph) = ob[1].as<float>() * 2.237f;
+              id(tempest_wind_dir_deg) = ob[2].as<float>();
+              return true;
+            });
+          }
+
+# Tempest template sensors — exposed to ESPHome API + ingestor
+sensor:
+  - platform: template
+    name: "Tempest Temperature"
+    id: tempest_outdoor_temp
+    icon: mdi:thermometer
+    unit_of_measurement: "°F"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: "return id(tempest_temp_f);"
+
+  - platform: template
+    name: "Tempest Humidity"
+    id: tempest_outdoor_rh
+    icon: mdi:water-percent
+    unit_of_measurement: "%"
+    device_class: humidity
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: "return id(tempest_rh_pct);"
+
+  - platform: template
+    name: "Tempest Wind Speed"
+    id: tempest_wind
+    icon: mdi:weather-windy
+    unit_of_measurement: "mph"
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: "return id(tempest_wind_speed_mph);"
+
+  - platform: template
+    name: "Tempest Wind Direction"
+    id: tempest_wind_direction
+    icon: mdi:compass
+    unit_of_measurement: "°"
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: "return id(tempest_wind_dir_deg);"
+
+  - platform: template
+    name: "Tempest Wind Gust"
+    id: tempest_gust
+    icon: mdi:weather-windy-variant
+    unit_of_measurement: "mph"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: "return id(tempest_wind_gust_mph);"
+
+  - platform: template
+    name: "Tempest Wind Lull"
+    id: tempest_lull
+    icon: mdi:weather-windy-variant
+    unit_of_measurement: "mph"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: "return id(tempest_wind_lull_mph);"
+
+  - platform: template
+    name: "Tempest Pressure"
+    id: tempest_pressure
+    icon: mdi:gauge
+    unit_of_measurement: "hPa"
+    device_class: atmospheric_pressure
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: "return id(tempest_pressure_hpa);"
+
+  - platform: template
+    name: "Tempest Solar Irradiance"
+    id: tempest_solar
+    icon: mdi:solar-power
+    unit_of_measurement: "W/m²"
+    device_class: irradiance
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: "return id(tempest_solar_w_m2);"
+
+  - platform: template
+    name: "Tempest UV Index"
+    id: tempest_uv
+    icon: mdi:sun-wireless
+    unit_of_measurement: ""
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: "return id(tempest_uv_index);"
+
+  - platform: template
+    name: "Tempest Illuminance"
+    id: tempest_illuminance
+    icon: mdi:brightness-7
+    unit_of_measurement: "lx"
+    device_class: illuminance
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: "return id(tempest_lux);"
+
+  - platform: template
+    name: "Tempest Precipitation Rate"
+    id: tempest_precip
+    icon: mdi:weather-rainy
+    unit_of_measurement: "in/hr"
+    accuracy_decimals: 3
+    update_interval: 60s
+    lambda: |-
+      // Convert mm/min to in/hr: mm/min * 60 / 25.4
+      float v = id(tempest_precip_mm_min);
+      if (isnan(v)) return NAN;
+      return v * 60.0f / 25.4f;
+
+  - platform: template
+    name: "Tempest Lightning Count"
+    id: tempest_lt_count
+    icon: mdi:lightning-bolt
+    unit_of_measurement: ""
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: "return id(tempest_lightning_count);"
+
+  - platform: template
+    name: "Tempest Lightning Distance"
+    id: tempest_lt_dist
+    icon: mdi:lightning-bolt-outline
+    unit_of_measurement: "mi"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      // Convert km to miles
+      float v = id(tempest_lightning_dist_km);
+      if (isnan(v)) return NAN;
+      return v * 0.621371f;
+
+  - platform: template
+    name: "Tempest Battery"
+    id: tempest_batt
+    icon: mdi:battery
+    unit_of_measurement: "V"
+    device_class: voltage
+    accuracy_decimals: 2
+    update_interval: 60s
+    lambda: "return id(tempest_battery_v);"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # SHELLY EM50 — HTTP poll every 300s
+  # Direct local API at http://<shelly-ip>/rpc/EM.GetStatus?id=0
+  # ═══════════════════════════════════════════════════════════════════
+
+  - platform: template
+    name: "Shelly Total Power"
+    id: shelly_power_total
+    icon: mdi:flash
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 1
+    update_interval: 300s
+    lambda: "return id(shelly_total_power_w);"
+
+  - platform: template
+    name: "Shelly CH0 Power"
+    id: shelly_power_ch0
+    icon: mdi:flash-outline
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 1
+    update_interval: 300s
+    lambda: "return id(shelly_ch0_power_w);"
+
+  - platform: template
+    name: "Shelly CH1 Power"
+    id: shelly_power_ch1
+    icon: mdi:flash-outline
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 1
+    update_interval: 300s
+    lambda: "return id(shelly_ch1_power_w);"
+
+  - platform: template
+    name: "Shelly Voltage"
+    id: shelly_volt
+    icon: mdi:sine-wave
+    unit_of_measurement: "V"
+    device_class: voltage
+    accuracy_decimals: 1
+    update_interval: 300s
+    lambda: "return id(shelly_voltage);"
+
+# Shelly HTTP poll interval
+interval:
+  - interval: 300s
+    then:
+      - http_request.get:
+          url: !secret shelly_em50_url
+          capture_response: true
+          max_response_buffer_size: 1024
+          on_response:
+            then:
+              - lambda: |-
+                  if (body.empty()) {
+                    ESP_LOGW("shelly", "Empty response from Shelly EM50");
+                    return;
+                  }
+                  json::parse_json(body, [](JsonObject root) -> bool {
+                    // Shelly Pro EM-50 returns em1:0 and em1:1 objects
+                    JsonObject ch0 = root["em1:0"];
+                    JsonObject ch1 = root["em1:1"];
+                    if (ch0) {
+                      id(shelly_ch0_power_w) = ch0["act_power"].as<float>();
+                      id(shelly_voltage) = ch0["voltage"].as<float>();
+                    }
+                    if (ch1) {
+                      id(shelly_ch1_power_w) = ch1["act_power"].as<float>();
+                    }
+                    id(shelly_total_power_w) = id(shelly_ch0_power_w) + id(shelly_ch1_power_w);
+                    ESP_LOGI("shelly", "EM50: total %.1fW, ch0 %.1fW, ch1 %.1fW, %.1fV",
+                             id(shelly_total_power_w), id(shelly_ch0_power_w),
+                             id(shelly_ch1_power_w), id(shelly_voltage));
+                    return true;
+                  });

@@ -1,7 +1,35 @@
-.vscode
-node_modules/
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
+# Secrets
+.env
+*.env
+secrets.yaml
+mqtt/password_file
+traefik/acme/
+
+# Python
+__pycache__/
+*.pyc
 .venv/
+
+# Node
+node_modules/
+site/public/
+
+# ESPHome build
+.esphome/
+firmware/*.bin
+firmware/*.elf
+
+# Runtime state
+state/
+logs/
+*.log
+
+# Grafana
+grafana/data/
+
+# Backups
+*.dump
+*.bak
+
+# OS
+.DS_Store
