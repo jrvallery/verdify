@@ -1,0 +1,83 @@
+"""
+Verdify configuration — single source of truth for all connection settings.
+
+All values come from environment variables (loaded from .env files) with
+sensible defaults where appropriate. No secrets have default values.
+"""
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env files (ingestor-specific, then project-level)
+load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env")
+
+# ── Database ──────────────────────────────────────────────────────
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = os.environ.get("DB_PORT", "5432")
+DB_NAME = os.environ.get("DB_NAME", "verdify")
+DB_USER = os.environ.get("DB_USER", "verdify")
+DB_PASS = os.environ.get("DB_PASSWORD") or os.environ.get("POSTGRES_PASSWORD", "")
+DB_DSN = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# ── ESP32 ─────────────────────────────────────────────────────────
+ESP32_HOST = os.environ.get("ESP32_HOST", "192.168.10.111")
+ESP32_PORT = int(os.environ.get("ESP32_PORT", "6053"))
+ESP32_API_KEY = os.environ.get("ESP32_API_KEY", "")
+
+# ── Home Assistant ────────────────────────────────────────────────
+HA_URL = os.environ.get("HA_URL", "http://192.168.30.107:8123")
+HA_TOKEN_FILE = os.environ.get("HA_TOKEN_FILE", "/mnt/jason/agents/shared/credentials/ha_token.txt")
+
+# ── MQTT (Sentinel occupancy bridge) ─────────────────────────────
+MQTT_HOST = os.environ.get("MQTT_HOST", "192.168.30.107")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USER = os.environ.get("MQTT_USER", "")
+MQTT_PASS = os.environ.get("MQTT_PASS", "")
+
+# ── Slack ─────────────────────────────────────────────────────────
+SLACK_TOKEN_FILE = os.environ.get("SLACK_TOKEN_FILE", "/mnt/jason/agents/shared/credentials/slack_bot_token.txt")
+SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "C0ANVVAPLD6")
+
+# ── External services ────────────────────────────────────────────
+FRIGATE_URL = os.environ.get("FRIGATE_URL", "http://192.168.30.142:5000")
+LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
+GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/jason/agents/shared/credentials/gemini_api_key.txt")
+
+# ── Greenhouse ────────────────────────────────────────────────────
+GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")
+LATITUDE = float(os.environ.get("LATITUDE", "40.1672"))
+LONGITUDE = float(os.environ.get("LONGITUDE", "-105.1019"))
+TIMEZONE = os.environ.get("TZ", "America/Denver")
+
+# ── Paths ─────────────────────────────────────────────────────────
+STATE_DIR = Path(os.environ.get("STATE_DIR", "/srv/verdify/state"))
+VAULT_DIR = Path(os.environ.get("VAULT_DIR", "/mnt/iris/verdify-vault"))
+BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/mnt/iris/backups"))
+
+# ── Equipment constants ───────────────────────────────────────────
+WATTAGES = {
+    "heat1": 1500, "heat2": 0,  # heat2 is gas (BTU, not watts)
+    "fan1": 52, "fan2": 52,
+    "fog": 1644, "vent": 10,
+    "grow_light_main": 630, "grow_light_grow": 816,
+}
+HEAT2_BTU_PER_HOUR = 75000
+BTU_PER_THERM = 100000
+
+# ── Utility rates ($/unit) ───────────────────────────────────────
+ELECTRIC_RATE = float(os.environ.get("ELECTRIC_RATE", "0.111"))    # $/kWh
+GAS_RATE = float(os.environ.get("GAS_RATE", "0.83"))              # $/therm
+WATER_RATE = float(os.environ.get("WATER_RATE", "0.00484"))        # $/gallon
+
+
+def get_db_dsn() -> str:
+    """Build DB DSN from env vars. Used by standalone scripts."""
+    return DB_DSN
+
+
+def load_token(path: str) -> str:
+    """Read and strip a token from a file."""
+    return Path(path).read_text().strip()
