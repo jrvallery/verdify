@@ -21,17 +21,13 @@ import asyncpg
 
 log = logging.getLogger("tasks")
 
-# ── Shared config ────────────────────────────────────────────────
-HA_URL = "http://192.168.30.107:8123"
-HA_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/ha_token.txt"
-SLACK_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/slack_bot_token.txt"
-SLACK_CHANNEL = "C0ANVVAPLD6"  # #greenhouse
-STATE_DIR = Path("/srv/verdify/state")
-
-
-def _load_token(path: str) -> str:
-    with open(path) as f:
-        return f.read().strip()
+# ── Shared config (from config.py / environment) ────────────────
+from config import (
+    HA_URL, HA_TOKEN_FILE, SLACK_TOKEN_FILE, SLACK_CHANNEL,
+    STATE_DIR, WATTAGES, HEAT2_BTU_PER_HOUR, BTU_PER_THERM,
+    ELECTRIC_RATE, GAS_RATE, WATER_RATE, LATITUDE, LONGITUDE,
+    FRIGATE_URL, GEMINI_API_KEY_FILE, load_token as _load_token,
+)
 
 
 def _parse_float(s) -> float | None:

@@ -65,7 +65,7 @@ DIAG_FLUSH_INTERVAL    = 60   # seconds between diagnostics row writes
 LOG_FLUSH_INTERVAL     = 10   # seconds between log batch writes
 
 # Loki push endpoint (nexus management VM)
-LOKI_URL = os.environ.get("LOKI_URL", "http://192.168.30.100:3100/loki/api/v1/push")
+LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
 
 # Map aioesphomeapi LogLevel to string
 LOG_LEVEL_MAP = {
@@ -766,10 +766,7 @@ async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
 # ──────────────────────────────────────────────────────────────
 async def mqtt_loop(pool: asyncpg.Pool) -> None:
     """Subscribe to Sentinel MQTT for greenhouse occupancy."""
-    MQTT_HOST = os.environ.get("MQTT_HOST", "192.168.30.107")
-    MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-    MQTT_USER = os.environ.get("MQTT_USER", "home")
-    MQTT_PASS = os.environ.get("MQTT_PASS", "CeRr9gngypVNLnmypAxykwN7")
+    from config import MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
     TOPIC = "sentinel/occupancy/greenhouse_zone"
 
     last_state = None
