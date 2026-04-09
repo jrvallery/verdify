@@ -1,0 +1,1354 @@
+###############################################################################
+# greenhouse/sensors.yaml — refactored edition (2025-07-20)
+#
+# Defines uptime, analog sensors, Modbus sensors, derived metrics and daily
+# counters.  All lambdas end with a semicolon to satisfy the ESPHome compiler.
+###############################################################################
+
+substitutions:
+  upd_int: 10s
+  modbus_temp_lambda: |
+    /* raw register = 0.1 °C; convert → °F.
+       0x7FFF (32767) = Modbus sensor error sentinel → NAN */
+    if(x >= 32000.0f) return NAN;
+    return (x * 0.1f) * 9.0f / 5.0f + 32.0f;
+  vpd_lambda: |-
+    /* VPD [kPa] from T (°F) & RH (%) */
+    float tc = (T - 32) * 5.0 / 9.0;
+    float es = 0.6108 * expf((17.27 * tc) / (tc + 237.3));
+    return es * (1.0 - RH / 100.0);
+
+sensor:
+  # --------------------------------------------------------------------------
+  # 1‑A Uptime
+  # --------------------------------------------------------------------------
+  - platform: uptime
+    id: uptime_seconds
+    name: "Uptime"
+    entity_category: diagnostic
+    update_interval: 60s
+
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    entity_category: diagnostic
+    update_interval: 60s
+
+  - platform: template
+    id: heap_free
+    name: "Free Heap"
+    unit_of_measurement: "kB"
+    entity_category: diagnostic
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: 'return esp_get_free_heap_size() / 1024.0f;'
+
+  # --------------------------------------------------------------------------
+  # 1‑B Analog – CO₂ & Light
+  # --------------------------------------------------------------------------
+  - platform: adc
+    id: co2_raw_v
+    pin: GPIO36
+    attenuation: 12db
+    internal: true
+    update_interval: 5s
+  - platform: template
+    id: greenhouse_co2_ppm
+    name: "CO₂ (ppm)"
+    device_class: carbon_dioxide
+    unit_of_measurement: "ppm"
+    state_class: measurement
+    accuracy_decimals: 0
+    lambda: "return id(co2_raw_v).state * (5.0/3.3) * (10000.0/5.0);"
+    filters:
+      - clamp:
+          min_value: 0
+          max_value: 10000
+
+  - platform: adc
+    id: lux_raw_v
+    pin: GPIO35
+    attenuation: 12db
+    internal: true
+    update_interval: 5s
+  - platform: template
+    id: greenhouse_light_lux
+    name: "Light (lx)"
+    device_class: illuminance
+    unit_of_measurement: "lx"
+    state_class: measurement
+    accuracy_decimals: 0
+    lambda: |-
+      // ADC baseline offset: 0.142V at 12dB attenuation = 2820 lux phantom reading.
+      // Subtract offset voltage before scaling.  Confirmed by 72h of nighttime data
+      // reading a constant 2820 lux while Tempest reads 0.
+      float v = id(lux_raw_v).state - 0.142f;
+      if (v < 0.0f) v = 0.0f;
+      return v * (5.0f/3.3f) * (65535.0f/5.0f);
+    filters:
+      - clamp:
+          min_value: 0
+          max_value: 65535
+
+  # --------------------------------------------------------------------------
+  # 1‑C Water meter (diagnostic flow + total usage)
+  # DAE AS200U-75P, 3/4" NPT, pulse output, measures in gallons.
+  # Measures ALL water downstream including: misting, hydro, sink,
+  # workstation, pressure washer hose. NOT greenhouse-only.
+  # Calibrate: fill a known container (e.g., 5 gallon bucket), read
+  # pulse count, adjust multiply factor. Current multiply: 1.0 (uncalibrated).
+  # --------------------------------------------------------------------------
+  - platform: pulse_counter
+    id: water_flow_rate
+    name: "Water Flow (gpm)"
+    pin:
+      number: GPIO33
+      mode: INPUT_PULLUP
+      inverted: true
+    internal_filter: 10us
+    update_interval: 60s
+    unit_of_measurement: gal/min
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    filters:
+      - multiply: 1.0   # adjust after calibration (see above)
+    total:
+      id: water_total_used
+      name: "Water Used (gal)"
+      unit_of_measurement: gal
+      device_class: water
+      state_class: total_increasing
+      accuracy_decimals: 1
+      filters:
+        - multiply: 1.0
+
+  # --------------------------------------------------------------------------
+  # 2. MODBUS PROBES
+  # --------------------------------------------------------------------------
+  # Controller case
+  - platform: modbus_controller
+    id: case_temperature
+    name: "Case Temp (°F)"
+    modbus_controller_id: case_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+    on_value:
+      then:
+        - lambda: |-
+            id(last_case_probe)      = id(sntp_time).now().timestamp;
+            id(last_external_update) = millis() / 1000;
+            id(last_case_ms) = millis();
+
+  - platform: modbus_controller
+    id: case_humidity
+    name: "Case RH (%)"
+    modbus_controller_id: case_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - lambda: "return x > 110.0f ? NAN : x;"  # 0x7FFF sentinel → NAN
+
+  # North wall
+  - platform: modbus_controller
+    id: north_wall_temperature
+    name: "North Temp (°F)"
+    modbus_controller_id: north_wall_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+    on_value:
+      then:
+        - lambda: |-
+            id(last_external_update) = millis() / 1000;
+            id(last_north_ms) = millis();
+  - platform: modbus_controller
+    id: north_wall_humidity
+    name: "North RH (%)"
+    modbus_controller_id: north_wall_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - lambda: "return x > 110.0f ? NAN : x;"  # 0x7FFF sentinel → NAN
+  - platform: template
+    id: vpd_north
+    name: "North VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float T  = id(north_wall_temperature).state;
+      float RH = id(north_wall_humidity).state;
+      if(isnan(T) || isnan(RH)) return NAN;
+      ${vpd_lambda}
+
+  # West wall
+  - platform: modbus_controller
+    id: west_wall_temperature
+    name: "West Temp (°F)"
+    modbus_controller_id: west_wall_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+    on_value:
+      then:
+        - lambda: |-
+            id(last_external_update) = millis() / 1000;
+            id(last_west_ms) = millis();
+  - platform: modbus_controller
+    id: west_wall_humidity
+    name: "West RH (%)"
+    modbus_controller_id: west_wall_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - lambda: "return x > 110.0f ? NAN : x;"  # 0x7FFF sentinel → NAN
+  - platform: template
+    id: vpd_west
+    name: "West VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float T  = id(west_wall_temperature).state;
+      float RH = id(west_wall_humidity).state;
+      if(isnan(T) || isnan(RH)) return NAN;
+      ${vpd_lambda}
+
+  # South wall
+  - platform: modbus_controller
+    id: south_wall_temperature
+    name: "South Temp (°F)"
+    modbus_controller_id: south_wall_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+    on_value:
+      then:
+        - lambda: |-
+            id(last_external_update) = millis() / 1000;
+            id(last_south_ms) = millis();
+  - platform: modbus_controller
+    id: south_wall_humidity
+    name: "South RH (%)"
+    modbus_controller_id: south_wall_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - lambda: "return x > 110.0f ? NAN : x;"  # 0x7FFF sentinel → NAN
+  - platform: template
+    id: vpd_south
+    name: "South VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float T  = id(south_wall_temperature).state;
+      float RH = id(south_wall_humidity).state;
+      if(isnan(T) || isnan(RH)) return NAN;
+      ${vpd_lambda}
+
+  # East wall
+  - platform: modbus_controller
+    id: east_wall_temperature
+    name: "East Temp (°F)"
+    modbus_controller_id: east_wall_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+    on_value:
+      then:
+        - lambda: |-
+            id(last_external_update) = millis() / 1000;
+            id(last_east_ms) = millis();
+  - platform: modbus_controller
+    id: east_wall_humidity
+    name: "East RH (%)"
+    modbus_controller_id: east_wall_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - lambda: "return x > 110.0f ? NAN : x;"  # 0x7FFF sentinel → NAN
+  - platform: template
+    id: vpd_east
+    name: "East VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float T  = id(east_wall_temperature).state;
+      float RH = id(east_wall_humidity).state;
+      if(isnan(T) || isnan(RH)) return NAN;
+      ${vpd_lambda}
+
+  # Exterior intake
+  - platform: modbus_controller
+    id: exterior_intake_temperature
+    name: "Exterior Intake Temp (°F)"
+    modbus_controller_id: exterior_intake_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+    on_value:
+      then:
+        - lambda: |-
+            id(last_external_update) = millis() / 1000;
+  - platform: modbus_controller
+    id: exterior_intake_humidity
+    name: "Exterior Intake RH (%)"
+    modbus_controller_id: exterior_intake_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - lambda: "return x > 110.0f ? NAN : x;"  # 0x7FFF sentinel → NAN
+  - platform: template
+    id: vpd_exterior
+    name: "Exterior Intake VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float T  = id(exterior_intake_temperature).state;
+      float RH = id(exterior_intake_humidity).state;
+      if(isnan(T) || isnan(RH)) return NAN;
+      ${vpd_lambda}
+
+  # --------------------------------------------------------------------------
+  # 2a. SOIL SENSORS (DFRobot SEN0600 / SEN0601)
+  # Modbus RTU 9600 8N1. Poll every 60s with 200ms throttle.
+  # timeout_filter: if no valid reading in 5 min, publish NaN (avoids stale data)
+  # --------------------------------------------------------------------------
+  # South zone sensor 1 — SEN0601 (moisture + temp + EC), addr 7
+  - platform: modbus_controller
+    id: south_1_soil_moisture
+    name: "South 1 Soil Moisture (%)"
+    modbus_controller_id: south_1_soil_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: moisture
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - timeout: 300s
+  - platform: modbus_controller
+    id: south_1_soil_temp
+    name: "South 1 Soil Temp (°F)"
+    modbus_controller_id: south_1_soil_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+      - timeout: 300s
+  - platform: modbus_controller
+    id: south_1_soil_ec
+    name: "South 1 Soil EC (µS⁄cm)"
+    modbus_controller_id: south_1_soil_probe
+    register_type: holding
+    address: 0x0002
+    value_type: U_WORD
+    unit_of_measurement: "µS/cm"
+    state_class: measurement
+    accuracy_decimals: 0
+    filters:
+      - timeout: 300s
+
+  # South zone sensor 2 — SEN0600 (moisture + temp), addr 8
+  - platform: modbus_controller
+    id: south_2_soil_moisture
+    name: "South 2 Soil Moisture (%)"
+    modbus_controller_id: south_2_soil_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: moisture
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - timeout: 300s
+  - platform: modbus_controller
+    id: south_2_soil_temp
+    name: "South 2 Soil Temp (°F)"
+    modbus_controller_id: south_2_soil_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+      - timeout: 300s
+
+  # West zone — SEN0600 (moisture + temp)
+  - platform: modbus_controller
+    id: west_soil_moisture
+    name: "West Soil Moisture (%)"
+    modbus_controller_id: west_soil_probe
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    device_class: moisture
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+      - timeout: 300s
+  - platform: modbus_controller
+    id: west_soil_temp
+    name: "West Soil Temp (°F)"
+    modbus_controller_id: west_soil_probe
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: ${modbus_temp_lambda}
+      - timeout: 300s
+
+  # --------------------------------------------------------------------------
+  # 2b. OUTDOOR CLIMATE — Tempest direct (primary) + HTTP pull (fallback)
+  # --------------------------------------------------------------------------
+  # Tempest UDP provides data every 60s. HTTP /setpoints pull every 300s as backup.
+  # The enthalpy calculation and economiser reference these IDs.
+  - platform: template
+    id: ha_outdoor_temp
+    internal: true
+    update_interval: 30s
+    lambda: |-
+      float t = id(tempest_temp_f);
+      if (!isnan(t)) return t;
+      return id(pulled_outdoor_temp_f);
+
+  - platform: template
+    id: ha_outdoor_rh
+    internal: true
+    update_interval: 30s
+    lambda: |-
+      float r = id(tempest_rh_pct);
+      if (!isnan(r)) return r;
+      return id(pulled_outdoor_rh_pct);
+
+  # Outdoor weather — now sourced from Tempest UDP (see external_sensors.yaml)
+  # Legacy HA imports removed. Tempest sensors: tempest_outdoor_temp, tempest_outdoor_rh, tempest_illuminance
+
+  # Expose Tempest illuminance as outdoor reference for grow light automation
+  - platform: template
+    id: outdoor_illuminance
+    name: "Outdoor Illuminance"
+    icon: mdi:weather-sunny
+    unit_of_measurement: "lx"
+    accuracy_decimals: 0
+    device_class: illuminance
+    update_interval: 60s
+    lambda: |-
+      float v = id(tempest_lux);
+      if(isnan(v)) return NAN;
+      return v;
+
+  # --------------------------------------------------------------------------
+  # 3. DERIVED METRICS
+  # --------------------------------------------------------------------------
+  # Absolute humidity outside (g/m³, internal)
+  - platform: template
+    id: absolute_humidity_out
+    internal: true
+    unit_of_measurement: "g/m³"
+    accuracy_decimals: 1
+    update_interval: 15s
+    lambda: |-
+      // Prefer local Modbus probe; fall back to HA 3-tier sensor
+      float T  = id(exterior_intake_temperature).state;
+      float RH = id(exterior_intake_humidity).state;
+      if(isnan(T) || isnan(RH)){
+        T  = id(ha_outdoor_temp).state;
+        RH = id(ha_outdoor_rh).state;
+      }
+      if(isnan(T) || isnan(RH)){
+        T  = id(pulled_outdoor_temp_f);
+        RH = id(pulled_outdoor_rh_pct);
+      }
+      if(isnan(T) || isnan(RH)) return NAN;
+      float tc = (T - 32) * 5.0f / 9.0f;
+      float es = 0.6108f * expf((17.27f * tc) / (tc + 237.3f)) * 10.0f;  // kPa→hPa
+      float avp= es * RH / 100.0f;
+      return 216.7f * (avp / (tc + 273.15f));
+
+  # Interior averages
+  - platform: template
+    id: average_temperature
+    name: "Avg Temp (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 15s
+    lambda: |
+      float s = 0; int n = 0;
+      float vals[] = {
+        id(north_wall_temperature).state, id(west_wall_temperature).state,
+        id(south_wall_temperature).state, id(east_wall_temperature).state
+      };
+      for(float v : vals) if(!isnan(v)){ s += v; n++; }
+      return n ? s/n : NAN;
+
+  - platform: template
+    id: average_humidity
+    name: "Avg RH (%)"
+    device_class: humidity
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 15s
+    lambda: |
+      float s = 0; int n = 0;
+      float vals[] = {
+        id(north_wall_humidity).state, id(west_wall_humidity).state,
+        id(south_wall_humidity).state, id(east_wall_humidity).state
+      };
+      for(float v : vals) if(!isnan(v)){ s += v; n++; }
+      return n ? s/n : NAN;
+
+  - platform: template
+    id: average_vpd_kpa
+    name: "Avg VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |
+      float s = 0; int n = 0;
+      float vals[] = {
+        id(vpd_north).state, id(vpd_west).state,
+        id(vpd_south).state, id(vpd_east).state
+      };
+      for(float v : vals) if(!isnan(v)){ s += v; n++; }
+      return n ? s/n : NAN;
+
+  # Absolute humidity inside
+  - platform: template
+    id: absolute_humidity
+    name: "Abs Humidity (g⁄m³)"
+    unit_of_measurement: "g/m³"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 15s
+    lambda: |
+      if(isnan(id(average_temperature).state) || isnan(id(average_humidity).state)) return NAN;
+      float tc = (id(average_temperature).state - 32.0f) * 5.0f / 9.0f;
+      float rh = id(average_humidity).state;
+      float es = 0.6108f * expf((17.27f * tc) / (tc + 237.3f)) * 10.0f;  // kPa→hPa
+      float avp= es * rh / 100.0f;
+      return 216.7f * (avp / (tc + 273.15f));
+
+  # Dew point
+  - platform: template
+    id: dewpoint_avg
+    name: "Dew Point (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 15s
+    lambda: |
+      if(isnan(id(average_temperature).state) || isnan(id(average_humidity).state)) return NAN;
+      float tc  = (id(average_temperature).state - 32.0f) * 5.0f / 9.0f;
+      float rh  = id(average_humidity).state;
+      float lnR = logf(rh / 100.0f);
+      float dpC = (237.3f * (lnR + ((17.27f * tc) / (237.3f + tc)))) /
+                  (17.27f - lnR - ((17.27f * tc) / (237.3f + tc)));
+      return dpC * 9.0f / 5.0f + 32.0f;
+
+  # Enthalpy (inside, outside, Δ)
+  - platform: template
+    id: inside_enthalpy
+    internal: true
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float T  = id(average_temperature).state;
+      float RH = id(average_humidity).state;
+      if(isnan(T) || isnan(RH)) return NAN;
+      float tc = (T - 32.0f) * 5.0f / 9.0f;
+      float pv = 0.6108f * expf((17.27f * tc) / (tc + 237.3f)) * RH / 100.0f * 10.0f;  // kPa→hPa
+      float P  = id(site_pressure_hpa);
+      float x  = 0.622f * pv / (P - pv);
+      return 1.006f * tc + x * (2501.0f + 1.84f * tc);
+
+  - platform: template
+    id: outside_enthalpy
+    internal: true
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      // Prefer local Modbus probe; fall back to HA 3-tier sensor
+      float T  = id(exterior_intake_temperature).state;
+      float RH = id(exterior_intake_humidity).state;
+      if(isnan(T) || isnan(RH)){
+        T  = id(ha_outdoor_temp).state;
+        RH = id(ha_outdoor_rh).state;
+      }
+      if(isnan(T) || isnan(RH)){
+        T  = id(pulled_outdoor_temp_f);
+        RH = id(pulled_outdoor_rh_pct);
+      }
+      if(isnan(T) || isnan(RH)) return NAN;
+      float tc = (T - 32.0f) * 5.0f / 9.0f;
+      float pv = 0.6108f * expf((17.27f * tc) / (tc + 237.3f)) * RH / 100.0f * 10.0f;  // kPa→hPa
+      float P  = id(site_pressure_hpa);
+      float x  = 0.622f * pv / (P - pv);
+      return 1.006f * tc + x * (2501.0f + 1.84f * tc);
+
+  - platform: template
+    id: enthalpy_diff
+    name: "Enthalpy Δ (kJ⁄kg)"
+    unit_of_measurement: "kJ/kg"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 15s
+    lambda: |-
+      float out = id(outside_enthalpy).state;
+      float in  = id(inside_enthalpy).state;
+      if(isnan(out) || isnan(in)) return NAN;
+      float diff = out - in;
+      if(diff < -200.0f || diff > 200.0f) return NAN;
+      return diff;
+
+  # --------------------------------------------------------------------------
+  # 4. DAILY CYCLE COUNTERS (diagnostic)
+  # --------------------------------------------------------------------------
+  - platform: template
+    id: daily_fan1_cycles
+    name: "Cycles • Fan 1 (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_fan1_today);"
+
+  - platform: template
+    id: daily_fan2_cycles
+    name: "Cycles • Fan 2 (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_fan2_today);"
+
+  - platform: template
+    id: daily_heat1_cycles
+    name: "Cycles • Heat 1 (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_heat1_today);"
+
+  - platform: template
+    id: daily_heat2_cycles
+    name: "Cycles • Heat 2 (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_heat2_today);"
+
+  - platform: template
+    id: daily_fog_cycles
+    name: "Cycles • Fog Fan (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_fog_today);"
+
+  - platform: template
+    id: daily_vent_cycles
+    name: "Cycles • Vent (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_vent_today);"
+
+  - platform: template
+    id: daily_dehum_cycles
+    name: "De‑Hum Cycles (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(dh_cycles_today);"
+
+  - platform: template
+    id: daily_dehum_safety
+    name: "Safety De‑Hum Cycles (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(dh_safety_today);"
+
+  # --------------------------------------------------------------------------
+  # 5. RUNTIME METRICS (DIAGNOSTIC)
+  # These sensors expose the accumulated runtime of each relay (minutes since
+  # midnight).  Values reset to zero at local midnight.  Useful for duty
+  # cycle analysis and lead/lag balancing.
+  - platform: template
+    id: runtime_heat1_min
+    name: "Runtime • Heat 1 (min today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "min"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(runtime_heat1_ms) / 60000.0;"
+
+  - platform: template
+    id: runtime_heat2_min
+    name: "Runtime • Heat 2 (min today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "min"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(runtime_heat2_ms) / 60000.0;"
+
+  - platform: template
+    id: runtime_fan1_min
+    name: "Runtime • Fan 1 (min today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "min"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(runtime_fan1_ms) / 60000.0;"
+
+  - platform: template
+    id: runtime_fan2_min
+    name: "Runtime • Fan 2 (min today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "min"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(runtime_fan2_ms) / 60000.0;"
+
+  - platform: template
+    id: runtime_fog_min
+    name: "Runtime • Fog (min today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "min"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(runtime_fog_ms) / 60000.0;"
+
+  - platform: template
+    id: runtime_vent_min
+    name: "Runtime • Vent (min today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "min"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(runtime_vent_ms) / 60000.0;"
+
+  # --------------------------------------------------------------------------
+  # 6. CONTROL INPUTS (TIN & VPD)
+  # These sensors mirror the temperature and VPD values actually used in the
+  # control loop after applying fallback logic.  They are helpful for debugging
+  # when averages are invalid or sensors are failing.
+  - platform: template
+    id: control_tin
+    name: "Control Tin (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      if(isnan(id(average_temperature).state) || isnan(id(average_humidity).state)){
+        return id(case_temperature).state;
+      }else{
+        return id(average_temperature).state;
+      }
+
+  - platform: template
+    id: control_vpd_kpa
+    name: "Control VPD (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      float Tin;
+      float RHin;
+      if(isnan(id(average_temperature).state) || isnan(id(average_humidity).state)){
+        Tin = id(case_temperature).state;
+        RHin = id(case_humidity).state;
+      }else{
+        Tin = id(average_temperature).state;
+        RHin = id(average_humidity).state;
+      }
+      float tc=(Tin-32.0f)*5.0f/9.0f;
+      float es=0.6108f*expf((17.27f*tc)/(tc+237.3f));
+      if(isnan(RHin)) return NAN;
+      float vpd = es*(1.0f-RHin/100.0f);
+      return vpd < 0.0f ? 0.0f : vpd;
+
+################################################################################
+# 7. CONFIGURATION / SET‑POINT OUTPUTS  – entity_category fixed to “diagnostic”
+################################################################################
+
+  # ─── Temperature band & hysteresis (°F) ────────────────────────────────
+  - platform: template
+    id: cfg_temp_low_f
+    name: "Cfg • Temp Low (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(target_temp_low_f);"
+
+  - platform: template
+    id: cfg_temp_high_f
+    name: "Cfg • Temp High (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(target_temp_high_f);"
+
+  - platform: template
+    id: cfg_stage2_heat_delta_f
+    name: "Cfg • Δ Heat S2 (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(stage2_heat_delta_f);"
+
+  - platform: template
+    id: cfg_stage2_cool_delta_f
+    name: "Cfg • Δ Cool S2 (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(stage2_cool_delta_f);"
+
+  - platform: template
+    id: cfg_hyst_temp_f
+    name: "Cfg • Temp Hyst (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(hyst_temp_f);"
+
+  # ─── VPD band & hysteresis (kPa) ───────────────────────────────────────
+  - platform: template
+    id: cfg_vpd_low_kpa
+    name: "Cfg • VPD Low (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(target_vpd_low_kpa);"
+
+  - platform: template
+    id: cfg_vpd_high_kpa
+    name: "Cfg • VPD High (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(target_vpd_high_kpa);"
+
+  - platform: template
+    id: cfg_hyst_vpd_kpa
+    name: "Cfg • VPD Hyst (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(hyst_vpd_kpa);"
+
+  # ─── Feed‑forward biases (°F) ─────────────────────────────────────────-
+  - platform: template
+    id: cfg_bias_heat_f
+    name: "Cfg • Bias Heat (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(bias_heat_f);"
+
+  - platform: template
+    id: cfg_bias_cool_f
+    name: "Cfg • Bias Cool (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(bias_cool_f);"
+
+  # ─── Safety rails (°F & kPa) ───────────────────────────────────────────
+  - platform: template
+    id: cfg_safety_min_f
+    name: "Cfg • Safety Min (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(safety_min_f);"
+
+  - platform: template
+    id: cfg_safety_max_f
+    name: "Cfg • Safety Max (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(safety_max_f);"
+
+  - platform: template
+    id: cfg_safety_vpd_min_kpa
+    name: "Cfg • Safety VPD Min (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(safety_vpd_min_kpa);"
+
+  - platform: template
+    id: cfg_safety_vpd_max_kpa
+    name: "Cfg • Safety VPD Max (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(safety_vpd_max_kpa);"
+
+  # ─── Economiser thresholds & site pressure ────────────────────────────
+  - platform: template
+    id: cfg_site_pressure_hpa
+    name: "Cfg • Site Pressure (hPa)"
+    device_class: pressure
+    unit_of_measurement: "hPa"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(site_pressure_hpa);"
+
+  - platform: template
+    id: cfg_enthalpy_open_kjkg
+    name: "Cfg • Enthalpy‑Open (kJ kg‑¹)"
+    unit_of_measurement: "kJ/kg"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(enthalpy_open_kjkg);"
+
+  - platform: template
+    id: cfg_enthalpy_close_kjkg
+    name: "Cfg • Enthalpy‑Close (kJ kg‑¹)"
+    unit_of_measurement: "kJ/kg"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(enthalpy_close_kjkg);"
+
+  # ─── Manual‑burst & control timers ─────────────────────────────────────
+  - platform: template
+    id: cfg_fan_burst_min
+    name: "Cfg • Fan Burst (min)"
+    device_class: duration
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(fan_burst_minutes);"
+
+  - platform: template
+    id: cfg_vent_bypass_min
+    name: "Cfg • Vent Bypass (min)"
+    device_class: duration
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(vent_bypass_minutes);"
+
+  - platform: template
+    id: cfg_fog_burst_min
+    name: "Cfg • Fog Burst (min)"
+    device_class: duration
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(fog_burst_minutes);"
+
+  - platform: template
+    id: cfg_lead_rotate_timeout_s
+    name: "Cfg • Lead‑Rotate Timeout (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(lead_rotate_timeout_s);"
+
+  - platform: template
+    id: cfg_fallback_window_s
+    name: "Cfg • Fallback Window (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(fallback_window_s);"
+
+  # ─── Relay timing tunables (seconds) ─────────────────────────────────
+  - platform: template
+    id: cfg_min_heat_on_s
+    name: "Cfg • Min Heat ON (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(min_heat_on_s);"
+
+  - platform: template
+    id: cfg_min_heat_off_s
+    name: "Cfg • Min Heat OFF (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(min_heat_off_s);"
+
+  - platform: template
+    id: cfg_min_fan_on_s
+    name: "Cfg • Min Fan ON (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(min_fan_on_s);"
+
+  - platform: template
+    id: cfg_min_fan_off_s
+    name: "Cfg • Min Fan OFF (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(min_fan_off_s);"
+
+  # ─── Vent relay timing tunables (seconds) ─────────────────────────────
+  - platform: template
+    id: cfg_min_vent_on_s
+    name: "Cfg • Min Vent ON (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(min_vent_on_s);"
+
+  - platform: template
+    id: cfg_min_vent_off_s
+    name: "Cfg • Min Vent OFF (s)"
+    device_class: duration
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(min_vent_off_s);"
+
+  # --------------------------------------------------------------------------
+  # 8. DLI — Daily Light Integral (B5)
+  # Accumulated on-device every 5s from lux sensor. Reset at midnight.
+  # DLI = Σ (lux × 0.0185 × Δt / 1e6) where Δt in seconds
+  # --------------------------------------------------------------------------
+  - platform: template
+    id: dli_sensor
+    name: "DLI (mol m⁻² day⁻¹)"
+    unit_of_measurement: "mol/m²"
+    state_class: total_increasing
+    accuracy_decimals: 2
+    update_interval: 60s
+    lambda: "return id(dli_accumulator);"
+
+  # --------------------------------------------------------------------------
+  # 9. MISTER STATE MACHINE SENSORS
+  # --------------------------------------------------------------------------
+  - platform: template
+    id: mister_state_sensor
+    name: "Mister State"
+    entity_category: diagnostic
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: "return id(mister_state);"
+
+  - platform: template
+    id: mister_water_today_sensor
+    name: "Mister Water Today"
+    unit_of_measurement: "gal"
+    state_class: total
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: "return id(mister_water_today);"
+
+  - platform: template
+    id: mister_selected_zone_sensor
+    name: "Mister Selected Zone"
+    entity_category: diagnostic
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: "return id(mister_selected_zone);"
+
+  - platform: template
+    id: runtime_mister_south_min
+    name: "Mister South Wall Runtime (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "h"
+    accuracy_decimals: 2
+    update_interval: 30s
+    lambda: "return id(runtime_mister_south_ms) / 3600000.0;"
+
+  - platform: template
+    id: runtime_mister_west_min
+    name: "Mister West Wall Runtime (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "h"
+    accuracy_decimals: 2
+    update_interval: 30s
+    lambda: "return id(runtime_mister_west_ms) / 3600000.0;"
+
+  - platform: template
+    id: runtime_mister_center_min
+    name: "Mister Center Runtime (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "h"
+    accuracy_decimals: 2
+    update_interval: 30s
+    lambda: "return id(runtime_mister_center_ms) / 3600000.0;"
+
+  - platform: template
+    id: cfg_mister_engage_kpa
+    name: "Cfg Mister Engage (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(mister_engage_kpa);"
+
+  - platform: template
+    id: cfg_mister_all_kpa
+    name: "Cfg Mister All (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(mister_all_kpa);"
+
+
+  # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
+  - platform: template
+    id: mister_vpd_delta
+    name: "Mister VPD Delta"
+    unit_of_measurement: "kPa"
+    accuracy_decimals: 3
+    update_interval: never
+    icon: "mdi:water-opacity"
+
+# ─────────────────── TEXT SENSORS ──────────────────────────────────────────
+
+text_sensor:
+  # A1: State machine transition logging
+  - platform: template
+    id: ts_last_transition
+    name: "Last State Transition"
+    entity_category: diagnostic
+
+  # A2: Per-probe health monitoring
+  - platform: template
+    id: probe_health
+    name: "Probe Health"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      uint32_t now = millis();
+      const uint32_t STALE_MS = 120000;
+      std::string result;
+      struct { const char* name; uint32_t last; } probes[] = {
+        {"Case", id(last_case_ms)},
+        {"North", id(last_north_ms)},
+        {"West", id(last_west_ms)},
+        {"South", id(last_south_ms)},
+        {"East", id(last_east_ms)}
+      };
+      bool all_ok = true;
+      for(auto &p : probes){
+        if(p.last == 0 || (now - p.last) > STALE_MS){
+          if(!all_ok) result += ", ";
+          result += p.name;
+          result += " STALE";
+          all_ok = false;
+        }
+      }
+      return all_ok ? std::string("OK") : result;
+
+###############################################################################
+# END OF FILE
+###############################################################################

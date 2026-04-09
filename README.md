@@ -1,181 +1,84 @@
-# Full Stack FastAPI Template
+# Verdify
 
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3ATest" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test/badge.svg" alt="Test"></a>
-<a href="https://coverage-badge.samuelcolvin.workers.dev/redirect/fastapi/full-stack-fastapi-template" target="_blank"><img src="https://coverage-badge.samuelcolvin.workers.dev/fastapi/full-stack-fastapi-template.svg" alt="Coverage"></a>
+**What if a greenhouse could learn?**
 
-## Technology Stack and Features
+367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95F solar peaks. Six crops. One AI.
 
-- ⚡ [**FastAPI**](https://fastapi.tiangolo.com) for the Python backend API.
-    - 🧰 [SQLModel](https://sqlmodel.tiangolo.com) for the Python SQL database interactions (ORM).
-    - 🔍 [Pydantic](https://docs.pydantic.dev), used by FastAPI, for the data validation and settings management.
-    - 💾 [PostgreSQL](https://www.postgresql.org) as the SQL database.
-- 🚀 [React](https://react.dev) for the frontend.
-    - 💃 Using TypeScript, hooks, Vite, and other parts of a modern frontend stack.
-    - 🎨 [Chakra UI](https://chakra-ui.com) for the frontend components.
-    - 🤖 An automatically generated frontend client.
-    - 🧪 [Playwright](https://playwright.dev) for End-to-End testing.
-    - 🦇 Dark mode support.
-- 🐋 [Docker Compose](https://www.docker.com) for development and production.
-- 🔒 Secure password hashing by default.
-- 🔑 JWT (JSON Web Token) authentication.
-- 📫 Email based password recovery.
-- ✅ Tests with [Pytest](https://pytest.org).
-- 📞 [Traefik](https://traefik.io) as a reverse proxy / load balancer.
-- 🚢 Deployment instructions using Docker Compose, including how to set up a frontend Traefik proxy to handle automatic HTTPS certificates.
-- 🏭 CI (continuous integration) and CD (continuous deployment) based on GitHub Actions.
+172 sensors feed a 42-state climate machine that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Gemini plans 72 hours ahead, three times a day. The system measures every outcome, scores every plan, and gets better.
 
-### Dashboard Login
+**[verdify.ai](https://verdify.ai)**
 
-[![API docs](img/login.png)](https://github.com/fastapi/full-stack-fastapi-template)
+## Architecture
 
-### Dashboard - Admin
+```
+ESP32 Controller (42-state machine, 5s loop)
+  ├── aioesphomeapi ──→ Ingestor ──→ TimescaleDB (2.5M+ rows)
+  ├── MQTT ──→ Mosquitto (state publishing)
+  └── HTTPS ──→ API (band-driven setpoints)
 
-[![API docs](img/dashboard.png)](https://github.com/fastapi/full-stack-fastapi-template)
+TimescaleDB (44 tables, 54 views, 23 functions)
+  ├── Grafana (54 dashboards)
+  ├── FastAPI (crop catalog + setpoints)
+  └── Quartz (static site with embedded panels)
 
-### Dashboard - Create User
-
-[![API docs](img/dashboard-create.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - Items
-
-[![API docs](img/dashboard-items.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - User Settings
-
-[![API docs](img/dashboard-user-settings.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - Dark Mode
-
-[![API docs](img/dashboard-dark.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Interactive API Documentation
-
-[![API docs](img/docs.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-## How To Use It
-
-You can **just fork or clone** this repository and use it as is.
-
-✨ It just works. ✨
-
-### How to Use a Private Repository
-
-If you want to have a private repository, GitHub won't allow you to simply fork it as it doesn't allow changing the visibility of forks.
-
-But you can do the following:
-
-- Create a new GitHub repo, for example `my-full-stack`.
-- Clone this repository manually, set the name with the name of the project you want to use, for example `my-full-stack`:
-
-```bash
-git clone git@github.com:jvallery/verdify.git my-full-stack
+Gemini 2.5 Pro (Google AI Studio)
+  └── 72h tactical planning, 3x daily
 ```
 
-- Enter into the new directory:
+Everything runs on a single VM. No cloud infrastructure — just an API key.
+
+## Components
+
+| Directory | What |
+|-----------|------|
+| `ingestor/` | Python async service — ESP32 data capture, 12 periodic tasks, entity routing |
+| `api/` | FastAPI crop catalog + ESP32 setpoint endpoint |
+| `firmware/` | ESPHome YAML — 42-state climate controller, VPD/temp bands, mister cascade |
+| `grafana/` | 17 standardized dashboards + provisioning config |
+| `scripts/` | 26 operational scripts — planner, vision analysis, vault export, monitoring |
+| `db/` | Schema (44 tables), migrations, init scripts |
+| `site/` | Quartz static site content (56 pages) |
+| `mqtt/` | Mosquitto broker config |
+| `traefik/` | Reverse proxy config |
+| `docs/` | System architecture, runbook, roadmap |
+
+## Quick Start
 
 ```bash
-cd my-full-stack
+# Prerequisites: Docker, Python 3.13+, Node 20+
+
+# 1. Clone and configure
+git clone https://github.com/jvallery/verdify.git
+cd verdify
+cp .env.example .env  # Edit with your passwords
+
+# 2. Start the stack
+docker compose up -d
+
+# 3. Start the ingestor (requires ESP32 on the network)
+pip install -r ingestor/requirements.txt
+python ingestor/ingestor.py
+
+# 4. Build the site
+cd site && npm install && npx quartz build
 ```
 
-- Set the new origin to your new repository, copy it from the GitHub interface, for example:
+## The Greenhouse
 
-```bash
-git remote set-url origin git@github.com:jvallery/verdify.git
-```
+The control system has three layers:
 
-- Add this repo as another "remote" to allow you to get updates later:
+1. **Crop target band** — smooth diurnal VPD/temperature profiles for six active crops, computed from `crop_target_profiles` and interpolated by hour
+2. **AI planner** — Gemini 2.5 Pro reads 14 sections of context (sensor data, 72h forecast, crop band, validated lessons, previous plan scores) and writes tactical setpoint plans
+3. **ESP32 state machine** — 42 climate states evaluated every 5 seconds, enforcing the band with fans, heaters, misters, and fog
 
-```bash
-git remote add upstream git@github.com:jvallery/verdify.git
-```
+The crops set the targets. The AI tunes the tactics. The controller enforces it. The telemetry proves what happened.
 
-- Push the code to your new repository:
+## Data Flow
 
-```bash
-git push -u origin dev
-```
+The ESP32 publishes 172 entities via encrypted native API. The ingestor routes them through 9 entity maps into 6 database tables at 60-second cadence. Twelve periodic tasks enrich the data: outdoor weather from Open-Meteo, energy from a Shelly EM50, forecast sync, alert monitoring, and band-driven setpoint dispatch.
 
-### Update From the Original Template
-
-After cloning the repository, and after doing changes, you might want to get the latest changes from this original template.
-
-- Make sure you added the original repository as a remote, you can check it with:
-
-```bash
-git remote -v
-
-origin    git@github.com:jvallery/verdify.git (fetch)
-origin    git@github.com:jvallery/verdify.git (push)
-upstream    git@github.com:jvallery/verdify.git (fetch)
-upstream    git@github.com:jvallery/verdify.git (push)
-```
-
-- Pull the latest changes without merging:
-
-```bash
-git pull --no-commit upstream dev
-```
-
-This will download the latest changes from this template without committing them, that way you can check everything is right before committing.
-
-- If there are conflicts, solve them in your editor.
-
-- Once you are done, commit the changes:
-
-```bash
-git merge --continue
-```
-
-### Configure
-
-You can then update configs in the `.env` files to customize your configurations.
-
-Before deploying it, make sure you change at least the values for:
-
-- `SECRET_KEY`
-- `FIRST_SUPERUSER_PASSWORD`
-- `POSTGRES_PASSWORD`
-
-You can (and should) pass these as environment variables from secrets.
-
-Read the [deployment.md](./deployment.md) docs for more details.
-
-### Generate Secret Keys
-
-Some environment variables in the `.env` file have a default value of `changethis`.
-
-You have to change them with a secret key, to generate secret keys you can run the following command:
-
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-Copy the content and use that as password / secret key. And run that again to generate another secure key.
-
-
-
-## Backend Development
-
-Backend docs: [backend/README.md](./backend/README.md).
-
-## Frontend Development
-
-Frontend docs: [frontend/README.md](./frontend/README.md).
-
-## Deployment
-
-Deployment docs: [deployment.md](./deployment.md).
-
-## Development
-
-General development docs: [development.md](./development.md).
-
-This includes using Docker Compose, custom local domains, `.env` configurations, etc.
-
-## Release Notes
-
-Check the file [release-notes.md](./release-notes.md).
+The setpoint dispatcher computes crop-science target bands every 5 minutes using `fn_band_setpoints()` and `fn_zone_vpd_targets()`, derives mister engagement thresholds from the band ceiling, and pushes directly to the ESP32 via aioesphomeapi.
 
 ## License
 
-The Full Stack FastAPI Template is licensed under the terms of the MIT license.
+MIT

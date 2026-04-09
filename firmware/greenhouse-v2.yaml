@@ -1,0 +1,484 @@
+###############################################################################
+# greenhouse-v2.yaml — Refactored (2025-07-20)
+#
+# Top-level configuration for the greenhouse ESP32.  This file includes
+# hardware, sensors, tunables and control logic from separate files.
+# Major changes:
+#  - unified naming (fog vs humid, manual burst naming)
+#  - implemented safety rails; vent control uses min_on/off timing rather than debounce
+#  - added cycle counters and fixed manual scripts
+###############################################################################
+
+esphome:
+  name: greenhouse
+  friendly_name: Greenhouse
+  name_add_mac_suffix: false
+  min_version: 2026.1.4
+  # Lutron LEAP TLS disabled (causes ESP32 crash — TLS heap exhaustion)
+  # Grow lights now controlled via HA REST API with long-lived token
+  # Cold-start safety: turn every relay OFF before the first control pass
+  on_boot:
+    priority: 600
+    then:
+      - logger.log: "Cold-start: forcing all relays off"
+      # Climate relays
+      - switch.turn_off: fan1_rly
+      - switch.turn_off: fan2_rly
+      - switch.turn_off: vent_rly
+      - switch.turn_off: fog_rly
+      - switch.turn_off: heat1_rly
+      - switch.turn_off: heat2_rly
+      # Irrigation & fertilizer relays
+      - switch.turn_off: wall_drips
+      - switch.turn_off: center_drips
+      - switch.turn_off: wall_drips_fertilized
+      - switch.turn_off: center_drips_fertilized
+      - switch.turn_off: west_wall_mister
+      - switch.turn_off: west_wall_mister_fertilized
+      - switch.turn_off: south_wall_mister
+      - switch.turn_off: south_wall_mister_fertilized
+      - switch.turn_off: center_mister
+      - switch.turn_off: fertilizer_master_valve
+      # Boot-time validation: catch corrupted restore_value globals
+      - lambda: |-
+          ESP_LOGI("boot","Validating restored globals...");
+          int fixes = 0;
+          // Safety rails — CRITICAL
+          if(id(safety_min_f) < 30 || id(safety_min_f) > 70 || isnan(id(safety_min_f))){ id(safety_min_f) = 45; fixes++; ESP_LOGE("boot","safety_min invalid → 45°F"); }
+          if(id(safety_max_f) < 70 || id(safety_max_f) > 120 || isnan(id(safety_max_f))){ id(safety_max_f) = 95; fixes++; ESP_LOGE("boot","safety_max invalid → 95°F"); }
+          if(id(safety_vpd_min_kpa) < 0 || isnan(id(safety_vpd_min_kpa))){ id(safety_vpd_min_kpa) = 0.3; fixes++; }
+          if(id(safety_vpd_max_kpa) < 1 || isnan(id(safety_vpd_max_kpa))){ id(safety_vpd_max_kpa) = 3.0; fixes++; }
+          // Timing — prevent 0 values
+          if(id(lead_rotate_timeout_s) < 60 || id(lead_rotate_timeout_s) > 7200){ id(lead_rotate_timeout_s) = 600; fixes++; ESP_LOGE("boot","lead_rotate invalid → 600s"); }
+          if(id(min_heat_on_s) < 10){ id(min_heat_on_s) = 120; fixes++; }
+          if(id(min_heat_off_s) < 30){ id(min_heat_off_s) = 300; fixes++; }
+          if(id(min_fan_on_s) < 10){ id(min_fan_on_s) = 120; fixes++; }
+          if(id(min_fan_off_s) < 10){ id(min_fan_off_s) = 90; fixes++; }
+          if(id(min_vent_on_s) < 5){ id(min_vent_on_s) = 30; fixes++; }
+          if(id(min_vent_off_s) < 5){ id(min_vent_off_s) = 30; fixes++; }
+          // Burst durations — prevent 0 (which defaults to 60 min)
+          if(id(fan_burst_minutes) < 1){ id(fan_burst_minutes) = 10; fixes++; }
+          if(id(vent_bypass_minutes) < 1){ id(vent_bypass_minutes) = 10; fixes++; }
+          if(id(fog_burst_minutes) < 1){ id(fog_burst_minutes) = 8; fixes++; }
+          // Setpoint sanity
+          if(id(target_temp_low_f) < 40 || id(target_temp_low_f) > 80){ id(target_temp_low_f) = 58; fixes++; }
+          if(id(target_temp_high_f) < 60 || id(target_temp_high_f) > 100){ id(target_temp_high_f) = 82; fixes++; }
+          if(id(target_vpd_high_kpa) < 0.5 || id(target_vpd_high_kpa) > 4){ id(target_vpd_high_kpa) = 2.0; fixes++; }
+          if(fixes > 0){ ESP_LOGE("boot","Fixed %d corrupted globals", fixes); }
+          else { ESP_LOGI("boot","All globals valid"); }
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    version: recommended
+
+
+packages:
+  globals:   !include greenhouse/globals.yaml
+  hardware:  !include greenhouse/hardware.yaml
+  sensors:   !include greenhouse/sensors.yaml
+  tunables:  !include greenhouse/tunables.yaml
+  control:   !include greenhouse/controls.yaml
+  external:  !include greenhouse/external_sensors.yaml
+
+# ────────────────────────────── Networking ─────────────────────────────────
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  power_save_mode: none
+  manual_ip:
+    static_ip: 192.168.10.111
+    gateway:   192.168.10.1
+    subnet:    255.255.255.0
+    dns1:      192.168.10.1
+  reboot_timeout: 300s  # Reboot if WiFi down for 5 minutes
+  ap:
+    ssid: "greenhouse Fallback"
+
+captive_portal:
+
+web_server:
+
+# ────────────────────────────── HTTP Client ─────────────────────────────────
+# Used by grow light switches to call HA REST API (Lutron bridge)
+http_request:
+  id: http_client
+  timeout: 2s
+
+logger:
+  baud_rate: 0
+  level: INFO
+  logs:
+    # Keep noisy components quiet
+    wifi: WARN
+    api: WARN
+    ota: WARN
+    mdns: WARN
+    captive_portal: WARN
+    web_server: WARN
+    # Control + Modbus at INFO (state transitions, relay commands, probe failures)
+    lambda: INFO
+    modbus_controller: INFO
+    sensor: WARN
+
+# ────────────────────────────── API / OTA ─────────────────────────────────
+api:
+  id: ha_api
+  reboot_timeout: 0s      # never auto‑reboot if HA disconnects
+  max_connections: 20
+  encryption:
+    key: !secret api_encryption_key
+
+mqtt:
+  broker: !secret cloud_mqtt_broker
+  port: 1883
+  username: !secret cloud_mqtt_user
+  password: !secret cloud_mqtt_password
+  topic_prefix: "greenhouse/vallery"
+  discovery: false
+  log_topic:
+    topic: "greenhouse/vallery/log"
+    level: INFO
+  birth_message:
+    topic: "greenhouse/vallery/status"
+    payload: "online"
+  will_message:
+    topic: "greenhouse/vallery/status"
+    payload: "offline"
+  on_message:
+    - topic: greenhouse/vallery/occupancy
+      then:
+        - lambda: |-
+            bool occ = (x == "ON");
+            if(id(greenhouse_occupied) != occ){
+              id(greenhouse_occupied) = occ;
+              ESP_LOGI("occupancy","Greenhouse %s (MQTT)", occ ? "OCCUPIED — misters inhibited" : "EMPTY — misters allowed");
+            }
+    - topic: sentinel/occupancy/greenhouse_zone
+      then:
+        - lambda: |-
+            bool occ = (x == "ON");
+            if(id(greenhouse_occupied) != occ){
+              id(greenhouse_occupied) = occ;
+              ESP_LOGI("occupancy","Greenhouse %s (MQTT local)", occ ? "OCCUPIED" : "EMPTY");
+            }
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ────────────────────────────── TIME / SNTP ───────────────────────────────
+time:
+  - platform: sntp
+    id: sntp_time
+    servers:
+      - 192.168.10.1
+      - pool.ntp.org
+    timezone: America/Denver
+    on_time:
+      # 30‑minute heartbeat — A3: track consecutive misses for SNTP failure detection
+      - seconds: 0
+        minutes: /30
+        then:
+          - lambda: |-
+              if(id(sntp_time).now().is_valid()){
+                if(id(sntp_failed)){
+                  ESP_LOGI("sntp","SNTP recovered");
+                }
+                id(sntp_heartbeat_misses) = 0;
+                id(sntp_failed) = false;
+              }else{
+                id(sntp_heartbeat_misses) = id(sntp_heartbeat_misses) + 1;
+                ESP_LOGW("sntp","SNTP invalid — miss count: %d", id(sntp_heartbeat_misses));
+                if(id(sntp_heartbeat_misses) >= 2){
+                  id(sntp_failed) = true;
+                  ESP_LOGE("sntp","SNTP FAILED — 2 consecutive misses (1 hour)");
+                }
+              }
+      # reset counters once per day at local midnight
+      - seconds: 0
+        minutes: 0
+        hours: 0
+        then:
+          - lambda: |-
+              /* reset all daily cycle counters */
+              id(cnt_fan1_today)  = 0;
+              id(cnt_fan2_today)  = 0;
+              id(cnt_heat1_today) = 0;
+              id(cnt_heat2_today) = 0;
+              id(cnt_fog_today)   = 0;
+              id(cnt_vent_today)  = 0;
+              id(dh_cycles_today) = 0;
+              id(dh_safety_today)= 0;
+              id(mister_water_today) = 0.0f;
+              id(runtime_mister_south_ms) = 0;
+              id(runtime_mister_west_ms) = 0;
+              id(runtime_mister_center_ms) = 0;
+          - logger.log: "Daily cycle counters reset (midnight)"
+
+# ───────────────────── BINARY SENSORS ─────────────────────
+binary_sensor:
+  # API connectivity — A4: log disconnects/reconnects
+  - platform: status
+    id: api_link
+    name: "API Status"
+    entity_category: diagnostic
+    on_state:
+      then:
+        - lambda: |-
+            if(id(api_link).state){
+              ESP_LOGI("api","HA API reconnected");
+            }else{
+              ESP_LOGW("api","HA API disconnected — local control continues");
+            }
+
+  # A3: SNTP failure detection (2 consecutive 30-min heartbeat misses)
+  - platform: template
+    id: bs_sntp_failed
+    name: "SNTP Status"
+    entity_category: diagnostic
+    device_class: problem
+    lambda: "return id(sntp_failed);"
+
+  # Relay monitors
+  - platform: template
+    id: bs_fan1_running
+    name: "Fan 1 Running"
+    lambda: "return id(fan1_rly).state;"
+    device_class: running
+
+  - platform: template
+    id: bs_fan2_running
+    name: "Fan 2 Running"
+    lambda: "return id(fan2_rly).state;"
+    device_class: running
+
+  - platform: template
+    id: bs_heat1_running
+    name: "Heat 1 Running"
+    lambda: "return id(heat1_rly).state;"
+    device_class: running
+
+  - platform: template
+    id: bs_heat2_running
+    name: "Heat 2 Running"
+    lambda: "return id(heat2_rly).state;"
+    device_class: running
+
+  - platform: template
+    id: bs_fog_running
+    name: "Fog Running"
+    lambda: "return id(fog_rly).state;"
+    device_class: running
+
+  # Physical push buttons
+  - platform: gpio
+    id: fans_switch
+    name: "PB • Fan Burst"
+    pin:
+      pcf8574: pcf_in_2
+      number: 6
+      mode: INPUT
+      inverted: true
+    on_press:
+      then:
+        - button.press: fan_burst_btn
+
+  - platform: gpio
+    id: vent_bypass_switch
+    name: "PB • Vent Bypass"
+    pin:
+      pcf8574: pcf_in_2
+      number: 7
+      mode: INPUT
+      inverted: true
+    on_press:
+      then:
+        - button.press: vent_bypass_btn
+
+  - platform: gpio
+    id: fog_switch
+    name: "PB • Fog Burst"
+    pin:
+      pcf8574: pcf_in_2
+      number: 5
+      mode: INPUT
+      inverted: true
+    on_press:
+      then:
+        - button.press: fog_burst_btn
+
+  # Manual-override state indicators
+  - platform: template
+    id: bs_manual_fan
+    name: "Fan Burst Active"
+    lambda: "return id(manual_fan_active);"
+    device_class: running
+
+  - platform: template
+    id: bs_vent_lock
+    name: "Vent Bypass Active"
+    lambda: "return id(vent_lock_active);"
+    device_class: running
+
+  - platform: template
+    id: bs_manual_fog
+    name: "Fog Burst Active"
+    lambda: "return id(manual_fog_active);"
+    device_class: running
+
+  - platform: template
+    id: bs_vent_state
+    name: "Vent Open"
+    lambda: "return id(vent_rly).state;"
+    device_class: opening
+
+  # Economiser gate status (true = economiser blocked / venting inhibited)
+  - platform: template
+    id: bs_econ_blocked
+    name: "Economiser Blocked"
+    lambda: "return id(econ_block_state);"
+    device_class: safety
+
+
+  # Mister state machine indicators
+  - platform: template
+    id: bs_mister_running
+    name: "Mister Running"
+    lambda: "return id(mister_state) > 0 && id(mister_duty_phase) == 1;"
+    device_class: running
+
+  - platform: template
+    id: bs_mister_budget_exceeded
+    name: "Mister Budget Exceeded"
+    lambda: "return id(mister_water_today) >= id(mister_water_budget_gal);"
+    device_class: problem
+
+  # Water status — replaces HA template binary_sensors
+  - platform: template
+    id: bs_water_flowing
+    name: "Water Flowing"
+    device_class: running
+    lambda: |-
+      float flow = id(water_flow_rate).state;
+      return !isnan(flow) && flow > 0.05;
+
+  - platform: template
+    id: bs_leak_detected
+    name: "Leak Detected"
+    device_class: problem
+    lambda: |-
+      float flow = id(water_flow_rate).state;
+      if(isnan(flow) || flow < 0.1) return false;
+      bool any_valve = id(wall_drips).state || id(center_drips).state
+                    || id(south_wall_mister).state || id(west_wall_mister).state
+                    || id(center_mister).state || id(wall_drips_fertilized).state
+                    || id(south_wall_mister_fertilized).state || id(west_wall_mister_fertilized).state;
+      return !any_valve;
+
+# ───────────────────── DASHBOARD BUTTONS ─────────────────────
+button:
+  - platform: restart
+    name: "Restart"
+    entity_category: config
+
+  - platform: template
+    id: fan_burst_btn
+    name: "Fan Cycle"
+    on_press:
+      - if:
+          condition:
+            lambda: "return id(manual_fan_active);"
+          then:
+            - script.stop: manual_fan_burst
+            - switch.turn_off: fan1_rly
+            - switch.turn_off: fan2_rly
+            - lambda: "id(manual_fan_active) = false;"
+          else:
+            - script.execute: manual_fan_burst
+
+  - platform: template
+    id: vent_bypass_btn
+    name: "Vent Bypass Toggle"
+    on_press:
+      - if:
+          condition:
+            lambda: "return id(vent_lock_active);"
+          then:
+            - script.stop: vent_bypass_timer
+            - lambda: "id(vent_lock_active) = false;"
+          else:
+            - script.execute: vent_bypass_timer
+
+  - platform: template
+    id: fog_burst_btn
+    name: "Fog Cycle"
+    on_press:
+      - if:
+          condition:
+            lambda: "return id(manual_fog_active);"
+          then:
+            - script.stop: manual_fog_burst
+            - switch.turn_off: fog_rly
+            - lambda: "id(manual_fog_active) = false;"
+          else:
+            - script.execute: manual_fog_burst
+
+# ───────────────────── SCRIPTS (0 min = 24 h) ────────────────────
+script:
+  # Manual fan burst script.  Runs both fans for a user-defined number of minutes
+  - id: manual_fan_burst
+    mode: restart
+    then:
+      - lambda: |
+          id(manual_fan_active) = true;
+          int minutes = id(fan_burst_minutes);
+          // Cap to 60 minutes for safety; if 0 or > 60, treat as 60
+          if(minutes <= 0 || minutes > 60) minutes = 60;
+          id(fan1_rly).turn_on();
+          id(fan2_rly).turn_on();
+      - delay: !lambda |-
+          int minutes = id(fan_burst_minutes);
+          if(minutes <= 0 || minutes > 60) minutes = 60;
+          return (uint32_t)minutes * 60000UL;
+      - lambda: |
+          id(fan1_rly).turn_off();
+          id(fan2_rly).turn_off();
+          id(manual_fan_active) = false;
+
+  # Vent bypass timer.  Locks out vent for user-defined minutes
+  - id: vent_bypass_timer
+    mode: restart
+    then:
+      - lambda: |
+          id(vent_lock_active) = true;
+          id(vent_rly).turn_off();
+      - delay: !lambda |-
+          int minutes = id(vent_bypass_minutes);
+          if(minutes <= 0 || minutes > 30) minutes = 30;
+          return (uint32_t)minutes * 60000UL;
+      - lambda: |
+          id(vent_lock_active) = false;
+
+  # Manual fog burst script.  Runs fog fan for a user-defined number of minutes
+  - id: manual_fog_burst
+    mode: restart
+    then:
+      - lambda: |
+          id(manual_fog_active) = true;
+          int minutes = id(fog_burst_minutes);
+          if(minutes <= 0 || minutes > 60) minutes = 60;
+          id(fog_rly).turn_on();
+      - delay: !lambda |-
+          int minutes = id(fog_burst_minutes);
+          if(minutes <= 0 || minutes > 60) minutes = 60;
+          return (uint32_t)minutes * 60000UL;
+      - lambda: |
+          id(fog_rly).turn_off();
+          id(manual_fog_active) = false;
+
+###############################################################################
+# END OF FILE
+###############################################################################

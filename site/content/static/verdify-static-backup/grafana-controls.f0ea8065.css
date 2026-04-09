@@ -1,0 +1,57 @@
+/* Grafana panel embed controls */
+.grafana-controls {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--lightgray);
+  flex-wrap: wrap;
+}
+.grafana-controls::before {
+  content: '⏱';
+  margin-right: 0.25rem;
+  opacity: 0.6;
+}
+.gc-btn {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--darkgray);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.gc-btn:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+.gc-btn.gc-active {
+  background: var(--secondary);
+  color: var(--light);
+  border-color: var(--secondary);
+}
+
+/* Panel grid layouts */
+.pg { display: grid; gap: 0.5rem; margin: 1rem 0; }
+.pg iframe { border: 1px solid var(--lightgray); border-radius: 6px; overflow: visible; }
+.s6 { grid-template-columns: repeat(6, 1fr); }
+.s4 { grid-template-columns: repeat(4, 1fr); }
+.s3 { grid-template-columns: repeat(3, 1fr); }
+.s2 { grid-template-columns: 1fr 1fr; }
+.s1 { grid-template-columns: 1fr; }
+@media (max-width: 768px) {
+  .s6, .s4, .s3, .s2 { grid-template-columns: 1fr 1fr; }
+}
+
+/* Ensure Quartz doesn't clip our panel containers */
+article .pg,
+.popover-hint .pg,
+article div[class*="pg"] {
+  overflow: visible !important;
+}
+article, .popover-hint {
+  overflow: visible !important;
+}

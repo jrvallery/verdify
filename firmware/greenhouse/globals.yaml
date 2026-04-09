@@ -1,0 +1,713 @@
+###############################################################################
+# greenhouse/globals.yaml -- global variables and initial values
+#
+# Variables declared here persist across reboots (restore_value: yes) unless
+# otherwise noted.  Daily counters reset at midnight via the time component.
+###############################################################################
+
+globals:
+
+  # ─── Temperature band (°F) ───
+  - id: target_temp_low_f
+    type: float
+    restore_value: yes
+    initial_value: '60.0'
+  - id: target_temp_high_f
+    type: float
+    restore_value: yes
+    initial_value: '75.0'
+  - id: stage2_heat_delta_f
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: stage2_cool_delta_f
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: hyst_temp_f
+    type: float
+    restore_value: yes
+    initial_value: '1.0'
+
+  # ─── Humidity / VPD (kPa) ───
+  - id: target_vpd_low_kpa
+    type: float
+    restore_value: yes
+    initial_value: '0.50'
+  - id: target_vpd_high_kpa
+    type: float
+    restore_value: yes
+    initial_value: '1.50'
+  - id: hyst_vpd_kpa
+    type: float
+    restore_value: yes
+    initial_value: '0.10'
+
+  # ─── Feed-forward biases & safety rails (°F & kPa) ───
+  - id: bias_heat_f
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: bias_cool_f
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: safety_min_f
+    type: float
+    restore_value: yes
+    initial_value: '45.0'
+  - id: safety_max_f
+    type: float
+    restore_value: yes
+    initial_value: '95.0'
+  - id: safety_vpd_min_kpa
+    type: float
+    restore_value: yes
+    initial_value: '0.30'
+  - id: safety_vpd_max_kpa
+    type: float
+    restore_value: yes
+    initial_value: '2.50'
+
+  # ─── Economiser (enthalpy thresholds) ───
+  - id: site_pressure_hpa
+    type: float
+    restore_value: yes
+    initial_value: '840.0'  # adjust to local elevation
+  - id: enthalpy_open_kjkg
+    type: float
+    restore_value: yes
+    initial_value: '-2.0'
+  - id: enthalpy_close_kjkg
+    type: float
+    restore_value: yes
+    initial_value: '1.0'
+  - id: economiser_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  # ─── Fog / evap-assist thresholds ───
+  # (removed unused fog_offset_f and AH thresholds)
+
+  # ─── Manual overrides & timers ───
+  - id: fan_burst_minutes
+    type: int
+    restore_value: yes
+    initial_value: '10'
+  - id: vent_bypass_minutes
+    type: int
+    restore_value: yes
+    initial_value: '10'
+  - id: fog_burst_minutes
+    type: int
+    restore_value: yes
+    initial_value: '10'
+  - id: manual_fan_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: manual_fog_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: vent_lock_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # (vent_debounce_ms removed: vent timing enforced via relay min_on/off)
+
+  # ─── Misc state ───
+  - id: fan_lead_is_fan1
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  # ─── Watchdog / failsafe ───
+  - id: last_case_probe
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_external_update
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: fallback_window_s
+    type: uint32_t
+    restore_value: yes
+    initial_value: '3600'
+
+  # ─── Per-probe health timestamps (ms, A2) ───
+  - id: last_north_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_west_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_south_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_east_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_case_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── SNTP failure detection (A3) ───
+  - id: sntp_failed
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: sntp_heartbeat_misses
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Graduated NaN fallback indoor offset (A6) ───
+  - id: indoor_offset_on_nan_f
+    type: float
+    restore_value: yes
+    initial_value: '15.0'
+
+  # ─── DLI accumulator (B5) ───
+  - id: dli_accumulator
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  # ─── Grow light automation (B6) ───
+  - id: gl_dli_target
+    type: float
+    restore_value: yes
+    initial_value: '14.0'    # mol/m²/day — set above natural max so safety cutoff rarely fires for crops
+
+  - id: gl_sunrise_hour
+    type: int
+    restore_value: yes
+    initial_value: '7'       # earliest hour (local) to turn on grow lights
+
+  - id: gl_sunset_hour
+    type: int
+    restore_value: yes
+    initial_value: '19'       # 7 PM cutoff — gives 2.5-3h afternoon supplement
+
+  - id: gl_lux_threshold
+    type: float
+    restore_value: yes
+    initial_value: '3000.0'  # indoor lux below this = need supplementation
+
+  - id: gl_lux_hysteresis
+    type: float
+    restore_value: yes
+    initial_value: '1500.0'  # prevent cycling during 9:30-10:30 AM transition (data-tuned) at threshold edge
+
+  - id: gl_auto_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'true'    # master enable for auto grow light control
+
+  - id: gl_last_check_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Daily ON-cycle counters (reset at midnight) ───
+  - id: cnt_fan1_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_fan2_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_heat1_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_heat2_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_fog_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_vent_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: dh_cycles_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: dh_safety_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Runtime metrics (ms since midnight) ───
+  # These values accumulate the total on‑time for each relay in milliseconds.
+  # They are reset to 0 at local midnight and updated each control loop.
+  - id: runtime_heat1_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: runtime_heat2_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: runtime_fan1_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: runtime_fan2_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: runtime_fog_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: runtime_vent_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Control diagnostics ───
+  # true if the economiser (enthalpy gate) is currently blocking venting
+  - id: econ_block_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # ─── Behaviour when temperature is NaN: assume cold or hot ───
+  - id: assume_cold_on_nan
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  # ─── Lead/lag rotation timeout (s) ───
+  - id: lead_rotate_timeout_s
+    type: int
+    restore_value: yes
+    initial_value: '600'
+
+  # ─── Relay min on/off timing (seconds, tunable via HA) ───
+  - id: min_heat_on_s
+    type: int
+    restore_value: yes
+    initial_value: '120'
+  - id: min_heat_off_s
+    type: int
+    restore_value: yes
+    initial_value: '300'
+  - id: min_fan_on_s
+    type: int
+    restore_value: yes
+    initial_value: '120'
+  - id: min_fan_off_s
+    type: int
+    restore_value: yes
+    initial_value: '90'
+  - id: min_vent_on_s
+    type: int
+    restore_value: yes
+    initial_value: '30'
+  - id: min_vent_off_s
+    type: int
+    restore_value: yes
+    initial_value: '30'
+
+  # fog_closes_vent: when true, the vent damper is forced closed during active
+  # fog pulses to prevent dry outside air from negating humidity gains.
+  - id: fog_closes_vent
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  # ─── Vent hold timer (anti-cycling) ───
+  - id: vent_hold_timer_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Outdoor RH adaptive mode ───
+  - id: outdoor_rh_mode
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+    # ─── Mister state machine (HUMID_S2/S3) ───
+  - id: mister_state
+    type: int
+    restore_value: no
+    initial_value: '0'
+    # 0=off, 1=HUMID_S2 (targeted), 2=HUMID_S3 (all zones)
+
+  - id: mister_selected_zone
+    type: int
+    restore_value: no
+    initial_value: '0'
+    # 0=none, 1=south_wall, 2=west_wall, 3=center
+
+  - id: mister_duty_phase
+    type: int
+    restore_value: no
+    initial_value: '0'
+    # 0=idle, 1=ON, 2=OFF (evaporation dwell)
+
+  - id: mister_duty_timer_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: humid_s1_duration_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: humid_s2_duration_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: humid_idle_holdoff_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: mister_water_today
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  # ─── Mister tunables (persisted) ───
+  - id: mister_engage_kpa
+    type: float
+    restore_value: yes
+    initial_value: '2.0'
+
+  - id: mister_all_kpa
+    type: float
+    restore_value: yes
+    initial_value: '2.3'
+
+  - id: mister_engage_delay_s
+    type: int
+    restore_value: yes
+    initial_value: '300'
+
+  - id: mister_all_delay_s
+    type: int
+    restore_value: yes
+    initial_value: '300'
+
+  - id: mister_on_s
+    type: int
+    restore_value: yes
+    initial_value: '300'
+
+  - id: mister_off_s
+    type: int
+    restore_value: yes
+    initial_value: '600'
+
+  - id: mister_all_on_s
+    type: int
+    restore_value: yes
+    initial_value: '480'
+
+  - id: mister_all_off_s
+    type: int
+    restore_value: yes
+    initial_value: '420'
+
+  - id: mister_water_budget_gal
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+
+  - id: mister_max_runtime_min
+    type: int
+    restore_value: yes
+    initial_value: '120'
+
+  # ─── Mister runtime counters (reset at midnight) ───
+  - id: runtime_mister_south_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: runtime_mister_west_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: runtime_mister_center_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Irrigation state machine ───
+  - id: irrig_state
+    type: int
+    restore_value: no
+    initial_value: '0'
+    # 0=idle, 1=wall_clean, 2=wall_fert, 3=center_clean, 4=center_fert, 5=flush
+
+  - id: irrig_timer_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: irrig_queue
+    type: int
+    restore_value: no
+    initial_value: '0'
+    # Bitmask: bit0=wall_clean, bit1=wall_fert, bit2=center_clean, bit3=center_fert
+
+  - id: irrig_wall_cycle_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  - id: irrig_center_cycle_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  - id: irrig_last_wall_doy
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  - id: irrig_last_center_doy
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  # Scheduling tunables (persisted)
+  - id: irrig_wall_start_hour
+    type: int
+    restore_value: yes
+    initial_value: '6'
+
+  - id: irrig_wall_start_minute
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  - id: irrig_wall_duration_min
+    type: int
+    restore_value: yes
+    initial_value: '10'
+
+  - id: irrig_wall_fert_duration_min
+    type: int
+    restore_value: yes
+    initial_value: '5'
+
+  - id: irrig_wall_fert_every_n
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  - id: irrig_wall_flush_min
+    type: int
+    restore_value: yes
+    initial_value: '2'
+
+  - id: irrig_wall_interval_days
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  - id: irrig_center_start_hour
+    type: int
+    restore_value: yes
+    initial_value: '6'
+
+  - id: irrig_center_start_minute
+    type: int
+    restore_value: yes
+    initial_value: '30'
+
+  - id: irrig_center_duration_min
+    type: int
+    restore_value: yes
+    initial_value: '10'
+
+  - id: irrig_center_fert_duration_min
+    type: int
+    restore_value: yes
+    initial_value: '5'
+
+  - id: irrig_center_fert_every_n
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+  - id: irrig_center_flush_min
+    type: int
+    restore_value: yes
+    initial_value: '2'
+
+  - id: irrig_center_interval_days
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  # VPD boost
+  - id: irrig_vpd_boost_pct
+    type: int
+    restore_value: yes
+    initial_value: '25'
+
+  - id: irrig_vpd_boost_threshold_hrs
+    type: float
+    restore_value: yes
+    initial_value: '3.0'
+
+  # Enable switches
+  - id: irrig_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  - id: irrig_wall_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  - id: irrig_center_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  - id: irrig_weather_skip
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  # VPD stress hours accumulator (local)
+  - id: irrig_vpd_stress_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Daily irrigation runtime counters (reset at midnight)
+  - id: runtime_wall_drip_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: runtime_center_drip_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: runtime_fert_master_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+
+  # ─── Mister pulse-rotation model ───
+  - id: mister_pulse_zone
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: mister_pulse_timer_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: mister_rotation_index
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: mister_pulse_on_s
+    type: int
+    restore_value: yes
+    initial_value: '45'
+
+  - id: mister_pulse_gap_s
+    type: int
+    restore_value: yes
+    initial_value: '30'
+
+  - id: mister_vpd_weight
+    type: float
+    restore_value: yes
+    initial_value: '2.0'
+
+  # ─── Per-zone VPD targets (set by band dispatcher from crop data) ───
+  - id: vpd_target_south
+    type: float
+    restore_value: yes
+    initial_value: '1.3'
+
+  - id: vpd_target_west
+    type: float
+    restore_value: yes
+    initial_value: '1.2'
+
+  - id: vpd_target_east
+    type: float
+    restore_value: yes
+    initial_value: '1.0'
+
+  - id: vpd_target_center
+    type: float
+    restore_value: yes
+    initial_value: '0.8'
+
+  - id: mister_center_penalty
+    type: float
+    restore_value: yes
+    initial_value: '0.5'
+
+  - id: mister_closes_vent
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+  - id: mister_vpd_at_start
+    type: float
+    restore_value: no
+    initial_value: 'NAN'
+
+  # ─── Outdoor data from /setpoints pull (Tempest → DB → setpoint-server → ESP32) ───
+  - id: pulled_outdoor_temp_f
+    type: float
+    restore_value: no
+    initial_value: 'NAN'
+
+  - id: pulled_outdoor_rh_pct
+    type: float
+    restore_value: no
+    initial_value: 'NAN'
+
+  # ─── Occupancy-based mist inhibit ───
+  - id: greenhouse_occupied
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: occupancy_inhibit_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+###############################################################################
+# END OF FILE
+###############################################################################

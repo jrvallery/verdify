@@ -1,0 +1,10 @@
+.panel-grid { display: grid; gap: 0.5rem; margin: 1rem 0; }
+.panel-grid iframe { border: 1px solid var(--lightgray); border-radius: 6px; }
+.panel-stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.panel-pair { grid-template-columns: 1fr 1fr; }
+.panel-triple { grid-template-columns: 1fr 1fr 1fr; }
+.panel-quad { grid-template-columns: repeat(4, 1fr); }
+.panel-full { grid-template-columns: 1fr; }
+@media (max-width: 768px) {
+  .panel-pair, .panel-triple, .panel-quad { grid-template-columns: 1fr; }
+}

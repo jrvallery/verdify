@@ -1,0 +1,1054 @@
+###############################################################################
+# greenhouse/tunables.yaml -- user-adjustable settings exposed to Home Assistant
+###############################################################################
+
+number:
+  # --- Temperature band (°F) -----------------------------------------
+  - platform: template
+    id: num_temp_low
+    name: "Set Temp Low °F"
+    min_value: 40
+    max_value: 80
+    step: 0.5
+    lambda: "return id(target_temp_low_f);"
+    set_action:
+      - lambda: |
+          id(target_temp_low_f) = x;
+          id(num_temp_low).publish_state(x);
+
+  - platform: template
+    id: num_temp_high
+    name: "Set Temp High °F"
+    min_value: 60
+    max_value: 100
+    step: 0.5
+    lambda: "return id(target_temp_high_f);"
+    set_action:
+      - lambda: |
+          id(target_temp_high_f) = x;
+          id(num_temp_high).publish_state(x);
+
+  # --- Stage‑2 deltas (°F) -------------------------------------------
+  - platform: template
+    id: num_stage2_heat
+    name: "Δ Heat Stage‑2 °F"
+    min_value: 2
+    max_value: 15
+    step: 0.5
+    lambda: "return id(stage2_heat_delta_f);"
+    set_action:
+      - lambda: |
+          id(stage2_heat_delta_f) = x;
+          id(num_stage2_heat).publish_state(x);
+  - platform: template
+    id: num_stage2_cool
+    name: "Δ Cool Stage‑2 °F"
+    min_value: 2
+    max_value: 15
+    step: 0.5
+    lambda: "return id(stage2_cool_delta_f);"
+    set_action:
+      - lambda: |
+          id(stage2_cool_delta_f) = x;
+          id(num_stage2_cool).publish_state(x);
+
+  # --- Temperature hysteresis (°F) -----------------------------------
+  - platform: template
+    id: num_hyst_temp
+    name: "Temp Hysteresis °F"
+    min_value: 0.5
+    max_value: 3
+    step: 0.1
+    lambda: "return id(hyst_temp_f);"
+    set_action:
+      - lambda: |
+          id(hyst_temp_f) = x;
+          id(num_hyst_temp).publish_state(x);
+
+  # --- VPD set‑band (kPa) --------------------------------------------
+  - platform: template
+    id: num_vpd_low
+    name: "Set VPD Low kPa"
+    min_value: 0.30
+    max_value: 1.00
+    step: 0.05
+    lambda: "return id(target_vpd_low_kpa);"
+    set_action:
+      - lambda: |
+          id(target_vpd_low_kpa) = x;
+          id(num_vpd_low).publish_state(x);
+  - platform: template
+    id: num_vpd_high
+    name: "Set VPD High kPa"
+    min_value: 1.00
+    max_value: 3.00
+    step: 0.05
+    lambda: "return id(target_vpd_high_kpa);"
+    set_action:
+      - lambda: |
+          id(target_vpd_high_kpa) = x;
+          id(num_vpd_high).publish_state(x);
+  - platform: template
+    id: num_hyst_vpd
+    name: "VPD Hysteresis kPa"
+    min_value: 0.05
+    max_value: 0.50
+    step: 0.05
+    lambda: "return id(hyst_vpd_kpa);"
+    set_action:
+      - lambda: |
+          id(hyst_vpd_kpa) = x;
+          id(num_hyst_vpd).publish_state(x);
+
+  # --- Relay min on/off timing (seconds) ------------------------------
+  - platform: template
+    id: num_min_heat_on
+    name: "Min Heat ON (s)"
+    min_value: 30
+    max_value: 300
+    step: 10
+    lambda: "return id(min_heat_on_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 30) val = 30;
+          if(val > 300) val = 300;
+          id(min_heat_on_s) = val;
+          id(num_min_heat_on).publish_state(val);
+  - platform: template
+    id: num_min_heat_off
+    name: "Min Heat OFF (s)"
+    min_value: 60
+    max_value: 600
+    step: 10
+    lambda: "return id(min_heat_off_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 60) val = 60;
+          if(val > 600) val = 600;
+          id(min_heat_off_s) = val;
+          id(num_min_heat_off).publish_state(val);
+  - platform: template
+    id: num_min_fan_on
+    name: "Min Fan ON (s)"
+    min_value: 30
+    max_value: 300
+    step: 10
+    lambda: "return id(min_fan_on_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 30) val = 30;
+          if(val > 300) val = 300;
+          id(min_fan_on_s) = val;
+          id(num_min_fan_on).publish_state(val);
+  - platform: template
+    id: num_min_fan_off
+    name: "Min Fan OFF (s)"
+    min_value: 30
+    max_value: 300
+    step: 10
+    lambda: "return id(min_fan_off_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 30) val = 30;
+          if(val > 300) val = 300;
+          id(min_fan_off_s) = val;
+          id(num_min_fan_off).publish_state(val);
+
+  # --- Vent relay min on/off timing (seconds) -------------------------
+  - platform: template
+    id: num_min_vent_on
+    name: "Min Vent ON (s)"
+    min_value: 10
+    max_value: 300
+    step: 10
+    lambda: "return id(min_vent_on_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 10) val = 10;
+          if(val > 300) val = 300;
+          id(min_vent_on_s) = val;
+          id(num_min_vent_on).publish_state(val);
+  - platform: template
+    id: num_min_vent_off
+    name: "Min Vent OFF (s)"
+    min_value: 10
+    max_value: 300
+    step: 10
+    lambda: "return id(min_vent_off_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 10) val = 10;
+          if(val > 300) val = 300;
+          id(min_vent_off_s) = val;
+          id(num_min_vent_off).publish_state(val);
+
+  # --- Economiser tunables ---------------------------------------------
+  - platform: template
+    id: num_enthalpy_open
+    name: "Enthalpy Open (kJ⁄kg)"
+    min_value: -20
+    max_value: 5
+    step: 0.5
+    lambda: "return id(enthalpy_open_kjkg);"
+    set_action:
+      - lambda: |
+          id(enthalpy_open_kjkg) = x;
+          id(num_enthalpy_open).publish_state(x);
+  - platform: template
+    id: num_enthalpy_close
+    name: "Enthalpy Close (kJ⁄kg)"
+    min_value: -5
+    max_value: 20
+    step: 0.5
+    lambda: "return id(enthalpy_close_kjkg);"
+    set_action:
+      - lambda: |
+          id(enthalpy_close_kjkg) = x;
+          id(num_enthalpy_close).publish_state(x);
+  - platform: template
+    id: num_site_pressure
+    name: "Site Pressure (hPa)"
+    min_value: 700
+    max_value: 1050
+    step: 1
+    lambda: "return id(site_pressure_hpa);"
+    set_action:
+      - lambda: |
+          id(site_pressure_hpa) = x;
+          id(num_site_pressure).publish_state(x);
+
+  # --- Lead/lag rotation timeout (seconds) ----------------------------
+  - platform: template
+    id: num_lead_rotate
+    name: "Lead Rotate (s)"
+    min_value: 60
+    max_value: 1800
+    step: 30
+    lambda: "return id(lead_rotate_timeout_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 60) val = 60;
+          if(val > 1800) val = 1800;
+          id(lead_rotate_timeout_s) = val;
+          id(num_lead_rotate).publish_state(val);
+
+  # --- Feed‑forward biases (°F) --------------------------------------
+  - platform: template
+    id: num_bias_heat
+    name: "Bias Heat °F"
+    min_value: -10
+    max_value: 10
+    step: 0.5
+    lambda: "return id(bias_heat_f);"
+    set_action:
+      - lambda: |
+          id(bias_heat_f) = x;
+          id(num_bias_heat).publish_state(x);
+  - platform: template
+    id: num_bias_cool
+    name: "Bias Cool °F"
+    min_value: -10
+    max_value: 10
+    step: 0.5
+    lambda: "return id(bias_cool_f);"
+    set_action:
+      - lambda: |
+          id(bias_cool_f) = x;
+          id(num_bias_cool).publish_state(x);
+
+  # --- Safety rails (°F) ---------------------------------------------
+  - platform: template
+    id: num_safety_min
+    name: "Safety Min °F"
+    min_value: 30
+    max_value: 60
+    step: 1
+    lambda: "return id(safety_min_f);"
+    set_action:
+      - lambda: |
+          id(safety_min_f) = x;
+          id(num_safety_min).publish_state(x);
+  - platform: template
+    id: num_safety_max
+    name: "Safety Max °F"
+    min_value: 80
+    max_value: 110
+    step: 1
+    lambda: "return id(safety_max_f);"
+    set_action:
+      - lambda: |
+          id(safety_max_f) = x;
+          id(num_safety_max).publish_state(x);
+
+  # --- VPD SAFETY rails (kPa) ----------------------------------------
+  - platform: template
+    id: num_safety_vpd_min
+    name: "Safety VPD Min kPa"
+    min_value: 0.10
+    max_value: 1.50
+    step: 0.05
+    lambda: "return id(safety_vpd_min_kpa);"
+    set_action:
+      - lambda: |
+          id(safety_vpd_min_kpa) = x;
+          id(num_safety_vpd_min).publish_state(x);
+  - platform: template
+    id: num_safety_vpd_max
+    name: "Safety VPD Max kPa"
+    min_value: 2.50
+    max_value: 3.00
+    step: 0.05
+    lambda: "return id(safety_vpd_max_kpa);"
+    set_action:
+      - lambda: |
+          id(safety_vpd_max_kpa) = x;
+          id(num_safety_vpd_max).publish_state(x);
+
+  # --- Manual‑burst timers (minutes) ---------------------------------
+  - platform: template
+    id: num_fan_burst
+    name: "Fan Burst (min)"
+    min_value: 1
+    max_value: 60
+    step: 1
+    lambda: "return id(fan_burst_minutes);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          if(val > 60) val = 60;
+          id(fan_burst_minutes) = val;
+          id(num_fan_burst).publish_state(val);
+
+  - platform: template
+    id: num_vent_bypass
+    name: "Vent Bypass (min)"
+    min_value: 1
+    max_value: 30
+    step: 1
+    lambda: "return id(vent_bypass_minutes);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          if(val > 30) val = 30;
+          id(vent_bypass_minutes) = val;
+          id(num_vent_bypass).publish_state(val);
+
+  - platform: template
+    id: num_fog_burst
+    name: "Fog Burst (min)"
+    min_value: 1
+    max_value: 60
+    step: 1
+    lambda: "return id(fog_burst_minutes);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          if(val > 60) val = 60;
+          id(fog_burst_minutes) = val;
+          id(num_fog_burst).publish_state(val);
+
+  # --- Mister VPD thresholds (kPa) ------------------------------------
+  - platform: template
+    id: num_mister_engage_kpa
+    name: "VPD Mister Engage kPa"
+    min_value: 1.20
+    max_value: 2.50
+    step: 0.05
+    lambda: "return id(mister_engage_kpa);"
+    set_action:
+      - lambda: |
+          id(mister_engage_kpa) = x;
+          id(num_mister_engage_kpa).publish_state(x);
+
+  - platform: template
+    id: num_mister_all_kpa
+    name: "VPD Mister All kPa"
+    min_value: 1.50
+    max_value: 2.80
+    step: 0.05
+    lambda: "return id(mister_all_kpa);"
+    set_action:
+      - lambda: |
+          id(mister_all_kpa) = x;
+          id(num_mister_all_kpa).publish_state(x);
+
+  # --- Mister timing (seconds) ----------------------------------------
+  - platform: template
+    id: num_mister_engage_delay
+    name: "Mister Engage Delay (s)"
+    min_value: 30
+    max_value: 900
+    step: 30
+    lambda: "return id(mister_engage_delay_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 30) val = 30;
+          if(val > 900) val = 900;
+          id(mister_engage_delay_s) = val;
+          id(num_mister_engage_delay).publish_state(val);
+
+  # --- Mister pulse model (replaces long duty cycles) ---
+  - platform: template
+    id: num_mister_pulse_on
+    name: "Mister Pulse ON (s)"
+    min_value: 15
+    max_value: 120
+    step: 5
+    lambda: "return id(mister_pulse_on_s);"
+    set_action:
+      - lambda: |
+          id(mister_pulse_on_s) = (int)x;
+          id(num_mister_pulse_on).publish_state(x);
+
+  - platform: template
+    id: num_mister_pulse_gap
+    name: "Mister Pulse Gap (s)"
+    min_value: 15
+    max_value: 120
+    step: 5
+    lambda: "return id(mister_pulse_gap_s);"
+    set_action:
+      - lambda: |
+          id(mister_pulse_gap_s) = (int)x;
+          id(num_mister_pulse_gap).publish_state(x);
+
+  - platform: template
+    id: num_mister_vpd_weight
+    name: "Mister VPD Weight"
+    min_value: 1.0
+    max_value: 3.0
+    step: 0.5
+    lambda: "return id(mister_vpd_weight);"
+    set_action:
+      - lambda: |
+          id(mister_vpd_weight) = x;
+          id(num_mister_vpd_weight).publish_state(x);
+
+  - platform: template
+    id: num_vpd_target_south
+    name: "VPD Target South (kPa)"
+    min_value: 0.5
+    max_value: 2.5
+    step: 0.05
+    lambda: "return id(vpd_target_south);"
+    set_action:
+      - lambda: |
+          id(vpd_target_south) = x;
+          id(num_vpd_target_south).publish_state(x);
+
+  - platform: template
+    id: num_vpd_target_west
+    name: "VPD Target West (kPa)"
+    min_value: 0.5
+    max_value: 2.5
+    step: 0.05
+    lambda: "return id(vpd_target_west);"
+    set_action:
+      - lambda: |
+          id(vpd_target_west) = x;
+          id(num_vpd_target_west).publish_state(x);
+
+  - platform: template
+    id: num_vpd_target_east
+    name: "VPD Target East (kPa)"
+    min_value: 0.5
+    max_value: 2.5
+    step: 0.05
+    lambda: "return id(vpd_target_east);"
+    set_action:
+      - lambda: |
+          id(vpd_target_east) = x;
+          id(num_vpd_target_east).publish_state(x);
+
+  - platform: template
+    id: num_vpd_target_center
+    name: "VPD Target Center (kPa)"
+    min_value: 0.3
+    max_value: 2.0
+    step: 0.05
+    lambda: "return id(vpd_target_center);"
+    set_action:
+      - lambda: |
+          id(vpd_target_center) = x;
+          id(num_vpd_target_center).publish_state(x);
+
+  - platform: template
+    id: num_mister_center_penalty
+    name: "Mister Center Penalty"
+    min_value: 0.0
+    max_value: 1.0
+    step: 0.1
+    lambda: "return id(mister_center_penalty);"
+    set_action:
+      - lambda: |
+          id(mister_center_penalty) = x;
+          id(num_mister_center_penalty).publish_state(x);
+
+  - platform: template
+    id: num_mister_all_delay
+    name: "Mister All Delay (s)"
+    min_value: 60
+    max_value: 900
+    step: 30
+    lambda: "return id(mister_all_delay_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 60) val = 60;
+          if(val > 900) val = 900;
+          id(mister_all_delay_s) = val;
+          id(num_mister_all_delay).publish_state(val);
+
+  - platform: template
+    id: num_mister_on
+    name: "Mister ON (s)"
+    min_value: 60
+    max_value: 600
+    step: 30
+    lambda: "return id(mister_on_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 60) val = 60;
+          if(val > 600) val = 600;
+          id(mister_on_s) = val;
+          id(num_mister_on).publish_state(val);
+
+  - platform: template
+    id: num_mister_off
+    name: "Mister OFF (s)"
+    min_value: 120
+    max_value: 900
+    step: 30
+    lambda: "return id(mister_off_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 120) val = 120;
+          if(val > 900) val = 900;
+          id(mister_off_s) = val;
+          id(num_mister_off).publish_state(val);
+
+  - platform: template
+    id: num_mister_all_on
+    name: "Mister All ON (s)"
+    min_value: 120
+    max_value: 600
+    step: 30
+    lambda: "return id(mister_all_on_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 120) val = 120;
+          if(val > 600) val = 600;
+          id(mister_all_on_s) = val;
+          id(num_mister_all_on).publish_state(val);
+
+  - platform: template
+    id: num_mister_all_off
+    name: "Mister All OFF (s)"
+    min_value: 120
+    max_value: 600
+    step: 30
+    lambda: "return id(mister_all_off_s);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 120) val = 120;
+          if(val > 600) val = 600;
+          id(mister_all_off_s) = val;
+          id(num_mister_all_off).publish_state(val);
+
+  # --- Mister budget & limits -----------------------------------------
+  - platform: template
+    id: num_mister_water_budget
+    name: "Mister Water Budget (gal)"
+    min_value: 20
+    max_value: 200
+    step: 10
+    lambda: "return id(mister_water_budget_gal);"
+    set_action:
+      - lambda: |
+          id(mister_water_budget_gal) = x;
+          id(num_mister_water_budget).publish_state(x);
+
+  - platform: template
+    id: num_mister_max_runtime
+    name: "Mister Max Runtime (min)"
+    min_value: 30
+    max_value: 300
+    step: 10
+    lambda: "return id(mister_max_runtime_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 30) val = 30;
+          if(val > 300) val = 300;
+          id(mister_max_runtime_min) = val;
+          id(num_mister_max_runtime).publish_state(val);
+
+
+
+  # ─── IRRIGATION SCHEDULING TUNABLES ──────────────────────────────────────────
+
+  # --- Wall drip schedule ---
+  - platform: template
+    id: num_irrig_wall_start_hour
+    name: "Irrig Wall Start Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(irrig_wall_start_hour);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_wall_start_hour) = val;
+          id(num_irrig_wall_start_hour).publish_state(val);
+
+  - platform: template
+    id: num_irrig_wall_start_min
+    name: "Irrig Wall Start Min"
+    min_value: 0
+    max_value: 59
+    step: 1
+    lambda: "return id(irrig_wall_start_minute);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_wall_start_minute) = val;
+          id(num_irrig_wall_start_min).publish_state(val);
+
+  - platform: template
+    id: num_irrig_wall_duration
+    name: "Irrig Wall Duration (min)"
+    min_value: 1
+    max_value: 60
+    step: 1
+    lambda: "return id(irrig_wall_duration_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          id(irrig_wall_duration_min) = val;
+          id(num_irrig_wall_duration).publish_state(val);
+
+  - platform: template
+    id: num_irrig_wall_fert_duration
+    name: "Irrig Wall Fert Duration (min)"
+    min_value: 1
+    max_value: 60
+    step: 1
+    lambda: "return id(irrig_wall_fert_duration_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          id(irrig_wall_fert_duration_min) = val;
+          id(num_irrig_wall_fert_duration).publish_state(val);
+
+  - platform: template
+    id: num_irrig_wall_fert_every_n
+    name: "Irrig Wall Fert Every N Cycles"
+    min_value: 0
+    max_value: 14
+    step: 1
+    lambda: "return id(irrig_wall_fert_every_n);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_wall_fert_every_n) = val;
+          id(num_irrig_wall_fert_every_n).publish_state(val);
+
+  - platform: template
+    id: num_irrig_wall_flush
+    name: "Irrig Wall Flush (min)"
+    min_value: 0
+    max_value: 10
+    step: 1
+    lambda: "return id(irrig_wall_flush_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_wall_flush_min) = val;
+          id(num_irrig_wall_flush).publish_state(val);
+
+  - platform: template
+    id: num_irrig_wall_interval
+    name: "Irrig Wall Interval (days)"
+    min_value: 1
+    max_value: 7
+    step: 1
+    lambda: "return id(irrig_wall_interval_days);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          id(irrig_wall_interval_days) = val;
+          id(num_irrig_wall_interval).publish_state(val);
+
+  # --- Center drip schedule ---
+  - platform: template
+    id: num_irrig_center_start_hour
+    name: "Irrig Center Start Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(irrig_center_start_hour);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_center_start_hour) = val;
+          id(num_irrig_center_start_hour).publish_state(val);
+
+  - platform: template
+    id: num_irrig_center_start_min
+    name: "Irrig Center Start Min"
+    min_value: 0
+    max_value: 59
+    step: 1
+    lambda: "return id(irrig_center_start_minute);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_center_start_minute) = val;
+          id(num_irrig_center_start_min).publish_state(val);
+
+  - platform: template
+    id: num_irrig_center_duration
+    name: "Irrig Center Duration (min)"
+    min_value: 1
+    max_value: 60
+    step: 1
+    lambda: "return id(irrig_center_duration_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          id(irrig_center_duration_min) = val;
+          id(num_irrig_center_duration).publish_state(val);
+
+  - platform: template
+    id: num_irrig_center_fert_duration
+    name: "Irrig Center Fert Duration (min)"
+    min_value: 1
+    max_value: 60
+    step: 1
+    lambda: "return id(irrig_center_fert_duration_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          id(irrig_center_fert_duration_min) = val;
+          id(num_irrig_center_fert_duration).publish_state(val);
+
+  - platform: template
+    id: num_irrig_center_fert_every_n
+    name: "Irrig Center Fert Every N Cycles"
+    min_value: 0
+    max_value: 14
+    step: 1
+    lambda: "return id(irrig_center_fert_every_n);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_center_fert_every_n) = val;
+          id(num_irrig_center_fert_every_n).publish_state(val);
+
+  - platform: template
+    id: num_irrig_center_flush
+    name: "Irrig Center Flush (min)"
+    min_value: 0
+    max_value: 10
+    step: 1
+    lambda: "return id(irrig_center_flush_min);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_center_flush_min) = val;
+          id(num_irrig_center_flush).publish_state(val);
+
+  - platform: template
+    id: num_irrig_center_interval
+    name: "Irrig Center Interval (days)"
+    min_value: 1
+    max_value: 7
+    step: 1
+    lambda: "return id(irrig_center_interval_days);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          if(val < 1) val = 1;
+          id(irrig_center_interval_days) = val;
+          id(num_irrig_center_interval).publish_state(val);
+
+  # --- VPD boost ---
+  - platform: template
+    id: num_irrig_vpd_boost_pct
+    name: "Irrig VPD Boost %"
+    min_value: 0
+    max_value: 100
+    step: 5
+    lambda: "return id(irrig_vpd_boost_pct);"
+    set_action:
+      - lambda: |
+          int val = int(roundf(x));
+          id(irrig_vpd_boost_pct) = val;
+          id(num_irrig_vpd_boost_pct).publish_state(val);
+
+  - platform: template
+    id: num_irrig_vpd_boost_threshold
+    name: "Irrig VPD Boost Threshold (hrs)"
+    min_value: 0.5
+    max_value: 12.0
+    step: 0.5
+    lambda: "return id(irrig_vpd_boost_threshold_hrs);"
+    set_action:
+      - lambda: |
+          id(irrig_vpd_boost_threshold_hrs) = x;
+          id(num_irrig_vpd_boost_threshold).publish_state(x);
+
+  # ─── Grow Light Shadow-Aware Automation ───
+  - platform: template
+    id: num_gl_lux_threshold
+    name: "GL Lux Threshold"
+    min_value: 500
+    max_value: 10000
+    step: 500
+    lambda: "return id(gl_lux_threshold);"
+    set_action:
+      - lambda: |
+          id(gl_lux_threshold) = x;
+          id(num_gl_lux_threshold).publish_state(x);
+          ESP_LOGI("grow_light","Lux threshold set to %.0f", x);
+
+  - platform: template
+    id: num_gl_dli_target
+    name: "GL DLI Target (mol)"
+    min_value: 5
+    max_value: 30
+    step: 1
+    lambda: "return id(gl_dli_target);"
+    set_action:
+      - lambda: |
+          id(gl_dli_target) = x;
+          id(num_gl_dli_target).publish_state(x);
+          ESP_LOGI("grow_light","DLI target set to %.0f mol/m²/day", x);
+
+  - platform: template
+    id: num_gl_sunrise_hour
+    name: "GL Start Hour"
+    min_value: 5
+    max_value: 12
+    step: 1
+    lambda: "return id(gl_sunrise_hour);"
+    set_action:
+      - lambda: |
+          id(gl_sunrise_hour) = (int)x;
+          id(num_gl_sunrise_hour).publish_state(x);
+
+  - platform: template
+    id: num_gl_sunset_hour
+    name: "GL Cutoff Hour"
+    min_value: 16
+    max_value: 23
+    step: 1
+    lambda: "return id(gl_sunset_hour);"
+    set_action:
+      - lambda: |
+          id(gl_sunset_hour) = (int)x;
+          id(num_gl_sunset_hour).publish_state(x);
+
+# ─────────────────────────────── BOOL SWITCHES ────────────────────────────────
+# These template switches expose boolean configuration flags to Home Assistant.
+# Users can toggle these switches in the UI, which updates the corresponding
+# global variables.  Each switch publishes its new state so HA stays in sync.
+switch:
+  # Grow light auto mode — enable DLI-based supplementation
+  - platform: template
+    id: sw_gl_auto
+    name: "GL Auto Mode"
+    icon: mdi:lightbulb-auto
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: "return id(gl_auto_enabled);"
+    turn_on_action:
+      - lambda: |
+          id(gl_auto_enabled) = true;
+          id(sw_gl_auto).publish_state(true);
+          ESP_LOGI("grow_light","Auto mode ENABLED");
+    turn_off_action:
+      - lambda: |
+          id(gl_auto_enabled) = false;
+          id(sw_gl_auto).publish_state(false);
+          ESP_LOGI("grow_light","Auto mode DISABLED");
+
+  # Close vent during fog pulses to prevent dry air infiltration
+  - platform: template
+    id: sw_fog_closes_vent
+    name: "Fog Closes Vent"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(fog_closes_vent);'
+    turn_on_action:
+      - lambda: |
+          id(fog_closes_vent) = true;
+          id(sw_fog_closes_vent).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(fog_closes_vent) = false;
+          id(sw_fog_closes_vent).publish_state(false);
+
+  # Close vent during mister pulses to trap humidity
+  - platform: template
+    id: sw_mister_closes_vent
+    name: "Mister Closes Vent"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(mister_closes_vent);'
+    turn_on_action:
+      - lambda: |
+          id(mister_closes_vent) = true;
+          id(sw_mister_closes_vent).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(mister_closes_vent) = false;
+          id(sw_mister_closes_vent).publish_state(false);
+
+  # Enable/disable economiser (enthalpy gate for venting)
+  - platform: template
+    id: sw_economiser_enabled
+    name: "Economiser Enabled"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(economiser_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(economiser_enabled) = true;
+          id(sw_economiser_enabled).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(economiser_enabled) = false;
+          id(sw_economiser_enabled).publish_state(false);
+
+
+  # Irrigation master enable
+  - platform: template
+    id: sw_irrig_enabled
+    name: "Irrigation Enabled"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(irrig_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(irrig_enabled) = true;
+          id(sw_irrig_enabled).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(irrig_enabled) = false;
+          id(sw_irrig_enabled).publish_state(false);
+
+  # Wall drip enable
+  - platform: template
+    id: sw_irrig_wall_enabled
+    name: "Irrigation Wall Enabled"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(irrig_wall_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(irrig_wall_enabled) = true;
+          id(sw_irrig_wall_enabled).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(irrig_wall_enabled) = false;
+          id(sw_irrig_wall_enabled).publish_state(false);
+
+  # Center drip enable
+  - platform: template
+    id: sw_irrig_center_enabled
+    name: "Irrigation Center Enabled"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(irrig_center_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(irrig_center_enabled) = true;
+          id(sw_irrig_center_enabled).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(irrig_center_enabled) = false;
+          id(sw_irrig_center_enabled).publish_state(false);
+
+  # Weather skip enable
+  - platform: template
+    id: sw_irrig_weather_skip
+    name: "Irrigation Weather Skip"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(irrig_weather_skip);'
+    turn_on_action:
+      - lambda: |
+          id(irrig_weather_skip) = true;
+          id(sw_irrig_weather_skip).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(irrig_weather_skip) = false;
+          id(sw_irrig_weather_skip).publish_state(false);
+
+  # Occupancy mist/fog inhibit — blocks misters and fogger when greenhouse is occupied
+  - platform: template
+    id: sw_occupancy_inhibit
+    name: "Occupancy Mist Inhibit"
+    icon: "mdi:account-cancel"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(occupancy_inhibit_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(occupancy_inhibit_enabled) = true;
+          id(sw_occupancy_inhibit).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(occupancy_inhibit_enabled) = false;
+          id(sw_occupancy_inhibit).publish_state(false);
+
+# ─── IRRIGATION MANUAL TRIGGER BUTTONS ────────────────────────────────────────
+button:
+  - platform: template
+    id: btn_wall_clean
+    name: "Wall Drips - RUN CLEAN"
+    on_press:
+      - lambda: |-
+          id(irrig_queue) |= 1;
+          ESP_LOGI("irrig","Manual: WALL CLEAN queued");
+
+  - platform: template
+    id: btn_wall_fert
+    name: "Wall Drips - RUN FERT"
+    on_press:
+      - lambda: |-
+          id(irrig_queue) |= 2;
+          ESP_LOGI("irrig","Manual: WALL FERT queued");
+
+  - platform: template
+    id: btn_center_clean
+    name: "Center Drips - RUN CLEAN"
+    on_press:
+      - lambda: |-
+          id(irrig_queue) |= 4;
+          ESP_LOGI("irrig","Manual: CENTER CLEAN queued");
+
+  - platform: template
+    id: btn_center_fert
+    name: "Center Drips - RUN FERT"
+    on_press:
+      - lambda: |-
+          id(irrig_queue) |= 8;
+          ESP_LOGI("irrig","Manual: CENTER FERT queued");
+
+###############################################################################
+# END OF FILE
+###############################################################################

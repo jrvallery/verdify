@@ -1,0 +1,20 @@
+-- Migration 040: Add climate aggregate + stress columns to daily_summary
+-- These are computed by daily-summary-snapshot.py, not the ESP32 ingestor.
+
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS temp_min DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS temp_max DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS temp_avg DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS rh_min DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS rh_max DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS rh_avg DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS vpd_min DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS vpd_max DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS vpd_avg DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS co2_avg DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS outdoor_temp_min DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS outdoor_temp_max DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS stress_hours_heat DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS stress_hours_cold DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS stress_hours_vpd_high DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS stress_hours_vpd_low DOUBLE PRECISION;
+ALTER TABLE daily_summary ADD COLUMN IF NOT EXISTS notes TEXT;
