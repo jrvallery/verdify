@@ -23,15 +23,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "ingestor"))
+from ai_config import ai
+
 import asyncpg
-from google import genai
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [vision] %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 DENVER = ZoneInfo("America/Denver")
-GEMINI_API_KEY = Path("/mnt/jason/agents/shared/credentials/gemini_api_key.txt").read_text().strip()
-GEMINI_MODEL = "gemini-2.5-flash"
 VAULT_DIR = Path("/mnt/iris/verdify-vault/snapshots")
 ZONES_CONFIG = Path("/srv/verdify/config/zones.yaml")
 
@@ -80,49 +80,10 @@ async def get_zone_mapping(conn, camera: str) -> list[str]:
 
 
 def build_prompt(camera: str, zones: list[str], conditions: dict, crops: list[dict]) -> str:
-    """Build the Gemini Vision analysis prompt."""
-    crop_list = "\n".join(f"  - {c['name']} in {c['zone']} zone ({c['position']}), stage: {c['stage']}"
-                          for c in crops if c['zone'] in zones) or "  (no crops in visible zones)"
-
-    return f"""You are a greenhouse crop health analyst. Analyze this image from camera '{camera}'.
-
-VISIBLE ZONES: {', '.join(zones)}
-
-KNOWN CROPS IN VIEW:
-{crop_list}
-
-CURRENT CONDITIONS:
-  Temperature: {conditions.get('temp', '?')}°F
-  Relative Humidity: {conditions.get('rh', '?')}%
-  VPD: {conditions.get('vpd', '?')} kPa
-  Light: {conditions.get('lux', '?')} lux
-  Soil Moisture South: {conditions.get('soil_s1', '?')}%
-  Soil Moisture West: {conditions.get('soil_w', '?')}%
-
-INSTRUCTIONS:
-1. Identify each visible plant/crop group
-2. Assess health on a 1-10 scale (10=thriving, 5=stressed, 1=dying)
-3. Note growth stage if observable
-4. Flag any visible stress: wilting, yellowing, browning, pest damage, nutrient deficiency
-5. Note any environmental observations: condensation, algae, equipment issues, debris
-6. Suggest actionable next steps
-
-Return ONLY valid JSON (no markdown, no commentary):
-{{
-  "observations": [
-    {{
-      "crop": "plant name or description",
-      "zone": "zone name",
-      "health_score": 8,
-      "growth_stage": "vegetative",
-      "stress_indicators": [],
-      "notes": "brief observation"
-    }}
-  ],
-  "environment_notes": "any notable environmental observations",
-  "recommended_actions": ["action 1", "action 2"],
-  "overall_confidence": 0.7
-}}"""
+    """Build the Gemini Vision analysis prompt from template."""
+    return ai.render_template("vision", "prompt",
+                             camera=camera, zones=zones,
+                             conditions=conditions, crops=crops)
 
 
 async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict | None:
@@ -144,18 +105,19 @@ async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict |
     # Call Gemini Vision
     start = time.time()
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        from google import genai
+        client = ai.get_client("vision")
 
         image_bytes = image_path.read_bytes()
         response = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=ai.model_name("vision"),
             contents=[
                 genai.types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
                 prompt,
             ],
             config=genai.types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.2,
+                temperature=ai.temperature("vision"),
             ),
         )
 

@@ -16,23 +16,13 @@ import sys
 from pathlib import Path
 
 import asyncpg
-from google import genai
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "ingestor"))
+from ai_config import ai
+from config import DB_DSN
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [embed] %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
-
-GEMINI_API_KEY = Path("/mnt/jason/agents/shared/credentials/gemini_api_key.txt").read_text().strip()
-EMBED_MODEL = "gemini-embedding-2-preview"
-
-
-def get_db_url():
-    pw = "verdify"
-    if os.path.exists("/srv/verdify/.env"):
-        with open("/srv/verdify/.env") as f:
-            for line in f:
-                if line.strip().startswith("POSTGRES_PASSWORD="):
-                    pw = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-    return f"postgresql://verdify:{pw}@localhost:5432/verdify"
 
 
 def observation_to_text(row) -> str:
@@ -58,8 +48,8 @@ Recommended actions: {actions_text}"""
 
 async def main():
     reembed_all = "--all" in sys.argv
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    conn = await asyncpg.connect(get_db_url())
+    client = ai.get_client("embedding")
+    conn = await asyncpg.connect(DB_DSN)
 
     try:
         if reembed_all:
@@ -77,10 +67,13 @@ async def main():
         for row in rows:
             text = observation_to_text(row)
             try:
+                from google import genai
+                embed_cfg = ai.model("embedding")
                 response = client.models.embed_content(
-                    model=EMBED_MODEL,
+                    model=ai.model_name("embedding"),
                     contents=text,
-                    config=genai.types.EmbedContentConfig(output_dimensionality=3072),
+                    config=genai.types.EmbedContentConfig(
+                        output_dimensionality=embed_cfg.get("dimensions", 3072)),
                 )
                 vector = response.embeddings[0].values
 

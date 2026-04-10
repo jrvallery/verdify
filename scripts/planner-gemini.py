@@ -22,42 +22,41 @@ import time
 from datetime import datetime, date
 from pathlib import Path
 
-from pathlib import Path
-from google import genai
+sys.path.insert(0, str(Path(__file__).parent.parent / "ingestor"))
+from ai_config import ai
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [planner] %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-GEMINI_API_KEY = Path("/mnt/jason/agents/shared/credentials/gemini_api_key.txt").read_text().strip()
-GEMINI_MODEL = "gemini-2.5-pro"
-STATIC_CONTEXT = Path("/srv/verdify/state/planner-static-context.md")
-PROMPT_TEMPLATE = Path("/srv/verdify/scripts/planner-prompt-v2.md")
-
 
 def gather_context(greenhouse_id: str) -> str:
     """Run gather-plan-context.sh and return output."""
+    ctx_cfg = ai.config["context"]
     result = subprocess.run(
-        ["bash", "/srv/verdify/scripts/gather-plan-context.sh", "--greenhouse-id", greenhouse_id],
+        ["bash", str(Path(__file__).parent / "gather-plan-context.sh"), "--greenhouse-id", greenhouse_id],
         capture_output=True, text=True, timeout=120)
     return result.stdout
 
 
 def read_static_context() -> str:
     """Read the pre-built static context file."""
-    if STATIC_CONTEXT.exists():
-        text = STATIC_CONTEXT.read_text()
-        # Truncate if too large (Gemini Pro has 1M context but let's be reasonable)
-        if len(text) > 100000:
-            text = text[:100000] + "\n\n[TRUNCATED — full context is 161KB]\n"
+    ctx_cfg = ai.config["context"]
+    static_path = ai.template_path("planner", "static_context")
+    if static_path.exists():
+        text = static_path.read_text()
+        max_chars = ctx_cfg.get("max_static_chars", 50000)
+        if len(text) > max_chars:
+            text = text[:max_chars] + f"\n\n[TRUNCATED at {max_chars} chars]\n"
         return text
     return ""
 
 
 def read_prompt_template() -> str:
     """Read the planner prompt template."""
-    if PROMPT_TEMPLATE.exists():
-        return PROMPT_TEMPLATE.read_text()
-    return "You are a greenhouse setpoint planner. Analyze the context and write a 72h plan."
+    try:
+        return ai.load_template("planner", "prompt")
+    except FileNotFoundError:
+        return "You are a greenhouse setpoint planner. Analyze the context and write a 72h plan."
 
 
 def build_full_prompt(greenhouse_id: str) -> str:
@@ -101,16 +100,17 @@ def main():
         return
 
     # Call Gemini Pro
-    log.info("Calling Gemini 2.5 Pro...")
+    log.info("Calling %s...", ai.model_name("planner"))
     start = time.time()
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    from google import genai
+    client = ai.get_client("planner")
     response = client.models.generate_content(
-        model=GEMINI_MODEL,
+        model=ai.model_name("planner"),
         contents=full_prompt,
         config=genai.types.GenerateContentConfig(
-            temperature=0.3,
-            max_output_tokens=8192,
+            temperature=ai.temperature("planner"),
+            max_output_tokens=ai.max_tokens("planner"),
         ),
     )
 

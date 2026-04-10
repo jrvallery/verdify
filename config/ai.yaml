@@ -1,0 +1,73 @@
+# Verdify AI Configuration
+# Centralized management of models, prompts, keys, and schedules.
+# All AI-powered tasks reference this file instead of hardcoding settings.
+
+# ── API Keys ─────────────────────────────────────────────────────
+# Keys are stored in external files (never in this config).
+# Paths can be overridden via environment variables.
+keys:
+  gemini:
+    file: ${GEMINI_API_KEY_FILE:-/mnt/jason/agents/shared/credentials/gemini_api_key.txt}
+    provider: google-ai-studio
+
+# ── Models ───────────────────────────────────────────────────────
+models:
+  planner:
+    provider: gemini
+    model: gemini-2.5-pro
+    temperature: 0.3
+    max_output_tokens: 16384
+    purpose: "72-hour tactical setpoint planning"
+
+  vision:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.2
+    max_output_tokens: 4096
+    purpose: "Camera snapshot crop health analysis"
+
+  embedding:
+    provider: gemini
+    model: gemini-embedding-2-preview
+    dimensions: 3072
+    purpose: "Observation semantic similarity search"
+
+# ── Prompts & Templates ─────────────────────────────────────────
+# All templates live in /srv/verdify/templates/
+templates:
+  planner:
+    prompt: planner-prompt.md
+    core_params: planner-core-params.md
+    static_context: ${STATE_DIR:-/srv/verdify/state}/planner-static-context.md
+
+  vision:
+    prompt: vision-analysis.j2
+
+  embedding:
+    text_template: embedding-text.j2
+
+# ── Schedules ────────────────────────────────────────────────────
+# Cron expressions (MDT). Managed via crontab, documented here.
+schedules:
+  planner:
+    cron: "0 6,12,18 * * *"
+    script: scripts/planner-gemini.py
+    description: "Gemini 2.5 Pro 72h planning cycle"
+
+  vision:
+    cron: "0 12,16,20,0 * * *"
+    script: scripts/frigate-snapshot.py
+    description: "Camera snapshots + Gemini Flash analysis"
+    depends_on: frigate  # Requires Frigate NVR accessible
+
+  embedding:
+    cron: null  # Manual — run after vision analysis accumulates new observations
+    script: scripts/generate-observation-embeddings.py
+    description: "Generate pgvector embeddings for similarity search"
+
+# ── Context Gathering ────────────────────────────────────────────
+context:
+  gather_script: scripts/gather-plan-context.sh
+  static_builder: scripts/gather-static-context.sh
+  max_context_chars: 100000
+  max_static_chars: 50000
