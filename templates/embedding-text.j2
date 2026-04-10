@@ -1,0 +1,5 @@
+Greenhouse observation from camera {{ camera }} in zone {{ zone }}.
+Confidence: {{ confidence | default('?') }}
+Crops observed: {{ crop_summaries | join('; ') if crop_summaries else 'none identified' }}
+Environment: {{ environment_notes | default('') }}
+Recommended actions: {{ actions_text | default('') }}
