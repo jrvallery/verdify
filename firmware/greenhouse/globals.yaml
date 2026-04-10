@@ -23,7 +23,7 @@ globals:
   - id: stage2_cool_delta_f
     type: float
     restore_value: yes
-    initial_value: '5.0'
+    initial_value: '3.0'
   - id: hyst_temp_f
     type: float
     restore_value: yes
@@ -41,7 +41,7 @@ globals:
   - id: hyst_vpd_kpa
     type: float
     restore_value: yes
-    initial_value: '0.10'
+    initial_value: '0.30'
 
   # ─── Feed-forward biases & safety rails (°F & kPa) ───
   - id: bias_heat_f
@@ -319,11 +319,11 @@ globals:
   - id: min_vent_on_s
     type: int
     restore_value: yes
-    initial_value: '30'
+    initial_value: '60'
   - id: min_vent_off_s
     type: int
     restore_value: yes
-    initial_value: '30'
+    initial_value: '60'
 
   # fog_closes_vent: when true, the vent damper is forced closed during active
   # fog pulses to prevent dry outside air from negating humidity gains.
@@ -392,12 +392,12 @@ globals:
   - id: mister_engage_kpa
     type: float
     restore_value: yes
-    initial_value: '2.0'
+    initial_value: '1.6'
 
   - id: mister_all_kpa
     type: float
     restore_value: yes
-    initial_value: '2.3'
+    initial_value: '1.9'
 
   - id: mister_engage_delay_s
     type: int
@@ -432,7 +432,7 @@ globals:
   - id: mister_water_budget_gal
     type: float
     restore_value: yes
-    initial_value: '100.0'
+    initial_value: '500.0'
 
   - id: mister_max_runtime_min
     type: int
@@ -638,17 +638,17 @@ globals:
   - id: mister_pulse_on_s
     type: int
     restore_value: yes
-    initial_value: '45'
+    initial_value: '60'
 
   - id: mister_pulse_gap_s
     type: int
     restore_value: yes
-    initial_value: '30'
+    initial_value: '45'
 
   - id: mister_vpd_weight
     type: float
     restore_value: yes
-    initial_value: '2.0'
+    initial_value: '1.5'
 
   # ─── Per-zone VPD targets (set by band dispatcher from crop data) ───
   - id: vpd_target_south
@@ -690,6 +690,62 @@ globals:
     type: int
     restore_value: yes
     initial_value: '60'
+
+  # VPD_WATCH dwell — observation period before misting
+  - id: vpd_watch_dwell_s
+    type: int
+    restore_value: yes
+    initial_value: '60'
+
+  # Vent coordination for misting (binary vent)
+  - id: mist_vent_close_lead_s
+    type: int
+    restore_value: yes
+    initial_value: '15'
+
+  - id: mist_max_closed_vent_s
+    type: int
+    restore_value: yes
+    initial_value: '600'
+
+  # Fog escalation threshold (VPD delta above vpd_high)
+  - id: fog_escalation_kpa
+    type: float
+    restore_value: yes
+    initial_value: '0.4'
+
+  # Vent reopen delay after misting completes (let evaporation settle)
+  - id: mist_vent_reopen_delay_s
+    type: int
+    restore_value: yes
+    initial_value: '45'
+
+  # Mandatory thermal relief opening duration
+  - id: mist_thermal_relief_s
+    type: int
+    restore_value: yes
+    initial_value: '90'
+
+  # Fog safety gates
+  - id: fog_rh_ceiling_pct
+    type: int
+    restore_value: yes
+    initial_value: '90'
+
+  - id: fog_min_temp_f
+    type: int
+    restore_value: yes
+    initial_value: '55'
+
+  - id: fog_time_window_start
+    type: int
+    restore_value: yes
+    initial_value: '7'
+
+  - id: fog_time_window_end
+    type: int
+    restore_value: yes
+    initial_value: '17'
 
   - id: mister_closes_vent
     type: bool

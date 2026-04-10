@@ -532,6 +532,126 @@ number:
           id(num_min_fog_off).publish_state(x);
 
   - platform: template
+    id: num_vpd_watch_dwell
+    name: "VPD Watch Dwell (s)"
+    min_value: 15
+    max_value: 120
+    step: 15
+    lambda: "return id(vpd_watch_dwell_s);"
+    set_action:
+      - lambda: |
+          id(vpd_watch_dwell_s) = x;
+          id(num_vpd_watch_dwell).publish_state(x);
+
+  - platform: template
+    id: num_mist_vent_close_lead
+    name: "Mist Vent Close Lead (s)"
+    min_value: 0
+    max_value: 60
+    step: 5
+    lambda: "return id(mist_vent_close_lead_s);"
+    set_action:
+      - lambda: |
+          id(mist_vent_close_lead_s) = x;
+          id(num_mist_vent_close_lead).publish_state(x);
+
+  - platform: template
+    id: num_mist_max_closed_vent
+    name: "Mist Max Closed Vent (s)"
+    min_value: 120
+    max_value: 900
+    step: 60
+    lambda: "return id(mist_max_closed_vent_s);"
+    set_action:
+      - lambda: |
+          id(mist_max_closed_vent_s) = x;
+          id(num_mist_max_closed_vent).publish_state(x);
+
+  - platform: template
+    id: num_fog_escalation_kpa
+    name: "Fog Escalation (kPa)"
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    lambda: "return id(fog_escalation_kpa);"
+    set_action:
+      - lambda: |
+          id(fog_escalation_kpa) = x;
+          id(num_fog_escalation_kpa).publish_state(x);
+
+  - platform: template
+    id: num_mist_vent_reopen_delay
+    name: "Mist Vent Reopen Delay (s)"
+    min_value: 0
+    max_value: 120
+    step: 15
+    lambda: "return id(mist_vent_reopen_delay_s);"
+    set_action:
+      - lambda: |
+          id(mist_vent_reopen_delay_s) = x;
+          id(num_mist_vent_reopen_delay).publish_state(x);
+
+  - platform: template
+    id: num_mist_thermal_relief
+    name: "Mist Thermal Relief (s)"
+    min_value: 30
+    max_value: 300
+    step: 30
+    lambda: "return id(mist_thermal_relief_s);"
+    set_action:
+      - lambda: |
+          id(mist_thermal_relief_s) = x;
+          id(num_mist_thermal_relief).publish_state(x);
+
+  - platform: template
+    id: num_fog_rh_ceiling
+    name: "Fog RH Ceiling (%)"
+    min_value: 75
+    max_value: 98
+    step: 1
+    lambda: "return id(fog_rh_ceiling_pct);"
+    set_action:
+      - lambda: |
+          id(fog_rh_ceiling_pct) = x;
+          id(num_fog_rh_ceiling).publish_state(x);
+
+  - platform: template
+    id: num_fog_min_temp
+    name: "Fog Min Temp (F)"
+    min_value: 40
+    max_value: 65
+    step: 5
+    lambda: "return id(fog_min_temp_f);"
+    set_action:
+      - lambda: |
+          id(fog_min_temp_f) = x;
+          id(num_fog_min_temp).publish_state(x);
+
+  - platform: template
+    id: num_fog_window_start
+    name: "Fog Window Start (hr)"
+    min_value: 5
+    max_value: 12
+    step: 1
+    lambda: "return id(fog_time_window_start);"
+    set_action:
+      - lambda: |
+          id(fog_time_window_start) = x;
+          id(num_fog_window_start).publish_state(x);
+
+  - platform: template
+    id: num_fog_window_end
+    name: "Fog Window End (hr)"
+    min_value: 14
+    max_value: 20
+    step: 1
+    lambda: "return id(fog_time_window_end);"
+    set_action:
+      - lambda: |
+          id(fog_time_window_end) = x;
+          id(num_fog_window_end).publish_state(x);
+
+  - platform: template
     id: num_mister_all_delay
     name: "Mister All Delay (s)"
     min_value: 60
@@ -611,7 +731,7 @@ number:
     id: num_mister_water_budget
     name: "Mister Water Budget (gal)"
     min_value: 20
-    max_value: 200
+    max_value: 600
     step: 10
     lambda: "return id(mister_water_budget_gal);"
     set_action:

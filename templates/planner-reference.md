@@ -25,15 +25,15 @@
 | Fan 2 (SE) | 2,450 CFM, 52W | COOL_S1 (lag) or COOL_S2 (both) |
 | Heater 1 (electric) | 1,500W | HEAT_S1 (pre-heat inside band) |
 | Heater 2 (gas/Lennox) | 75,000 BTU/hr | HEAT_S2 (below band floor) |
-| AquaFog XE 2000 | 1,644W, ultrasonic | HUMID_S1+ or fog escalation |
+| AquaFog XE 2000 | 1,644W, ultrasonic | HUMID_S3 (fog escalation, vent forced closed) |
 | Intake vent (north) | 24"x24", motorized | Economiser logic (enthalpy gate) |
 | Grow lights (main) | 630W, 15x4FT LED | DLI-based automation |
 | Grow lights (shelf) | 816W, 15x2FT LED | DLI-based automation |
 
-## State Machine (42 states)
+## State Machine (48 states (6 thermal × 8 VPD))
 
 Temperature axis: HEAT_S2 → HEAT_S1 → TEMP_IDLE → COOL_S1 → COOL_S2 → COOL_S3
-Humidity axis: DEHUM_HEAT → DEHUM_V2 → DEHUM_V1 → HUM_IDLE → HUMID_S1 → HUMID_S2 → HUMID_S3
+VPD axis: DEHUM_HEAT → DEHUM_V2 → DEHUM_V1 → HUM_IDLE → VPD_WATCH → HUMID_S1 → HUMID_S2 → HUMID_S3
 
 Key thresholds:
 - HEAT_S2 at temp_low, HEAT_S1 at temp_low + d_heat_stage_2
