@@ -383,14 +383,27 @@ interval:
 
           HumiStage h = HUM_IDLE;
 
+          // Vent close lead: close vent ahead of misting so volume seals first
+          static uint32_t vent_close_lead_timer_ms = 0;
+          bool vent_close_lead_active = false;
+
           if(VPD > VPDhi + HV){
             // VPD above band + hysteresis — check if WATCH dwell satisfied
             if(h_prev == VPD_WATCH && vpd_watch_timer_ms >= VPD_WATCH_DWELL_MS){
-              h = HUMID_S1;                                  // dwell complete → mist
+              // Dwell complete — check if vent close lead is satisfied
+              if(MIST_VENT_CLOSE_LEAD_MS == 0 || vent_close_lead_timer_ms >= MIST_VENT_CLOSE_LEAD_MS){
+                h = HUMID_S1;                                // lead satisfied → mist
+                vent_close_lead_timer_ms = 0;
+              }else{
+                h = VPD_WATCH;                               // stay in watch, vent closing
+                vent_close_lead_timer_ms += dt_ms;
+                vent_close_lead_active = true;               // flag for section 11
+              }
             }else if(h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3){
               h = h_prev;                                    // already misting, stay
             }else{
               h = VPD_WATCH;                                 // enter observation dwell
+              vent_close_lead_timer_ms = 0;
             }
           }else if(VPD > VPDhi){
             // VPD above band but within hysteresis — watch only (no misting)
@@ -476,6 +489,11 @@ interval:
           // Base vent desire from pattern table
           bool wantVentRaw = !id(vent_lock_active) &&
                              (active.VENT || active.LEAD || active.LAG);
+
+          // Vent close lead: close vent during VPD_WATCH lead-time before misting
+          if(vent_close_lead_active && wantVentRaw){
+            wantVentRaw = false;
+          }
 
           // VPD_MIST/FOG forces vent closed (core rule)
           if(vpd_misting_active && wantVentRaw){

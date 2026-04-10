@@ -44,22 +44,22 @@ Current time (MDT): {{ current_time }}
 **Fog (graduated, with safety gates):**
 | # | Parameter | Range | Default | Purpose |
 |---|-----------|-------|---------|---------|
-| 17 | `fog_pulse_on_s` | 15-90s | 30 | Fog burst duration (PWM fog) |
-| 18 | `fog_pulse_gap_s` | 30-300s | 120 | Evaporation dwell between fog pulses |
+| 17 | `min_fog_on_s` | 15-300s | 60 | Min fog runtime per cycle |
+| 18 | `min_fog_off_s` | 15-300s | 60 | Min gap between fog cycles |
 | 19 | `fog_escalation_kpa` | 0.2-0.8 | 0.4 | VPD delta above band that triggers fog (vs mist-only) |
 
 **Thermal + biases:**
 | # | Parameter | Range | Default | Purpose |
 |---|-----------|-------|---------|---------|
 | 20 | `d_cool_stage_2` | 2-5°F | 3 | Gap between COOL_S1 and COOL_S2 |
-| 21 | `bias_heat_f` | -5 to +5°F | 0 | Shift heating floor |
-| 22 | `bias_cool_f` | -5 to +5°F | 0 | Shift cooling ceiling |
+| 21 | `bias_heat` | -5 to +5°F | 0 | Shift heating floor |
+| 22 | `bias_cool` | -5 to +5°F | 0 | Shift cooling ceiling |
 | 23 | `min_heat_on_s` | 60-300s | 120 | Min heater on-time |
 | 24 | `min_heat_off_s` | 120-600s | 300 | Min gap between heater cycles |
 
 ### Tier 2: Band-Driven (do NOT emit — silently dropped)
 `temp_high`, `temp_low`, `vpd_high`, `vpd_low`, `vpd_target_*`, `mister_engage_delay_s`, `mister_all_delay_s`
-Computed from crop profiles every 5 min. Use `bias_heat_f`/`bias_cool_f` to shift.
+Computed from crop profiles every 5 min. Use `bias_heat`/`bias_cool` to shift.
 
 Lighting is managed by `gl_auto_mode`, not this planner.
 
@@ -77,6 +77,62 @@ After mist_max_closed_vent_s: mandatory thermal relief opening
 ```
 
 Tune the oscillation rhythm through `mist_vent_close_lead_s`, `mist_max_closed_vent_s`, and `mist_vent_reopen_delay_s`. On extreme days, allow longer sealed periods (increase max_closed). On moderate days, shorten max_closed for more thermal relief.
+
+## State Machine Architecture
+
+The ESP32 evaluates a 48-state machine every 5 seconds (6 thermal × 8 VPD). Each state combination maps to a relay pattern (heaters, fans, fog, vent) via a lookup table.
+
+**Thermal axis** (from crop band targets, not planner-controlled):
+- HEAT_S2 → HEAT_S1 → TEMP_IDLE → COOL_S1 → COOL_S2 → COOL_S3
+- Transitions at temp_low (heat), temp_high (cool), temp_high + d_cool_stage_2 (S2), + 2°F (S3)
+
+**VPD axis** (planner controls response timing and aggressiveness):
+- HUM_IDLE → VPD_WATCH → HUMID_S1 → HUMID_S2 → HUMID_S3 → VPD_EMERGENCY
+- Also: DEHUM_V1, DEHUM_V2, DEHUM_HEAT (rare, low-VPD states)
+
+**VPD state transitions you control:**
+1. VPD exceeds band ceiling → enters VPD_WATCH (dwell = `vpd_watch_dwell_s`)
+2. Dwell completes, VPD sustained → vent closes (lead = `mist_vent_close_lead_s`) → HUMID_S1
+3. HUMID_S1: single-zone misting (pulse = `mister_pulse_on_s`, gap = `mister_pulse_gap_s`)
+4. Zone selection: driest zone first, weighted by `mister_vpd_weight`, south prioritized
+5. If VPD > `mister_all_kpa` after delay → HUMID_S2 (all-zone rotation)
+6. If VPD > band + `fog_escalation_kpa` after S2 exhaustion → fog fires (min_on/off timing)
+7. Fog safety gates: blocked if RH > ceiling, temp < min, or outside time window
+
+**Vent behavior during misting (binary: open or closed):**
+- VPD_MIST/FOG forces vent closed (open-vent misting wastes 70% of water at 15% RH)
+- After `mist_max_closed_vent_s`: mandatory thermal relief opening for `mist_thermal_relief_s`
+- After misting stops: vent stays closed for `mist_vent_reopen_delay_s` (evaporation settling)
+- Safety: vent opens unconditionally at safety_max (95°F)
+
+## Data Dictionary — All 24 Tier 1 Parameters
+
+| # | Parameter | Unit | Default | State Machine Impact |
+|---|-----------|------|---------|---------------------|
+| 1 | `vpd_hysteresis` | kPa | 0.3 | Dead band around vpd_high. VPD_WATCH enters at vpd_high, HUMID_S1 at vpd_high + hysteresis. Larger = fewer mist cycles but slower VPD response. |
+| 2 | `vpd_watch_dwell_s` | seconds | 60 | Time system must observe VPD above band before allowing misting. Prevents water waste on transient spikes. 0 = immediate misting (old behavior). |
+| 3 | `mister_engage_kpa` | kPa | 1.6 | Global VPD threshold for mister engagement. Works alongside zone-specific targets. Lower = earlier misting. |
+| 4 | `mister_all_kpa` | kPa | 1.9 | VPD threshold to escalate from single-zone to all-zone rotation (HUMID_S1 → S2). Usually engage + 0.3. |
+| 5 | `mister_pulse_on_s` | seconds | 60 | How long each mister zone runs per pulse cycle. 60s validated as optimal balance between VPD drop (0.23 kPa/pulse for south) and water use. |
+| 6 | `mister_pulse_gap_s` | seconds | 45 | Evaporation dwell between pulses. At 15% outdoor RH, evaporation is near-instant — 15-20s sufficient on dry days. 45s on humid days. |
+| 7 | `mister_vpd_weight` | multiplier | 1.5 | How aggressively the driest zone is prioritized. 1.0 = equal, 3.0 = extreme focus on worst zone. |
+| 8 | `mister_water_budget_gal` | gallons/day | 500 | Daily water limit. Misters lock off when exceeded. Must never be the bottleneck. |
+| 9 | `mist_vent_close_lead_s` | seconds | 15 | Close vent this many seconds BEFORE starting misters. Seals the volume first so mist isn't exhausted. 0 = simultaneous. |
+| 10 | `mist_max_closed_vent_s` | seconds | 600 | Max continuous vent-closed time during misting. After this, mandatory thermal relief opening. Prevents heat buildup. |
+| 11 | `mist_vent_reopen_delay_s` | seconds | 45 | Hold vent closed after misters stop. Lets evaporation complete before dry air enters. |
+| 12 | `mist_thermal_relief_s` | seconds | 90 | Duration of mandatory vent opening when mist_max_closed_vent_s triggers. Fan cooling during this window. |
+| 13 | `enthalpy_open` | kJ/kg delta | -2 | Vent opens when outdoor enthalpy is this much lower than indoor. More negative = only open when outdoor air is significantly better. |
+| 14 | `enthalpy_close` | kJ/kg delta | 1 | Vent closes when outdoor enthalpy is this much higher than indoor. Wider gap between open/close = less vent cycling. |
+| 15 | `min_vent_on_s` | seconds | 60 | Min time vent stays open once opened. Prevents relay chatter on marginal enthalpy. |
+| 16 | `min_vent_off_s` | seconds | 60 | Min time vent stays closed once closed. Lets fog/mist take effect. |
+| 17 | `min_fog_on_s` | seconds | 60 | Min fog relay on-time per cycle. Prevents micro-bursts that don't produce useful vapor. |
+| 18 | `min_fog_off_s` | seconds | 60 | Min gap between fog cycles. Prevents over-saturation and condensation. |
+| 19 | `fog_escalation_kpa` | kPa delta | 0.4 | VPD delta above vpd_high that triggers fog escalation (HUMID_S2 → fog). Higher = fog fires later, more conservative. |
+| 20 | `d_cool_stage_2` | °F | 3 | Temperature gap between COOL_S1 (lead fan) and COOL_S2 (both fans). Smaller = more aggressive cooling. |
+| 21 | `bias_heat` | °F | 0 | Shifts the heating floor (temp_low). +2 = pre-heat before cold front. -2 = save gas on mild night. Applied on top of crop band. |
+| 22 | `bias_cool` | °F | 0 | Shifts the cooling ceiling (temp_high). -2 = start cooling earlier before heat wave. Applied on top of crop band. |
+| 23 | `min_heat_on_s` | seconds | 120 | Min heater on-time per cycle. Prevents short-cycling relay wear. |
+| 24 | `min_heat_off_s` | seconds | 300 | Min gap between heater cycles. Gas heater needs recovery time. |
 
 ## Reasoning Process
 
@@ -108,7 +164,7 @@ Synthesize each day into overnight, ramp, peak, and restore. Do not mirror every
 ## Validated Lessons
 
 1. **Misting (dry days <20% RH):** engage 1.3, gap 20-30s, pulse 60s. Revert to 45s gap in evening.
-2. **Heating:** Gas is 3.9x cheaper per BTU. Use bias_heat_f to pre-heat, don't fight reactively.
+2. **Heating:** Gas is 3.9x cheaper per BTU. Use bias_heat to pre-heat, don't fight reactively.
 3. **Cooling (>85°F):** Physics-limited. Accept 5-8h stress. Only shade cloth fixes this.
 4. **Hysteresis:** 0.3 standard, 0.2 mild days, 0.4 extreme days.
 5. **Water budget:** 500 gal. Budget must never be the bottleneck.
@@ -165,12 +221,12 @@ Return ONLY valid JSON. Each transition includes ALL 14 Tier 1 params:
         "enthalpy_close": 1.0,
         "min_vent_on_s": 60,
         "min_vent_off_s": 60,
-        "fog_pulse_on_s": 30,
-        "fog_pulse_gap_s": 120,
+        "min_fog_on_s": 60,
+        "min_fog_off_s": 60,
         "fog_escalation_kpa": 0.4,
         "d_cool_stage_2": 3,
-        "bias_heat_f": 0,
-        "bias_cool_f": 0,
+        "bias_heat": 0,
+        "bias_cool": 0,
         "min_heat_on_s": 120,
         "min_heat_off_s": 300
       },
