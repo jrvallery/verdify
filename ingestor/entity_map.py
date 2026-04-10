@@ -262,6 +262,9 @@ SETPOINT_MAP: dict[str, str] = {
     "vpd_target_east__kpa_":        "vpd_target_east",
     "vpd_target_center__kpa_":      "vpd_target_center",
     "mister_center_penalty":        "mister_center_penalty",
+    "east_adjacency_factor":        "east_adjacency_factor",
+    "min_fog_on__s_":               "min_fog_on_s",
+    "min_fog_off__s_":              "min_fog_off_s",
 }
 
 # ──────────────────────────────────────────────────────────────

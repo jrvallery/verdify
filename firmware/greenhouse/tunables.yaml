@@ -496,6 +496,42 @@ number:
           id(num_mister_center_penalty).publish_state(x);
 
   - platform: template
+    id: num_east_adjacency_factor
+    name: "East Adjacency Factor"
+    min_value: 0.0
+    max_value: 1.0
+    step: 0.1
+    lambda: "return id(east_adjacency_factor);"
+    set_action:
+      - lambda: |
+          id(east_adjacency_factor) = x;
+          id(num_east_adjacency_factor).publish_state(x);
+
+  - platform: template
+    id: num_min_fog_on
+    name: "Min Fog ON (s)"
+    min_value: 15
+    max_value: 300
+    step: 15
+    lambda: "return id(min_fog_on_s);"
+    set_action:
+      - lambda: |
+          id(min_fog_on_s) = x;
+          id(num_min_fog_on).publish_state(x);
+
+  - platform: template
+    id: num_min_fog_off
+    name: "Min Fog OFF (s)"
+    min_value: 15
+    max_value: 300
+    step: 15
+    lambda: "return id(min_fog_off_s);"
+    set_action:
+      - lambda: |
+          id(min_fog_off_s) = x;
+          id(num_min_fog_off).publish_state(x);
+
+  - platform: template
     id: num_mister_all_delay
     name: "Mister All Delay (s)"
     min_value: 60

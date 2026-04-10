@@ -22,21 +22,40 @@ echo ""
 
 # ── 1. CORE PLANNING VIEW (7 JSON columns in one query) ───────────
 echo "--- IRIS PLANNING CONTEXT (DB view) ---"
-# Inject deduped active_plan instead of the view's raw version
+# Core view — conditions, zones, setpoints, health, summary (exclude bloated active_plan)
 $DB -c "
 SELECT json_build_object(
   'conditions', (SELECT row_to_json(v)->'conditions' FROM v_iris_planning_context v),
   'zones', (SELECT row_to_json(v)->'zones' FROM v_iris_planning_context v),
   'setpoints', (SELECT row_to_json(v)->'setpoints' FROM v_iris_planning_context v),
-  'forecast_24h', (SELECT row_to_json(v)->'forecast_24h' FROM v_iris_planning_context v),
   'system_health', (SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v),
-  'daily_summary', (SELECT row_to_json(v)->'daily_summary' FROM v_iris_planning_context v),
-  'active_plan', (SELECT json_agg(sub ORDER BY ts, parameter) FROM (
-    SELECT DISTINCT ON (ts, parameter) ts, parameter, value, reason
-    FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata'
-    ORDER BY ts, parameter, created_at DESC
-  ) sub)
-);"
+  'daily_summary', (SELECT row_to_json(v)->'daily_summary' FROM v_iris_planning_context v)
+);" 2>/dev/null
+echo ""
+
+# Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
+echo "--- ACTIVE PLAN (transitions) ---"
+echo "ts_mdt|plan_id|engage_kpa|all_kpa|pulse_gap|vpd_weight|hysteresis|d_cool_s2|bias_heat|bias_cool"
+$DB -c "
+WITH deduped AS (
+  SELECT DISTINCT ON (ts, parameter) ts, parameter, value, plan_id
+  FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata'
+  ORDER BY ts, parameter, created_at DESC
+)
+SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH:MI') AS ts_mdt,
+  max(plan_id) AS plan_id,
+  max(CASE WHEN parameter='mister_engage_kpa' THEN value END) AS engage,
+  max(CASE WHEN parameter='mister_all_kpa' THEN value END) AS all_kpa,
+  max(CASE WHEN parameter='mister_pulse_gap_s' THEN value END) AS gap,
+  max(CASE WHEN parameter='mister_vpd_weight' THEN value END) AS weight,
+  max(CASE WHEN parameter='vpd_hysteresis' THEN value END) AS hyst,
+  max(CASE WHEN parameter='d_cool_stage_2' THEN value END) AS d_cool,
+  max(CASE WHEN parameter='bias_heat_f' THEN value END) AS b_heat,
+  max(CASE WHEN parameter='bias_cool_f' THEN value END) AS b_cool
+FROM deduped
+GROUP BY ts
+ORDER BY ts;
+" 2>/dev/null || echo "(no active plan)"
 echo ""
 
 # ── 2. CURRENT ZONE-LEVEL CONDITIONS ──────────────────────────────
@@ -57,12 +76,13 @@ SELECT json_build_object(
   'flow_gpm', round(flow_gpm::numeric,2), 'water_total_gal', round(water_total_gal::numeric,0)
 ) FROM climate ORDER BY ts DESC LIMIT 1;
 "
-# Dynamic zone ranking from actual current data
-$DB -c "SELECT 'ZONE VPD RANKING: ' || string_agg(z || '=' || v, ', ' ORDER BY v DESC)
+# Dynamic zone ranking with context
+$DB -c "SELECT 'ZONE VPD (current): ' || string_agg(z || '=' || v, ', ' ORDER BY v DESC)
 FROM (SELECT unnest(ARRAY['north','south','east','west']) AS z,
       unnest(ARRAY[round(vpd_north::numeric,2), round(vpd_south::numeric,2),
                     round(vpd_east::numeric,2), round(vpd_west::numeric,2)]) AS v
       FROM climate ORDER BY ts DESC LIMIT 1) ranked;" 2>/dev/null
+echo "NOTE: North reads driest overnight (equipment zone). Daytime misting priority: south first (6 heads, 0.23 kPa/pulse), west second (3 heads, 0.15 kPa/pulse)."
 echo ""
 
 # ── 3. GREENHOUSE STATE + SWITCHES (from HA or DB) ──────────────
