@@ -454,44 +454,65 @@ fi
 echo ""
 
 # ── 23b. TRANSITION MILESTONES (computed from forecast + astronomy) ──
-echo "--- TRANSITION MILESTONES (next 3 days) ---"
-echo "date|sunrise|sunset|peak_solar|peak_temp|driest_hour|peak_vpd|cloud_shift|stress_hrs"
+echo "--- SOLAR EPHEMERIS (computed from fn_solar_altitude) ---"
+echo "date|sunrise|solar_noon|sunset|peak_alt_deg|daylight_hrs"
+$DB -c "
+WITH solar AS (
+  SELECT ts, ts AT TIME ZONE 'America/Denver' AS mdt,
+    (ts AT TIME ZONE 'America/Denver')::date AS day,
+    fn_solar_altitude(ts) AS alt
+  FROM generate_series(
+    (date_trunc('day', now() AT TIME ZONE 'America/Denver') + interval '1 day 4 hours') AT TIME ZONE 'America/Denver',
+    (date_trunc('day', now() AT TIME ZONE 'America/Denver') + interval '3 days 22 hours') AT TIME ZONE 'America/Denver',
+    interval '5 minutes') AS ts
+)
+SELECT to_char(day, 'Dy MM-DD'),
+  to_char(min(CASE WHEN alt > 0 THEN mdt END), 'HH24:MI') AS sunrise,
+  to_char((array_agg(mdt ORDER BY alt DESC))[1], 'HH24:MI') AS solar_noon,
+  to_char(max(CASE WHEN alt > 0 THEN mdt END), 'HH24:MI') AS sunset,
+  round(max(alt)::numeric, 1) AS peak_alt,
+  round(count(*) FILTER (WHERE alt > 0) * 5.0 / 60, 1) AS daylight_hrs
+FROM solar GROUP BY day ORDER BY day;
+" 2>/dev/null || echo "(unavailable)"
+
+echo ""
+echo "--- FORECAST MILESTONES (per day from weather data) ---"
+echo "date|peak_solar_hr|peak_temp_hr|driest_hr|peak_vpd_hr|cloud_shift|stress_hrs|peak_temp_f|min_rh_pct"
 $DB -c "
 WITH fc AS (
   SELECT DISTINCT ON (ts) ts,
     ts AT TIME ZONE 'America/Denver' AS mdt,
     (ts AT TIME ZONE 'America/Denver')::date AS day,
-    extract(hour FROM ts AT TIME ZONE 'America/Denver') AS hr,
     temp_f, rh_pct, cloud_cover_pct, vpd_kpa,
     COALESCE(direct_radiation_w_m2, 0) AS solar_w
-  FROM weather_forecast
-  WHERE ts > now() AND ts < now() + interval '72 hours'
+  FROM weather_forecast WHERE ts > now() AND ts < now() + interval '72 hours'
   ORDER BY ts, fetched_at DESC
-),
-daily AS (
-  SELECT day,
-    to_char(min(CASE WHEN solar_w > 10 THEN mdt END), 'HH24:MI') AS sunrise,
-    to_char(max(CASE WHEN solar_w > 10 THEN mdt END), 'HH24:MI') AS sunset,
-    to_char((array_agg(mdt ORDER BY solar_w DESC))[1], 'HH24:MI') AS peak_solar,
-    to_char((array_agg(mdt ORDER BY temp_f DESC))[1], 'HH24:MI') AS peak_temp,
-    to_char((array_agg(mdt ORDER BY rh_pct ASC))[1], 'HH24:MI') AS driest,
-    to_char((array_agg(mdt ORDER BY vpd_kpa DESC))[1], 'HH24:MI') AS peak_vpd,
-    count(*) FILTER (WHERE vpd_kpa > 1.5) || 'h' AS stress_hrs
-  FROM fc GROUP BY day
 )
-SELECT to_char(day, 'Dy MM-DD'), sunrise, sunset, peak_solar, peak_temp, driest, peak_vpd,
-  COALESCE((
-    SELECT to_char(mdt, 'HH24:MI') || CASE
-      WHEN cloud_cover_pct > lag_c THEN ' →cloud' ELSE ' →clear' END
-    FROM (SELECT mdt, cloud_cover_pct, lag(cloud_cover_pct) OVER (ORDER BY ts) AS lag_c
-          FROM fc f2 WHERE f2.day = d.day) cc
-    WHERE abs(cloud_cover_pct - COALESCE(lag_c, cloud_cover_pct)) > 30
-    ORDER BY mdt LIMIT 1
-  ), 'none') AS cloud_shift,
-  stress_hrs
-FROM daily d ORDER BY day;
+SELECT to_char(day, 'Dy MM-DD'),
+  to_char((array_agg(mdt ORDER BY solar_w DESC))[1], 'HH24:MI'),
+  to_char((array_agg(mdt ORDER BY temp_f DESC))[1], 'HH24:MI'),
+  to_char((array_agg(mdt ORDER BY rh_pct ASC))[1], 'HH24:MI'),
+  to_char((array_agg(mdt ORDER BY vpd_kpa DESC))[1], 'HH24:MI'),
+  COALESCE((SELECT to_char(mdt, 'HH24:MI') || CASE WHEN cloud_cover_pct > lag_c THEN ' →cloud' ELSE ' →clear' END
+    FROM (SELECT mdt, cloud_cover_pct, lag(cloud_cover_pct) OVER (ORDER BY ts) AS lag_c FROM fc f2 WHERE f2.day = fc.day) cc
+    WHERE abs(cloud_cover_pct - COALESCE(lag_c, cloud_cover_pct)) > 30 ORDER BY mdt LIMIT 1), 'none'),
+  count(*) FILTER (WHERE vpd_kpa > 1.5) || 'h',
+  round(max(temp_f)::numeric, 0),
+  round(min(rh_pct)::numeric, 0)
+FROM fc GROUP BY day ORDER BY day;
 " 2>/dev/null || echo "(unavailable)"
-echo "Anchor your transitions to these milestones — not fixed clock times."
+
+# Greenhouse-specific: tree shade clearing (from lux sensor history)
+SHADE_CLEAR=$($DB -c "
+SELECT to_char(ts AT TIME ZONE 'America/Denver', 'HH:MI AM')
+FROM climate WHERE ts > now() - interval '7 days'
+  AND extract(hour FROM ts AT TIME ZONE 'America/Denver') BETWEEN 9 AND 12
+  AND lux > 500
+ORDER BY ts LIMIT 1;" 2>/dev/null | tr -d ' ')
+if [ -n "$SHADE_CLEAR" ]; then
+  echo "Tree shade clears east sensor: ~${SHADE_CLEAR} (east zone gets direct sun after this)"
+fi
+echo "Anchor transitions to these computed times — not fixed clock hours."
 echo ""
 
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
