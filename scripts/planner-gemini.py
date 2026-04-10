@@ -97,7 +97,6 @@ def parse_plan_json(text: str) -> dict:
 BAND_DRIVEN = {
     "temp_high", "temp_low", "vpd_high", "vpd_low",
     "vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center",
-    "mister_engage_kpa", "mister_all_kpa",
     "mister_engage_delay_s", "mister_all_delay_s",
     "mister_center_penalty",
 }

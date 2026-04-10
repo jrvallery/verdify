@@ -564,9 +564,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     # Parameters driven by the target band curve, not the AI planner
     BAND_DRIVEN = {"temp_high", "temp_low", "vpd_high", "vpd_low",
                     "vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center",
-                    "mister_engage_kpa", "mister_all_kpa",
                     "mister_engage_delay_s", "mister_all_delay_s",
-                    "mister_pulse_gap_s", "mister_center_penalty"}
+                    "mister_center_penalty"}
     async with pool.acquire() as conn:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
@@ -602,19 +601,18 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     continue
                 changes.append((param, val))
 
-        # Band-driven mister tuning: engage at band ceiling, not at fixed 2.0 kPa
-        # This aligns mister behavior with the crop band — same principle as heating
+        # Mister tuning defaults: band-derived fallbacks, planner can override
+        # engage/all_kpa default to band ceiling; planner may set different values
         if band_row:
             vpd_hi = float(band_row["vpd_high"])
-            mister_tuning = {
-                "mister_engage_kpa":    round(vpd_hi, 2),          # Engage at band ceiling (was 2.0)
-                "mister_all_kpa":       round(vpd_hi + 0.3, 2),   # Escalate at band + 0.3 (was 2.3)
-                "mister_engage_delay_s": 60.0,                     # 1 min delay (was 300s)
-                "mister_all_delay_s":    60.0,                     # 1 min escalation (was 300s)
-                "mister_pulse_gap_s":    20.0,                     # Tighter pulses (was 30s)
-                "mister_center_penalty": 0.8,                      # Deprioritize weak center (was 0.5)
+            mister_defaults = {
+                "mister_engage_kpa":    round(vpd_hi, 2),
+                "mister_all_kpa":       round(vpd_hi + 0.3, 2),
             }
-            for param, val in mister_tuning.items():
+            # Only set defaults if planner hasn't specified a value
+            for param, val in mister_defaults.items():
+                if param in planner_params:
+                    continue  # Planner owns this — don't override
                 last = _last_pushed.get(param)
                 if last is not None and abs(last - val) < 0.01:
                     continue
