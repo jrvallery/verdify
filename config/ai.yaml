@@ -14,14 +14,14 @@ keys:
 models:
   planner:
     provider: gemini
-    model: gemini-2.5-pro
+    model: gemini-3.1-pro-preview
     temperature: 0.3
     max_output_tokens: 16384
     purpose: "72-hour tactical setpoint planning"
 
   vision:
     provider: gemini
-    model: gemini-2.5-flash
+    model: gemini-3.1-pro-preview
     temperature: 0.2
     max_output_tokens: 4096
     purpose: "Camera snapshot crop health analysis"
@@ -52,12 +52,12 @@ schedules:
   planner:
     cron: "0 6,12,18 * * *"
     script: scripts/planner-gemini.py
-    description: "Gemini 2.5 Pro 72h planning cycle"
+    description: "Gemini 3.1 Pro Preview 72h planning cycle"
 
   vision:
     cron: "0 12,16,20,0 * * *"
     script: scripts/frigate-snapshot.py
-    description: "Camera snapshots + Gemini Flash analysis"
+    description: "Camera snapshots + Gemini 3.1 Pro Preview analysis"
     depends_on: frigate  # Requires Frigate NVR accessible
 
   embedding:
