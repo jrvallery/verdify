@@ -66,9 +66,11 @@ def build_prompt(greenhouse_id: str) -> str:
     """Render the planner prompt with live context injected."""
     dynamic_context = gather_context(greenhouse_id)
     static_context = read_static_context()
+    current_time = datetime.now(DENVER).strftime("%Y-%m-%dT%H:%M:%S-06:00")
     return ai.render_template("planner", "prompt",
                              dynamic_context=dynamic_context,
-                             static_context=static_context)
+                             static_context=static_context,
+                             current_time=current_time)
 
 
 def parse_plan_json(text: str) -> dict:
@@ -112,9 +114,22 @@ async def write_plan_to_db(plan: dict, greenhouse_id: str) -> dict:
             # 1. Deactivate all future waypoints from previous plans
             await conn.execute("SELECT fn_deactivate_future_plans()")
 
-            # 2. Insert waypoints (filter out band-driven params)
+            # 2. Flatten transitions (keyed dict) or waypoints (flat list) into rows
             plan_id = plan["plan_id"]
-            waypoints = plan.get("waypoints", [])
+            waypoints = []
+            if "transitions" in plan:
+                # New format: keyed dict per transition
+                for t in plan["transitions"]:
+                    ts = t["ts"]
+                    reason = t.get("reason", t.get("label", ""))
+                    for param, value in t.get("params", {}).items():
+                        waypoints.append({"ts": ts, "parameter": param,
+                                         "value": value, "reason": reason})
+            else:
+                # Old format: flat waypoint list
+                waypoints = plan.get("waypoints", [])
+
+            # Filter out band-driven params
             filtered = [wp for wp in waypoints if wp["parameter"] in BAND_DRIVEN]
             waypoints = [wp for wp in waypoints if wp["parameter"] not in BAND_DRIVEN]
             if filtered:
