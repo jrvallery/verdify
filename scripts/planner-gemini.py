@@ -69,27 +69,55 @@ def build_prompt(greenhouse_id: str) -> str:
 
 
 def parse_plan_json(text: str) -> dict:
-    """Extract and parse JSON from Gemini's response."""
-    # Strip markdown code fences if present
+    """Extract and parse JSON from Gemini's response.
+    Handles truncated output by closing incomplete JSON structures."""
     text = text.strip()
     text = re.sub(r'^```(?:json)?\s*\n', '', text)
     text = re.sub(r'\n```\s*$', '', text)
-    return json.loads(text)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Try to recover truncated JSON by closing open structures
+        # Find the last complete waypoint entry
+        last_brace = text.rfind('},')
+        if last_brace > 0:
+            truncated = text[:last_brace + 1] + '\n  ]\n}'
+            log.warning("JSON truncated — recovered by closing at position %d", last_brace)
+            return json.loads(truncated)
+        raise
+
+
+# Parameters the AI must NOT set — these are band-driven by the dispatcher
+BAND_DRIVEN = {
+    "temp_high", "temp_low", "vpd_high", "vpd_low",
+    "vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center",
+    "mister_engage_kpa", "mister_all_kpa",
+    "mister_engage_delay_s", "mister_all_delay_s",
+    "mister_center_penalty",
+}
 
 
 async def write_plan_to_db(plan: dict, greenhouse_id: str) -> dict:
     """Write the parsed plan to the database. Returns summary stats."""
     conn = await asyncpg.connect(DB_DSN)
-    stats = {"waypoints": 0, "journal": False, "validation": False, "lesson": False}
+    stats = {"waypoints": 0, "journal": False, "validation": False,
+             "lesson": False, "filtered": 0}
 
     try:
         async with conn.transaction():
             # 1. Deactivate all future waypoints from previous plans
             await conn.execute("SELECT fn_deactivate_future_plans()")
 
-            # 2. Insert waypoints
+            # 2. Insert waypoints (filter out band-driven params)
             plan_id = plan["plan_id"]
             waypoints = plan.get("waypoints", [])
+            filtered = [wp for wp in waypoints if wp["parameter"] in BAND_DRIVEN]
+            waypoints = [wp for wp in waypoints if wp["parameter"] not in BAND_DRIVEN]
+            if filtered:
+                log.warning("Filtered %d band-driven waypoints: %s",
+                           len(filtered),
+                           {wp["parameter"] for wp in filtered})
             for wp in waypoints:
                 await conn.execute("""
                     INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason)
@@ -97,6 +125,7 @@ async def write_plan_to_db(plan: dict, greenhouse_id: str) -> dict:
                 """, datetime.fromisoformat(wp["ts"]), wp["parameter"],
                     float(wp["value"]), plan_id, wp.get("reason", ""))
             stats["waypoints"] = len(waypoints)
+            stats["filtered"] = len(filtered)
 
             # 3. Insert plan journal entry
             await conn.execute("""
@@ -208,8 +237,8 @@ def main():
 
     # Write to DB
     stats = asyncio.run(write_plan_to_db(plan, args.greenhouse_id))
-    log.info("DB writes: %d waypoints, journal=%s, validation=%s, lesson=%s",
-             stats["waypoints"], stats["journal"], stats["validation"], stats["lesson"])
+    log.info("DB writes: %d waypoints (%d band-driven filtered), journal=%s, validation=%s, lesson=%s",
+             stats["waypoints"], stats["filtered"], stats["journal"], stats["validation"], stats["lesson"])
 
     log.info("Planner complete (%.1fs context + %.1fs inference + DB write)",
              context_time, elapsed)
