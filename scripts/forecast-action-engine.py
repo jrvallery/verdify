@@ -17,7 +17,7 @@ import logging
 import os
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -50,8 +50,10 @@ def post_slack(text):
         token = open(SLACK_TOKEN_FILE).read().strip()
         data = json.dumps({"channel": SLACK_CHANNEL, "text": text}).encode()
         req = urllib.request.Request(
-            "https://slack.com/api/chat.postMessage", data=data,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+            "https://slack.com/api/chat.postMessage",
+            data=data,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        )
         urllib.request.urlopen(req, timeout=10)
     except Exception as e:
         log.warning("Slack post failed: %s", e)
@@ -59,12 +61,11 @@ def post_slack(text):
 
 async def main():
     conn = await asyncpg.connect(get_db_url())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         # Get enabled rules ordered by priority
-        rules = await conn.fetch(
-            "SELECT * FROM forecast_action_rules WHERE enabled = true ORDER BY priority")
+        rules = await conn.fetch("SELECT * FROM forecast_action_rules WHERE enabled = true ORDER BY priority")
 
         if not rules:
             log.info("No enabled rules")
@@ -88,7 +89,8 @@ async def main():
             # Check cooldown — skip if triggered recently
             last_trigger = await conn.fetchval(
                 "SELECT MAX(triggered_at) FROM forecast_action_log WHERE rule_id = $1 AND action_taken != 'evaluated_ok'",
-                rule_id)
+                rule_id,
+            )
             if last_trigger and (now - last_trigger).total_seconds() < cooldown_h * 3600:
                 continue  # Still in cooldown
 
@@ -96,7 +98,8 @@ async def main():
             op_sql = {"<": "<", ">": ">", "<=": "<=", ">=": ">="}[op]
 
             # Get the most recent forecast per hour (dedup accumulation mode)
-            trigger_row = await conn.fetchrow(f"""
+            trigger_row = await conn.fetchrow(
+                f"""
                 SELECT ts, {metric} AS val
                 FROM (
                     SELECT DISTINCT ON (ts) ts, {metric}
@@ -106,31 +109,40 @@ async def main():
                 ) sub
                 WHERE {metric} {op_sql} $1
                 ORDER BY ts LIMIT 1
-            """, threshold)
+            """,
+                threshold,
+            )
 
             if trigger_row is None:
                 # Condition not met — log as evaluated_ok
                 await conn.execute(
                     "INSERT INTO forecast_action_log (rule_id, rule_name, action_taken, forecast_condition) VALUES ($1, $2, 'evaluated_ok', $3)",
-                    rule_id, name, json.dumps({"metric": metric, "threshold": threshold, "window": window}))
+                    rule_id,
+                    name,
+                    json.dumps({"metric": metric, "threshold": threshold, "window": window}),
+                )
                 continue
 
             trigger_val = float(trigger_row["val"])
             trigger_ts = trigger_row["ts"]
             forecast_snapshot = {
-                "metric": metric, "operator": op, "threshold": threshold,
+                "metric": metric,
+                "operator": op,
+                "threshold": threshold,
                 "trigger_value": str(trigger_val),
                 "trigger_hour": trigger_ts.strftime("%Y-%m-%d %H:%M"),
-                "window": window
+                "window": window,
             }
 
-            log.info("RULE TRIGGERED: %s — %s %s %s (actual: %s at %s)",
-                     name, metric, op, threshold, trigger_val, trigger_ts)
+            log.info(
+                "RULE TRIGGERED: %s — %s %s %s (actual: %s at %s)", name, metric, op, threshold, trigger_val, trigger_ts
+            )
 
             if action_type == "setpoint" and param and adj_value is not None:
                 # Get current value
                 old_val = await conn.fetchval(
-                    "SELECT value FROM setpoint_changes WHERE parameter = $1 ORDER BY ts DESC LIMIT 1", param)
+                    "SELECT value FROM setpoint_changes WHERE parameter = $1 ORDER BY ts DESC LIMIT 1", param
+                )
 
                 plan_id = f"preemptive-{now.strftime('%Y%m%d-%H%M')}"
 
@@ -138,24 +150,42 @@ async def main():
                     await conn.execute(
                         "INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason) "
                         "VALUES (now(), $1, $2, $3, 'preemptive', $4)",
-                        param, float(adj_value), plan_id,
-                        f"Forecast: {name} — {metric} {op} {threshold} (actual {trigger_val} at {trigger_ts.strftime('%H:%M')})")
+                        param,
+                        float(adj_value),
+                        plan_id,
+                        f"Forecast: {name} — {metric} {op} {threshold} (actual {trigger_val} at {trigger_ts.strftime('%H:%M')})",
+                    )
 
                     # Also write to setpoint_changes for immediate dispatch
                     await conn.execute(
                         "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, 'preemptive')",
-                        param, float(adj_value))
+                        param,
+                        float(adj_value),
+                    )
 
                 await conn.execute(
                     "INSERT INTO forecast_action_log (rule_id, rule_name, triggered_at, forecast_condition, action_taken, plan_id, param, old_value, new_value) "
                     "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                    rule_id, name, now, json.dumps(forecast_snapshot),
+                    rule_id,
+                    name,
+                    now,
+                    json.dumps(forecast_snapshot),
                     "setpoint_written" if not DRY_RUN else "dry_run",
-                    plan_id, param, float(old_val) if old_val else None, float(adj_value))
+                    plan_id,
+                    param,
+                    float(old_val) if old_val else None,
+                    float(adj_value),
+                )
 
-                log.info("  → %s %s: %s → %s (plan: %s)%s",
-                         action_type, param, old_val, adj_value, plan_id,
-                         " [DRY RUN]" if DRY_RUN else "")
+                log.info(
+                    "  → %s %s: %s → %s (plan: %s)%s",
+                    action_type,
+                    param,
+                    old_val,
+                    adj_value,
+                    plan_id,
+                    " [DRY RUN]" if DRY_RUN else "",
+                )
                 actions_taken += 1
 
             elif action_type == "alert":
@@ -166,15 +196,23 @@ async def main():
                 await conn.execute(
                     "INSERT INTO forecast_action_log (rule_id, rule_name, triggered_at, forecast_condition, action_taken) "
                     "VALUES ($1, $2, $3, $4, $5)",
-                    rule_id, name, now, json.dumps(forecast_snapshot),
-                    "alert_posted" if not DRY_RUN else "dry_run")
+                    rule_id,
+                    name,
+                    now,
+                    json.dumps(forecast_snapshot),
+                    "alert_posted" if not DRY_RUN else "dry_run",
+                )
                 actions_taken += 1
 
             elif action_type == "log":
                 await conn.execute(
                     "INSERT INTO forecast_action_log (rule_id, rule_name, triggered_at, forecast_condition, action_taken) "
                     "VALUES ($1, $2, $3, $4, 'logged')",
-                    rule_id, name, now, json.dumps(forecast_snapshot))
+                    rule_id,
+                    name,
+                    now,
+                    json.dumps(forecast_snapshot),
+                )
                 log.info("  → logged (no action)")
                 actions_taken += 1
 

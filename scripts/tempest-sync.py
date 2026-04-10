@@ -16,10 +16,9 @@ import asyncio
 import json
 import logging
 import os
-import sys
-import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+import urllib.request
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -36,26 +35,26 @@ log = logging.getLogger(__name__)
 
 # --- Tempest entity → climate column mapping ---
 TEMPEST_MAP = {
-    "sensor.panorama_temperature":              ("outdoor_temp_f",          None),
-    "sensor.panorama_humidity":                  ("outdoor_rh_pct",          None),
-    "sensor.panorama_wind_speed":                ("wind_speed_mph",          None),
-    "sensor.panorama_wind_direction":            ("wind_direction_deg",      None),
-    "sensor.panorama_illuminance":               ("outdoor_lux",            None),
-    "sensor.panorama_irradiance":                ("solar_irradiance_w_m2",   None),
-    "sensor.panorama_air_pressure":              ("pressure_hpa",            lambda v: v * 33.8639),
-    "sensor.panorama_precipitation":             ("precip_in",               None),
-    "sensor.panorama_uv_index":                  ("uv_index",               None),
-    "sensor.panorama_wind_gust":                 ("wind_gust_mph",           None),
-    "sensor.panorama_wind_lull":                 ("wind_lull_mph",           None),
-    "sensor.panorama_wind_speed_average":        ("wind_speed_avg_mph",      None),
-    "sensor.panorama_wind_direction_average":     ("wind_direction_avg_deg",  None),
-    "sensor.panorama_feels_like":                ("feels_like_f",            None),
-    "sensor.panorama_wet_bulb_temperature":      ("wet_bulb_temp_f",         None),
-    "sensor.panorama_vapor_pressure":            ("vapor_pressure_inhg",     None),
-    "sensor.panorama_air_density":               ("air_density_kg_m3",       None),
-    "sensor.panorama_precipitation_intensity":   ("precip_intensity_in_h",   None),
-    "sensor.panorama_lightning_count":           ("lightning_count",          lambda v: int(v)),
-    "sensor.panorama_lightning_average_distance": ("lightning_avg_dist_mi",   None),
+    "sensor.panorama_temperature": ("outdoor_temp_f", None),
+    "sensor.panorama_humidity": ("outdoor_rh_pct", None),
+    "sensor.panorama_wind_speed": ("wind_speed_mph", None),
+    "sensor.panorama_wind_direction": ("wind_direction_deg", None),
+    "sensor.panorama_illuminance": ("outdoor_lux", None),
+    "sensor.panorama_irradiance": ("solar_irradiance_w_m2", None),
+    "sensor.panorama_air_pressure": ("pressure_hpa", lambda v: v * 33.8639),
+    "sensor.panorama_precipitation": ("precip_in", None),
+    "sensor.panorama_uv_index": ("uv_index", None),
+    "sensor.panorama_wind_gust": ("wind_gust_mph", None),
+    "sensor.panorama_wind_lull": ("wind_lull_mph", None),
+    "sensor.panorama_wind_speed_average": ("wind_speed_avg_mph", None),
+    "sensor.panorama_wind_direction_average": ("wind_direction_avg_deg", None),
+    "sensor.panorama_feels_like": ("feels_like_f", None),
+    "sensor.panorama_wet_bulb_temperature": ("wet_bulb_temp_f", None),
+    "sensor.panorama_vapor_pressure": ("vapor_pressure_inhg", None),
+    "sensor.panorama_air_density": ("air_density_kg_m3", None),
+    "sensor.panorama_precipitation_intensity": ("precip_intensity_in_h", None),
+    "sensor.panorama_lightning_count": ("lightning_count", lambda v: int(v)),
+    "sensor.panorama_lightning_average_distance": ("lightning_avg_dist_mi", None),
 }
 
 
@@ -78,10 +77,13 @@ def fetch_ha_states(token: str, entity_ids: list[str]) -> dict[str, dict]:
     results = {}
     for eid in entity_ids:
         url = f"{HA_URL}/api/states/{eid}"
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        })
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 results[eid] = json.loads(resp.read())
@@ -111,7 +113,7 @@ async def sync_tempest(conn) -> None:
         log.warning("No Tempest states returned from HA")
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     climate_cols = {"ts": now}
 
     for eid, (col, converter) in TEMPEST_MAP.items():
@@ -136,36 +138,46 @@ async def sync_tempest(conn) -> None:
                 set_parts = []
                 set_vals = []
                 for i, (c, v) in enumerate(outdoor_cols.items()):
-                    set_parts.append(f"{c} = ${i+1}")
+                    set_parts.append(f"{c} = ${i + 1}")
                     set_vals.append(v)
                 set_vals.append(latest_esp32)
-                await conn.execute(
-                    f"UPDATE climate SET {', '.join(set_parts)} WHERE ts = ${len(set_vals)}",
-                    *set_vals
+                await conn.execute(f"UPDATE climate SET {', '.join(set_parts)} WHERE ts = ${len(set_vals)}", *set_vals)
+                log.info(
+                    "Tempest: merged %d outdoor cols into ESP32 row at %s",
+                    len(outdoor_cols),
+                    latest_esp32.strftime("%H:%M:%S"),
                 )
-                log.info("Tempest: merged %d outdoor cols into ESP32 row at %s",
-                         len(outdoor_cols), latest_esp32.strftime("%H:%M:%S"))
         else:
             # No recent ESP32 row — insert standalone (ESP32 down or overnight gap)
             cols = list(climate_cols.keys())
             vals = [climate_cols[c] for c in cols]
-            ph = ", ".join(f"${i+1}" for i in range(len(vals)))
+            ph = ", ".join(f"${i + 1}" for i in range(len(vals)))
             cn = ", ".join(cols)
             await conn.execute(f"INSERT INTO climate ({cn}) VALUES ({ph})", *vals)
             log.info("Tempest: standalone INSERT (no recent ESP32 row)")
 
         # Also write to dedicated weather_station table
         WS_COL_MAP = {
-            "outdoor_temp_f": "temp_f", "outdoor_rh_pct": "rh_pct",
-            "wind_speed_mph": "wind_speed_mph", "wind_gust_mph": "wind_gust_mph",
-            "wind_lull_mph": "wind_lull_mph", "wind_direction_deg": "wind_dir_deg",
-            "wind_speed_avg_mph": "wind_speed_avg_mph", "wind_direction_avg_deg": "wind_dir_avg_deg",
-            "outdoor_lux": "outdoor_lux", "solar_irradiance_w_m2": "solar_irradiance_w_m2",
-            "pressure_hpa": "pressure_hpa", "uv_index": "uv_index",
-            "precip_in": "precip_in", "precip_intensity_in_h": "precip_intensity_in_h",
-            "lightning_count": "lightning_count", "lightning_avg_dist_mi": "lightning_avg_dist_mi",
-            "feels_like_f": "feels_like_f", "wet_bulb_temp_f": "wet_bulb_temp_f",
-            "vapor_pressure_inhg": "vapor_pressure_inhg", "air_density_kg_m3": "air_density_kg_m3",
+            "outdoor_temp_f": "temp_f",
+            "outdoor_rh_pct": "rh_pct",
+            "wind_speed_mph": "wind_speed_mph",
+            "wind_gust_mph": "wind_gust_mph",
+            "wind_lull_mph": "wind_lull_mph",
+            "wind_direction_deg": "wind_dir_deg",
+            "wind_speed_avg_mph": "wind_speed_avg_mph",
+            "wind_direction_avg_deg": "wind_dir_avg_deg",
+            "outdoor_lux": "outdoor_lux",
+            "solar_irradiance_w_m2": "solar_irradiance_w_m2",
+            "pressure_hpa": "pressure_hpa",
+            "uv_index": "uv_index",
+            "precip_in": "precip_in",
+            "precip_intensity_in_h": "precip_intensity_in_h",
+            "lightning_count": "lightning_count",
+            "lightning_avg_dist_mi": "lightning_avg_dist_mi",
+            "feels_like_f": "feels_like_f",
+            "wet_bulb_temp_f": "wet_bulb_temp_f",
+            "vapor_pressure_inhg": "vapor_pressure_inhg",
+            "air_density_kg_m3": "air_density_kg_m3",
         }
         ws_cols = {"ts": now, "source": "tempest"}
         for climate_col, ws_col in WS_COL_MAP.items():
@@ -174,7 +186,7 @@ async def sync_tempest(conn) -> None:
         if len(ws_cols) > 2:
             ws_c = list(ws_cols.keys())
             ws_v = [ws_cols[c] for c in ws_c]
-            ws_ph = ", ".join(f"${i+1}" for i in range(len(ws_v)))
+            ws_ph = ", ".join(f"${i + 1}" for i in range(len(ws_v)))
             ws_cn = ", ".join(ws_c)
             await conn.execute(f"INSERT INTO weather_station ({ws_cn}) VALUES ({ws_ph})", *ws_v)
 

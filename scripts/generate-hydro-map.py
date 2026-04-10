@@ -10,7 +10,6 @@ Usage:
 import asyncio
 import logging
 import os
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -65,17 +64,17 @@ def render_cell(pos: int, crop: dict | None) -> str:
         name = crop["name"]
         variety = crop.get("variety") or ""
         days = (date.today() - crop["planted_date"]).days if crop.get("planted_date") else "?"
-        return f'''<td class="cell occupied" style="background:{bg};color:{fg}">
+        return f"""<td class="cell occupied" style="background:{bg};color:{fg}">
             <div class="pos">#{pos}</div>
             <div class="name">{name}</div>
             <div class="detail">{variety}</div>
             <div class="detail">{stage} &middot; {days}d</div>
-        </td>'''
+        </td>"""
     else:
-        return f'''<td class="cell empty">
+        return f"""<td class="cell empty">
             <div class="pos">#{pos}</div>
             <div class="name">&nbsp;</div>
-        </td>'''
+        </td>"""
 
 
 def render_html(crops: dict) -> str:
@@ -108,7 +107,7 @@ def render_html(crops: dict) -> str:
     transition: all 0.2s;
   }}
   .cell:hover {{ box-shadow: 0 0 6px rgba(0,0,0,0.3); z-index: 1; position: relative; }}
-  .cell.empty {{ background: {STAGE_COLORS['empty']}; color: {STAGE_TEXT_COLORS['empty']}; }}
+  .cell.empty {{ background: {STAGE_COLORS["empty"]}; color: {STAGE_TEXT_COLORS["empty"]}; }}
   .pos {{ font-size: 9px; font-weight: 700; opacity: 0.6; }}
   .name {{ font-size: 11px; font-weight: 600; margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
   .detail {{ font-size: 9px; opacity: 0.8; }}
@@ -134,7 +133,7 @@ def render_html(crops: dict) -> str:
 <table><tr>{bottom_row}</tr></table>
 
 <div class="legend">{legend_items}</div>
-<div class="stats">{occupied} occupied &middot; {60 - occupied} empty &middot; {len(set(c['name'] for c in crops.values() if c))} crop types</div>
+<div class="stats">{occupied} occupied &middot; {60 - occupied} empty &middot; {len(set(c["name"] for c in crops.values() if c))} crop types</div>
 </body>
 </html>"""
 

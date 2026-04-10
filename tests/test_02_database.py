@@ -1,7 +1,7 @@
 """
 Test 02: Database — Schema integrity, views, functions, data freshness.
 """
-import pytest
+
 from conftest import db_query, db_query_rows
 
 
@@ -9,53 +9,62 @@ class TestSchemaIntegrity:
     """Core tables and views must exist with expected structure."""
 
     REQUIRED_TABLES = [
-        "climate", "equipment_state", "system_state", "daily_summary",
-        "setpoint_changes", "setpoint_plan", "plan_journal", "planner_lessons",
-        "weather_forecast", "forecast_deviation_log", "crops", "crop_events",
-        "observations", "alert_log", "diagnostics",
+        "climate",
+        "equipment_state",
+        "system_state",
+        "daily_summary",
+        "setpoint_changes",
+        "setpoint_plan",
+        "plan_journal",
+        "planner_lessons",
+        "weather_forecast",
+        "forecast_deviation_log",
+        "crops",
+        "crop_events",
+        "observations",
+        "alert_log",
+        "diagnostics",
     ]
 
     REQUIRED_VIEWS = [
-        "v_stress_hours_today", "v_planner_performance", "v_dew_point_risk",
-        "v_plan_accuracy", "v_plan_compliance", "v_climate_latest",
-        "v_relay_stuck", "v_sensor_staleness",
+        "v_stress_hours_today",
+        "v_planner_performance",
+        "v_dew_point_risk",
+        "v_plan_accuracy",
+        "v_plan_compliance",
+        "v_climate_latest",
+        "v_relay_stuck",
+        "v_sensor_staleness",
     ]
 
     REQUIRED_FUNCTIONS = [
-        "fn_planner_scorecard", "fn_stress_summary", "fn_band_setpoints",
-        "fn_compliance_pct", "fn_solar_altitude",
+        "fn_planner_scorecard",
+        "fn_stress_summary",
+        "fn_band_setpoints",
+        "fn_compliance_pct",
+        "fn_solar_altitude",
     ]
 
     def test_tables_exist(self):
-        rows = db_query_rows(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
-        )
+        rows = db_query_rows("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
         for table in self.REQUIRED_TABLES:
             assert table in rows, f"Table {table} missing"
 
     def test_views_exist(self):
-        rows = db_query_rows(
-            "SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY viewname"
-        )
+        rows = db_query_rows("SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY viewname")
         # Also check materialized views
-        mat_rows = db_query_rows(
-            "SELECT matviewname FROM pg_matviews WHERE schemaname = 'public'"
-        )
+        mat_rows = db_query_rows("SELECT matviewname FROM pg_matviews WHERE schemaname = 'public'")
         all_views = rows + mat_rows
         for view in self.REQUIRED_VIEWS:
             assert view in all_views, f"View {view} missing"
 
     def test_functions_exist(self):
-        rows = db_query_rows(
-            "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public'"
-        )
+        rows = db_query_rows("SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public'")
         for fn in self.REQUIRED_FUNCTIONS:
             assert fn in rows, f"Function {fn} missing"
 
     def test_timescaledb_hypertables(self):
-        rows = db_query_rows(
-            "SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY hypertable_name"
-        )
+        rows = db_query_rows("SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY hypertable_name")
         for ht in ["climate", "equipment_state", "system_state", "weather_forecast"]:
             assert ht in rows, f"Hypertable {ht} missing"
 
@@ -80,9 +89,7 @@ class TestDataFreshness:
 
     def test_forecast_data_recent(self):
         """Forecast data must have been fetched in last 6 hours."""
-        age = db_query(
-            "SELECT extract(epoch FROM now() - max(fetched_at))::int FROM weather_forecast"
-        )
+        age = db_query("SELECT extract(epoch FROM now() - max(fetched_at))::int FROM weather_forecast")
         assert int(age) < 21600, f"Forecast data is {age}s old (>6h)"
 
 
@@ -98,15 +105,11 @@ class TestViewsCompute:
         assert len(rows) >= 1, "v_stress_hours_today returned no rows"
 
     def test_dew_point_risk_computes(self):
-        rows = db_query_rows(
-            "SELECT * FROM v_dew_point_risk WHERE date >= CURRENT_DATE - 1 LIMIT 1"
-        )
+        rows = db_query_rows("SELECT * FROM v_dew_point_risk WHERE date >= CURRENT_DATE - 1 LIMIT 1")
         assert len(rows) >= 1, "v_dew_point_risk returned no rows"
 
     def test_planner_performance_computes(self):
-        rows = db_query_rows(
-            "SELECT * FROM v_planner_performance WHERE date >= CURRENT_DATE - 7 LIMIT 1"
-        )
+        rows = db_query_rows("SELECT * FROM v_planner_performance WHERE date >= CURRENT_DATE - 7 LIMIT 1")
         assert len(rows) >= 1, "v_planner_performance returned no rows"
 
     def test_band_setpoints_returns(self):

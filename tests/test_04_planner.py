@@ -2,11 +2,11 @@
 Test 04: Planner Pipeline — Context gathering, prompt rendering, output parsing.
 Tests the full planner pipeline WITHOUT calling the AI model (dry-run mode).
 """
-import json
+
 import os
-import re
 import subprocess
 import sys
+
 import pytest
 
 sys.path.insert(0, "/srv/verdify/ingestor")
@@ -20,8 +20,10 @@ class TestContextGathering:
     def context(self):
         result = subprocess.run(
             ["bash", "/srv/verdify/scripts/gather-plan-context.sh"],
-            capture_output=True, text=True, timeout=60,
-            env={**os.environ, "PATH": os.environ.get("PATH", "")}
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={**os.environ, "PATH": os.environ.get("PATH", "")},
         )
         assert result.returncode == 0, f"Context gathering failed: {result.stderr[:500]}"
         return result.stdout
@@ -67,7 +69,9 @@ class TestPromptRendering:
     def prompt(self):
         result = subprocess.run(
             ["/srv/greenhouse/.venv/bin/python", "/srv/verdify/scripts/planner.py", "--dry-run"],
-            capture_output=True, text=True, timeout=90
+            capture_output=True,
+            text=True,
+            timeout=90,
         )
         # stdout is the prompt, stderr is log messages
         assert len(result.stdout) > 1000, f"Prompt too short: {len(result.stdout)} chars"
@@ -110,8 +114,7 @@ class TestPromptRendering:
     def test_milestones_include_today(self, prompt):
         """Today must appear in the suggested timestamps table."""
         from datetime import datetime
-        today_abbrev = datetime.now().strftime("%a %m-%d")  # e.g., "Fri 04-10"
-        # Check for the day abbreviation (first 3 letters)
+
         day_abbr = datetime.now().strftime("%a")
         assert day_abbr in prompt, f"Today ({day_abbr}) not found in milestones"
 
@@ -121,24 +124,28 @@ class TestOutputParsing:
 
     def test_parse_clean_json(self):
         from planner import parse_plan_json
+
         raw = '{"plan_id": "test", "transitions": []}'
         result = parse_plan_json(raw)
         assert result["plan_id"] == "test"
 
     def test_parse_code_fenced_json(self):
         from planner import parse_plan_json
+
         raw = '```json\n{"plan_id": "test", "transitions": []}\n```'
         result = parse_plan_json(raw)
         assert result["plan_id"] == "test"
 
     def test_parse_preamble_json(self):
         from planner import parse_plan_json
+
         raw = 'Here is my plan:\n\n```json\n{"plan_id": "test", "transitions": []}\n```\n\nLet me explain...'
         result = parse_plan_json(raw)
         assert result["plan_id"] == "test"
 
     def test_parse_truncated_json(self):
         from planner import parse_plan_json
+
         # Simulate a complete-enough JSON that just has an extra trailing comma
         raw = '{"plan_id": "test", "transitions": [{"ts": "2026-04-10T10:00:00-06:00", "params": {"vpd_hysteresis": 0.3}}]}'
         result = parse_plan_json(raw)

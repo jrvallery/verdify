@@ -19,14 +19,13 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "ingestor"))
-from ai_config import ai
-
 import asyncpg
+from ai_config import ai
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [vision] %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -74,16 +73,13 @@ async def get_crop_inventory(conn) -> list[dict]:
 
 async def get_zone_mapping(conn, camera: str) -> list[str]:
     """Get zones visible from a specific camera."""
-    rows = await conn.fetch(
-        "SELECT zone FROM camera_zone_map WHERE camera = $1 ORDER BY coverage_pct DESC", camera)
+    rows = await conn.fetch("SELECT zone FROM camera_zone_map WHERE camera = $1 ORDER BY coverage_pct DESC", camera)
     return [r["zone"] for r in rows]
 
 
 def build_prompt(camera: str, zones: list[str], conditions: dict, crops: list[dict]) -> str:
     """Build the Gemini Vision analysis prompt from template."""
-    return ai.render_template("vision", "prompt",
-                             camera=camera, zones=zones,
-                             conditions=conditions, crops=crops)
+    return ai.render_template("vision", "prompt", camera=camera, zones=zones, conditions=conditions, crops=crops)
 
 
 async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict | None:
@@ -106,6 +102,7 @@ async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict |
     start = time.time()
     try:
         from google import genai
+
         client = ai.get_client("vision")
 
         image_bytes = image_path.read_bytes()
@@ -131,26 +128,38 @@ async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict |
                 raw_text = raw_text[:-3].strip()
 
         result = json.loads(raw_text)
-        tokens = getattr(response, 'usage_metadata', None)
-        token_count = (tokens.total_token_count if tokens else None)
+        tokens = getattr(response, "usage_metadata", None)
+        token_count = tokens.total_token_count if tokens else None
 
         # Insert into DB
-        await conn.execute("""
+        await conn.execute(
+            """
             INSERT INTO image_observations
                 (ts, camera, zone, image_path, model, raw_response, crops_observed,
                  environment_notes, recommended_actions, processing_ms, tokens_used, confidence)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         """,
-            datetime.now(timezone.utc), camera, zones[0], str(image_path),
+            datetime.now(UTC),
+            camera,
+            zones[0],
+            str(image_path),
             ai.model_name("vision"),
-            json.dumps(result), json.dumps(result.get("observations", [])),
-            result.get("environment_notes"), result.get("recommended_actions"),
-            elapsed_ms, token_count, result.get("overall_confidence"))
+            json.dumps(result),
+            json.dumps(result.get("observations", [])),
+            result.get("environment_notes"),
+            result.get("recommended_actions"),
+            elapsed_ms,
+            token_count,
+            result.get("overall_confidence"),
+        )
 
-        log.info("%s: analyzed in %dms, %d observations, confidence %.2f",
-                 image_path.name, elapsed_ms,
-                 len(result.get("observations", [])),
-                 result.get("overall_confidence", 0))
+        log.info(
+            "%s: analyzed in %dms, %d observations, confidence %.2f",
+            image_path.name,
+            elapsed_ms,
+            len(result.get("observations", [])),
+            result.get("overall_confidence", 0),
+        )
 
         # Auto-populate observations table per detected crop
         for obs in result.get("observations", []):
@@ -160,18 +169,25 @@ async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict |
                 continue
             # Find crop_id
             crop_id = await conn.fetchval(
-                "SELECT id FROM crops WHERE name ILIKE $1 AND is_active LIMIT 1", f"%{crop_name}%")
+                "SELECT id FROM crops WHERE name ILIKE $1 AND is_active LIMIT 1", f"%{crop_name}%"
+            )
             if crop_id:
                 stress = obs.get("stress_indicators", [])
                 notes = obs.get("notes", "")
                 if stress:
                     notes = f"[{', '.join(stress)}] {notes}"
-                await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO observations (ts, crop_id, zone, obs_type, notes, source, health_score, image_observation_id)
                     VALUES ($1, $2, $3, 'visual_health', $4, 'gemini-vision', $5, $6)
-                """, datetime.now(timezone.utc), crop_id, obs.get("zone", zones[0]),
-                    notes, float(health) / 10.0,  # Normalize to 0.0-1.0
-                    await conn.fetchval("SELECT MAX(id) FROM image_observations"))
+                """,
+                    datetime.now(UTC),
+                    crop_id,
+                    obs.get("zone", zones[0]),
+                    notes,
+                    float(health) / 10.0,  # Normalize to 0.0-1.0
+                    await conn.fetchval("SELECT MAX(id) FROM image_observations"),
+                )
 
         return result
 
@@ -219,7 +235,7 @@ async def main():
                 latest_per_camera[cam] = img
 
             log.info("Analyzing %d snapshots from %s", len(latest_per_camera), date_str)
-            for cam, img in sorted(latest_per_camera.items()):
+            for _cam, img in sorted(latest_per_camera.items()):
                 await analyze_image(img, conn, args.dry_run)
 
     finally:

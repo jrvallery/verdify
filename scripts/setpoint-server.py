@@ -24,11 +24,11 @@ import asyncio
 import json
 import logging
 import os
-import urllib.request
-import urllib.error
-from datetime import datetime, timezone
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import urllib.error
+import urllib.request
+from datetime import UTC, datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import asyncpg
 
@@ -68,10 +68,14 @@ def ha_call(service: str, entity_id: str) -> bool:
         _ha_token = load_token()
     url = f"{HA_URL}/api/services/light/{service}"
     body = json.dumps({"entity_id": entity_id}).encode()
-    req = urllib.request.Request(url, data=body, headers={
-        "Authorization": f"Bearer {_ha_token}",
-        "Content-Type": "application/json",
-    })
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {_ha_token}",
+            "Content-Type": "application/json",
+        },
+    )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
@@ -86,10 +90,13 @@ def ha_get_state(entity_id: str) -> str | None:
     if _ha_token is None:
         _ha_token = load_token()
     url = f"{HA_URL}/api/states/{entity_id}"
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {_ha_token}",
-        "Content-Type": "application/json",
-    })
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {_ha_token}",
+            "Content-Type": "application/json",
+        },
+    )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
@@ -108,7 +115,9 @@ async def record_state_change(equipment: str, is_on: bool) -> None:
         async with _db_pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
-                datetime.now(timezone.utc), equipment, is_on,
+                datetime.now(UTC),
+                equipment,
+                is_on,
             )
         log.info("State recorded: %s → %s", equipment, "ON" if is_on else "OFF")
     except Exception as e:
@@ -129,8 +138,22 @@ def get_db_url() -> str:
 def get_setpoint_text_sync() -> str:
     """Query setpoint_plan for current active values. Synchronous for HTTP thread."""
     import subprocess
-    db_cmd = ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify",
-              "-t", "-A", "-F", "=", "-c"]
+
+    db_cmd = [
+        "docker",
+        "exec",
+        "verdify-timescaledb",
+        "psql",
+        "-U",
+        "verdify",
+        "-d",
+        "verdify",
+        "-t",
+        "-A",
+        "-F",
+        "=",
+        "-c",
+    ]
 
     # Planner/dispatcher param names → ESP32 firmware param names
     # The ESP32 pull lambda reads specific key names from this endpoint.
@@ -139,10 +162,16 @@ def get_setpoint_text_sync() -> str:
     # DB trigger (migration 058) normalizes all param names at INSERT — no aliases needed
     # Step 1: ALL current setpoints as baseline
     params = {}
-    result = subprocess.run(db_cmd + [
-        "SELECT parameter, value FROM (SELECT DISTINCT ON (parameter) parameter, value "
-        "FROM setpoint_changes ORDER BY parameter, ts DESC) sub"
-    ], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        db_cmd
+        + [
+            "SELECT parameter, value FROM (SELECT DISTINCT ON (parameter) parameter, value "
+            "FROM setpoint_changes ORDER BY parameter, ts DESC) sub"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
     for line in result.stdout.strip().split("\n"):
         if "=" in line:
             k, v = line.split("=", 1)
@@ -150,9 +179,9 @@ def get_setpoint_text_sync() -> str:
 
     # Step 2: Overlay active plan values (v_active_plan resolves supersession by created_at DESC)
     has_plan = False
-    result = subprocess.run(db_cmd + [
-        "SELECT parameter, value FROM v_active_plan"
-    ], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        db_cmd + ["SELECT parameter, value FROM v_active_plan"], capture_output=True, text=True, timeout=5
+    )
     for line in result.stdout.strip().split("\n"):
         if "=" in line:
             k, v = line.split("=", 1)
@@ -164,10 +193,13 @@ def get_setpoint_text_sync() -> str:
     lines.append(f"source={'merged' if has_plan else 'fallback'}")
 
     # Next upcoming change
-    result = subprocess.run(db_cmd + [
-        "SELECT ts || '|' || parameter || '|' || value FROM setpoint_plan "
-        "WHERE ts > now() ORDER BY ts LIMIT 1"
-    ], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        db_cmd
+        + ["SELECT ts || '|' || parameter || '|' || value FROM setpoint_plan WHERE ts > now() ORDER BY ts LIMIT 1"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
     if result.stdout.strip():
         parts = result.stdout.strip().split("|")
         if len(parts) == 3:
@@ -176,20 +208,29 @@ def get_setpoint_text_sync() -> str:
             lines.append(f"next_value={parts[2]}")
 
     # Occupancy state (real-time from system_state, written by occupancy-bridge.py)
-    result = subprocess.run(db_cmd + [
-        "SELECT value FROM system_state WHERE entity = 'occupancy' ORDER BY ts DESC LIMIT 1"
-    ], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        db_cmd + ["SELECT value FROM system_state WHERE entity = 'occupancy' ORDER BY ts DESC LIMIT 1"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
     occ = result.stdout.strip()
     lines.append(f"occupancy={'1' if occ == 'occupied' else '0'}")
 
     # Outdoor conditions (from Tempest via climate table — for ESP32 enthalpy computation)
-    result = subprocess.run(db_cmd + [
-        "SELECT round(outdoor_temp_f::numeric,1) || '|' || round(outdoor_rh_pct::numeric,1) "
-        "FROM climate WHERE outdoor_temp_f IS NOT NULL ORDER BY ts DESC LIMIT 1"
-    ], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        db_cmd
+        + [
+            "SELECT round(outdoor_temp_f::numeric,1) || '|' || round(outdoor_rh_pct::numeric,1) "
+            "FROM climate WHERE outdoor_temp_f IS NOT NULL ORDER BY ts DESC LIMIT 1"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
     outdoor = result.stdout.strip()
-    if '|' in outdoor:
-        parts = outdoor.split('|')
+    if "|" in outdoor:
+        parts = outdoor.split("|")
         lines.append(f"outdoor_temp={parts[0]}")
         lines.append(f"outdoor_rh={parts[1]}")
 

@@ -86,22 +86,32 @@ async def main():
                 day = row["day"]
                 runtime, cycles = await compute_day(conn, day)
                 if runtime > 0 or cycles > 0:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         UPDATE daily_summary
                         SET runtime_grow_light_min = $2, cycles_grow_light = $3
                         WHERE date = $1
-                    """, day, runtime, cycles)
+                    """,
+                        day,
+                        runtime,
+                        cycles,
+                    )
                     updated += 1
             log.info("Backfill complete: %d days updated", updated)
         else:
             # Yesterday only
             yesterday = await conn.fetchval("SELECT CURRENT_DATE - 1")
             runtime, cycles = await compute_day(conn, yesterday)
-            await conn.execute("""
+            await conn.execute(
+                """
                 UPDATE daily_summary
                 SET runtime_grow_light_min = $2, cycles_grow_light = $3
                 WHERE date = $1
-            """, yesterday, runtime, cycles)
+            """,
+                yesterday,
+                runtime,
+                cycles,
+            )
             log.info("Yesterday (%s): %.1f min runtime, %d cycles", yesterday, runtime, cycles)
     finally:
         await conn.close()

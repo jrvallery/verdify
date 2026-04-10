@@ -59,18 +59,22 @@ BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/mnt/iris/backups"))
 
 # ── Equipment constants ───────────────────────────────────────────
 WATTAGES = {
-    "heat1": 1500, "heat2": 0,  # heat2 is gas (BTU, not watts)
-    "fan1": 52, "fan2": 52,
-    "fog": 800, "vent": 10,  # AquaFog XE 2000: centrifugal atomizer, ~750-850W actual
-    "grow_light_main": 630, "grow_light_grow": 816,
+    "heat1": 1500,
+    "heat2": 0,  # heat2 is gas (BTU, not watts)
+    "fan1": 52,
+    "fan2": 52,
+    "fog": 800,
+    "vent": 10,  # AquaFog XE 2000: centrifugal atomizer, ~750-850W actual
+    "grow_light_main": 630,
+    "grow_light_grow": 816,
 }
 HEAT2_BTU_PER_HOUR = 54000  # Lennox nameplate 75K, altitude-derated ~20% at 5,090 ft
 BTU_PER_THERM = 100000
 
 # ── Utility rates ($/unit) ───────────────────────────────────────
-ELECTRIC_RATE = float(os.environ.get("ELECTRIC_RATE", "0.111"))    # $/kWh
-GAS_RATE = float(os.environ.get("GAS_RATE", "0.83"))              # $/therm
-WATER_RATE = float(os.environ.get("WATER_RATE", "0.00484"))        # $/gallon
+ELECTRIC_RATE = float(os.environ.get("ELECTRIC_RATE", "0.111"))  # $/kWh
+GAS_RATE = float(os.environ.get("GAS_RATE", "0.83"))  # $/therm
+WATER_RATE = float(os.environ.get("WATER_RATE", "0.00484"))  # $/gallon
 
 
 def get_db_dsn() -> str:

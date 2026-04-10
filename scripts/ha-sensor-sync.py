@@ -20,9 +20,9 @@ import json
 import logging
 import os
 import sys
-import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+import urllib.request
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -50,17 +50,17 @@ OCCUPANCY_ENTITIES = {
 # --- Grow light entities ---
 LIGHT_ENTITIES = {
     "light.greenhouse_main": "grow_light_main",
-    "light.greenhouse_grow":  "grow_light_grow",
+    "light.greenhouse_grow": "grow_light_grow",
 }
 
 # --- Hydroponic water tester (LocalTuya + BLE) ---
 HYDRO_MAP = {
     # LocalTuya (primary — renamed from pool_* to greenhouse_hydroponic_*)
-    "sensor.greenhouse_hydroponic_ec":         ("hydro_ec_us_cm",    None),
-    "sensor.greenhouse_hydroponic_orp":        ("hydro_orp_mv",      None),
-    "sensor.greenhouse_hydroponic_ph":         ("hydro_ph",          None),
-    "sensor.greenhouse_hydroponic_tds":        ("hydro_tds_ppm",     None),     # ppm from LocalTuya, column is ppt (legacy name)
-    "sensor.greenhouse_hydroponic_water_temp": ("hydro_water_temp_f", lambda v: v * 9.0/5.0 + 32.0),  # °C → °F
+    "sensor.greenhouse_hydroponic_ec": ("hydro_ec_us_cm", None),
+    "sensor.greenhouse_hydroponic_orp": ("hydro_orp_mv", None),
+    "sensor.greenhouse_hydroponic_ph": ("hydro_ph", None),
+    "sensor.greenhouse_hydroponic_tds": ("hydro_tds_ppm", None),  # ppm from LocalTuya, column is ppt (legacy name)
+    "sensor.greenhouse_hydroponic_water_temp": ("hydro_water_temp_f", lambda v: v * 9.0 / 5.0 + 32.0),  # °C → °F
     # Battery
     "sensor.greenhouse_hydroponic_yinmik_battery": ("hydro_battery_pct", None),
 }
@@ -77,12 +77,12 @@ HYDRO_MAP = {
 
 # --- Config switches → equipment_state ---
 HA_CONFIG_SWITCHES = {
-    "switch.greenhouse_economiser_enabled":          "economiser_enabled",
-    "switch.greenhouse_fog_closes_vent":              "fog_closes_vent",
-    "switch.greenhouse_irrigation_enabled":           "irrigation_enabled",
-    "switch.greenhouse_irrigation_wall_enabled":      "irrigation_wall_enabled",
-    "switch.greenhouse_irrigation_center_enabled":    "irrigation_center_enabled",
-    "switch.greenhouse_irrigation_weather_skip":      "irrigation_weather_skip",
+    "switch.greenhouse_economiser_enabled": "economiser_enabled",
+    "switch.greenhouse_fog_closes_vent": "fog_closes_vent",
+    "switch.greenhouse_irrigation_enabled": "irrigation_enabled",
+    "switch.greenhouse_irrigation_wall_enabled": "irrigation_wall_enabled",
+    "switch.greenhouse_irrigation_center_enabled": "irrigation_center_enabled",
+    "switch.greenhouse_irrigation_weather_skip": "irrigation_weather_skip",
 }
 
 
@@ -110,10 +110,13 @@ def fetch_states(token: str, entity_ids: list[str]) -> dict[str, dict]:
     results = {}
     for eid in entity_ids:
         url = f"{HA_URL}/api/states/{eid}"
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        })
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())
@@ -145,11 +148,15 @@ def get_db_url() -> str:
 
 async def sync_once(db_url: str) -> None:
     token = load_token()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Collect all entity IDs to fetch
-    all_entities = (list(LIGHT_ENTITIES.keys()) + list(HYDRO_MAP.keys())
-                    + list(HA_CONFIG_SWITCHES.keys()) + list(OCCUPANCY_ENTITIES.keys()))
+    all_entities = (
+        list(LIGHT_ENTITIES.keys())
+        + list(HYDRO_MAP.keys())
+        + list(HA_CONFIG_SWITCHES.keys())
+        + list(OCCUPANCY_ENTITIES.keys())
+    )
     states = fetch_states(token, all_entities)
 
     if not states:
@@ -180,19 +187,17 @@ async def sync_once(db_url: str) -> None:
                     set_parts = []
                     set_vals = []
                     for i, (c, v) in enumerate(hydro_cols.items()):
-                        set_parts.append(f"{c} = ${i+1}")
+                        set_parts.append(f"{c} = ${i + 1}")
                         set_vals.append(v)
                     set_vals.append(latest_esp32)
                     await conn.execute(
-                        f"UPDATE climate SET {', '.join(set_parts)} WHERE ts = ${len(set_vals)}",
-                        *set_vals
+                        f"UPDATE climate SET {', '.join(set_parts)} WHERE ts = ${len(set_vals)}", *set_vals
                     )
-                    log.info("Merged hydro into ESP32 row: %s",
-                             ", ".join(f"{k}={v}" for k, v in hydro_cols.items()))
+                    log.info("Merged hydro into ESP32 row: %s", ", ".join(f"{k}={v}" for k, v in hydro_cols.items()))
             else:
                 cols = list(climate_cols.keys())
                 vals = [climate_cols[c] for c in cols]
-                placeholders = ", ".join(f"${i+1}" for i in range(len(vals)))
+                placeholders = ", ".join(f"${i + 1}" for i in range(len(vals)))
                 col_names = ", ".join(cols)
                 await conn.execute(f"INSERT INTO climate ({col_names}) VALUES ({placeholders})", *vals)
                 log.info("Hydro standalone INSERT (no recent ESP32 row)")
@@ -209,7 +214,9 @@ async def sync_once(db_url: str) -> None:
                 if prev is None or prev != is_on:
                     await conn.execute(
                         "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
-                        now, equip_name, is_on,
+                        now,
+                        equip_name,
+                        is_on,
                     )
                     log.info("Light state change: %s → %s", equip_name, "ON" if is_on else "OFF")
 
@@ -225,7 +232,9 @@ async def sync_once(db_url: str) -> None:
                 if prev is None or prev != is_on:
                     await conn.execute(
                         "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
-                        now, equip_name, is_on,
+                        now,
+                        equip_name,
+                        is_on,
                     )
                     log.info("Config switch: %s → %s", equip_name, "ON" if is_on else "OFF")
                 new_state[prev_key] = is_on
@@ -241,7 +250,9 @@ async def sync_once(db_url: str) -> None:
                 if prev_state.get(prev_key) != val:
                     await conn.execute(
                         "INSERT INTO system_state (ts, entity, value) VALUES ($1, $2, $3)",
-                        now, entity_name, val,
+                        now,
+                        entity_name,
+                        val,
                     )
                     new_state[prev_key] = val
                     log.info("Occupancy: %s → %s", entity_name, val)

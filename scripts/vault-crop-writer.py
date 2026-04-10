@@ -41,9 +41,9 @@ def get_db_url() -> str:
 
 def slugify(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r'[^a-z0-9\-]', '-', text)
-    text = re.sub(r'-+', '-', text)
-    return text.strip('-')
+    text = re.sub(r"[^a-z0-9\-]", "-", text)
+    text = re.sub(r"-+", "-", text)
+    return text.strip("-")
 
 
 def fmt_date(d) -> str:
@@ -78,14 +78,14 @@ async def write_crop(conn, crop_id: int) -> bool:
     events = await conn.fetch(
         "SELECT ts, event_type, old_stage, new_stage, operator, notes "
         "FROM crop_events WHERE crop_id = $1 ORDER BY ts DESC",
-        crop_id
+        crop_id,
     )
 
     # Observations
     observations = await conn.fetch(
         "SELECT ts, obs_type, severity, species, affected_pct, photo_path, observer, notes "
         "FROM observations WHERE crop_id = $1 ORDER BY ts DESC",
-        crop_id
+        crop_id,
     )
 
     # Build markdown
@@ -194,9 +194,7 @@ async def main():
             await write_crop(conn, crop_id)
         else:
             # Default / --backfill: write all active crops
-            crops = await conn.fetch(
-                "SELECT id FROM crops WHERE is_active = true ORDER BY id"
-            )
+            crops = await conn.fetch("SELECT id FROM crops WHERE is_active = true ORDER BY id")
             if not crops:
                 log.info("No active crops — nothing to write")
                 return

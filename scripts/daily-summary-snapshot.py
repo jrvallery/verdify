@@ -17,7 +17,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 import asyncpg
 
@@ -30,16 +30,19 @@ log = logging.getLogger(__name__)
 
 # Wattage for cost estimation (from equipment_assets)
 WATTAGE = {
-    "heat1": 1500, "heat2": 0,  # heat2 is gas
-    "fan1": 52, "fan2": 52,
+    "heat1": 1500,
+    "heat2": 0,  # heat2 is gas
+    "fan1": 52,
+    "fan2": 52,
     "fog": 800,  # AquaFog XE 2000: centrifugal atomizer ~750-850W
     "vent": 10,
-    "grow_light_main": 816, "grow_light_grow": 630,  # main: 34x 2FT@24W=816W, grow: 15x 4FT@42W=630W, total 1446W
+    "grow_light_main": 816,
+    "grow_light_grow": 630,  # main: 34x 2FT@24W=816W, grow: 15x 4FT@42W=630W, total 1446W
 }
-ELECTRIC_RATE = 0.111   # $/kWh (confirmed by Jason, Longmont CO residential)
-GAS_RATE = 0.83         # $/therm (Xcel Energy marginal: variable + franchise fee + sales tax)
-WATER_RATE = 0.00484    # $/gal ($4.84/1000 gal, lowest tier)
-HEAT2_BTU = 75000       # BTU/h (Lennox LF24-75A-5 natural gas furnace)
+ELECTRIC_RATE = 0.111  # $/kWh (confirmed by Jason, Longmont CO residential)
+GAS_RATE = 0.83  # $/therm (Xcel Energy marginal: variable + franchise fee + sales tax)
+WATER_RATE = 0.00484  # $/gal ($4.84/1000 gal, lowest tier)
+HEAT2_BTU = 75000  # BTU/h (Lennox LF24-75A-5 natural gas furnace)
 THERM_BTU = 100000
 
 
@@ -59,12 +62,14 @@ async def snapshot_day(conn, target_date: date) -> bool:
 
     # Date boundaries in Denver local time converted to UTC-aware datetimes
     from zoneinfo import ZoneInfo
+
     denver = ZoneInfo("America/Denver")
     day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=denver)
     day_end = day_start + timedelta(days=1)
 
     # ── Climate aggregates ──
-    climate = await conn.fetchrow(f"""
+    climate = await conn.fetchrow(
+        """
         SELECT
             MIN(temp_avg) AS temp_min,
             MAX(temp_avg) AS temp_max,
@@ -86,14 +91,18 @@ async def snapshot_day(conn, target_date: date) -> bool:
         FROM climate
         WHERE ts >= $1 AND ts < $2
         AND temp_avg IS NOT NULL
-    """, day_start, day_end)
+    """,
+        day_start,
+        day_end,
+    )
 
     if not climate or climate["temp_avg"] is None:
         log.warning("No climate data for %s", target_date)
         return False
 
     # ── Stress hours (count rows where out of band, multiply by sample interval) ──
-    stress = await conn.fetchrow(f"""
+    stress = await conn.fetchrow(
+        """
         SELECT
             ROUND(COUNT(*) FILTER (WHERE temp_avg > 85) * 2.0 / 60, 2) AS stress_heat,
             ROUND(COUNT(*) FILTER (WHERE temp_avg < 50) * 2.0 / 60, 2) AS stress_cold,
@@ -102,12 +111,13 @@ async def snapshot_day(conn, target_date: date) -> bool:
         FROM climate
         WHERE ts >= $1 AND ts < $2
         AND temp_avg IS NOT NULL
-    """, day_start, day_end)
+    """,
+        day_start,
+        day_end,
+    )
 
     # ── Equipment runtimes (from existing daily_summary row if ingestor wrote it) ──
-    existing = await conn.fetchrow(
-        "SELECT * FROM daily_summary WHERE date = $1", target_date
-    )
+    existing = await conn.fetchrow("SELECT * FROM daily_summary WHERE date = $1", target_date)
 
     # Get runtimes — prefer ingestor values if they exist
     rt_heat1 = float(existing["runtime_heat1_min"] or 0) if existing else 0
@@ -123,16 +133,21 @@ async def snapshot_day(conn, target_date: date) -> bool:
     kwh_fans = ((rt_fan1 + rt_fan2) / 60) * (WATTAGE["fan1"] / 1000)
     kwh_fog = (rt_fog / 60) * (WATTAGE["fog"] / 1000)
     kwh_vent = (rt_vent / 60) * (WATTAGE["vent"] / 1000)
-    kwh_gl = (rt_gl / 60) * ((WATTAGE["grow_light_main"] + WATTAGE["grow_light_grow"]) / 1000)  # both circuits on same schedule
+    kwh_gl = (rt_gl / 60) * (
+        (WATTAGE["grow_light_main"] + WATTAGE["grow_light_grow"]) / 1000
+    )  # both circuits on same schedule
     kwh_estimated = round(kwh_heat + kwh_fans + kwh_fog + kwh_vent + kwh_gl, 2)
 
     therms_estimated = round((rt_heat2 / 60) * HEAT2_BTU / THERM_BTU, 3)
 
     # Water: consecutive-day delta (today's max minus yesterday's max)
     # Use v_water_daily which already handles counter resets correctly
-    water_row = await conn.fetchval("""
+    water_row = await conn.fetchval(
+        """
         SELECT used_gal FROM v_water_daily WHERE day::date = $1
-    """, target_date)
+    """,
+        target_date,
+    )
     water_gal = float(water_row) if water_row and water_row > 0 else 0.0
     cost_electric = round(kwh_estimated * ELECTRIC_RATE, 2)
     cost_gas = round(therms_estimated * GAS_RATE, 2)
@@ -140,14 +155,19 @@ async def snapshot_day(conn, target_date: date) -> bool:
     cost_total = round(cost_electric + cost_gas + cost_water, 2)
 
     # ── Peak demand from Shelly EM ──
-    peak_row = await conn.fetchval(f"""
+    peak_row = await conn.fetchval(
+        """
         SELECT ROUND((MAX(watts_total) / 1000.0)::numeric, 2)
         FROM energy WHERE ts >= $1 AND ts < $2
-    """, day_start, day_end)
+    """,
+        day_start,
+        day_end,
+    )
     peak_kw = float(peak_row) if peak_row else None
 
     # ── Upsert ──
-    await conn.execute("""
+    await conn.execute(
+        """
         INSERT INTO daily_summary (
             date, temp_min, temp_max, temp_avg, rh_min, rh_max, rh_avg,
             vpd_min, vpd_max, vpd_avg, co2_avg,
@@ -191,26 +211,45 @@ async def snapshot_day(conn, target_date: date) -> bool:
             captured_at = now()
     """,
         target_date,
-        climate["temp_min"], climate["temp_max"], float(climate["temp_avg"]),
-        climate["rh_min"], climate["rh_max"], float(climate["rh_avg"]),
-        climate["vpd_min"], climate["vpd_max"], float(climate["vpd_avg"]),
+        climate["temp_min"],
+        climate["temp_max"],
+        float(climate["temp_avg"]),
+        climate["rh_min"],
+        climate["rh_max"],
+        float(climate["rh_avg"]),
+        climate["vpd_min"],
+        climate["vpd_max"],
+        float(climate["vpd_avg"]),
         float(climate["co2_avg"]) if climate["co2_avg"] else None,
-        climate["outdoor_temp_min"], climate["outdoor_temp_max"],
-        climate["dli_final"], water_gal, float(climate["mister_water"] or 0),
-        float(stress["stress_heat"]), float(stress["stress_cold"]),
-        float(stress["stress_vpd_high"]), float(stress["stress_vpd_low"]),
-        kwh_estimated, therms_estimated,
-        cost_electric, cost_gas, cost_water, cost_total,
+        climate["outdoor_temp_min"],
+        climate["outdoor_temp_max"],
+        climate["dli_final"],
+        water_gal,
+        float(climate["mister_water"] or 0),
+        float(stress["stress_heat"]),
+        float(stress["stress_cold"]),
+        float(stress["stress_vpd_high"]),
+        float(stress["stress_vpd_low"]),
+        kwh_estimated,
+        therms_estimated,
+        cost_electric,
+        cost_gas,
+        cost_water,
+        cost_total,
         peak_kw,
     )
 
     log.info(
         "%s: temp %.0f–%.0f°F, VPD %.1f–%.1f, DLI %.1f, $%.2f, stress: heat=%.1fh vpd_hi=%.1fh",
         target_date,
-        climate["temp_min"] or 0, climate["temp_max"] or 0,
-        climate["vpd_min"] or 0, climate["vpd_max"] or 0,
-        climate["dli_final"] or 0, cost_total,
-        float(stress["stress_heat"]), float(stress["stress_vpd_high"]),
+        climate["temp_min"] or 0,
+        climate["temp_max"] or 0,
+        climate["vpd_min"] or 0,
+        climate["vpd_max"] or 0,
+        climate["dli_final"] or 0,
+        cost_total,
+        float(stress["stress_heat"]),
+        float(stress["stress_vpd_high"]),
     )
     return True
 

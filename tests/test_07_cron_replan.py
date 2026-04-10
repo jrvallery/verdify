@@ -1,8 +1,10 @@
 """
 Test 07: Cron Jobs & Replan Flow — Scheduled tasks and deviation-triggered replanning.
 """
+
 import os
 import subprocess
+
 import pytest
 from conftest import db_query
 
@@ -48,9 +50,7 @@ class TestReplanFlow:
 
     def test_planner_journal_has_recent_entries(self):
         """At least one plan should have been generated today."""
-        count = db_query(
-            "SELECT count(*) FROM plan_journal WHERE created_at::date = CURRENT_DATE"
-        )
+        count = db_query("SELECT count(*) FROM plan_journal WHERE created_at::date = CURRENT_DATE")
         assert int(count) >= 1, "No plans generated today"
 
     def test_plan_has_waypoints(self):
@@ -59,9 +59,7 @@ class TestReplanFlow:
             "SELECT plan_id FROM plan_journal WHERE plan_id NOT LIKE 'iris-reactive%' ORDER BY created_at DESC LIMIT 1"
         )
         if plan_id:
-            count = db_query(
-                f"SELECT count(*) FROM setpoint_plan WHERE plan_id = '{plan_id}' AND is_active = true"
-            )
+            count = db_query(f"SELECT count(*) FROM setpoint_plan WHERE plan_id = '{plan_id}' AND is_active = true")
             assert int(count) >= 24, f"Plan {plan_id} has only {count} waypoints (expected >=24)"
 
 
@@ -70,8 +68,10 @@ class TestPlannerConfig:
 
     def test_ai_config_loads(self):
         import sys
+
         sys.path.insert(0, "/srv/verdify/ingestor")
         from ai_config import ai
+
         assert ai.model_name("planner") == "claude-opus-4-6"
         assert ai.config["models"]["planner"]["provider"] == "anthropic"
 

@@ -18,10 +18,8 @@ Output: /srv/verdify/verdify-site/content/plans/YYYY-MM-DD.md
 import argparse
 import json
 import subprocess
-import sys
-from datetime import datetime, date, timedelta
+from datetime import date, datetime
 from pathlib import Path
-from textwrap import dedent
 
 CONTENT_DIR = Path("/srv/verdify/verdify-site/content/plans")
 DB_CMD = "docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
@@ -29,10 +27,7 @@ DB_CMD = "docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
 
 def db_query(sql: str) -> str:
     """Run a psql query and return stripped output."""
-    result = subprocess.run(
-        f'{DB_CMD} -c "{sql}"',
-        shell=True, capture_output=True, text=True, timeout=15
-    )
+    result = subprocess.run(f'{DB_CMD} -c "{sql}"', shell=True, capture_output=True, text=True, timeout=15)
     return result.stdout.strip()
 
 
@@ -57,7 +52,8 @@ def db_query_json(sql: str) -> dict | list | None:
 
 def get_daily_summary(d: date) -> dict:
     """Get daily_summary row as dict."""
-    return db_query_json(f"""
+    return (
+        db_query_json(f"""
         SELECT row_to_json(ds) FROM (
             SELECT date, temp_min, temp_max, temp_avg, vpd_min, vpd_max, vpd_avg,
                    rh_min, rh_max, co2_avg, dli_final,
@@ -71,20 +67,22 @@ def get_daily_summary(d: date) -> dict:
                    runtime_drip_wall_h
             FROM daily_summary WHERE date = '{d}'
         ) ds
-    """) or {}
+    """)
+        or {}
+    )
 
 
 def get_plans_for_date(d: date) -> list[dict]:
     """Get all plan_journal entries whose plan_id references this date."""
-    date_str = d.strftime('%Y%m%d')
+    date_str = d.strftime("%Y%m%d")
     rows = db_query_rows(f"""
-        SELECT plan_id, 
+        SELECT plan_id,
                to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
                conditions_summary, hypothesis, experiment, expected_outcome,
                actual_outcome, outcome_score, lesson_extracted,
                array_to_string(params_changed, ','),
                CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END
-        FROM plan_journal 
+        FROM plan_journal
         WHERE plan_id LIKE 'iris-{date_str}%'
           AND plan_id NOT LIKE 'iris-reactive%'
         ORDER BY created_at
@@ -92,19 +90,21 @@ def get_plans_for_date(d: date) -> list[dict]:
     plans = []
     for row in rows:
         if len(row) >= 11:
-            plans.append({
-                'plan_id': row[0].strip(),
-                'created': row[1].strip(),
-                'conditions_summary': row[2].strip(),
-                'hypothesis': row[3].strip(),
-                'experiment': row[4].strip(),
-                'expected_outcome': row[5].strip(),
-                'actual_outcome': row[6].strip(),
-                'outcome_score': row[7].strip(),
-                'lesson_extracted': row[8].strip(),
-                'params_changed': row[9].strip(),
-                'status': row[10].strip(),
-            })
+            plans.append(
+                {
+                    "plan_id": row[0].strip(),
+                    "created": row[1].strip(),
+                    "conditions_summary": row[2].strip(),
+                    "hypothesis": row[3].strip(),
+                    "experiment": row[4].strip(),
+                    "expected_outcome": row[5].strip(),
+                    "actual_outcome": row[6].strip(),
+                    "outcome_score": row[7].strip(),
+                    "lesson_extracted": row[8].strip(),
+                    "params_changed": row[9].strip(),
+                    "status": row[10].strip(),
+                }
+            )
     return plans
 
 
@@ -120,19 +120,22 @@ def get_waypoints_for_plan(plan_id: str) -> list[dict]:
     waypoints = []
     for row in rows:
         if len(row) >= 4:
-            waypoints.append({
-                'time': row[0].strip(),
-                'parameter': row[1].strip(),
-                'value': row[2].strip(),
-                'reason': row[3].strip(),
-            })
+            waypoints.append(
+                {
+                    "time": row[0].strip(),
+                    "parameter": row[1].strip(),
+                    "value": row[2].strip(),
+                    "reason": row[3].strip(),
+                }
+            )
     return waypoints
 
 
 def get_zone_snapshot(d: date, hour: int = 6) -> dict:
     """Get zone conditions at a specific hour of the given date."""
     ts = f"{d} {hour:02d}:00:00-06"
-    return db_query_json(f"""
+    return (
+        db_query_json(f"""
         SELECT json_build_object(
             'temp_south', round(temp_south::numeric,1),
             'temp_east', round(temp_east::numeric,1),
@@ -159,7 +162,9 @@ def get_zone_snapshot(d: date, hour: int = 6) -> dict:
           AND ts <= '{ts}'::timestamptz + interval '30 minutes'
         ORDER BY ts
         LIMIT 1
-    """) or {}
+    """)
+        or {}
+    )
 
 
 def get_active_setpoints_at(d: date) -> dict:
@@ -187,8 +192,11 @@ def get_hourly_pattern(d: date) -> list[dict]:
         GROUP BY date_trunc('hour', ts)
         ORDER BY date_trunc('hour', ts)
     """)
-    return [{'hour': r[0].strip(), 'temp': r[1].strip(), 'vpd': r[2].strip(), 'rh': r[3].strip()}
-            for r in rows if len(r) >= 4]
+    return [
+        {"hour": r[0].strip(), "temp": r[1].strip(), "vpd": r[2].strip(), "rh": r[3].strip()}
+        for r in rows
+        if len(r) >= 4
+    ]
 
 
 def get_stress_context(d: date) -> list[dict]:
@@ -200,15 +208,23 @@ def get_stress_context(d: date) -> list[dict]:
         WHERE date >= '{d}'::date - 6 AND date <= '{d}'
         ORDER BY date
     """)
-    return [{'date': r[0].strip(), 'heat': r[1].strip(), 'vpd_high': r[2].strip(),
-             'cold': r[3].strip(), 'vpd_low': r[4].strip()}
-            for r in rows if len(r) >= 5]
+    return [
+        {
+            "date": r[0].strip(),
+            "heat": r[1].strip(),
+            "vpd_high": r[2].strip(),
+            "cold": r[3].strip(),
+            "vpd_low": r[4].strip(),
+        }
+        for r in rows
+        if len(r) >= 5
+    ]
 
 
 def classify_cycle(plan_id: str) -> str:
     """Classify a plan_id into morning/midday/evening/overnight."""
     # Extract time portion: iris-20260325-0605 → 0605
-    parts = plan_id.split('-')
+    parts = plan_id.split("-")
     if len(parts) >= 3:
         time_part = parts[-1]
         if len(time_part) == 4:
@@ -234,14 +250,31 @@ def r(v, digits=1):
         return str(v) if v else "—"
 
 
-CORE_PARAMS = ['temp_high', 'temp_low', 'vpd_high', 'vpd_hysteresis', 'd_cool_stage_2',
-               'mister_engage_kpa', 'mister_all_kpa', 'mister_pulse_on_s',
-               'mister_pulse_gap_s', 'mister_vpd_weight']
+CORE_PARAMS = [
+    "temp_high",
+    "temp_low",
+    "vpd_high",
+    "vpd_hysteresis",
+    "d_cool_stage_2",
+    "mister_engage_kpa",
+    "mister_all_kpa",
+    "mister_pulse_on_s",
+    "mister_pulse_gap_s",
+    "mister_vpd_weight",
+]
 PARAM_SHORT = {
-    'temp_high': 'high', 'temp_low': 'low', 'vpd_high': 'vpd_h', 'vpd_hysteresis': 'hyst',
-    'd_cool_stage_2': 'd_cool', 'mister_engage_kpa': 'engage', 'mister_all_kpa': 'all',
-    'mister_pulse_on_s': 'pulse', 'mister_pulse_gap_s': 'gap', 'mister_vpd_weight': 'wt',
+    "temp_high": "high",
+    "temp_low": "low",
+    "vpd_high": "vpd_h",
+    "vpd_hysteresis": "hyst",
+    "d_cool_stage_2": "d_cool",
+    "mister_engage_kpa": "engage",
+    "mister_all_kpa": "all",
+    "mister_pulse_on_s": "pulse",
+    "mister_pulse_gap_s": "gap",
+    "mister_vpd_weight": "wt",
 }
+
 
 def format_waypoints_table(waypoints: list[dict]) -> str:
     """Format waypoints as a pivoted table: rows = transition times, columns = 10 core params."""
@@ -250,17 +283,17 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
 
     # Group by timestamp
     from collections import defaultdict
+
     by_time = defaultdict(dict)
     notes_by_time = {}
     for wp in waypoints:
-        t = wp['time']
-        param = wp['parameter']
-        by_time[t][param] = wp['value']
-        if wp.get('reason') and param in CORE_PARAMS:
-            notes_by_time.setdefault(t, wp['reason'][:60])
+        t = wp["time"]
+        param = wp["parameter"]
+        by_time[t][param] = wp["value"]
+        if wp.get("reason") and param in CORE_PARAMS:
+            notes_by_time.setdefault(t, wp["reason"][:60])
 
     # Group by day
-    from itertools import groupby
     times = sorted(by_time.keys())
 
     lines = []
@@ -270,8 +303,8 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
         if day != current_day:
             current_day = day
             try:
-                d = datetime.strptime(day, '%Y-%m-%d')
-                day_label = d.strftime('%A %B %d')
+                d = datetime.strptime(day, "%Y-%m-%d")
+                day_label = d.strftime("%A %B %d")
             except ValueError:
                 day_label = day
             lines.append(f"\n#### {day_label}\n")
@@ -282,19 +315,17 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
         time_str = t[11:16] if len(t) > 11 else t
         cols = [time_str]
         for p in CORE_PARAMS:
-            v = vals.get(p, '')
-            cols.append(str(v) if v else '·')
-        note = notes_by_time.get(t, '')
-        note = note.replace('|', '—')[:40]
+            v = vals.get(p, "")
+            cols.append(str(v) if v else "·")
+        note = notes_by_time.get(t, "")
+        note = note.replace("|", "—")[:40]
         cols.append(note)
         lines.append("| " + " | ".join(cols) + " |")
 
     # Also include non-core params as a separate small table
-    non_core = [wp for wp in waypoints if wp['parameter'] not in CORE_PARAMS]
+    non_core = [wp for wp in waypoints if wp["parameter"] not in CORE_PARAMS]
     if non_core:
-        lines.extend(["", "**Other parameters:**", "",
-                       "| Time | Parameter | Value |",
-                       "|------|-----------|-------|"])
+        lines.extend(["", "**Other parameters:**", "", "| Time | Parameter | Value |", "|------|-----------|-------|"])
         for wp in non_core:
             lines.append(f"| {wp['time'][11:16]} | `{wp['parameter']}` | {wp['value']} |")
 
@@ -303,18 +334,27 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
 
 def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: dict) -> str:
     """Generate YAML frontmatter for the daily plan."""
-    title = d.strftime('%B %d, %Y')
+    title = d.strftime("%B %d, %Y")
 
     latest_plan = plans[-1] if plans else {}
-    latest_cycle = classify_cycle(latest_plan.get('plan_id', '')) if latest_plan else 'none'
+    latest_cycle = classify_cycle(latest_plan.get("plan_id", "")) if latest_plan else "none"
 
     # Core setpoint values (from active setpoints at that date)
     sp = {}
-    core_params = ['temp_high', 'temp_low', 'vpd_high', 'vpd_hysteresis', 'd_cool_stage_2',
-                   'mister_engage_kpa', 'mister_all_kpa', 'mister_pulse_on_s',
-                   'mister_pulse_gap_s', 'mister_vpd_weight']
+    core_params = [
+        "temp_high",
+        "temp_low",
+        "vpd_high",
+        "vpd_hysteresis",
+        "d_cool_stage_2",
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_pulse_on_s",
+        "mister_pulse_gap_s",
+        "mister_vpd_weight",
+    ]
     for p in core_params:
-        sp[p] = setpoints.get(p, '')
+        sp[p] = setpoints.get(p, "")
 
     lines = [
         "---",
@@ -379,16 +419,18 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
 
     # Experiment from latest plan
     if latest_plan:
-        lines.extend([
-            "",
-            "# Experiment",
-            "experiment:",
-            f"  hypothesis: \"{latest_plan.get('hypothesis', '').replace(chr(34), chr(39))}\"",
-            f"  test: \"{latest_plan.get('experiment', '').replace(chr(34), chr(39))}\"",
-            f"  expected_outcome: \"{latest_plan.get('expected_outcome', '').replace(chr(34), chr(39))}\"",
-            f"  outcome_score: {latest_plan.get('outcome_score', '')}",
-            f"  status: {latest_plan.get('status', 'pending')}",
-        ])
+        lines.extend(
+            [
+                "",
+                "# Experiment",
+                "experiment:",
+                f'  hypothesis: "{latest_plan.get("hypothesis", "").replace(chr(34), chr(39))}"',
+                f'  test: "{latest_plan.get("experiment", "").replace(chr(34), chr(39))}"',
+                f'  expected_outcome: "{latest_plan.get("expected_outcome", "").replace(chr(34), chr(39))}"',
+                f"  outcome_score: {latest_plan.get('outcome_score', '')}",
+                f"  status: {latest_plan.get('status', 'pending')}",
+            ]
+        )
 
     lines.append("---")
     return "\n".join(lines)
@@ -413,14 +455,14 @@ def get_previous_plan(plan_created: str) -> dict | None:
     if rows and len(rows[0]) >= 9:
         row = rows[0]
         return {
-            'plan_id': row[0].strip(),
-            'created': row[1].strip(),
-            'hypothesis': row[3].strip(),
-            'experiment': row[4].strip(),
-            'expected_outcome': row[5].strip(),
-            'actual_outcome': row[6].strip(),
-            'outcome_score': row[7].strip(),
-            'lesson_extracted': row[8].strip(),
+            "plan_id": row[0].strip(),
+            "created": row[1].strip(),
+            "hypothesis": row[3].strip(),
+            "experiment": row[4].strip(),
+            "expected_outcome": row[5].strip(),
+            "actual_outcome": row[6].strip(),
+            "outcome_score": row[7].strip(),
+            "lesson_extracted": row[8].strip(),
         }
     return None
 
@@ -431,31 +473,31 @@ def get_cycle_label(plan: dict) -> tuple[str, str]:
     Uses plan_id time to determine cycle type. If the plan came from a
     deviation trigger, labels it as a Deviation Replan.
     """
-    plan_id = plan.get('plan_id', '')
-    created = plan.get('created', '')
+    plan_id = plan.get("plan_id", "")
+    created = plan.get("created", "")
 
     # Format time for display: "06:06 AM"
-    time_display = ''
+    time_display = ""
     if created and len(created) >= 16:
         try:
-            dt = datetime.strptime(created, '%Y-%m-%d %H:%M')
-            time_display = dt.strftime('%I:%M %p').lstrip('0')
+            dt = datetime.strptime(created, "%Y-%m-%d %H:%M")
+            time_display = dt.strftime("%I:%M %p").lstrip("0")
         except ValueError:
             time_display = created[11:16]
 
     # Check for deviation trigger
-    if 'deviation' in plan_id.lower() or 'reactive' in plan_id.lower():
+    if "deviation" in plan_id.lower() or "reactive" in plan_id.lower():
         return f"⚠️ Deviation Replan ({time_display})", time_display
 
     cycle_type = classify_cycle(plan_id)
     labels = {
-        'morning': '🌅 Morning Cycle',
-        'midday': '☀️ Midday Cycle',
-        'evening': '🌆 Evening Cycle',
-        'overnight': '🌙 Overnight Cycle',
-        'unknown': '📋 Planning Cycle',
+        "morning": "🌅 Morning Cycle",
+        "midday": "☀️ Midday Cycle",
+        "evening": "🌆 Evening Cycle",
+        "overnight": "🌙 Overnight Cycle",
+        "unknown": "📋 Planning Cycle",
     }
-    label = labels.get(cycle_type, '📋 Planning Cycle')
+    label = labels.get(cycle_type, "📋 Planning Cycle")
     return f"{label} ({time_display})", time_display
 
 
@@ -467,40 +509,40 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     The Hypothesis is THIS cycle's forward look.
     """
     label, _ = get_cycle_label(plan)
-    plan_id = plan.get('plan_id', '')
+    plan_id = plan.get("plan_id", "")
     lines = [f"## {label} — `{plan_id}`", ""]
 
     # --- Reflection: validates the previous cycle ---
     lines.append("### Reflection")
     lines.append("")
 
-    if plan.get('status') == 'pending':
+    if plan.get("status") == "pending":
         # This is the latest (current) cycle — hasn't been validated yet
         lines.append("⏳ *Pending — will be validated at next planning cycle.*")
         lines.append("")
     elif prev_plan:
         # Show what previous cycle hypothesized and how it turned out
-        prev_id = prev_plan.get('plan_id', 'unknown')
+        prev_id = prev_plan.get("plan_id", "unknown")
         prev_label, _ = get_cycle_label(prev_plan)
         lines.append(f"_Validating previous cycle: `{prev_id}`_")
         lines.append("")
 
-        prev_hypothesis = prev_plan.get('hypothesis', '')
+        prev_hypothesis = prev_plan.get("hypothesis", "")
         if prev_hypothesis:
             lines.append(f"**Previous hypothesis:** {prev_hypothesis}")
         else:
             lines.append("**Previous hypothesis:** *(not recorded)*")
 
         # The actual_outcome and score come from THIS plan's validation of the previous one
-        actual = plan.get('actual_outcome', '')
-        score = plan.get('outcome_score', '')
+        actual = plan.get("actual_outcome", "")
+        score = plan.get("outcome_score", "")
         if actual:
             lines.append(f"**Result:** {actual}")
         if score:
             lines.append(f"**Score:** {score}/10")
         lines.append("")
 
-        lesson = plan.get('lesson_extracted', '')
+        lesson = plan.get("lesson_extracted", "")
         if lesson:
             lines.append(f"> **New finding:** {lesson} → Added to [Lessons Learned](/greenhouse/lessons)")
             lines.append("")
@@ -513,15 +555,15 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     lines.append("### Hypothesis")
     lines.append("")
 
-    conditions = plan.get('conditions_summary', '')
+    conditions = plan.get("conditions_summary", "")
     if conditions:
         lines.append(f"**Conditions:** {conditions}")
 
-    experiment = plan.get('experiment', '')
+    experiment = plan.get("experiment", "")
     if experiment:
         lines.append(f"**Testing:** {experiment}")
 
-    expected = plan.get('expected_outcome', '')
+    expected = plan.get("expected_outcome", "")
     if expected:
         lines.append(f"**Expected outcome:** {expected}")
     lines.append("")
@@ -545,67 +587,77 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
     lines = ["## End-of-Day Summary", ""]
 
     # Climate table
-    lines.extend([
-        "### Climate",
-        "",
-        "| Metric | Min | Avg | Max |",
-        "|--------|-----|-----|-----|",
-        f"| Temperature (°F) | {r(summary.get('temp_min'))} | {r(summary.get('temp_avg'))} | {r(summary.get('temp_max'))} |",
-        f"| VPD (kPa) | {r(summary.get('vpd_min'), 2)} | {r(summary.get('vpd_avg'), 2)} | {r(summary.get('vpd_max'), 2)} |",
-        f"| Relative Humidity (%) | {r(summary.get('rh_min'))} | — | {r(summary.get('rh_max'))} |",
-        "",
-    ])
+    lines.extend(
+        [
+            "### Climate",
+            "",
+            "| Metric | Min | Avg | Max |",
+            "|--------|-----|-----|-----|",
+            f"| Temperature (°F) | {r(summary.get('temp_min'))} | {r(summary.get('temp_avg'))} | {r(summary.get('temp_max'))} |",
+            f"| VPD (kPa) | {r(summary.get('vpd_min'), 2)} | {r(summary.get('vpd_avg'), 2)} | {r(summary.get('vpd_max'), 2)} |",
+            f"| Relative Humidity (%) | {r(summary.get('rh_min'))} | — | {r(summary.get('rh_max'))} |",
+            "",
+        ]
+    )
 
     # Stress
-    lines.extend([
-        "### Stress Hours",
-        "",
-        f"- **Heat stress (>85°F):** {r(summary.get('stress_hours_heat'))}h",
-        f"- **VPD stress (>2.0 kPa):** {r(summary.get('stress_hours_vpd_high'))}h",
-        f"- **Cold stress (<55°F):** {r(summary.get('stress_hours_cold'))}h",
-        "",
-    ])
+    lines.extend(
+        [
+            "### Stress Hours",
+            "",
+            f"- **Heat stress (>85°F):** {r(summary.get('stress_hours_heat'))}h",
+            f"- **VPD stress (>2.0 kPa):** {r(summary.get('stress_hours_vpd_high'))}h",
+            f"- **Cold stress (<55°F):** {r(summary.get('stress_hours_cold'))}h",
+            "",
+        ]
+    )
 
     # Economics
-    lines.extend([
-        "### Economics",
-        "",
-        f"| Electric | Gas | Water | **Total** |",
-        f"|----------|-----|-------|-----------|",
-        f"| ${r(summary.get('cost_electric'), 2)} | ${r(summary.get('cost_gas'), 2)} | ${r(summary.get('cost_water'), 3)} | **${r(summary.get('cost_total'), 2)}** |",
-        "",
-    ])
+    lines.extend(
+        [
+            "### Economics",
+            "",
+            "| Electric | Gas | Water | **Total** |",
+            "|----------|-----|-------|-----------|",
+            f"| ${r(summary.get('cost_electric'), 2)} | ${r(summary.get('cost_gas'), 2)} | ${r(summary.get('cost_water'), 3)} | **${r(summary.get('cost_total'), 2)}** |",
+            "",
+        ]
+    )
 
     # Equipment runtimes
-    lines.extend([
-        "### Equipment Runtimes",
-        "",
-        "| Equipment | Runtime |",
-        "|-----------|---------|",
-        f"| Fan 1 | {r(summary.get('runtime_fan1_min'), 0)} min |",
-        f"| Fan 2 | {r(summary.get('runtime_fan2_min'), 0)} min |",
-        f"| Vent | {r(summary.get('runtime_vent_min'), 0)} min |",
-        f"| Fog | {r(summary.get('runtime_fog_min'), 0)} min |",
-        f"| Heat 1 (electric) | {r(summary.get('runtime_heat1_min'), 0)} min |",
-        f"| Heat 2 (gas) | {r(summary.get('runtime_heat2_min'), 0)} min |",
-        f"| Grow lights | {r(summary.get('runtime_grow_light_min'), 0)} min |",
-        f"| Mister south | {r(summary.get('runtime_mister_south_h'), 2)}h |",
-        f"| Mister west | {r(summary.get('runtime_mister_west_h'), 2)}h |",
-        f"| Mister center | {r(summary.get('runtime_mister_center_h'), 2)}h |",
-        "",
-    ])
+    lines.extend(
+        [
+            "### Equipment Runtimes",
+            "",
+            "| Equipment | Runtime |",
+            "|-----------|---------|",
+            f"| Fan 1 | {r(summary.get('runtime_fan1_min'), 0)} min |",
+            f"| Fan 2 | {r(summary.get('runtime_fan2_min'), 0)} min |",
+            f"| Vent | {r(summary.get('runtime_vent_min'), 0)} min |",
+            f"| Fog | {r(summary.get('runtime_fog_min'), 0)} min |",
+            f"| Heat 1 (electric) | {r(summary.get('runtime_heat1_min'), 0)} min |",
+            f"| Heat 2 (gas) | {r(summary.get('runtime_heat2_min'), 0)} min |",
+            f"| Grow lights | {r(summary.get('runtime_grow_light_min'), 0)} min |",
+            f"| Mister south | {r(summary.get('runtime_mister_south_h'), 2)}h |",
+            f"| Mister west | {r(summary.get('runtime_mister_west_h'), 2)}h |",
+            f"| Mister center | {r(summary.get('runtime_mister_center_h'), 2)}h |",
+            "",
+        ]
+    )
 
     # Water
-    water_total = summary.get('water_used_gal')
-    mister_water = summary.get('mister_water_gal')
+    water_total = summary.get("water_used_gal")
+    mister_water = summary.get("mister_water_gal")
     if water_total is not None:
-        lines.extend([
-            "### Water",
-            "",
-            f"- **Total:** {r(water_total, 0)} gal",
-            f"- **Mister:** {r(mister_water, 0)} gal",
-            "",
-        ])
+        lines.extend(
+            [
+                "### Water",
+                "",
+                f"- **Total:** {r(water_total, 0)} gal",
+                f"- **Mister:** {r(mister_water, 0)} gal",
+                "",
+            ]
+        )
 
     # Crop health (from Gemini Vision observations)
     crop_health = db_query_rows(f"""
@@ -617,21 +669,26 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
         GROUP BY c.name, c.zone ORDER BY c.name
     """)
     if crop_health:
-        lines.extend(["### Crop Health (Gemini Vision)", "",
-                       "| Crop | Zone | Health | Obs | Notes |",
-                       "|------|------|--------|-----|-------|"])
+        lines.extend(
+            [
+                "### Crop Health (Gemini Vision)",
+                "",
+                "| Crop | Zone | Health | Obs | Notes |",
+                "|------|------|--------|-----|-------|",
+            ]
+        )
         for row in crop_health:
             if len(row) >= 5:
-                health_pct = f"{float(row[2].strip())*100:.0f}%" if row[2].strip() else "—"
+                health_pct = f"{float(row[2].strip()) * 100:.0f}%" if row[2].strip() else "—"
                 notes = row[4].strip()[:60] if row[4].strip() else "—"
                 lines.append(f"| {row[0].strip()} | {row[1].strip()} | {health_pct} | {row[3].strip()} | {notes} |")
         lines.append("")
 
     # Hourly pattern (compact)
     if hourly:
-        lines.extend(["### Hourly Pattern", "",
-                       "| Hour | Temp °F | VPD kPa | RH % |",
-                       "|------|---------|---------|------|"])
+        lines.extend(
+            ["### Hourly Pattern", "", "| Hour | Temp °F | VPD kPa | RH % |", "|------|---------|---------|------|"]
+        )
         for h in hourly:
             lines.append(f"| {h['hour']} | {h['temp']} | {h['vpd']} | {h['rh']} |")
         lines.append("")
@@ -647,7 +704,7 @@ def generate_day(d: date) -> str:
     Each cycle gets its own ## section with Reflection + Hypothesis + Setpoints.
     The day reads like a lab notebook — chronological, no collapsing.
     """
-    title = d.strftime('%B %d, %Y')
+    title = d.strftime("%B %d, %Y")
 
     summary = get_daily_summary(d)
     plans = get_plans_for_date(d)
@@ -666,8 +723,8 @@ def generate_day(d: date) -> str:
     else:
         # Each plan gets its own cycle section, chronologically
         for plan in plans:
-            prev_plan = get_previous_plan(plan['created'])
-            waypoints = get_waypoints_for_plan(plan['plan_id'])
+            prev_plan = get_previous_plan(plan["created"])
+            waypoints = get_waypoints_for_plan(plan["plan_id"])
             body.append(generate_cycle_section(plan, prev_plan, waypoints))
 
     # End-of-day summary (unchanged)
@@ -676,9 +733,14 @@ def generate_day(d: date) -> str:
 
     # 7-day stress context (unchanged)
     if stress_ctx:
-        body.extend(["## 7-Day Stress Context", "",
-                      "| Date | Heat (h) | VPD High (h) | Cold (h) |",
-                      "|------|----------|--------------|----------|"])
+        body.extend(
+            [
+                "## 7-Day Stress Context",
+                "",
+                "| Date | Heat (h) | VPD High (h) | Cold (h) |",
+                "|------|----------|--------------|----------|",
+            ]
+        )
         for s in stress_ctx:
             body.append(f"| {s['date']} | {s['heat']} | {s['vpd_high']} | {s['cold']} |")
         body.append("")
@@ -736,8 +798,7 @@ def main():
     parser.add_argument("--backfill", action="store_true", help="Backfill all historical days")
     parser.add_argument("--date", type=str, help="Date to generate (YYYY-MM-DD)")
     parser.add_argument("--today", action="store_true", help="Generate today's plan")
-    parser.add_argument("--cycle", type=str, choices=["morning", "midday", "evening"],
-                        help="Current planning cycle")
+    parser.add_argument("--cycle", type=str, choices=["morning", "midday", "evening"], help="Current planning cycle")
     parser.add_argument("--plan-id", type=str, help="Current plan ID")
     args = parser.parse_args()
 
