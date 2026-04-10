@@ -532,6 +532,54 @@ number:
           id(num_min_fog_off).publish_state(x);
 
   - platform: template
+    id: num_vpd_watch_dwell
+    name: "VPD Watch Dwell (s)"
+    min_value: 15
+    max_value: 120
+    step: 15
+    lambda: "return id(vpd_watch_dwell_s);"
+    set_action:
+      - lambda: |
+          id(vpd_watch_dwell_s) = x;
+          id(num_vpd_watch_dwell).publish_state(x);
+
+  - platform: template
+    id: num_mist_vent_close_lead
+    name: "Mist Vent Close Lead (s)"
+    min_value: 0
+    max_value: 60
+    step: 5
+    lambda: "return id(mist_vent_close_lead_s);"
+    set_action:
+      - lambda: |
+          id(mist_vent_close_lead_s) = x;
+          id(num_mist_vent_close_lead).publish_state(x);
+
+  - platform: template
+    id: num_mist_max_closed_vent
+    name: "Mist Max Closed Vent (s)"
+    min_value: 120
+    max_value: 900
+    step: 60
+    lambda: "return id(mist_max_closed_vent_s);"
+    set_action:
+      - lambda: |
+          id(mist_max_closed_vent_s) = x;
+          id(num_mist_max_closed_vent).publish_state(x);
+
+  - platform: template
+    id: num_fog_escalation_kpa
+    name: "Fog Escalation (kPa)"
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    lambda: "return id(fog_escalation_kpa);"
+    set_action:
+      - lambda: |
+          id(fog_escalation_kpa) = x;
+          id(num_fog_escalation_kpa).publish_state(x);
+
+  - platform: template
     id: num_mister_all_delay
     name: "Mister All Delay (s)"
     min_value: 60

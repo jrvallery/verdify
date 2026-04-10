@@ -691,6 +691,29 @@ globals:
     restore_value: yes
     initial_value: '60'
 
+  # VPD_WATCH dwell — observation period before misting
+  - id: vpd_watch_dwell_s
+    type: int
+    restore_value: yes
+    initial_value: '60'
+
+  # Vent coordination for misting (binary vent)
+  - id: mist_vent_close_lead_s
+    type: int
+    restore_value: yes
+    initial_value: '15'
+
+  - id: mist_max_closed_vent_s
+    type: int
+    restore_value: yes
+    initial_value: '600'
+
+  # Fog escalation threshold (VPD delta above vpd_high)
+  - id: fog_escalation_kpa
+    type: float
+    restore_value: yes
+    initial_value: '0.4'
+
   - id: mister_closes_vent
     type: bool
     restore_value: yes

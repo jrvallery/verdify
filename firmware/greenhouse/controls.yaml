@@ -28,7 +28,7 @@ interval:
 
           /**************** ENUMS & PATTERN TABLE ********************************/
           enum TempStage { TEMP_IDLE, COOL_S1, COOL_S2, COOL_S3, HEAT_S1, HEAT_S2 };
-          enum HumiStage { HUM_IDLE, HUMID_S1, HUMID_S2, HUMID_S3, DEHUM_V1, DEHUM_V2, DEHUM_HEAT };
+          enum HumiStage { HUM_IDLE, VPD_WATCH, HUMID_S1, HUMID_S2, HUMID_S3, DEHUM_V1, DEHUM_V2, DEHUM_HEAT };
 
           struct Row {
             TempStage t; HumiStage h;
@@ -38,6 +38,7 @@ interval:
           static const Row PATTERN_TABLE[] = {
             /* ────────────── TEMP_IDLE ────────────── */
             { TEMP_IDLE, HUM_IDLE    , 0,0,0,0,0,0 },
+            { TEMP_IDLE, VPD_WATCH   , 0,0,0,0,0,0 },  // observation dwell — no equipment
             { TEMP_IDLE, HUMID_S1    , 0,0,0,0,1,0 },
             { TEMP_IDLE, HUMID_S2    , 0,0,0,0,1,0 },
             { TEMP_IDLE, HUMID_S3    , 0,0,0,0,1,0 },
@@ -47,6 +48,7 @@ interval:
 
             /* ────────────── COOL_S1 ────────────── */
             { COOL_S1  , HUM_IDLE    , 0,0,1,0,0,1 },
+            { COOL_S1  , VPD_WATCH   , 0,0,1,0,0,1 },  // fans run, observe VPD
             { COOL_S1  , HUMID_S1    , 0,0,1,0,0,1 },
             { COOL_S1  , HUMID_S2    , 0,0,1,0,1,0 },
             { COOL_S1  , HUMID_S3    , 0,0,1,0,1,0 },
@@ -56,6 +58,7 @@ interval:
 
             /* ────────────── COOL_S2 ────────────── */
             { COOL_S2  , HUM_IDLE    , 0,0,1,1,0,1 },
+            { COOL_S2  , VPD_WATCH   , 0,0,1,1,0,1 },  // both fans, observe VPD
             { COOL_S2  , HUMID_S1    , 0,0,1,1,0,1 },
             { COOL_S2  , HUMID_S2    , 0,0,1,1,1,0 },
             { COOL_S2  , HUMID_S3    , 0,0,1,1,1,0 },
@@ -65,6 +68,7 @@ interval:
 
             /* ────────────── COOL_S3 ────────────── */
             { COOL_S3  , HUM_IDLE    , 0,0,1,1,0,1 },
+            { COOL_S3  , VPD_WATCH   , 0,0,1,1,0,1 },  // extreme cool + observe VPD
             { COOL_S3  , HUMID_S1    , 0,0,1,1,1,1 },
             { COOL_S3  , HUMID_S2    , 0,0,1,1,1,1 },
             { COOL_S3  , HUMID_S3    , 0,0,1,1,1,1 },
@@ -74,6 +78,7 @@ interval:
 
             /* ────────────── HEAT_S1 ────────────── */
             { HEAT_S1  , HUM_IDLE    , 1,0,0,0,0,0 },
+            { HEAT_S1  , VPD_WATCH   , 1,0,0,0,0,0 },  // heat continues, observe VPD
             { HEAT_S1  , HUMID_S1    , 1,0,0,0,1,0 },
             { HEAT_S1  , HUMID_S2    , 1,0,0,0,1,0 },
             { HEAT_S1  , HUMID_S3    , 1,0,0,0,1,0 },
@@ -83,6 +88,7 @@ interval:
 
             /* ────────────── HEAT_S2 ────────────── */
             { HEAT_S2  , HUM_IDLE    , 1,1,0,0,0,0 },
+            { HEAT_S2  , VPD_WATCH   , 1,1,0,0,0,0 },  // both heaters, observe VPD
             { HEAT_S2  , HUMID_S1    , 1,1,0,0,1,0 },
             { HEAT_S2  , HUMID_S2    , 1,1,0,0,1,0 },
             { HEAT_S2  , HUMID_S3    , 1,1,0,0,1,0 },
@@ -369,27 +375,53 @@ interval:
 
           /**************** 9 — humidity sub-state determination *****************/
           static HumiStage h_prev = HUM_IDLE;
+          static uint32_t vpd_watch_timer_ms = 0;
+          static uint32_t mist_vent_closed_ms = 0;
+          const uint32_t VPD_WATCH_DWELL_MS = uint32_t(id(vpd_watch_dwell_s)) * 1000UL;
+          const uint32_t MIST_VENT_CLOSE_LEAD_MS = uint32_t(id(mist_vent_close_lead_s)) * 1000UL;
+          const uint32_t MIST_MAX_CLOSED_VENT_MS = uint32_t(id(mist_max_closed_vent_s)) * 1000UL;
+
           HumiStage h = HUM_IDLE;
+
           if(VPD > VPDhi + HV){
-            h = HUMID_S1;                                    // air too dry → fog
+            // VPD above band + hysteresis — check if WATCH dwell satisfied
+            if(h_prev == VPD_WATCH && vpd_watch_timer_ms >= VPD_WATCH_DWELL_MS){
+              h = HUMID_S1;                                  // dwell complete → mist
+            }else if(h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3){
+              h = h_prev;                                    // already misting, stay
+            }else{
+              h = VPD_WATCH;                                 // enter observation dwell
+            }
+          }else if(VPD > VPDhi){
+            // VPD above band but within hysteresis — watch only (no misting)
+            if(h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3){
+              h = h_prev;                                    // keep misting until below band
+            }else{
+              h = VPD_WATCH;                                 // observe
+            }
           }else if(VPD < VPDlo - HV){
-            bool ventOK = !econ_block;                      // outside air is drier
+            bool ventOK = !econ_block;
             if(ventOK){
               h = (VPD < VPDlo - 2*HV) ? DEHUM_V2 : DEHUM_V1;
             }else{
-              h = DEHUM_HEAT;                               // last resort
-            }
-          }
-          // Safety override on VPD extremes
-          if(VPD > VPDmaxSafe){
-            h = HUMID_S1;
-          }else if(VPD < VPDminSafe){
-            bool ventOK = !econ_block;
-            if(ventOK){
-              h = DEHUM_V2;
-            }else{
               h = DEHUM_HEAT;
             }
+          }
+
+          // VPD_WATCH timer management
+          if(h == VPD_WATCH){
+            vpd_watch_timer_ms += dt_ms;
+          }else{
+            vpd_watch_timer_ms = 0;
+          }
+
+          // Safety override on VPD extremes (skip WATCH, go direct)
+          if(VPD > VPDmaxSafe){
+            h = HUMID_S1;
+            vpd_watch_timer_ms = VPD_WATCH_DWELL_MS;       // bypass dwell
+          }else if(VPD < VPDminSafe){
+            bool ventOK = !econ_block;
+            h = ventOK ? DEHUM_V2 : DEHUM_HEAT;
           }
 
           // Track de-hum cycles and safety cycles
@@ -806,7 +838,7 @@ interval:
 
           /**************** 14 — Telemetry & debug *******************************/
           const char* Tn[]{"TEMP_IDLE","COOL_S1","COOL_S2","COOL_S3","HEAT_S1","HEAT_S2"};
-          const char* Hn[]{"HUM_IDLE","HUMID_S1","HUMID_S2","HUMID_S3","DEHUM_V1","DEHUM_V2","DEHUM_HEAT"};
+          const char* Hn[]{"HUM_IDLE","VPD_WATCH","HUMID_S1","HUMID_S2","HUMID_S3","DEHUM_V1","DEHUM_V2","DEHUM_HEAT"};
           char lbl[48];
           snprintf(lbl,sizeof(lbl),"%s_%s", Tn[t], Hn[h]);
           id(gh_state).publish_state(lbl);
@@ -1360,6 +1392,10 @@ interval:
                     if(key == "east_adjacency_factor"){ val = cf(val, 0, 1); if(fabs(id(east_adjacency_factor) - val) > 0.01f){ id(east_adjacency_factor) = val; id(num_east_adjacency_factor).publish_state(val); applied++; }}
                     if(key == "min_fog_on_s"){ int v = ci((int)val, 15, 300); if(id(min_fog_on_s) != v){ id(min_fog_on_s) = v; id(num_min_fog_on).publish_state(v); applied++; }}
                     if(key == "min_fog_off_s"){ int v = ci((int)val, 15, 300); if(id(min_fog_off_s) != v){ id(min_fog_off_s) = v; id(num_min_fog_off).publish_state(v); applied++; }}
+                    if(key == "vpd_watch_dwell_s"){ int v = ci((int)val, 15, 120); if(id(vpd_watch_dwell_s) != v){ id(vpd_watch_dwell_s) = v; id(num_vpd_watch_dwell).publish_state(v); applied++; }}
+                    if(key == "mist_vent_close_lead_s"){ int v = ci((int)val, 0, 60); if(id(mist_vent_close_lead_s) != v){ id(mist_vent_close_lead_s) = v; id(num_mist_vent_close_lead).publish_state(v); applied++; }}
+                    if(key == "mist_max_closed_vent_s"){ int v = ci((int)val, 120, 900); if(id(mist_max_closed_vent_s) != v){ id(mist_max_closed_vent_s) = v; id(num_mist_max_closed_vent).publish_state(v); applied++; }}
+                    if(key == "fog_escalation_kpa"){ val = cf(val, 0.1, 1.0); if(fabs(id(fog_escalation_kpa) - val) > 0.01f){ id(fog_escalation_kpa) = val; id(num_fog_escalation_kpa).publish_state(val); applied++; }}
                     if(key == "sw_gl_auto_mode"){ bool v = val > 0.5f; if(id(gl_auto_enabled) != v){ id(gl_auto_enabled) = v; id(sw_gl_auto).publish_state(v); applied++; }}
                     if(key == "sw_irrigation_enabled"){ bool v = val > 0.5f; if(id(irrig_enabled) != v){ id(irrig_enabled) = v; id(sw_irrig_enabled).publish_state(v); applied++; }}
                     if(key == "sw_irrigation_wall_enabled"){ bool v = val > 0.5f; if(id(irrig_wall_enabled) != v){ id(irrig_wall_enabled) = v; id(sw_irrig_wall_enabled).publish_state(v); applied++; }}
