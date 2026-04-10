@@ -90,16 +90,19 @@ These are computed from crop profiles every 5 minutes. Use `bias_heat_f`/`bias_c
 
 ## Transition Timing
 
-| Transition | Time | What Changes |
-|-----------|------|-------------|
-| Pre-dawn | 5:00 AM | Heat bias, tighten hysteresis |
-| Morning ramp | 8:00-9:00 AM | Reduce pulse gap for approaching solar stress |
-| Peak heat | 12:00-1:00 PM | Most aggressive misting posture |
-| Afternoon decline | 4:00-5:00 PM | Relax pulse gap |
-| Evening restore | 7:00 PM | Revert to defaults, add heat bias if cold night |
+Derive timestamps from the TRANSITION MILESTONES in the live data — not fixed clock times.
+
+| Transition | Anchor | What Changes |
+|-----------|--------|-------------|
+| Pre-dawn | 1h before sunrise | Heat bias, tighten hysteresis before solar ramp |
+| Solar ramp | Sunrise → peak solar hour | Reduce pulse gap as VPD climbs |
+| Peak stress | Peak VPD hour ± 1h | Most aggressive misting posture |
+| Cloud shift | Cloud transition time (if any) | Adjust posture at clear↔cloud boundary |
+| Afternoon decline | 2h after peak solar | Relax pulse gap, solar dropping |
+| Evening restore | Sunset | Revert to defaults, heat bias if cold night |
 
 Target: 8-15 transitions across 3 days. Every transition must include ALL 28 Tier 1 params.
-Synthesize each day into overnight, ramp, peak, and restore segments. Do not mirror every forecast hour.
+Synthesize each day into overnight, ramp, peak, and restore. Do not mirror every forecast hour.
 
 ## Validated Lessons
 
