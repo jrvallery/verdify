@@ -1,11 +1,13 @@
 ################################################################################
-# greenhouse/controls.yaml — refactored (2025‑07‑20)
+# greenhouse/controls.yaml — Mode-based climate controller (2026-04-10)
 #
-# Two‑axis deterministic state machine with safety rails and vent control via
-# relay min_on/off timing.  The vent relay uses independent min on/off times
-# (default 30s) for fast response to fog-priority gating, while fans retain
-# their own timing (default 120s/90s).  Daily counters for relay cycles are
-# maintained.
+# 6-mode architecture: SAFETY_COOL, SAFETY_HEAT, SEALED_MIST,
+# THERMAL_RELIEF, VENTILATE, IDLE. Each mode defines a complete, consistent
+# set of relay outputs. No override layers — the mode table IS the truth.
+#
+# Vent and fans are always consistent: sealed modes have vent closed + fans off,
+# open modes have vent open + fans on. Open-vent misting is structurally
+# impossible. Heater/vent oscillation is structurally impossible.
 ################################################################################
 
 interval:
@@ -26,79 +28,19 @@ interval:
           const uint32_t LEAD_ROTATE_TIMEOUT_MS =
                    std::max(uint32_t(id(lead_rotate_timeout_s)) * 1000UL, uint32_t(60000UL));
 
-          /**************** ENUMS & PATTERN TABLE ********************************/
-          enum TempStage { TEMP_IDLE, COOL_S1, COOL_S2, COOL_S3, HEAT_S1, HEAT_S2 };
-          enum HumiStage { HUM_IDLE, VPD_WATCH, HUMID_S1, HUMID_S2, HUMID_S3, DEHUM_V1, DEHUM_V2, DEHUM_HEAT };
-
-          struct Row {
-            TempStage t; HumiStage h;
-            bool H1,H2,LEAD,LAG,FOG,VENT;
+          /**************** ENUMS *************************************************/
+          // 6 greenhouse modes — mutually exclusive, priority-ordered
+          enum Mode {
+            SAFETY_COOL,      // temp >= safety_max → vent open, both fans, fog allowed
+            SAFETY_HEAT,      // temp <= safety_min → vent closed, both heaters
+            SEALED_MIST,      // VPD > band ceiling → vent closed, fans off, misters pulsing
+            THERMAL_RELIEF,   // sealed too long → mandatory vent burst for heat dump
+            VENTILATE,        // temp > temp_high + bias_cool → vent open, fans on
+            DEHUM_VENT,       // VPD < vpd_low → vent open for humidity dump
+            IDLE              // everything in band → vent closed, no active equipment
           };
-
-          static const Row PATTERN_TABLE[] = {
-            /* ────────────── TEMP_IDLE ────────────── */
-            { TEMP_IDLE, HUM_IDLE    , 0,0,0,0,0,0 },
-            { TEMP_IDLE, VPD_WATCH   , 0,0,0,0,0,0 },  // observation dwell — no equipment
-            { TEMP_IDLE, HUMID_S1    , 0,0,0,0,1,0 },
-            { TEMP_IDLE, HUMID_S2    , 0,0,0,0,1,0 },
-            { TEMP_IDLE, HUMID_S3    , 0,0,0,0,1,0 },
-            { TEMP_IDLE, DEHUM_V1    , 0,0,1,0,0,1 },
-            { TEMP_IDLE, DEHUM_V2    , 0,0,1,1,0,1 },
-            { TEMP_IDLE, DEHUM_HEAT  , 1,1,0,0,0,0 },
-
-            /* ────────────── COOL_S1 ────────────── */
-            { COOL_S1  , HUM_IDLE    , 0,0,1,0,0,1 },
-            { COOL_S1  , VPD_WATCH   , 0,0,1,0,0,1 },  // fans run, observe VPD
-            { COOL_S1  , HUMID_S1    , 0,0,1,0,0,1 },
-            { COOL_S1  , HUMID_S2    , 0,0,1,0,1,0 },
-            { COOL_S1  , HUMID_S3    , 0,0,1,0,1,0 },
-            { COOL_S1  , DEHUM_V1    , 0,0,1,0,0,1 },
-            { COOL_S1  , DEHUM_V2    , 0,0,1,1,0,1 },
-            { COOL_S1  , DEHUM_HEAT  , 0,0,1,0,0,0 },
-
-            /* ────────────── COOL_S2 ────────────── */
-            { COOL_S2  , HUM_IDLE    , 0,0,1,1,0,1 },
-            { COOL_S2  , VPD_WATCH   , 0,0,1,1,0,1 },  // both fans, observe VPD
-            { COOL_S2  , HUMID_S1    , 0,0,1,1,0,1 },
-            { COOL_S2  , HUMID_S2    , 0,0,1,1,1,0 },
-            { COOL_S2  , HUMID_S3    , 0,0,1,1,1,0 },
-            { COOL_S2  , DEHUM_V1    , 0,0,1,1,0,1 },
-            { COOL_S2  , DEHUM_V2    , 0,0,1,1,0,1 },
-            { COOL_S2  , DEHUM_HEAT  , 0,0,1,1,0,1 },
-
-            /* ────────────── COOL_S3 ────────────── */
-            { COOL_S3  , HUM_IDLE    , 0,0,1,1,0,1 },
-            { COOL_S3  , VPD_WATCH   , 0,0,1,1,0,1 },  // extreme cool + observe VPD
-            { COOL_S3  , HUMID_S1    , 0,0,1,1,1,1 },
-            { COOL_S3  , HUMID_S2    , 0,0,1,1,1,1 },
-            { COOL_S3  , HUMID_S3    , 0,0,1,1,1,1 },
-            { COOL_S3  , DEHUM_V1    , 0,0,1,1,0,1 },
-            { COOL_S3  , DEHUM_V2    , 0,0,1,1,0,1 },
-            { COOL_S3  , DEHUM_HEAT  , 0,0,1,1,0,1 },
-
-            /* ────────────── HEAT_S1 ────────────── */
-            { HEAT_S1  , HUM_IDLE    , 1,0,0,0,0,0 },
-            { HEAT_S1  , VPD_WATCH   , 1,0,0,0,0,0 },  // heat continues, observe VPD
-            { HEAT_S1  , HUMID_S1    , 1,0,0,0,1,0 },
-            { HEAT_S1  , HUMID_S2    , 1,0,0,0,1,0 },
-            { HEAT_S1  , HUMID_S3    , 1,0,0,0,1,0 },
-            { HEAT_S1  , DEHUM_V1    , 1,0,0,0,0,0 },
-            { HEAT_S1  , DEHUM_V2    , 1,1,0,0,0,0 },
-            { HEAT_S1  , DEHUM_HEAT  , 1,1,0,0,0,0 },
-
-            /* ────────────── HEAT_S2 ────────────── */
-            { HEAT_S2  , HUM_IDLE    , 1,1,0,0,0,0 },
-            { HEAT_S2  , VPD_WATCH   , 1,1,0,0,0,0 },  // both heaters, observe VPD
-            { HEAT_S2  , HUMID_S1    , 1,1,0,0,1,0 },
-            { HEAT_S2  , HUMID_S2    , 1,1,0,0,1,0 },
-            { HEAT_S2  , HUMID_S3    , 1,1,0,0,1,0 },
-            { HEAT_S2  , DEHUM_V1    , 1,1,0,0,0,0 },
-            { HEAT_S2  , DEHUM_V2    , 1,1,0,0,0,0 },
-            { HEAT_S2  , DEHUM_HEAT  , 1,1,0,0,0,0 }
-          };
-
-          /* Fallback pattern if no exact row matched */
-          const Row SAFE_FAN_PURGE = { TEMP_IDLE, HUM_IDLE, 0,0,1,1,0,1 };
+          // Sub-states for mister escalation within SEALED_MIST
+          enum MistStage { MIST_WATCH, MIST_S1, MIST_S2, MIST_FOG };
 
           /**************** 1 — time bookkeeping *********************************/
           static uint32_t last_ms = millis();
@@ -326,342 +268,235 @@ interval:
             ESP_LOGI("lead","Lead fan rotated → %s", id(fan_lead_is_fan1) ? "Fan 1" : "Fan 2");
           }
 
-          /**************** 8 — temperature sub-state determination **************/
-          static TempStage t_prev = TEMP_IDLE;
-          TempStage t = TEMP_IDLE;
+          /**************** 8 — MODE DETERMINATION ********************************/
+          // Single priority-ordered decision. No override layers.
+          static Mode mode_prev = IDLE;
+          static uint32_t sealed_timer_ms = 0;     // how long vent has been closed for misting
+          static uint32_t relief_timer_ms = 0;     // how long thermal relief has been active
+          static uint32_t vpd_watch_timer_ms = 0;  // VPD observation dwell before sealing
+          static MistStage mist_stage = MIST_WATCH;
 
-          bool t_lo2 = Tin < Tlow;           // S2: gas fires AT crop floor
-          bool t_lo  = Tin < Tlow + dH2;    // S1: electric pre-heats inside band
-          bool t_hi3 = Tin > Thigh + dC2 + EXTRA_COOL_S3_DELTA_F;
-          bool t_hi2 = Tin > Thigh + dC2;
-          bool t_hi  = Tin > Thigh;
-
-          // Safety override
-          bool safety_heat = Tin <= TminSafe;
-          bool safety_cool = Tin >= TmaxSafe;
-
-          switch(t_prev){
-            case HEAT_S2:
-              t = (Tin >= Tlow + HT) ? (t_lo ? HEAT_S1 : TEMP_IDLE) : HEAT_S2;
-              break;
-            case HEAT_S1:
-              t = (Tin >= Tlow + dH2 + HT) ? TEMP_IDLE : (t_lo2 ? HEAT_S2 : HEAT_S1);
-              break;
-            case COOL_S3:
-              t = (Tin <= Thigh + dC2) ? COOL_S2 : COOL_S3;
-              break;
-            case COOL_S2:
-              t = (Tin <= Thigh + dC2 - HT) ?
-                    (t_hi ? COOL_S1 : TEMP_IDLE) :
-                    (t_hi3 ? COOL_S3 : COOL_S2);
-              break;
-            case COOL_S1:
-              t = (Tin <= Thigh - HT) ? TEMP_IDLE : (t_hi2 ? COOL_S2 : COOL_S1);
-              break;
-            default:
-              t = t_lo2 ? HEAT_S2 :
-                  t_lo  ? HEAT_S1 :
-                  t_hi3 ? COOL_S3 :
-                  t_hi2 ? COOL_S2 :
-                  t_hi  ? COOL_S1 :
-                          TEMP_IDLE;
-          }
-
-          // Apply safety overrides for temperature extremes
-          if(safety_heat) t = HEAT_S2;
-          if(safety_cool) t = COOL_S3;
-
-          t_prev = t;
-
-          /**************** 9 — humidity sub-state determination *****************/
-          static HumiStage h_prev = HUM_IDLE;
-          static uint32_t vpd_watch_timer_ms = 0;
-          static uint32_t mist_vent_closed_ms = 0;
           const uint32_t VPD_WATCH_DWELL_MS = uint32_t(id(vpd_watch_dwell_s)) * 1000UL;
-          const uint32_t MIST_VENT_CLOSE_LEAD_MS = uint32_t(id(mist_vent_close_lead_s)) * 1000UL;
-          const uint32_t MIST_MAX_CLOSED_VENT_MS = uint32_t(id(mist_max_closed_vent_s)) * 1000UL;
+          const uint32_t SEALED_MAX_MS = uint32_t(id(mist_max_closed_vent_s)) * 1000UL;
+          const uint32_t RELIEF_DURATION_MS = uint32_t(id(mist_thermal_relief_s)) * 1000UL;
 
-          HumiStage h = HUM_IDLE;
+          // Conditions
+          bool safety_cool = Tin >= TmaxSafe;
+          bool safety_heat = Tin <= TminSafe;
+          bool vpd_above_band = VPD > VPDhi;
+          bool vpd_below_exit = VPD < (VPDhi - HV);  // hysteresis is EXIT condition
+          bool vpd_too_low = VPD < (VPDlo - HV) && !econ_block;
+          bool needs_cooling = Tin > Thigh;
+          bool needs_heating_s1 = Tin < (Tlow + dH2);  // electric pre-heat inside band
+          bool needs_heating_s2 = Tin < Tlow;           // gas fires at crop floor
+          bool in_thermal_relief = (mode_prev == THERMAL_RELIEF);
+          bool was_sealed = (mode_prev == SEALED_MIST);
 
-          // Vent close lead: close vent ahead of misting so volume seals first
-          static uint32_t vent_close_lead_timer_ms = 0;
-          bool vent_close_lead_active = false;
-
-          if(VPD > VPDhi){
-            // VPD above band ceiling — engage misting after WATCH dwell
-            if(h_prev == VPD_WATCH && vpd_watch_timer_ms >= VPD_WATCH_DWELL_MS){
-              // Dwell complete — check if vent close lead is satisfied
-              if(MIST_VENT_CLOSE_LEAD_MS == 0 || vent_close_lead_timer_ms >= MIST_VENT_CLOSE_LEAD_MS){
-                h = HUMID_S1;                                // lead satisfied → mist
-                vent_close_lead_timer_ms = 0;
-              }else{
-                h = VPD_WATCH;                               // stay in watch, vent closing
-                vent_close_lead_timer_ms += dt_ms;
-                vent_close_lead_active = true;               // flag for section 11
-              }
-            }else if(h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3){
-              h = h_prev;                                    // already misting, stay
-            }else{
-              h = VPD_WATCH;                                 // enter observation dwell
-              vent_close_lead_timer_ms = 0;
-            }
-          }else if(VPD < VPDhi - HV){
-            // VPD below band - hysteresis → stop misting, return to idle
-            // (hysteresis is the EXIT condition, not the entry condition)
-            h = HUM_IDLE;
-          }else if(VPD >= VPDhi - HV && VPD <= VPDhi && (h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3)){
-            // VPD within hysteresis band and currently misting → keep misting
-            h = h_prev;
-          }else if(VPD < VPDlo - HV){
-            bool ventOK = !econ_block;
-            if(ventOK){
-              h = (VPD < VPDlo - 2*HV) ? DEHUM_V2 : DEHUM_V1;
-            }else{
-              h = DEHUM_HEAT;
-            }
-          }
-
-          // VPD_WATCH timer management
-          if(h == VPD_WATCH){
+          // VPD_WATCH dwell: observe before committing to seal
+          if(vpd_above_band && mode_prev != SEALED_MIST && mode_prev != THERMAL_RELIEF){
             vpd_watch_timer_ms += dt_ms;
-          }else{
+          }else if(!vpd_above_band && mode_prev != SEALED_MIST && mode_prev != THERMAL_RELIEF){
             vpd_watch_timer_ms = 0;
           }
+          bool vpd_watch_complete = vpd_watch_timer_ms >= VPD_WATCH_DWELL_MS;
+          bool vpd_wants_seal = vpd_above_band && vpd_watch_complete;
 
-          // Safety override on VPD extremes (skip WATCH, go direct)
-          if(VPD > VPDmaxSafe){
-            h = HUMID_S1;
-            vpd_watch_timer_ms = VPD_WATCH_DWELL_MS;       // bypass dwell
-          }else if(VPD < VPDminSafe){
-            bool ventOK = !econ_block;
-            h = ventOK ? DEHUM_V2 : DEHUM_HEAT;
+          // Mode determination — priority order (highest wins)
+          Mode mode = IDLE;
+
+          if(safety_cool){
+            mode = SAFETY_COOL;
+            sealed_timer_ms = 0;
+            relief_timer_ms = 0;
+          }else if(safety_heat){
+            mode = SAFETY_HEAT;
+            sealed_timer_ms = 0;
+          }else if(in_thermal_relief){
+            // Continue relief until timer expires
+            relief_timer_ms += dt_ms;
+            if(relief_timer_ms >= RELIEF_DURATION_MS){
+              // Relief complete — return to SEALED_MIST if VPD still high, else IDLE
+              relief_timer_ms = 0;
+              sealed_timer_ms = 0;
+              mode = vpd_above_band ? SEALED_MIST : IDLE;
+              if(mode == IDLE) vpd_watch_timer_ms = 0;
+              ESP_LOGI("mode","Thermal relief complete → %s", mode == SEALED_MIST ? "SEALED_MIST" : "IDLE");
+            }else{
+              mode = THERMAL_RELIEF;
+            }
+          }else if(was_sealed){
+            // Already sealed — check exit conditions
+            if(vpd_below_exit){
+              // VPD resolved — exit to IDLE (or VENTILATE if hot)
+              mode = needs_cooling ? VENTILATE : IDLE;
+              sealed_timer_ms = 0;
+              mist_stage = MIST_WATCH;
+              vpd_watch_timer_ms = 0;
+              ESP_LOGI("mode","VPD resolved (%.2f < %.2f) → %s", VPD, VPDhi - HV,
+                       mode == VENTILATE ? "VENTILATE" : "IDLE");
+            }else if(sealed_timer_ms >= SEALED_MAX_MS){
+              // Sealed too long — mandatory thermal relief
+              mode = THERMAL_RELIEF;
+              relief_timer_ms = 0;
+              ESP_LOGI("mode","Thermal relief: sealed %ds → THERMAL_RELIEF", id(mist_max_closed_vent_s));
+            }else{
+              mode = SEALED_MIST;
+              sealed_timer_ms += dt_ms;
+            }
+          }else if(vpd_wants_seal){
+            // VPD above band and dwell complete — enter sealed mode
+            mode = SEALED_MIST;
+            sealed_timer_ms = 0;
+            mist_stage = MIST_S1;
+            ESP_LOGI("mode","VPD %.2f > %.2f → SEALED_MIST", VPD, VPDhi);
+          }else if(vpd_too_low){
+            // VPD below band — open vent to dump humidity
+            mode = DEHUM_VENT;
+          }else if(needs_cooling){
+            mode = VENTILATE;
+          }else{
+            mode = IDLE;
           }
 
-          // Track de-hum cycles and safety cycles
-          if(h != HUM_IDLE && h_prev == HUM_IDLE){
-            id(dh_cycles_today) += 1;
+          // Safety overrides on VPD extremes
+          if(VPD > VPDmaxSafe && mode != SAFETY_COOL){
+            mode = SEALED_MIST;
+            vpd_watch_timer_ms = VPD_WATCH_DWELL_MS;  // bypass dwell
+            mist_stage = MIST_S1;
           }
-          if(h == DEHUM_HEAT && h_prev != DEHUM_HEAT){
-            id(dh_safety_today) += 1;
+          if(VPD < VPDminSafe && mode == IDLE){
+            mode = econ_block ? IDLE : DEHUM_VENT;  // can't vent if economiser blocks
           }
-          h_prev = h;
 
-          /**************** 10 — lookup desired relay pattern ********************/
-          bool found = false;
-          Row active = SAFE_FAN_PURGE;
-          for(const Row &row : PATTERN_TABLE){
-            if(row.t == t && row.h == h){
-              active = row;
-              found = true;
+          // Log mode transitions
+          if(mode != mode_prev){
+            static const char* MN[] = {"SAFETY_COOL","SAFETY_HEAT","SEALED_MIST",
+                                        "THERMAL_RELIEF","VENTILATE","DEHUM_VENT","IDLE"};
+            ESP_LOGI("mode","%s → %s (T=%.1f VPD=%.2f)", MN[mode_prev], MN[mode], Tin, VPD);
+          }
+          mode_prev = mode;
+
+          /**************** 9 — EQUIPMENT RESOLUTION ******************************/
+          // Direct function of mode. No overrides. The table IS the truth.
+          //
+          // | Mode             | Vent | Fans      | Heat1 | Heat2 | Fog     |
+          // |------------------|------|-----------|-------|-------|---------|
+          // | SAFETY_COOL      | OPEN | BOTH      | off   | off   | allowed |
+          // | SAFETY_HEAT      | SHUT | off       | ON    | ON    | off     |
+          // | SEALED_MIST      | SHUT | off       | temp  | temp  | escal.  |
+          // | THERMAL_RELIEF   | OPEN | LEAD      | off   | off   | off     |
+          // | VENTILATE        | OPEN | 1 or 2    | off   | off   | off     |
+          // | DEHUM_VENT       | OPEN | LEAD      | off   | off   | off     |
+          // | IDLE             | SHUT | off       | temp  | temp  | off     |
+
+          bool willHeat1 = false, willHeat2 = false;
+          bool willFan1 = false, willFan2 = false;
+          bool willFog = false, willVent = false;
+
+          switch(mode){
+            case SAFETY_COOL:
+              willVent = true;
+              willFan1 = true; willFan2 = true;
+              // Fog allowed as evaporative cooling assist during extreme heat
+              {
+                float RH = id(average_humidity).state;
+                auto now_time = id(sntp_time).now();
+                int local_hour = now_time.is_valid() ? now_time.hour : 12;
+                bool fog_ok = !(RH > id(fog_rh_ceiling_pct))
+                  && !(Tin < id(fog_min_temp_f))
+                  && (local_hour >= id(fog_time_window_start))
+                  && (local_hour < id(fog_time_window_end))
+                  && !(id(occupancy_inhibit_enabled) && id(greenhouse_occupied));
+                willFog = fog_ok && VPD > VPDhi;
+              }
+              break;
+
+            case SAFETY_HEAT:
+              willHeat1 = true; willHeat2 = true;
+              break;
+
+            case SEALED_MIST:
+              // Vent closed, fans off — sealed for humidity retention
+              // Heaters allowed if temp is also low (cold + dry conditions)
+              if(needs_heating_s2){ willHeat1 = true; willHeat2 = true; }
+              else if(needs_heating_s1){ willHeat1 = true; }
+              // Fog escalation check
+              {
+                float RH = id(average_humidity).state;
+                auto now_time = id(sntp_time).now();
+                int local_hour = now_time.is_valid() ? now_time.hour : 12;
+                bool fog_gated = (RH > id(fog_rh_ceiling_pct))
+                  || (Tin < id(fog_min_temp_f))
+                  || (local_hour < id(fog_time_window_start))
+                  || (local_hour >= id(fog_time_window_end));
+                bool fog_as_escalation = (id(mister_state) == 2)
+                  && (id(humid_s2_duration_ms) > uint32_t(id(mister_all_delay_s)) * 1000UL)
+                  && (VPD > VPDhi + id(fog_escalation_kpa));
+                willFog = fog_as_escalation && !fog_gated
+                  && !(id(occupancy_inhibit_enabled) && id(greenhouse_occupied));
+              }
+              break;
+
+            case THERMAL_RELIEF:
+              willVent = true;
+              if(leadIs1){ willFan1 = true; } else { willFan2 = true; }
+              break;
+
+            case VENTILATE: {
+              willVent = true;
+              // Single fan for mild cooling, both for aggressive
+              bool needs_both = Tin > (Thigh + dC2);
+              if(leadIs1){ willFan1 = true; willFan2 = needs_both; }
+              else       { willFan2 = true; willFan1 = needs_both; }
               break;
             }
-          }
-          if(!found){
-            ESP_LOGW("ctl","State %d/%d not in table – using SAFE_FAN_PURGE", t, h);
+
+            case DEHUM_VENT:
+              willVent = true;
+              // Single fan to move air, dump humidity
+              if(VPD < VPDlo - 2*HV){
+                // Very low VPD — both fans
+                willFan1 = true; willFan2 = true;
+              }else{
+                if(leadIs1){ willFan1 = true; } else { willFan2 = true; }
+              }
+              break;
+
+            case IDLE:
+              // Heaters if needed (vent stays closed — no oscillation possible)
+              if(needs_heating_s2){ willHeat1 = true; willHeat2 = true; }
+              else if(needs_heating_s1){ willHeat1 = true; }
+              // Dehumidification via heating (if economiser blocks venting)
+              if(VPD < VPDlo && econ_block){ willHeat1 = true; willHeat2 = true; }
+              break;
           }
 
-          // Apply manual overrides
-          if(id(manual_fan_active)){
-            active.LEAD = 1;
-            active.LAG  = 1;
-            active.VENT = 1;
-          }
-          if(id(manual_fog_active)){
-            active.FOG  = 1;
-          }
+          // Manual overrides
+          if(id(manual_fan_active)){ willFan1 = true; willFan2 = true; willVent = true; }
+          if(id(manual_fog_active)){ willFog = true; }
 
-          /**************** 11 — Vent coordination (VPD-primary, binary vent) ****/
-          // Binary vent = mode switch: VENT_OPEN (free cooling) vs VENT_CLOSED
-          // (humidity retention for effective misting/fog).
-          //
-          // Core rule: VPD_MIST and VPD_FOG FORCE vent closed. At 15% outdoor
-          // RH, open-vent misting wastes ~70% of water to immediate evaporation.
-          // Close vent → mist → VPD drops → vent reopens → thermal relief → cycle.
+          /**************** 10 — CYCLE COUNTERS ***********************************/
+          if(willHeat1 && !id(heat1_rly)->state) id(cnt_heat1_today) += 1;
+          if(willHeat2 && !id(heat2_rly)->state) id(cnt_heat2_today) += 1;
+          if(willFog && !id(fog_rly)->state)     id(cnt_fog_today) += 1;
+          if(willFan1 && !id(fan1_rly)->state)   id(cnt_fan1_today) += 1;
+          if(willFan2 && !id(fan2_rly)->state)   id(cnt_fan2_today) += 1;
+          if(willVent && !id(vent_rly)->state)    id(cnt_vent_today) += 1;
 
-          static uint32_t vent_closed_for_mist_ms = 0;  // thermal relief timer
-          static uint32_t vent_reopen_cooldown_ms = 0;   // delay after misting stops
-          const uint32_t MIST_VENT_REOPEN_DELAY_MS = uint32_t(id(mist_vent_reopen_delay_s)) * 1000UL;
-          const uint32_t MIST_THERMAL_RELIEF_MS = uint32_t(id(mist_thermal_relief_s)) * 1000UL;
-
-          bool vpd_misting_active = (h == HUMID_S1 || h == HUMID_S2 || h == HUMID_S3);
-          bool vpd_fogging = false;  // set below after fog escalation check
-
-          // Base vent desire from pattern table
-          bool wantVentRaw = !id(vent_lock_active) &&
-                             (active.VENT || active.LEAD || active.LAG);
-
-          // Vent close lead: close vent during VPD_WATCH lead-time before misting
-          if(vent_close_lead_active && wantVentRaw){
-            wantVentRaw = false;
-          }
-
-          // VPD_MIST/FOG forces vent closed (core rule)
-          if(vpd_misting_active && wantVentRaw){
-            wantVentRaw = false;
-            vent_closed_for_mist_ms += dt_ms;
-          }else if(!vpd_misting_active){
-            vent_closed_for_mist_ms = 0;
-          }
-
-          // Thermal relief: after max closed time, force vent open briefly
-          static bool thermal_relief_active = false;
-          static uint32_t thermal_relief_timer_ms = 0;
-          if(vent_closed_for_mist_ms > MIST_MAX_CLOSED_VENT_MS && !thermal_relief_active){
-            thermal_relief_active = true;
-            thermal_relief_timer_ms = 0;
-            vent_closed_for_mist_ms = 0;
-            ESP_LOGI("vent","Thermal relief: vent forced open after %ds closed", id(mist_max_closed_vent_s));
-          }
-          if(thermal_relief_active){
-            wantVentRaw = true;  // force open during relief
-            thermal_relief_timer_ms += dt_ms;
-            if(thermal_relief_timer_ms >= MIST_THERMAL_RELIEF_MS){
-              thermal_relief_active = false;
-              thermal_relief_timer_ms = 0;
-              ESP_LOGI("vent","Thermal relief complete, resuming VPD control");
-            }
-          }
-
-          // Vent reopen delay: after misting stops, hold vent closed briefly for evaporation
-          if(!vpd_misting_active && vent_reopen_cooldown_ms > 0){
-            wantVentRaw = false;  // hold closed during cooldown
-            vent_reopen_cooldown_ms = (vent_reopen_cooldown_ms > dt_ms) ? vent_reopen_cooldown_ms - dt_ms : 0;
-          }else if(vpd_misting_active){
-            vent_reopen_cooldown_ms = MIST_VENT_REOPEN_DELAY_MS;  // reset on each mist cycle
-          }
-
-          // Safety override: vent opens at safety_max regardless of VPD state
-          if(Tin >= TmaxSafe){
-            wantVentRaw = true;
-            thermal_relief_active = false;
-            ESP_LOGW("vent","Safety override: vent forced open at %.1f°F", Tin);
-          }
-
-          /**************** 12 — Pre-count cycles before switching ***************/
-          // Map fan outputs to physical fan1/fan2 based on lead/lag
-          bool willHeat1 = active.H1;
-          bool willHeat2 = active.H2;
-          // Fog escalation: fires when VPD exceeds band ceiling + fog_escalation_kpa
-          // and misters have been running (S2) without resolving VPD.
-          // Fog also fires from pattern table (e.g., COOL_EVAP) or manual override.
-          bool fog_as_escalation = (id(mister_state) == 2)
-            && (id(humid_s2_duration_ms) > uint32_t(id(mister_all_delay_s)) * 1000UL)
-            && (VPD > VPDhi + id(fog_escalation_kpa));
-
-          // Fog safety gates
-          float RH = id(average_humidity).state;
-          // Get local hour from ESPHome time (if available) or approximate from millis
-          auto now_time = id(sntp_time).now();
-          int local_hour = now_time.is_valid() ? now_time.hour : 12;  // fallback to noon if SNTP unavailable
-          bool fog_gated = (RH > id(fog_rh_ceiling_pct))       // too humid — condensation risk
-            || (Tin < id(fog_min_temp_f))                       // too cold — condensation risk
-            || (local_hour < id(fog_time_window_start))         // too early
-            || (local_hour >= id(fog_time_window_end));         // too late — must dry before dark
-
-          bool willFog = (active.FOG || fog_as_escalation)
-            && !fog_gated
-            && !(id(occupancy_inhibit_enabled) && id(greenhouse_occupied));
-
-          if(willFog){
-            vpd_fogging = true;
-            // Fog forces vent closed (always — at 15% outdoor RH, fog with open vent is useless)
-            if(wantVentRaw && !thermal_relief_active){
-              wantVentRaw = false;
-            }
-          }
-
-          bool willFan1;
-          bool willFan2;
-          if(leadIs1){
-            willFan1 = active.LEAD;
-            willFan2 = active.LAG;
-          }else{
-            willFan1 = active.LAG;
-            willFan2 = active.LEAD;
-          }
-          bool willVent = wantVentRaw;
-
-          // Suppress exhaust fans when VPD forces vent closed (sealed-mode misting).
-          // Running exhaust fans against a sealed greenhouse creates negative pressure
-          // that pulls humid air out through gaps, defeating the purpose of sealing.
-          if(!willVent && (vpd_misting_active || vpd_fogging || vent_close_lead_active)){
-            willFan1 = false;
-            willFan2 = false;
-          }
-
-          // Increment counters on rising edge
-          if(willHeat1 && !id(heat1_rly)->state){
-            id(cnt_heat1_today) += 1;
-          }
-          if(willHeat2 && !id(heat2_rly)->state){
-            id(cnt_heat2_today) += 1;
-          }
-          if(willFog && !id(fog_rly)->state){
-            id(cnt_fog_today) += 1;
-          }
-          if(willFan1 && !id(fan1_rly)->state){
-            id(cnt_fan1_today) += 1;
-          }
-          if(willFan2 && !id(fan2_rly)->state){
-            id(cnt_fan2_today) += 1;
-          }
-          if(willVent && !id(vent_rly)->state){
-            id(cnt_vent_today) += 1;
-          }
-
-          /**************** 13 — Apply outputs ***********************************/
-          // Heat + fog coexistence allowed per pattern table design.
-          // Pattern table explicitly defines all valid H1/H2/FOG combos.
-          // Set heat, fans, fog and vent via relay helper.  The vent relay
-          // (R[5]) uses independent min_on/off (default 30s) for fast
-          // response to fog-priority gating.
+          /**************** 11 — APPLY RELAY OUTPUTS ******************************/
           set_relay(R[0], willHeat1);
           set_relay(R[1], willHeat2);
           set_relay(R[2], willFan1);
           set_relay(R[3], willFan2);
           set_relay(R[4], willFog);
-          // Vent hold timer — prevent rapid cycling
-          // VPD misting/fog BYPASSES the hold timer: misting with vent open
-          // wastes 70%+ of water. The hold timer prevents chattering from
-          // thermal state transitions, but VPD-priority close is deliberate.
-          bool vpd_vent_override = (vpd_misting_active || vpd_fogging || vent_close_lead_active)
-                                   && !willVent && R[5].sw->state;
-          if(vpd_vent_override){
-            // Force vent closed immediately — bypass hold timer AND min_on
-            R[5].sw->turn_off();
-            R[5].last_off_ms = now_ms;
-            update_runtime(R[5]);
-            id(vent_hold_timer_ms) = 0;
-            ESP_LOGI("vent","VPD override: vent forced closed (mist=%d fog=%d lead=%d)",
-                     vpd_misting_active, vpd_fogging, vent_close_lead_active);
-          }else if(id(vent_hold_timer_ms) > 0){
-            id(vent_hold_timer_ms) = (dt_ms >= id(vent_hold_timer_ms)) ? 0 : id(vent_hold_timer_ms) - dt_ms;
-            // Don't change vent state during hold period
-          }else{
-            bool vent_changed = (willVent != R[5].sw->state);
-            set_relay(R[5], willVent);
-            if(vent_changed && R[5].sw->state == willVent){
-              id(vent_hold_timer_ms) = 120000;  // 2-minute minimum hold
-            }
-          }
+          set_relay(R[5], willVent);
 
-
-          /**************** 13b — MISTER STATE MACHINE (HUMID_S2/S3) *************/
+          /**************** 12 — MISTER STATE MACHINE *****************************/
+          // Only runs in SEALED_MIST mode. Zone-targeted pulse rotation.
+          // Stages: S1 (single zone) → S2 (all zones rotating) → FOG (escalation)
           {
-            const uint32_t MISTER_ENGAGE_DELAY_MS = uint32_t(id(mister_engage_delay_s)) * 1000UL;
-            const uint32_t MISTER_ALL_DELAY_MS    = uint32_t(id(mister_all_delay_s))    * 1000UL;
-            const uint32_t MISTER_ON_MS           = uint32_t(id(mister_on_s))           * 1000UL;
-            const uint32_t MISTER_OFF_MS          = uint32_t(id(mister_off_s))          * 1000UL;
-            const uint32_t MISTER_ALL_ON_MS       = uint32_t(id(mister_all_on_s))       * 1000UL;
-            const uint32_t MISTER_ALL_OFF_MS      = uint32_t(id(mister_all_off_s))      * 1000UL;
-            const uint32_t MISTER_MAX_RUNTIME_MS  = uint32_t(id(mister_max_runtime_min))* 60000UL;
+            bool humidity_demand = (mode == SEALED_MIST);
 
-            float south_vpd = id(vpd_south).state;
-            float west_vpd  = id(vpd_west).state;
-            float east_vpd  = id(vpd_east).state;
-            float avg_vpd   = VPD;
-            bool humidity_demand = (h == HUMID_S1 || h == HUMID_S2 || h == HUMID_S3);
-            bool vent_is_open = id(vent_rly).state;
 
             // NEW HIERARCHY: Misters first (S1/S2), Fog escalation (S3)
             // Misters run in ANY humidity state including with vent open —
@@ -794,7 +629,7 @@ interval:
                   ESP_LOGI("mister","S1 MISTERS: pulse %s %ds (VPD=%.2f, target=%.2f)",
                            zone_names[zone], id(mister_pulse_on_s), avg_vpd,
                            zone == 1 ? id(vpd_target_south) : zone == 2 ? id(vpd_target_west) : id(vpd_target_center));
-                  h = HUMID_S1;
+                  mist_stage = MIST_S1;
                 }
               }
 
@@ -816,9 +651,9 @@ interval:
                   id(mister_pulse_timer_ms) = weighted_ms;
                   ESP_LOGI("mister","S2 ALL-ROTATE: start %s %dms (VPD=%.2f)",
                            zone_names[zone], weighted_ms, avg_vpd);
-                  h = HUMID_S2;
+                  mist_stage = MIST_S2;
                 }else{
-                  h = HUMID_S1;
+                  mist_stage = MIST_S1;
                 }
               }
 
@@ -835,7 +670,7 @@ interval:
                 int zone = select_most_stressed_zone();
                 turn_on_zone(zone);
                 id(mister_pulse_timer_ms) = PULSE_ON_MS;
-                h = HUMID_S1;
+                mist_stage = MIST_S1;
               }
 
               // --- DE-ESCALATE S1 → off ---
@@ -906,8 +741,8 @@ interval:
               }
 
               // Update h for telemetry (new hierarchy: S1=misters, S2=all-rotate, S3=fog)
-              if(id(mister_state) == 2) h = HUMID_S2;
-              else if(id(mister_state) == 1) h = HUMID_S1;
+              if(id(mister_state) == 2) mist_stage = MIST_S2;
+              else if(id(mister_state) == 1) mist_stage = MIST_S1;
 
               // --- RUNTIME TRACKING ---
               if(id(south_wall_mister).state) id(runtime_mister_south_ms) += dt_ms;
@@ -925,31 +760,34 @@ interval:
           }
 
           /**************** 14 — Telemetry & debug *******************************/
-          const char* Tn[]{"TEMP_IDLE","COOL_S1","COOL_S2","COOL_S3","HEAT_S1","HEAT_S2"};
-          const char* Hn[]{"HUM_IDLE","VPD_WATCH","HUMID_S1","HUMID_S2","HUMID_S3","DEHUM_V1","DEHUM_V2","DEHUM_HEAT"};
+          static const char* ModeNames[] = {"SAFETY_COOL","SAFETY_HEAT","SEALED_MIST",
+                                             "THERMAL_RELIEF","VENTILATE","DEHUM_VENT","IDLE"};
+          static const char* MistNames[] = {"WATCH","S1","S2","FOG"};
           char lbl[48];
-          snprintf(lbl,sizeof(lbl),"%s_%s", Tn[t], Hn[h]);
+          if(mode == SEALED_MIST){
+            snprintf(lbl, sizeof(lbl), "SEALED_MIST_%s", MistNames[mist_stage]);
+          }else{
+            snprintf(lbl, sizeof(lbl), "%s", ModeNames[mode]);
+          }
           id(gh_state).publish_state(lbl);
 
           /*** A1 — State transition logging ***/
           {
-            static TempStage prev_log_t = TEMP_IDLE;
-            static HumiStage prev_log_h = HUM_IDLE;
-            if(t != prev_log_t || h != prev_log_h){
+            static Mode prev_log_mode = IDLE;
+            static MistStage prev_log_mist = MIST_WATCH;
+            if(mode != prev_log_mode || (mode == SEALED_MIST && mist_stage != prev_log_mist)){
               char trans[80];
               auto hm = id(sntp_time).now();
               if(hm.is_valid()){
-                snprintf(trans, sizeof(trans), "%s_%s→%s_%s @ %02d:%02d",
-                         Tn[prev_log_t], Hn[prev_log_h], Tn[t], Hn[h],
-                         hm.hour, hm.minute);
+                snprintf(trans, sizeof(trans), "%s→%s @ %02d:%02d",
+                         lbl, lbl, hm.hour, hm.minute);
               }else{
-                snprintf(trans, sizeof(trans), "%s_%s→%s_%s",
-                         Tn[prev_log_t], Hn[prev_log_h], Tn[t], Hn[h]);
+                snprintf(trans, sizeof(trans), "→%s", lbl);
               }
               ESP_LOGI("transition","State change: %s", trans);
               id(ts_last_transition).publish_state(trans);
-              prev_log_t = t;
-              prev_log_h = h;
+              prev_log_mode = mode;
+              prev_log_mist = mist_stage;
             }
           }
 
@@ -1055,13 +893,12 @@ interval:
               // Log a concise summary at debug level.  To see these logs,
               // set logger.level to DEBUG in the top‑level config (already done).
               ESP_LOGD("summary","%s | Tin %.1f°F VPD %.2f kPa | "
-                                 "H1:%d H2:%d Lead:%d Lag:%d Fog:%d Vent:%d (safe:%d)",
+                                 "H1:%d H2:%d F1:%d F2:%d Fog:%d Vent:%d",
                        lbl, Tin, VPD,
                        willHeat1, willHeat2, willFan1, willFan2,
-                       willFog, willVent, !found);
+                       willFog, willVent);
 
-              // Also log the current state at INFO level for easier visibility.
-              ESP_LOGI("state","State=%s Tin=%.1f°F VPD=%.2f kPa", lbl, Tin, VPD);
+              ESP_LOGI("state","Mode=%s Tin=%.1f°F VPD=%.2f kPa", lbl, Tin, VPD);
 
           char js[192];
           snprintf(js,sizeof(js),
