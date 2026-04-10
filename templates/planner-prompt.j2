@@ -27,7 +27,7 @@ The ESP32 evaluates every 5 seconds. Each (thermal, VPD) pair maps to a relay pa
 HEAT_S2 → HEAT_S1 → TEMP_IDLE → COOL_S1 → COOL_S2 → COOL_S3
 
 **VPD axis** (planner controls response via Tier 1 tunables):
-HUM_IDLE → VPD_WATCH → HUMID_S1 → HUMID_S2 → HUMID_S3 | DEHUM_V1 → DEHUM_V2 → DEHUM_HEAT
+DEHUM_HEAT → DEHUM_V2 → DEHUM_V1 → HUM_IDLE → VPD_WATCH → HUMID_S1 → HUMID_S2 → HUMID_S3
 
 **VPD state flow you control:**
 1. VPD > band ceiling → **VPD_WATCH** (observe for `vpd_watch_dwell_s`)

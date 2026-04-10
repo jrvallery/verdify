@@ -29,25 +29,25 @@ echo ""
 
 # Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
 echo "--- ACTIVE PLAN (summary per transition) ---"
-echo "Each row = one transition with all 24 params. Key values shown; full set applied."
-echo "ts_mdt|params|engage|all_kpa|gap_s|weight|hyst|vent_max|fog_esc|bias_h|bias_c"
+echo "Key variables shown per transition. Vent/fog timing params at defaults unless noted."
+echo "ts_mdt|n|engage|all|gap|wt|hyst|vent_max|fog_esc|b_heat|b_cool"
 $DB -c "
 WITH deduped AS (
   SELECT DISTINCT ON (ts, parameter) ts, parameter, value
   FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata' AND is_active = true
   ORDER BY ts, parameter, created_at DESC
 )
-SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH24:MI') AS ts_mdt,
-  count(*) AS params,
-  max(CASE WHEN parameter='mister_engage_kpa' THEN round(value::numeric,1) END),
-  max(CASE WHEN parameter='mister_all_kpa' THEN round(value::numeric,1) END),
-  max(CASE WHEN parameter='mister_pulse_gap_s' THEN value::int END),
-  max(CASE WHEN parameter='mister_vpd_weight' THEN round(value::numeric,1) END),
-  max(CASE WHEN parameter='vpd_hysteresis' THEN round(value::numeric,1) END),
-  max(CASE WHEN parameter='mist_max_closed_vent_s' THEN value::int END),
-  max(CASE WHEN parameter='fog_escalation_kpa' THEN round(value::numeric,1) END),
-  max(CASE WHEN parameter='bias_heat' THEN round(value::numeric,1) END),
-  max(CASE WHEN parameter='bias_cool' THEN round(value::numeric,1) END)
+SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH24:MI'),
+  count(*),
+  COALESCE(max(CASE WHEN parameter='mister_engage_kpa' THEN round(value::numeric,1) END), 1.6),
+  COALESCE(max(CASE WHEN parameter='mister_all_kpa' THEN round(value::numeric,1) END), 1.9),
+  COALESCE(max(CASE WHEN parameter='mister_pulse_gap_s' THEN value::int END), 45),
+  COALESCE(max(CASE WHEN parameter='mister_vpd_weight' THEN round(value::numeric,1) END), 1.5),
+  COALESCE(max(CASE WHEN parameter='vpd_hysteresis' THEN round(value::numeric,1) END), 0.3),
+  COALESCE(max(CASE WHEN parameter='mist_max_closed_vent_s' THEN value::int END), 600),
+  COALESCE(max(CASE WHEN parameter='fog_escalation_kpa' THEN round(value::numeric,1) END), 0.4),
+  COALESCE(max(CASE WHEN parameter='bias_heat' THEN round(value::numeric,1) END), 0),
+  COALESCE(max(CASE WHEN parameter='bias_cool' THEN round(value::numeric,1) END), 0)
 FROM deduped
 GROUP BY ts
 ORDER BY ts;
@@ -340,6 +340,13 @@ ORDER BY parameter;
 echo "Band-driven values above reflect current diurnal crop profiles and shift with the cycle."
 echo "Values like temp_high=65 or vpd_high=0.6 are normal at night — they do not indicate corruption."
 echo "Do not set band-driven params in your plan."
+echo ""
+echo "Firmware invariants (always active, not planner-controlled):"
+echo "  fog_time_window: 07:00-17:00 (fog blocked outside this window)"
+echo "  fog_rh_ceiling: 90% (fog blocked when RH exceeds)"
+echo "  fog_min_temp: 55°F (fog blocked when temp below)"
+echo "  economiser: always enabled (planner tunes enthalpy thresholds)"
+echo "  fog_closes_vent: always (built into state machine)"
 echo ""
 
 # ── 21. PLANNING GUIDANCE ──────────────────────────────────────────
