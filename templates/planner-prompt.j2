@@ -136,17 +136,19 @@ Anchor transitions to these computed milestones — not fixed clock times:
 
 {{ milestones }}
 
-| Transition | Anchor | What Changes |
-|-----------|--------|-------------|
-| Pre-dawn | 1h before sunrise | Heat bias, tighten hysteresis |
-| Tree shade clears | See table above | East zone direct sun, VPD ramp accelerates |
-| Peak stress | Peak VPD hour ± 1h | Most aggressive misting + shortest vent oscillation |
-| Cloud shift | Cloud transition time | Adjust vent/misting posture at boundary |
-| Afternoon decline | 2h after peak solar | Relax pulse gap, widen vent oscillation |
-| Evening restore | Sunset | Revert to defaults, heat bias if cold night |
+The SUGGESTED TRANSITION TIMESTAMPS table above gives you the EXACT times to use for each day's transitions. Use those timestamps directly — do NOT round to the nearest hour.
+
+| Transition | Column in table | What Changes |
+|-----------|----------------|-------------|
+| Pre-dawn | `pre_dawn` | Heat bias, tighten hysteresis |
+| Tree shade clears | `tree_shade` | East zone direct sun, VPD ramp accelerates |
+| Peak stress | `peak_stress` | Most aggressive misting + shortest vent oscillation |
+| Cloud shift | `cloud_shift` | Adjust vent/misting posture at boundary (skip if `-`) |
+| Afternoon decline | `decline` | Relax pulse gap, widen vent oscillation |
+| Evening restore | `evening` | Revert to defaults, heat bias if cold night |
 
 Target: 8-15 transitions across 3 days. Every transition includes ALL 24 params.
-Synthesize each day into overnight, ramp, peak, and restore. Do not mirror every forecast hour.
+Use the exact timestamps from the table. Do not round to :00. Do not use fixed clock times.
 
 ## Validated Lessons
 
