@@ -581,6 +581,14 @@ interval:
           }
           bool willVent = wantVentRaw;
 
+          // Suppress exhaust fans when VPD forces vent closed (sealed-mode misting).
+          // Running exhaust fans against a sealed greenhouse creates negative pressure
+          // that pulls humid air out through gaps, defeating the purpose of sealing.
+          if(!willVent && (vpd_misting_active || vpd_fogging || vent_close_lead_active)){
+            willFan1 = false;
+            willFan2 = false;
+          }
+
           // Increment counters on rising edge
           if(willHeat1 && !id(heat1_rly)->state){
             id(cnt_heat1_today) += 1;
