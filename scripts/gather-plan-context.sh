@@ -337,8 +337,9 @@ FROM (SELECT DISTINCT ON (parameter) parameter, value FROM setpoint_changes ORDE
 WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis','mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s','gl_dli_target','gl_sunrise_hour','gl_sunset_hour')
 ORDER BY parameter;
 " 2>/dev/null
-echo "These are the current active values. Band-driven params (temp_high, temp_low, vpd_high, vpd_low)"
-echo "are computed from crop profiles every 5 min — do not set these in your plan."
+echo "Band-driven values above reflect current diurnal crop profiles and shift with the cycle."
+echo "Values like temp_high=65 or vpd_high=0.6 are normal at night — they do not indicate corruption."
+echo "Do not set band-driven params in your plan."
 echo ""
 
 # ── 21. PLANNING GUIDANCE ──────────────────────────────────────────
@@ -437,18 +438,7 @@ echo ""
 
 # ── 22b. (moved to section 27) ───────────────────────────────────
 
-# ── 23. REPLAN TRIGGER ───────────────────────────────────────────
-echo "--- REPLAN TRIGGER ---"
-if [ -f /srv/verdify/state/replan-needed.json ]; then
-  echo "⚠️ DEVIATION-TRIGGERED REPLAN"
-  cat /srv/verdify/state/replan-needed.json
-  echo ""
-  echo "The forecast was significantly wrong. Re-evaluate all waypoints against ACTUAL conditions."
-else
-  echo "Scheduled cycle — no deviation trigger."
-fi
-echo ""
-
+# Replan trigger is handled by planner-gemini.py MODE header — not injected here.
 
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
 echo "--- 72H HOURLY FORECAST ---"

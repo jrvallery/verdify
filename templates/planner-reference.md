@@ -33,7 +33,7 @@
 ## State Machine (48 states (6 thermal × 8 VPD))
 
 Temperature axis: HEAT_S2 → HEAT_S1 → TEMP_IDLE → COOL_S1 → COOL_S2 → COOL_S3
-Humidity axis: DEHUM_HEAT → DEHUM_V2 → DEHUM_V1 → HUM_IDLE → HUMID_S1 → HUMID_S2 → HUMID_S3
+VPD axis: DEHUM_HEAT → DEHUM_V2 → DEHUM_V1 → HUM_IDLE → VPD_WATCH → HUMID_S1 → HUMID_S2 → HUMID_S3
 
 Key thresholds:
 - HEAT_S2 at temp_low, HEAT_S1 at temp_low + d_heat_stage_2
