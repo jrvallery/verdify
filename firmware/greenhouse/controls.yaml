@@ -1387,7 +1387,7 @@ interval:
                     if(key == "bias_heat"){ val = cf(val, -10, 10); if(fabs(id(bias_heat_f) - val) > 0.01f){ id(bias_heat_f) = val; id(num_bias_heat).publish_state(val); applied++; }}
                     if(key == "bias_cool"){ val = cf(val, -10, 10); if(fabs(id(bias_cool_f) - val) > 0.01f){ id(bias_cool_f) = val; id(num_bias_cool).publish_state(val); applied++; }}
                     if(key == "temp_hysteresis"){ val = cf(val, 0.5, 5); if(fabs(id(hyst_temp_f) - val) > 0.01f){ id(hyst_temp_f) = val; id(num_hyst_temp).publish_state(val); applied++; }}
-                    if(key == "vpd_hysteresis"){ val = cf(val, 0.05, 1); if(fabs(id(hyst_vpd_kpa) - val) > 0.01f){ id(hyst_vpd_kpa) = val; id(num_hyst_vpd).publish_state(val); applied++; }}
+                    if(key == "vpd_hysteresis"){ val = cf(val, 0.1, 0.5); if(fabs(id(hyst_vpd_kpa) - val) > 0.01f){ id(hyst_vpd_kpa) = val; id(num_hyst_vpd).publish_state(val); applied++; }}
                     if(key == "d_heat_stage_2"){ val = cf(val, 0, 10); if(fabs(id(stage2_heat_delta_f) - val) > 0.01f){ id(stage2_heat_delta_f) = val; id(num_stage2_heat).publish_state(val); applied++; }}
                     if(key == "d_cool_stage_2"){ val = cf(val, 1, 10); if(fabs(id(stage2_cool_delta_f) - val) > 0.01f){ id(stage2_cool_delta_f) = val; id(num_stage2_cool).publish_state(val); applied++; }}
                     // ── Safety (CRITICAL: hard floor/ceiling enforced) ──
@@ -1400,11 +1400,11 @@ interval:
                     if(key == "min_heat_off_s"){ int v = ci((int)val, 60, 600); if(id(min_heat_off_s) != v){ id(min_heat_off_s) = v; id(num_min_heat_off).publish_state(v); applied++; }}
                     if(key == "min_fan_on_s"){ int v = ci((int)val, 30, 300); if(id(min_fan_on_s) != v){ id(min_fan_on_s) = v; id(num_min_fan_on).publish_state(v); applied++; }}
                     if(key == "min_fan_off_s"){ int v = ci((int)val, 30, 300); if(id(min_fan_off_s) != v){ id(min_fan_off_s) = v; id(num_min_fan_off).publish_state(v); applied++; }}
-                    if(key == "min_vent_on_s"){ int v = ci((int)val, 10, 300); if(id(min_vent_on_s) != v){ id(min_vent_on_s) = v; id(num_min_vent_on).publish_state(v); applied++; }}
-                    if(key == "min_vent_off_s"){ int v = ci((int)val, 10, 300); if(id(min_vent_off_s) != v){ id(min_vent_off_s) = v; id(num_min_vent_off).publish_state(v); applied++; }}
+                    if(key == "min_vent_on_s"){ int v = ci((int)val, 15, 300); if(id(min_vent_on_s) != v){ id(min_vent_on_s) = v; id(num_min_vent_on).publish_state(v); applied++; }}
+                    if(key == "min_vent_off_s"){ int v = ci((int)val, 15, 300); if(id(min_vent_off_s) != v){ id(min_vent_off_s) = v; id(num_min_vent_off).publish_state(v); applied++; }}
                     // ── Economiser ──
-                    if(key == "enthalpy_open"){ val = cf(val, -20, 5); if(fabs(id(enthalpy_open_kjkg) - val) > 0.01f){ id(enthalpy_open_kjkg) = val; id(num_enthalpy_open).publish_state(val); applied++; }}
-                    if(key == "enthalpy_close"){ val = cf(val, -10, 10); if(fabs(id(enthalpy_close_kjkg) - val) > 0.01f){ id(enthalpy_close_kjkg) = val; id(num_enthalpy_close).publish_state(val); applied++; }}
+                    if(key == "enthalpy_open"){ val = cf(val, -5, 0); if(fabs(id(enthalpy_open_kjkg) - val) > 0.01f){ id(enthalpy_open_kjkg) = val; id(num_enthalpy_open).publish_state(val); applied++; }}
+                    if(key == "enthalpy_close"){ val = cf(val, 0, 5); if(fabs(id(enthalpy_close_kjkg) - val) > 0.01f){ id(enthalpy_close_kjkg) = val; id(num_enthalpy_close).publish_state(val); applied++; }}
                     if(key == "site_pressure_hpa"){ val = cf(val, 700, 1100); if(fabs(id(site_pressure_hpa) - val) > 0.01f){ id(site_pressure_hpa) = val; id(num_site_pressure).publish_state(val); applied++; }}
                     // ── Overrides (clamped) ──
                     if(key == "lead_rotate_s"){ int v = ci((int)val, 60, 1800); if(id(lead_rotate_timeout_s) != v){ id(lead_rotate_timeout_s) = v; id(num_lead_rotate).publish_state(v); applied++; }}
@@ -1412,15 +1412,15 @@ interval:
                     if(key == "fan_burst_min"){ int v = ci((int)val, 1, 60); if(id(fan_burst_minutes) != v){ id(fan_burst_minutes) = v; id(num_fan_burst).publish_state(v); applied++; }}
                     if(key == "fog_burst_min"){ int v = ci((int)val, 1, 60); if(id(fog_burst_minutes) != v){ id(fog_burst_minutes) = v; id(num_fog_burst).publish_state(v); applied++; }}
                     // ── Misting (clamped) ──
-                    if(key == "mister_engage_kpa"){ val = cf(val, 0.5, 3); if(fabs(id(mister_engage_kpa) - val) > 0.01f){ id(mister_engage_kpa) = val; id(num_mister_engage_kpa).publish_state(val); applied++; }}
-                    if(key == "mister_all_kpa"){ val = cf(val, 0.5, 4); if(fabs(id(mister_all_kpa) - val) > 0.01f){ id(mister_all_kpa) = val; id(num_mister_all_kpa).publish_state(val); applied++; }}
+                    if(key == "mister_engage_kpa"){ val = cf(val, 0.8, 2.0); if(fabs(id(mister_engage_kpa) - val) > 0.01f){ id(mister_engage_kpa) = val; id(num_mister_engage_kpa).publish_state(val); applied++; }}
+                    if(key == "mister_all_kpa"){ val = cf(val, 1.0, 2.5); if(fabs(id(mister_all_kpa) - val) > 0.01f){ id(mister_all_kpa) = val; id(num_mister_all_kpa).publish_state(val); applied++; }}
                     if(key == "mister_engage_delay_s"){ int v = ci((int)val, 10, 900); if(id(mister_engage_delay_s) != v){ id(mister_engage_delay_s) = v; id(num_mister_engage_delay).publish_state(v); applied++; }}
                     if(key == "mister_all_delay_s"){ int v = ci((int)val, 0, 600); if(id(mister_all_delay_s) != v){ id(mister_all_delay_s) = v; id(num_mister_all_delay).publish_state(v); applied++; }}
                     if(key == "mister_on_s"){ int v = ci((int)val, 5, 300); if(id(mister_on_s) != v){ id(mister_on_s) = v; id(num_mister_on).publish_state(v); applied++; }}
                     if(key == "mister_off_s"){ int v = ci((int)val, 5, 300); if(id(mister_off_s) != v){ id(mister_off_s) = v; id(num_mister_off).publish_state(v); applied++; }}
                     if(key == "mister_all_on_s"){ int v = ci((int)val, 5, 300); if(id(mister_all_on_s) != v){ id(mister_all_on_s) = v; id(num_mister_all_on).publish_state(v); applied++; }}
                     if(key == "mister_all_off_s"){ int v = ci((int)val, 5, 300); if(id(mister_all_off_s) != v){ id(mister_all_off_s) = v; id(num_mister_all_off).publish_state(v); applied++; }}
-                    if(key == "mister_water_budget_gal"){ val = cf(val, 10, 1000); if(fabs(id(mister_water_budget_gal) - val) > 0.01f){ id(mister_water_budget_gal) = val; id(num_mister_water_budget).publish_state(val); applied++; }}
+                    if(key == "mister_water_budget_gal"){ val = cf(val, 100, 600); if(fabs(id(mister_water_budget_gal) - val) > 0.01f){ id(mister_water_budget_gal) = val; id(num_mister_water_budget).publish_state(val); applied++; }}
                     if(key == "mister_max_runtime_min"){ int v = ci((int)val, 5, 480); if(id(mister_max_runtime_min) != v){ id(mister_max_runtime_min) = v; id(num_mister_max_runtime).publish_state(v); applied++; }}
                     // ── Grow lights (clamped) ──
                     if(key == "gl_dli_target"){ val = cf(val, 1, 50); if(fabs(id(gl_dli_target) - val) > 0.01f){ id(gl_dli_target) = val; id(num_gl_dli_target).publish_state(val); applied++; }}
@@ -1478,8 +1478,8 @@ interval:
                     if(key == "sw_irrigation_weather_skip"){ bool v = val > 0.5f; if(id(irrig_weather_skip) != v){ id(irrig_weather_skip) = v; id(sw_irrig_weather_skip).publish_state(v); applied++; }}
                     if(key == "sw_occupancy_inhibit"){ bool v = val > 0.5f; if(id(occupancy_inhibit_enabled) != v){ id(occupancy_inhibit_enabled) = v; id(sw_occupancy_inhibit).publish_state(v); applied++; }}
                     if(key == "occupancy"){ bool v = val > 0.5f; if(id(greenhouse_occupied) != v){ id(greenhouse_occupied) = v; ESP_LOGI("plan","Occupancy: %s", v ? "OCCUPIED" : "EMPTY"); }}
-                    if(key == "mister_pulse_on_s"){ int v = ci((int)val, 15, 120); if(id(mister_pulse_on_s) != v){ id(mister_pulse_on_s) = v; id(num_mister_pulse_on).publish_state(v); applied++; }}
-                    if(key == "mister_pulse_gap_s"){ int v = ci((int)val, 5, 120); if(id(mister_pulse_gap_s) != v){ id(mister_pulse_gap_s) = v; id(num_mister_pulse_gap).publish_state(v); applied++; }}
+                    if(key == "mister_pulse_on_s"){ int v = ci((int)val, 30, 90); if(id(mister_pulse_on_s) != v){ id(mister_pulse_on_s) = v; id(num_mister_pulse_on).publish_state(v); applied++; }}
+                    if(key == "mister_pulse_gap_s"){ int v = ci((int)val, 10, 60); if(id(mister_pulse_gap_s) != v){ id(mister_pulse_gap_s) = v; id(num_mister_pulse_gap).publish_state(v); applied++; }}
                     if(key == "mister_vpd_weight"){ val = cf(val, 0.5, 5.0); if(fabs(id(mister_vpd_weight) - val) > 0.01f){ id(mister_vpd_weight) = val; id(num_mister_vpd_weight).publish_state(val); applied++; }}
                     if(key == "outdoor_temp"){ id(pulled_outdoor_temp_f) = val; ESP_LOGI("plan","Outdoor temp: %.1f°F (from DB)", val); }
                     if(key == "outdoor_rh"){ id(pulled_outdoor_rh_pct) = val; ESP_LOGI("plan","Outdoor RH: %.0f%% (from DB)", val); }
