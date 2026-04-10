@@ -269,6 +269,20 @@ async def write_plan_to_db(plan: dict, greenhouse_id: str) -> dict:
             # Filter out band-driven params
             filtered = [wp for wp in waypoints if wp["parameter"] in BAND_DRIVEN]
             waypoints = [wp for wp in waypoints if wp["parameter"] not in BAND_DRIVEN]
+
+            # Ensure immediate coverage: duplicate the first transition at now()
+            # so there's no gap between fn_deactivate_future_plans() and the first planned ts
+            if waypoints:
+                first_ts = min(wp["ts"] for wp in waypoints)
+                now_ts = datetime.now(DENVER).isoformat()
+                if first_ts > now_ts:
+                    now_wps = [{"ts": now_ts, "parameter": wp["parameter"],
+                               "value": wp["value"],
+                               "reason": "Immediate coverage (copied from first transition)"}
+                              for wp in waypoints if wp["ts"] == first_ts]
+                    waypoints.extend(now_wps)
+                    log.info("Added %d immediate-coverage waypoints at %s",
+                            len(now_wps), now_ts[:16])
             if filtered:
                 log.warning("Filtered %d band-driven waypoints: %s",
                            len(filtered),
