@@ -142,7 +142,7 @@ async def analyze_image(image_path: Path, conn, dry_run: bool = False) -> dict |
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         """,
             datetime.now(timezone.utc), camera, zones[0], str(image_path),
-            GEMINI_MODEL,
+            ai.model_name("vision"),
             json.dumps(result), json.dumps(result.get("observations", [])),
             result.get("environment_notes"), result.get("recommended_actions"),
             elapsed_ms, token_count, result.get("overall_confidence"))
