@@ -1,0 +1,10 @@
+/* Hide Grafana branding in embedded solo panels */
+[class*="PoweredBy"],
+[aria-label*="Powered by"],
+.css-1jnma2h,
+footer,
+a[href*="grafana.com/oss"] {
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}

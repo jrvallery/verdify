@@ -666,7 +666,7 @@ interval:
             // NEW HIERARCHY: Misters first (S1/S2), Fog escalation (S3)
             // Misters run in ANY humidity state including with vent open —
             // they spray directionally at surfaces, providing local evaporative cooling.
-            // Fog (S3) is the heavy escalation: 1644W, fills the room.
+            // Fog (S3) is the heavy escalation: ~800W, fills the room.
             bool occupancy_blocks = id(occupancy_inhibit_enabled) && id(greenhouse_occupied);
             bool mister_blocked =
                 (id(mister_water_today) >= id(mister_water_budget_gal))
@@ -715,7 +715,7 @@ interval:
               // ═══════════ INVERTED HIERARCHY: MISTERS → FOG ═══════════
               // S1: Pulse-rotation misters (cheap, targeted, zone-specific)
               // S2: Aggressive misters (all zones rotating, shorter gaps)
-              // S3: FOG (1644W heavy artillery — misters couldn't handle it)
+              // S3: FOG (~800W heavy artillery — misters couldn't handle it)
 
               const uint32_t PULSE_ON_MS  = uint32_t(id(mister_pulse_on_s)) * 1000UL;
               const uint32_t PULSE_GAP_MS = uint32_t(id(mister_pulse_gap_s)) * 1000UL;
