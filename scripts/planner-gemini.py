@@ -78,10 +78,92 @@ def check_replan_trigger() -> tuple[bool, str]:
     return False, ""
 
 
+def compute_milestones() -> str:
+    """Compute solar ephemeris + forecast milestones as a formatted table."""
+    import subprocess
+    result = subprocess.run(
+        ["bash", "-c", """
+DB="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
+
+echo "date|sunrise|solar_noon|sunset|peak_alt|daylight|peak_solar|peak_temp|driest|peak_vpd|cloud_shift|stress_hrs|high_f|low_rh|tree_shade"
+
+# Join solar ephemeris (1-min resolution) with forecast milestones
+$DB -c "
+WITH solar AS (
+  SELECT ts, ts AT TIME ZONE 'America/Denver' AS mdt,
+    (ts AT TIME ZONE 'America/Denver')::date AS day,
+    fn_solar_altitude(ts) AS alt
+  FROM generate_series(
+    (date_trunc('day', now() AT TIME ZONE 'America/Denver') + interval '1 day 4 hours') AT TIME ZONE 'America/Denver',
+    (date_trunc('day', now() AT TIME ZONE 'America/Denver') + interval '3 days 22 hours') AT TIME ZONE 'America/Denver',
+    interval '1 minute') AS ts
+),
+ephem AS (
+  SELECT day,
+    to_char(min(CASE WHEN alt > 0 THEN mdt END), 'HH24:MI') AS sunrise,
+    to_char((array_agg(mdt ORDER BY alt DESC))[1], 'HH24:MI') AS solar_noon,
+    to_char(max(CASE WHEN alt > 0 THEN mdt END), 'HH24:MI') AS sunset,
+    round(max(alt)::numeric, 1) AS peak_alt,
+    round(count(*) FILTER (WHERE alt > 0) / 60.0, 1) AS daylight_hrs
+  FROM solar GROUP BY day
+),
+fc AS (
+  SELECT DISTINCT ON (ts) ts,
+    ts AT TIME ZONE 'America/Denver' AS mdt,
+    (ts AT TIME ZONE 'America/Denver')::date AS day,
+    temp_f, rh_pct, cloud_cover_pct, vpd_kpa,
+    COALESCE(direct_radiation_w_m2, 0) AS solar_w
+  FROM weather_forecast WHERE ts > now() AND ts < now() + interval '72 hours'
+  ORDER BY ts, fetched_at DESC
+),
+forecast AS (
+  SELECT day,
+    to_char((array_agg(mdt ORDER BY solar_w DESC))[1], 'HH24:MI') AS peak_solar,
+    to_char((array_agg(mdt ORDER BY temp_f DESC))[1], 'HH24:MI') AS peak_temp,
+    to_char((array_agg(mdt ORDER BY rh_pct ASC))[1], 'HH24:MI') AS driest,
+    to_char((array_agg(mdt ORDER BY vpd_kpa DESC))[1], 'HH24:MI') AS peak_vpd,
+    COALESCE((SELECT to_char(mdt, 'HH24:MI') || CASE WHEN cloud_cover_pct > lag_c THEN ' cloud' ELSE ' clear' END
+      FROM (SELECT mdt, cloud_cover_pct, lag(cloud_cover_pct) OVER (ORDER BY ts) AS lag_c FROM fc f2 WHERE f2.day = fc.day) cc
+      WHERE abs(cloud_cover_pct - COALESCE(lag_c, cloud_cover_pct)) > 30 ORDER BY mdt LIMIT 1), '-') AS cloud_shift,
+    count(*) FILTER (WHERE vpd_kpa > 1.5) || 'h' AS stress_hrs,
+    round(max(temp_f)::numeric, 0) AS high_f,
+    round(min(rh_pct)::numeric, 0) AS low_rh
+  FROM fc GROUP BY day
+),
+shade AS (
+  SELECT DISTINCT ON ((ts AT TIME ZONE 'America/Denver')::date)
+    (ts AT TIME ZONE 'America/Denver')::date AS day,
+    extract(epoch FROM (ts AT TIME ZONE 'America/Denver') - (ts AT TIME ZONE 'America/Denver')::date::timestamp) / 60.0 AS mins
+  FROM climate WHERE ts > now() - interval '14 days'
+    AND extract(hour FROM ts AT TIME ZONE 'America/Denver') BETWEEN 9 AND 12
+    AND lux > 500 AND solar_irradiance_w_m2 > 300
+  ORDER BY (ts AT TIME ZONE 'America/Denver')::date, ts
+),
+shade_model AS (
+  SELECT regr_slope(mins, extract(doy FROM day)::double precision) AS slope,
+         regr_intercept(mins, extract(doy FROM day)::double precision) AS intercept
+  FROM shade
+)
+SELECT to_char(e.day, 'Dy MM-DD'),
+  e.sunrise, e.solar_noon, e.sunset, e.peak_alt, e.daylight_hrs,
+  f.peak_solar, f.peak_temp, f.driest, f.peak_vpd, f.cloud_shift,
+  f.stress_hrs, f.high_f, f.low_rh,
+  to_char('00:00'::time + make_interval(secs => (sm.intercept + sm.slope * extract(doy FROM e.day)::double precision) * 60), 'HH24:MI')
+FROM ephem e
+LEFT JOIN forecast f ON e.day = f.day
+CROSS JOIN shade_model sm
+ORDER BY e.day;
+" 2>/dev/null
+"""],
+        capture_output=True, text=True, timeout=30)
+    return result.stdout.strip() if result.returncode == 0 else "(milestones unavailable)"
+
+
 def build_prompt(greenhouse_id: str) -> str:
     """Render the planner prompt with live context injected."""
     dynamic_context = gather_context(greenhouse_id)
     static_context = read_static_context()
+    milestones = compute_milestones()
     current_time = datetime.now(DENVER).strftime("%Y-%m-%dT%H:%M:%S-06:00")
     replan_mode, replan_reason = check_replan_trigger()
     if replan_mode:
@@ -89,6 +171,7 @@ def build_prompt(greenhouse_id: str) -> str:
     return ai.render_template("planner", "prompt",
                              dynamic_context=dynamic_context,
                              static_context=static_context,
+                             milestones=milestones,
                              current_time=current_time,
                              replan_mode=replan_mode,
                              replan_reason=replan_reason)
