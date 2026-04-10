@@ -136,15 +136,13 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         if zone_row:
             for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):
                 params[param] = round(float(zone_row[param]), 2)
-        # Band-driven mister tuning: engage at band ceiling, not fixed thresholds
+        # Mister tuning: band provides defaults, planner can override.
+        # Set band-derived values first, then planner values overwrite if present.
         if band_row:
             vpd_hi = float(band_row["vpd_high"])
-            params["mister_engage_kpa"] = round(vpd_hi, 2)
-            params["mister_all_kpa"] = round(vpd_hi + 0.3, 2)
-            params["mister_engage_delay_s"] = 60.0
-            params["mister_all_delay_s"] = 60.0
-            params["mister_pulse_gap_s"] = 20.0
-            params["mister_center_penalty"] = 0.8
+            # Band defaults — will be overwritten by planner values from setpoint_changes if present
+            params.setdefault("mister_engage_kpa", round(vpd_hi, 2))
+            params.setdefault("mister_all_kpa", round(vpd_hi + 0.3, 2))
         outdoor = await conn.fetchrow("""
             SELECT outdoor_temp_f, outdoor_rh_pct FROM climate
             WHERE outdoor_temp_f IS NOT NULL AND greenhouse_id = $1

@@ -1478,9 +1478,9 @@ interval:
                     if(key == "sw_irrigation_weather_skip"){ bool v = val > 0.5f; if(id(irrig_weather_skip) != v){ id(irrig_weather_skip) = v; id(sw_irrig_weather_skip).publish_state(v); applied++; }}
                     if(key == "sw_occupancy_inhibit"){ bool v = val > 0.5f; if(id(occupancy_inhibit_enabled) != v){ id(occupancy_inhibit_enabled) = v; id(sw_occupancy_inhibit).publish_state(v); applied++; }}
                     if(key == "occupancy"){ bool v = val > 0.5f; if(id(greenhouse_occupied) != v){ id(greenhouse_occupied) = v; ESP_LOGI("plan","Occupancy: %s", v ? "OCCUPIED" : "EMPTY"); }}
-                    if(key == "mister_pulse_on_s" && id(mister_pulse_on_s) != (int)val){ id(mister_pulse_on_s) = (int)val; id(num_mister_pulse_on).publish_state(val); applied++; }
-                    if(key == "mister_pulse_gap_s" && id(mister_pulse_gap_s) != (int)val){ id(mister_pulse_gap_s) = (int)val; id(num_mister_pulse_gap).publish_state(val); applied++; }
-                    if(key == "mister_vpd_weight" && fabs(id(mister_vpd_weight) - val) > 0.01f){ id(mister_vpd_weight) = val; id(num_mister_vpd_weight).publish_state(val); applied++; }
+                    if(key == "mister_pulse_on_s"){ int v = ci((int)val, 15, 120); if(id(mister_pulse_on_s) != v){ id(mister_pulse_on_s) = v; id(num_mister_pulse_on).publish_state(v); applied++; }}
+                    if(key == "mister_pulse_gap_s"){ int v = ci((int)val, 5, 120); if(id(mister_pulse_gap_s) != v){ id(mister_pulse_gap_s) = v; id(num_mister_pulse_gap).publish_state(v); applied++; }}
+                    if(key == "mister_vpd_weight"){ val = cf(val, 0.5, 5.0); if(fabs(id(mister_vpd_weight) - val) > 0.01f){ id(mister_vpd_weight) = val; id(num_mister_vpd_weight).publish_state(val); applied++; }}
                     if(key == "outdoor_temp"){ id(pulled_outdoor_temp_f) = val; ESP_LOGI("plan","Outdoor temp: %.1f°F (from DB)", val); }
                     if(key == "outdoor_rh"){ id(pulled_outdoor_rh_pct) = val; ESP_LOGI("plan","Outdoor RH: %.0f%% (from DB)", val); }
                   }
