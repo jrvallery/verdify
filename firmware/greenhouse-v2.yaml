@@ -83,8 +83,8 @@ esphome:
           if(id(mister_vpd_weight) < 0.5 || id(mister_vpd_weight) > 5){ id(mister_vpd_weight) = 1.5; fixes++; }
           if(id(mist_vent_close_lead_s) < 0 || id(mist_vent_close_lead_s) > 60){ id(mist_vent_close_lead_s) = 15; fixes++; }
           if(id(mist_vent_reopen_delay_s) < 0 || id(mist_vent_reopen_delay_s) > 120){ id(mist_vent_reopen_delay_s) = 45; fixes++; }
-          if(id(enthalpy_open_kjkg) < -5 || id(enthalpy_open_kjkg) > 0){ /* valid range */ } else { id(enthalpy_open_kjkg) = -2; fixes++; }
-          if(id(enthalpy_close_kjkg) < 0 || id(enthalpy_close_kjkg) > 5){ /* valid range */ } else { id(enthalpy_close_kjkg) = 1; fixes++; }
+          if(id(enthalpy_open_kjkg) < -5 || id(enthalpy_open_kjkg) > 0){ id(enthalpy_open_kjkg) = -2; fixes++; }
+          if(id(enthalpy_close_kjkg) < 0 || id(enthalpy_close_kjkg) > 5){ id(enthalpy_close_kjkg) = 1; fixes++; }
           if(id(stage2_cool_delta_f) < 2 || id(stage2_cool_delta_f) > 5){ id(stage2_cool_delta_f) = 3; fixes++; }
           if(id(mister_water_budget_gal) < 100 || id(mister_water_budget_gal) > 600){ id(mister_water_budget_gal) = 500; fixes++; }
           if(id(bias_heat_f) < -10 || id(bias_heat_f) > 10){ id(bias_heat_f) = 0; fixes++; }
