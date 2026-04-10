@@ -156,7 +156,41 @@ ORDER BY e.day;
 " 2>/dev/null
 """],
         capture_output=True, text=True, timeout=30)
-    return result.stdout.strip() if result.returncode == 0 else "(milestones unavailable)"
+    raw = result.stdout.strip() if result.returncode == 0 else ""
+    if not raw:
+        return "(milestones unavailable)"
+
+    # Parse milestones table and compute suggested transition timestamps
+    lines = raw.split('\n')
+    suggested = ["\nSUGGESTED TRANSITION TIMESTAMPS (use these exact times, not round hours):",
+                 "date|pre_dawn|tree_shade|peak_stress|cloud_shift|decline|evening"]
+
+    for line in lines:
+        parts = line.split('|')
+        if len(parts) >= 15 and parts[0].strip().startswith(('Mon','Tue','Wed','Thu','Fri','Sat','Sun')):
+            day = parts[0].strip()
+            sunrise = parts[1].strip()   # HH:MM
+            sunset = parts[3].strip()    # index 3
+            peak_solar = parts[6].strip() # index 6
+            peak_vpd = parts[9].strip()   # index 9
+            cloud = parts[10].strip()     # index 10
+            tree = parts[14].strip()      # index 14
+
+            def shift(t, delta_min):
+                if not t or t == '-': return '-'
+                try:
+                    h, m = int(t[:2]), int(t[3:5])
+                    total = h * 60 + m + delta_min
+                    return f"{(total // 60) % 24:02d}:{total % 60:02d}"
+                except: return t
+
+            pre_dawn = shift(sunrise, -60)
+            decline = shift(peak_solar, 120)
+            cloud_time = cloud.split()[0] if cloud and cloud != '-' and cloud != 'none' else '-'
+
+            suggested.append(f"{day}|{pre_dawn}|{tree}|{peak_vpd}|{cloud_time}|{decline}|{sunset}")
+
+    return raw + '\n' + '\n'.join(suggested)
 
 
 def build_prompt(greenhouse_id: str) -> str:
