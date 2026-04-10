@@ -36,7 +36,7 @@ models:
 # All templates live in /srv/verdify/templates/
 templates:
   planner:
-    prompt: planner-prompt.md
+    prompt: planner-prompt.j2
     core_params: planner-core-params.md
     static_context: ${STATE_DIR:-/srv/verdify/state}/planner-static-context.md
 
