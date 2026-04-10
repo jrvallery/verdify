@@ -77,10 +77,14 @@ class AIConfig:
         return Path(key_file).read_text().strip()
 
     def get_client(self, task: str):
-        """Create a google.genai Client for the given task's provider."""
-        from google import genai
+        """Create an API client for the given task's provider."""
         provider = self.config["models"][task]["provider"]
-        return genai.Client(api_key=self.api_key(provider))
+        if provider == "anthropic":
+            import anthropic
+            return anthropic.Anthropic(api_key=self.api_key(provider))
+        else:
+            from google import genai
+            return genai.Client(api_key=self.api_key(provider))
 
     def template_path(self, task: str, template_key: str) -> Path:
         """Get the full path to a template file."""

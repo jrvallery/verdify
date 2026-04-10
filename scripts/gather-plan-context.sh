@@ -28,7 +28,7 @@ SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v;
 echo ""
 
 # Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
-echo "--- ACTIVE PLAN (summary per transition) ---"
+echo "--- ACTIVE PLAN (future transitions only — your new plan will replace this entirely) ---"
 echo "Key variables shown per transition. Vent/fog timing params at defaults unless noted."
 echo "ts_mdt|raw_params|engage|all|gap|wt|hyst|vent_max|fog_esc|b_heat|b_cool"
 $DB -c "
@@ -103,13 +103,25 @@ ORDER BY date_trunc('hour', ts);
 "
 echo ""
 
-# ── 5. STRESS LAST 7 DAYS ─────────────────────────────────────────
-echo "--- STRESS LAST 7 DAYS ---"
-echo "date|cold_stress_hrs|heat_stress_hrs|vpd_high_hrs|vpd_low_hrs"
+# ── 5. PLANNER SCORECARD (today + 7-day trend) ───────────────────
+TODAY=$(date +%Y-%m-%d)
+echo "--- PLANNER SCORECARD (${TODAY} — partial if before midnight, informational only) ---"
+echo "metric|value"
+$DB -c "SELECT * FROM fn_planner_scorecard(CURRENT_DATE);"
+echo ""
+echo "--- PLANNER SCORE TREND (7 complete calendar days, excludes today) ---"
+echo "date|score|compliance_pct|total_stress_h|heat|cold|vpd_high|vpd_low|cost|dp_min|dp_risk_h"
 $DB -c "
-SELECT date, cold_stress_hours, heat_stress_hours, vpd_stress_hours, vpd_low_hours
-FROM v_stress_hours_today WHERE date >= CURRENT_DATE - 6 ORDER BY date DESC;
+SELECT p.date, p.planner_score, p.compliance_pct, p.total_stress_h,
+       p.heat_stress_h, p.cold_stress_h, p.vpd_high_stress_h, p.vpd_low_stress_h, p.cost_total,
+       COALESCE(d.min_margin_f, 0), COALESCE(d.risk_hours, 0)
+FROM v_planner_performance p
+LEFT JOIN v_dew_point_risk d ON p.date = d.date
+WHERE p.date >= CURRENT_DATE - 7 AND p.date < CURRENT_DATE ORDER BY p.date DESC;
 "
+echo "Score formula: 80% compliance (in-band time) + 20% cost efficiency (<\$5/day=full marks)"
+echo "Priority 1: stay in band. Priority 2: minimize cost. Target: score >70, compliance >90%, total stress <3h/day"
+echo "Dew point margin: <5°F = condensation risk, <3°F = imminent. dp_risk_h = hours below 5°F. Target: 0h."
 echo ""
 
 # ── 6. COMPLIANCE (24h by zone) ───────────────────────────────────
@@ -181,10 +193,11 @@ echo ""
 
 # ── 12. DLI + GROW LIGHTS ─────────────────────────────────────────
 echo "--- DLI + GROW LIGHTS ---"
+echo "Current readings:"
 $DB -c "
 SELECT round(dli_today::numeric,1) as dli_mol, round(lux::numeric,0) as lux_now
 FROM climate ORDER BY ts DESC LIMIT 1;
-"
+" 2>/dev/null
 echo "DLI last 7 days:"
 $DB -c "
 SELECT to_char(date_trunc('day', ts)::date, 'MM-DD') as day, round(max(dli_today)::numeric,1) as peak_dli
@@ -217,8 +230,13 @@ FROM crops WHERE is_active ORDER BY zone, position;
 " 2>/dev/null || echo "(none)"
 echo ""
 
-# ── 15. PREVIOUS PLAN REVIEW (hypothesis → outcome validation) ────
-echo "--- PREVIOUS PLAN REVIEW ---"
+# Compute yesterday + governing plan once for sections 15 and 15b
+YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
+GOVERNING_PLAN=$($DB -c "SELECT plan_id FROM plan_journal WHERE created_at::date <= '${YESTERDAY}'::date AND plan_id NOT LIKE 'iris-reactive%' ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
+GOVERNING_VALIDATED=$($DB -c "SELECT CASE WHEN validated_at IS NOT NULL THEN 'yes' ELSE 'no' END FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}';" 2>/dev/null | tr -d ' ')
+
+# ── 15. PREVIOUS PLAN REVIEW (show governing plan for yesterday) ────
+echo "--- PREVIOUS PLAN REVIEW (governing plan for ${YESTERDAY}) ---"
 $DB -c "
 SELECT pj.plan_id,
   to_char(pj.created_at AT TIME ZONE 'America/Denver', 'MM-DD HH:MI AM') AS planned_at,
@@ -231,32 +249,40 @@ SELECT pj.plan_id,
   CASE WHEN pj.validated_at IS NULL THEN '⚠ NEEDS VALIDATION' ELSE 'validated' END AS status
 FROM plan_journal pj
 WHERE pj.plan_id NOT LIKE 'iris-reactive%'
+  AND pj.created_at::date <= '${YESTERDAY}'::date
 ORDER BY pj.created_at DESC LIMIT 1;
 " 2>/dev/null
 # Show accuracy for last 3 plans
 echo "Plan accuracy (last 3):"
 $DB -c "SELECT plan_id, waypoints, achieved, accuracy_pct, mean_abs_error FROM v_plan_accuracy WHERE plan_id NOT LIKE 'iris-reactive%' ORDER BY plan_start DESC LIMIT 3;" 2>/dev/null
-# Flag unvalidated plans
-UNVALIDATED=$($DB -c "SELECT COUNT(*) FROM plan_journal WHERE validated_at IS NULL AND plan_id NOT LIKE 'iris-reactive%' AND created_at < now() - interval '6 hours';" 2>/dev/null | tr -d ' ')
-if [ "${UNVALIDATED:-0}" -gt 0 ]; then
-  echo "ACTION REQUIRED: $UNVALIDATED unvalidated plan(s). Score the previous plan before writing a new one."
+# Flag if governing plan is unvalidated (vars computed above section 15)
+if [ "${GOVERNING_VALIDATED}" = "no" ]; then
+  echo "ACTION REQUIRED: Governing plan ${GOVERNING_PLAN} is unvalidated. Include its validation in your previous_plan_validation output block using the MOST RECENT COMPLETE PLAN EVALUATION metrics below."
 fi
-# Structured actuals for previous plan period (stress, water, cost, equipment)
-echo "Previous plan actuals (measured outcomes since yesterday):"
+# Structured actuals for previous plan period — USE THIS for previous_plan_validation grading
+echo "--- MOST RECENT COMPLETE PLAN EVALUATION (${YESTERDAY} only, use for previous_plan_validation) ---"
+echo "governing_plan_id: ${GOVERNING_PLAN:-(unknown)}"
+echo "All values from daily_summary (frozen at end-of-day with the setpoints that were active then)."
 echo "metric|value"
 $DB -c "
-SELECT 'heat_stress_hrs' AS metric, round(COALESCE(sum(heat_stress_hours),0)::numeric, 1) AS val
-FROM v_stress_hours_today WHERE date >= CURRENT_DATE - 1
-UNION ALL SELECT 'vpd_stress_hrs', round(COALESCE(sum(vpd_stress_hours),0)::numeric, 1)
-FROM v_stress_hours_today WHERE date >= CURRENT_DATE - 1
-UNION ALL SELECT 'water_used_gal', round(COALESCE(sum(water_used_gal),0)::numeric, 1)
-FROM daily_summary WHERE date >= CURRENT_DATE - 1
-UNION ALL SELECT 'cost_total', round(COALESCE(sum(cost_total),0)::numeric, 2)
-FROM daily_summary WHERE date >= CURRENT_DATE - 1
-UNION ALL SELECT 'peak_temp_f', round(COALESCE(max(temp_max),0)::numeric, 1)
-FROM daily_summary WHERE date >= CURRENT_DATE - 1
-UNION ALL SELECT 'peak_vpd_kpa', round(COALESCE(max(vpd_max),0)::numeric, 2)
-FROM daily_summary WHERE date >= CURRENT_DATE - 1;
+SELECT 'planner_score' AS metric, planner_score::text AS val FROM v_planner_performance WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'compliance_pct', compliance_pct::text FROM v_planner_performance WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'heat_stress_hrs', round(COALESCE(stress_hours_heat,0)::numeric, 1)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'cold_stress_hrs', round(COALESCE(stress_hours_cold,0)::numeric, 1)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'vpd_high_stress_hrs', round(COALESCE(stress_hours_vpd_high,0)::numeric, 1)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'vpd_low_stress_hrs', round(COALESCE(stress_hours_vpd_low,0)::numeric, 1)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'water_used_gal', round(COALESCE(water_used_gal,0)::numeric, 1)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'cost_total', round(COALESCE(cost_total,0)::numeric, 2)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'peak_temp_f', round(COALESCE(temp_max,0)::numeric, 1)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1
+UNION ALL SELECT 'peak_vpd_kpa', round(COALESCE(vpd_max,0)::numeric, 2)::text
+FROM daily_summary WHERE date = CURRENT_DATE - 1;
 " 2>/dev/null || echo "(unavailable)"
 # Dispatched changes removed — planner does not verify dispatch.
 echo ""
@@ -307,14 +333,19 @@ if [ -n "$BIAS" ] && [ "$BIAS" != "" ]; then
 fi
 
 # ── 20. ACTIVE LESSONS (accumulated planner knowledge) ────────────
-echo "--- ACTIVE LESSONS ---"
+echo "--- ACTIVE LESSONS (top 10 by confidence + validation count) ---"
 $DB -c "
+WITH deduped AS (
+  SELECT DISTINCT ON (lesson) id, category, condition, lesson, confidence, times_validated
+  FROM planner_lessons
+  WHERE is_active = true AND superseded_by IS NULL
+  ORDER BY lesson, times_validated DESC
+)
 SELECT category, condition, lesson, confidence, times_validated
-FROM planner_lessons
-WHERE is_active = true AND superseded_by IS NULL
-ORDER BY
-  CASE confidence WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-  times_validated DESC;
+FROM deduped
+ORDER BY CASE confidence WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+  times_validated DESC
+LIMIT 10;
 " 2>/dev/null
 echo "When making decisions, reference applicable lessons above. If a lesson contradicts"
 echo "your plan, either follow the lesson or explain why conditions differ enough to override."
@@ -328,9 +359,9 @@ FROM (SELECT DISTINCT ON (parameter) parameter, value FROM setpoint_changes ORDE
 WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis','mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s','gl_dli_target','gl_sunrise_hour','gl_sunset_hour')
 ORDER BY parameter;
 " 2>/dev/null
-echo "Band-driven values above reflect current diurnal crop profiles and shift with the cycle."
-echo "Values like temp_high=65 or vpd_high=0.6 are normal at night — they do not indicate corruption."
-echo "Do not set band-driven params in your plan."
+echo "Band-driven values above reflect current diurnal crop profiles and shift throughout the day."
+echo "Nighttime values are typically lower (temp_high ~62-65°F, vpd_high ~0.6-0.8 kPa). These are normal, not corruption."
+echo "Do not set band-driven params in your plan — use bias_heat/bias_cool to shift them."
 echo ""
 echo "Firmware invariants (always active, not planner-controlled):"
 echo "  fog_time_window: 07:00-17:00 (fog blocked outside this window)"
@@ -436,7 +467,7 @@ echo ""
 
 # ── 22b. (moved to section 27) ───────────────────────────────────
 
-# Replan trigger is handled by planner-gemini.py MODE header — not injected here.
+# Replan trigger is handled by planner.py MODE header — not injected here.
 
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
 echo "--- 72H HOURLY FORECAST ---"
@@ -448,7 +479,7 @@ SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH24:00') as hour_mdt
   round(cloud_cover_pct::numeric,0) as cloud,
   round(wind_speed_mph::numeric,0) as wind,
   round(vpd_kpa::numeric,2) as vpd,
-  round(COALESCE(direct_radiation_w_m2,0)::numeric,0) as solar_w,
+  round(GREATEST(COALESCE(direct_radiation_w_m2,0),0)::numeric,0) as solar_w,
   round(COALESCE(et0_mm,0)::numeric,1) as et0,
   round(COALESCE(precip_prob_pct,0)::numeric,0) as precip_pct,
   weather_code
@@ -528,7 +559,7 @@ FROM image_observations
 WHERE ts > now() - interval '24 hours'
 ORDER BY ts DESC LIMIT 2;
 " 2>/dev/null
-echo "Use these visual observations to inform crop-specific decisions. If health scores are declining, investigate and adjust."
+echo "Crop health observations are informational. Note declining scores in your conditions_summary, but do not change tuning strategy based on visual observations alone — they may indicate nutrient, light, or root-zone issues outside this planner's control surface."
 echo ""
 
 echo "=== END PLANNING CONTEXT ==="

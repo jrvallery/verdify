@@ -5,7 +5,7 @@
 set -euo pipefail
 
 TRIGGER="/srv/verdify/state/replan-needed.json"
-PLANNER="/srv/verdify/scripts/planner-gemini.py"
+PLANNER="/srv/verdify/scripts/planner.py"
 PUBLISHER="/srv/verdify/scripts/publish-daily-plan.sh"
 LOG="/srv/verdify/state/replan.log"
 COOLDOWN="/srv/verdify/state/replan-cooldown"
@@ -26,7 +26,7 @@ fi
 echo "[$(date)] REPLAN triggered (age=${AGE}s)" >> "$LOG"
 source /srv/greenhouse/.venv/bin/activate
 
-# Run planner (MODE: REPLAN set automatically by planner-gemini.py)
+# Run planner (MODE: REPLAN set automatically by planner.py)
 python3 "$PLANNER" >> "$LOG" 2>&1
 RESULT=$?
 

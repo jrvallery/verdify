@@ -9,12 +9,15 @@ keys:
   gemini:
     file: ${GEMINI_API_KEY_FILE:-/mnt/jason/agents/shared/credentials/gemini_api_key.txt}
     provider: google-ai-studio
+  anthropic:
+    file: ${ANTHROPIC_API_KEY_FILE:-/mnt/jason/agents/shared/credentials/anthropic_api_key.txt}
+    provider: anthropic
 
 # ── Models ───────────────────────────────────────────────────────
 models:
   planner:
-    provider: gemini
-    model: gemini-3.1-pro-preview
+    provider: anthropic
+    model: claude-opus-4-6
     temperature: 0.3
     max_output_tokens: 16384
     purpose: "72-hour tactical setpoint planning"
@@ -51,8 +54,8 @@ templates:
 schedules:
   planner:
     cron: "0 6,12,18 * * *"
-    script: scripts/planner-gemini.py
-    description: "Gemini 3.1 Pro Preview 72h planning cycle"
+    script: scripts/planner.py
+    description: "Claude Opus 4.6 72h planning cycle"
 
   vision:
     cron: "0 12,16,20,0 * * *"
