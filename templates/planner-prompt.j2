@@ -64,7 +64,7 @@ During extended vent-closed + fog/mist periods, monitor condensation risk:
 - If RH approaches 90%+, prefer shorter `mist_max_closed_vent_s` (more thermal relief openings)
 - If overnight plan keeps vent closed with fog, ensure `min_fog_off_s` is long enough for canopy drying
 - Fog is firmware-gated: blocked above RH ceiling, below temp floor, and outside time window
-- Do NOT tune fog into nighttime or pre-dawn hours — canopy must dry before dark
+- **HARD GATE:** `fog_escalation_kpa` is only active between `fog_time_window_start` and `fog_time_window_end` (firmware-enforced, default 07:00-17:00). Do not schedule transitions that assume fog availability outside this window. Canopy must dry before dark.
 
 ## Parameter Authority — 24 Tier 1 Tunables
 
