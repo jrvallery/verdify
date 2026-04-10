@@ -23,6 +23,8 @@ When parameters conflict, follow this priority (highest first):
 | `mister_pulse_on_s` | 30-90s | Mister burst duration. 60s is the validated sweet spot. |
 | `mister_pulse_gap_s` | 10-60s | Evaporation dwell. 15-20s dry days, 45s when humid. |
 | `mister_vpd_weight` | 1.0-3.0 | Driest-zone-first weighting. Higher = more zone focus. |
+| `mister_engage_kpa` | 1.0-1.8 kPa | VPD threshold to start misting. Lower = earlier engagement. |
+| `mister_all_kpa` | 1.3-2.2 kPa | VPD threshold for all-zone rotation. Usually engage + 0.3. |
 | `mister_water_budget_gal` | 200-500 | Daily water limit. Must never be the bottleneck. |
 | `bias_heat_f` | -5 to +5°F | Shift heating floor. +2 = pre-heat before cold front. |
 | `bias_cool_f` | -5 to +5°F | Shift cooling ceiling. -2 = start cooling earlier. |
@@ -34,7 +36,7 @@ When parameters conflict, follow this priority (highest first):
 ### Tier 2: Band-Driven (do NOT set these)
 These are computed from crop profiles every 5 minutes and will be overwritten:
 `temp_high`, `temp_low`, `vpd_high`, `vpd_low`, `vpd_target_south/west/east/center`,
-`mister_engage_kpa`, `mister_all_kpa`, `mister_engage_delay_s`, `mister_all_delay_s`
+`mister_engage_delay_s`, `mister_all_delay_s`
 
 Use `bias_heat_f`/`bias_cool_f` to shift the band instead.
 
@@ -120,5 +122,5 @@ Return ONLY valid JSON. Each transition is a keyed object — no duplicate times
 Rules:
 - Use -06:00 (MDT) for all timestamps
 - Every transition must include ALL Tier 1 params you want active (omitted params keep their current value)
-- Do NOT include Tier 2 params (temp_high, vpd_high, etc.) — they will be ignored
+- Do NOT include Tier 2 params (temp_high, temp_low, vpd_high, vpd_low) — they will be ignored
 - Include `mister_water_budget_gal` and switches only when changing them (not every transition)

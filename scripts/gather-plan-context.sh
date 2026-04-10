@@ -22,7 +22,21 @@ echo ""
 
 # ── 1. CORE PLANNING VIEW (7 JSON columns in one query) ───────────
 echo "--- IRIS PLANNING CONTEXT (DB view) ---"
-$DB -c "SELECT row_to_json(v) FROM v_iris_planning_context v;"
+# Inject deduped active_plan instead of the view's raw version
+$DB -c "
+SELECT json_build_object(
+  'conditions', (SELECT row_to_json(v)->'conditions' FROM v_iris_planning_context v),
+  'zones', (SELECT row_to_json(v)->'zones' FROM v_iris_planning_context v),
+  'setpoints', (SELECT row_to_json(v)->'setpoints' FROM v_iris_planning_context v),
+  'forecast_24h', (SELECT row_to_json(v)->'forecast_24h' FROM v_iris_planning_context v),
+  'system_health', (SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v),
+  'daily_summary', (SELECT row_to_json(v)->'daily_summary' FROM v_iris_planning_context v),
+  'active_plan', (SELECT json_agg(sub ORDER BY ts, parameter) FROM (
+    SELECT DISTINCT ON (ts, parameter) ts, parameter, value, reason
+    FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata'
+    ORDER BY ts, parameter, created_at DESC
+  ) sub)
+);"
 echo ""
 
 # ── 2. CURRENT ZONE-LEVEL CONDITIONS ──────────────────────────────
@@ -277,9 +291,13 @@ for e in data:
 echo ""
 
 # ── 19. FORECAST BIAS (7-day rolling correction) ──────────────────
-echo "--- FORECAST BIAS ---"
-$DB -c "SELECT * FROM fn_forecast_correction('temp_f', 24);"
-echo ""
+BIAS=$($DB -c "SELECT * FROM fn_forecast_correction('temp_f', 24);" 2>/dev/null)
+if [ -n "$BIAS" ] && [ "$BIAS" != "" ]; then
+  echo "--- FORECAST BIAS ---"
+  echo "param|bias_f|window_hours"
+  echo "$BIAS"
+  echo ""
+fi
 
 # ── 20. ACTIVE LESSONS (accumulated planner knowledge) ────────────
 echo "--- ACTIVE LESSONS ---"
@@ -303,9 +321,8 @@ FROM (SELECT DISTINCT ON (parameter) parameter, value FROM setpoint_changes ORDE
 WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis','mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s','gl_dli_target','gl_sunrise_hour','gl_sunset_hour')
 ORDER BY parameter;
 " 2>/dev/null
-echo "MANDATORY: You MUST emit a waypoint for temp_high, temp_low, vpd_high, and vpd_hysteresis"
-echo "in EVERY plan — even if keeping the same value. The homepage forecast charts need continuous"
-echo "plan lines extending into the future. If you skip a parameter, the chart shows no target line."
+echo "These are the current active values. Band-driven params (temp_high, temp_low, vpd_high, vpd_low)"
+echo "are computed from crop profiles every 5 min — do not set these in your plan."
 echo ""
 
 # ── 21. PLANNING GUIDANCE ──────────────────────────────────────────
@@ -473,12 +490,13 @@ echo "Use this to calibrate your trust in the forecast. If 48h accuracy is consi
 echo ""
 
 # ── 29. PLAN COMPARISON ───────────────────────────────────────────
-echo "--- PLAN COMPARISON (last 3) ---"
+echo "--- PLAN COMPARISON (vs previous) ---"
+echo "parameter|current_avg|previous_avg|delta"
 $DB -c "
-SELECT plan_id, prev_plan_id, plan_created, parameter, cur_avg, prev_avg, delta_avg
+SELECT parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
 FROM v_plan_comparison
-ORDER BY plan_created DESC, parameter
-LIMIT 30;
+ORDER BY plan_created DESC, abs(delta_avg) DESC
+LIMIT 10;
 " 2>/dev/null || echo "(not available)"
 echo ""
 
