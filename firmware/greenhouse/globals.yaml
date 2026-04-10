@@ -676,6 +676,21 @@ globals:
     restore_value: yes
     initial_value: '0.5'
 
+  - id: east_adjacency_factor
+    type: float
+    restore_value: yes
+    initial_value: '0.3'
+
+  - id: min_fog_on_s
+    type: int
+    restore_value: yes
+    initial_value: '60'
+
+  - id: min_fog_off_s
+    type: int
+    restore_value: yes
+    initial_value: '60'
+
   - id: mister_closes_vent
     type: bool
     restore_value: yes

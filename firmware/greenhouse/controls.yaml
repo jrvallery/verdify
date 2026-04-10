@@ -19,8 +19,8 @@ interval:
           const uint32_t MIN_FAN_OFF_MS    = uint32_t(id(min_fan_off_s))  * 1000UL;
           const uint32_t MIN_VENT_ON_MS    = uint32_t(id(min_vent_on_s))  * 1000UL;
           const uint32_t MIN_VENT_OFF_MS   = uint32_t(id(min_vent_off_s)) * 1000UL;
-          const uint32_t MIN_FOG_ON_MS     =  60000;
-          const uint32_t MIN_FOG_OFF_MS    =  60000;
+          const uint32_t MIN_FOG_ON_MS     = uint32_t(id(min_fog_on_s))  * 1000UL;
+          const uint32_t MIN_FOG_OFF_MS    = uint32_t(id(min_fog_off_s)) * 1000UL;
 
           const float    EXTRA_COOL_S3_DELTA_F = 2.0f;
           const uint32_t LEAD_ROTATE_TIMEOUT_MS =
@@ -617,7 +617,7 @@ interval:
 
                 // South: own sensor + gets boost from east stress (adjacent)
                 if(!isnan(south_vpd) && id(vpd_target_south) > 0.0f)
-                  s_stress = (south_vpd - id(vpd_target_south)) / id(vpd_target_south) + e_stress * 0.3f;
+                  s_stress = (south_vpd - id(vpd_target_south)) / id(vpd_target_south) + e_stress * id(east_adjacency_factor);
 
                 // West: own sensor, no east adjacency boost
                 if(!isnan(west_vpd) && id(vpd_target_west) > 0.0f)
@@ -626,7 +626,7 @@ interval:
                 // Center: avg_vpd proxy + east adjacency boost + sensor penalty
                 if(id(vpd_target_center) > 0.0f)
                   c_stress = (avg_vpd - id(vpd_target_center)) / id(vpd_target_center)
-                             * id(mister_center_penalty) + e_stress * 0.3f;
+                             * id(mister_center_penalty) + e_stress * id(east_adjacency_factor);
 
                 // Only mist zones actually above their target (stress > 0)
                 if(s_stress <= 0 && w_stress <= 0 && c_stress <= 0) return 0;
@@ -1357,6 +1357,9 @@ interval:
                     if(key == "vpd_target_west"){ val = cf(val, 0.3, 3); if(fabs(id(vpd_target_west) - val) > 0.01f){ id(vpd_target_west) = val; id(num_vpd_target_west).publish_state(val); applied++; }}
                     if(key == "vpd_target_center"){ val = cf(val, 0.1, 3); if(fabs(id(vpd_target_center) - val) > 0.01f){ id(vpd_target_center) = val; id(num_vpd_target_center).publish_state(val); applied++; }}
                     if(key == "mister_center_penalty"){ val = cf(val, 0, 1); if(fabs(id(mister_center_penalty) - val) > 0.01f){ id(mister_center_penalty) = val; id(num_mister_center_penalty).publish_state(val); applied++; }}
+                    if(key == "east_adjacency_factor"){ val = cf(val, 0, 1); if(fabs(id(east_adjacency_factor) - val) > 0.01f){ id(east_adjacency_factor) = val; id(num_east_adjacency_factor).publish_state(val); applied++; }}
+                    if(key == "min_fog_on_s"){ int v = ci((int)val, 15, 300); if(id(min_fog_on_s) != v){ id(min_fog_on_s) = v; id(num_min_fog_on).publish_state(v); applied++; }}
+                    if(key == "min_fog_off_s"){ int v = ci((int)val, 15, 300); if(id(min_fog_off_s) != v){ id(min_fog_off_s) = v; id(num_min_fog_off).publish_state(v); applied++; }}
                     if(key == "sw_gl_auto_mode"){ bool v = val > 0.5f; if(id(gl_auto_enabled) != v){ id(gl_auto_enabled) = v; id(sw_gl_auto).publish_state(v); applied++; }}
                     if(key == "sw_irrigation_enabled"){ bool v = val > 0.5f; if(id(irrig_enabled) != v){ id(irrig_enabled) = v; id(sw_irrig_enabled).publish_state(v); applied++; }}
                     if(key == "sw_irrigation_wall_enabled"){ bool v = val > 0.5f; if(id(irrig_wall_enabled) != v){ id(irrig_wall_enabled) = v; id(sw_irrig_wall_enabled).publish_state(v); applied++; }}
