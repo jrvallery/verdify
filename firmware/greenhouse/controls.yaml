@@ -457,51 +457,100 @@ interval:
             active.FOG  = 1;
           }
 
-          // Fog-during-cooling override: when fog_closes_vent is active and
-          // humidity demands fog (HUMID_S1), enable fog even if the pattern
-          // table suppressed it (COOL_S1/S2).  The vent gating in section 11
-          // will close the vent during the fog pulse, so dry air infiltration
-          // is no longer a concern.
-          if(id(fog_closes_vent) && h == HUMID_S1 && !active.FOG){
-            active.FOG = 1;
-            ESP_LOGD("ctl","Fog enabled during cooling (vent gating active, VPD=%.2f)", VPD);
-          }
-
-          /**************** 11 — Vent decision (no debounce) *********************/
-          // The vent should open whenever any fan is requested or the table
-          // specifies venting, unless the vent lock timer is active.  Vent
-          // on/off timing is enforced via RelayMeta min_on/off values.
+          /**************** 11 — Vent coordination (VPD-primary, binary vent) ****/
+          // Binary vent = mode switch: VENT_OPEN (free cooling) vs VENT_CLOSED
+          // (humidity retention for effective misting/fog).
           //
-          // Fog-priority vent gating: when fog is active and fog_closes_vent
-          // is true, override the vent closed so dry outside air doesn't negate
-          // the fog's humidity contribution.  Fans still circulate internal air.
+          // Core rule: VPD_MIST and VPD_FOG FORCE vent closed. At 15% outdoor
+          // RH, open-vent misting wastes ~70% of water to immediate evaporation.
+          // Close vent → mist → VPD drops → vent reopens → thermal relief → cycle.
+
+          static uint32_t vent_closed_for_mist_ms = 0;  // thermal relief timer
+          static uint32_t vent_reopen_cooldown_ms = 0;   // delay after misting stops
+          const uint32_t MIST_VENT_REOPEN_DELAY_MS = uint32_t(id(mist_vent_reopen_delay_s)) * 1000UL;
+          const uint32_t MIST_THERMAL_RELIEF_MS = uint32_t(id(mist_thermal_relief_s)) * 1000UL;
+
+          bool vpd_misting_active = (h == HUMID_S1 || h == HUMID_S2 || h == HUMID_S3);
+          bool vpd_fogging = false;  // set below after fog escalation check
+
+          // Base vent desire from pattern table
           bool wantVentRaw = !id(vent_lock_active) &&
                              (active.VENT || active.LEAD || active.LAG);
-          bool fog_for_humidity_vent = (h == HUMID_S1 || h == HUMID_S2 || h == HUMID_S3);
-          if(active.FOG && id(fog_closes_vent) && wantVentRaw && fog_for_humidity_vent){
-            ESP_LOGD("ctl","Fog-priority: vent gated closed during humidity fog");
+
+          // VPD_MIST/FOG forces vent closed (core rule)
+          if(vpd_misting_active && wantVentRaw){
             wantVentRaw = false;
+            vent_closed_for_mist_ms += dt_ms;
+          }else if(!vpd_misting_active){
+            vent_closed_for_mist_ms = 0;
           }
-          // Mister vent coordination: close vent during active mist pulse to trap humidity
-          if(id(mister_closes_vent) && id(mister_pulse_zone) > 0 && wantVentRaw){
-            ESP_LOGD("ctl","Mister-priority: vent gated closed during mist pulse (zone=%d)", id(mister_pulse_zone));
-            wantVentRaw = false;
+
+          // Thermal relief: after max closed time, force vent open briefly
+          static bool thermal_relief_active = false;
+          static uint32_t thermal_relief_timer_ms = 0;
+          if(vent_closed_for_mist_ms > MIST_MAX_CLOSED_VENT_MS && !thermal_relief_active){
+            thermal_relief_active = true;
+            thermal_relief_timer_ms = 0;
+            vent_closed_for_mist_ms = 0;
+            ESP_LOGI("vent","Thermal relief: vent forced open after %ds closed", id(mist_max_closed_vent_s));
           }
-          // When fog is on for COOL_S3 evaporative cooling, vent stays open
+          if(thermal_relief_active){
+            wantVentRaw = true;  // force open during relief
+            thermal_relief_timer_ms += dt_ms;
+            if(thermal_relief_timer_ms >= MIST_THERMAL_RELIEF_MS){
+              thermal_relief_active = false;
+              thermal_relief_timer_ms = 0;
+              ESP_LOGI("vent","Thermal relief complete, resuming VPD control");
+            }
+          }
+
+          // Vent reopen delay: after misting stops, hold vent closed briefly for evaporation
+          if(!vpd_misting_active && vent_reopen_cooldown_ms > 0){
+            wantVentRaw = false;  // hold closed during cooldown
+            vent_reopen_cooldown_ms = (vent_reopen_cooldown_ms > dt_ms) ? vent_reopen_cooldown_ms - dt_ms : 0;
+          }else if(vpd_misting_active){
+            vent_reopen_cooldown_ms = MIST_VENT_REOPEN_DELAY_MS;  // reset on each mist cycle
+          }
+
+          // Safety override: vent opens at safety_max regardless of VPD state
+          if(Tin >= TmaxSafe){
+            wantVentRaw = true;
+            thermal_relief_active = false;
+            ESP_LOGW("vent","Safety override: vent forced open at %.1f°F", Tin);
+          }
 
           /**************** 12 — Pre-count cycles before switching ***************/
           // Map fan outputs to physical fan1/fan2 based on lead/lag
           bool willHeat1 = active.H1;
           bool willHeat2 = active.H2;
-          // Fog is now S3 escalation only — fires when misters at S2 can't control VPD.
-          // Pattern table's active.FOG still applies (e.g., COOL_S3 evaporative cooling).
-          // Additionally, fog fires when mister_state == 2 AND VPD is still above mister_all_kpa
-          // after the all-zone rotation delay — this is the "misters couldn't handle it" trigger.
+          // Fog escalation: fires when VPD exceeds band ceiling + fog_escalation_kpa
+          // and misters have been running (S2) without resolving VPD.
+          // Fog also fires from pattern table (e.g., COOL_EVAP) or manual override.
           bool fog_as_escalation = (id(mister_state) == 2)
             && (id(humid_s2_duration_ms) > uint32_t(id(mister_all_delay_s)) * 1000UL)
-            && (VPD > id(mister_all_kpa));
-          bool willFog   = (active.FOG || fog_as_escalation)
+            && (VPD > VPDhi + id(fog_escalation_kpa));
+
+          // Fog safety gates
+          float RH = id(average_humidity).state;
+          // Get local hour from ESPHome time (if available) or approximate from millis
+          auto now_time = id(sntp_time).now();
+          int local_hour = now_time.is_valid() ? now_time.hour : 12;  // fallback to noon if SNTP unavailable
+          bool fog_gated = (RH > id(fog_rh_ceiling_pct))       // too humid — condensation risk
+            || (Tin < id(fog_min_temp_f))                       // too cold — condensation risk
+            || (local_hour < id(fog_time_window_start))         // too early
+            || (local_hour >= id(fog_time_window_end));         // too late — must dry before dark
+
+          bool willFog = (active.FOG || fog_as_escalation)
+            && !fog_gated
             && !(id(occupancy_inhibit_enabled) && id(greenhouse_occupied));
+
+          if(willFog){
+            vpd_fogging = true;
+            // Fog forces vent closed (always — at 15% outdoor RH, fog with open vent is useless)
+            if(wantVentRaw && !thermal_relief_active){
+              wantVentRaw = false;
+            }
+          }
 
           bool willFan1;
           bool willFan2;
@@ -1379,6 +1428,14 @@ interval:
                     // ── Irrigation VPD boost (clamped) ──
                     if(key == "irrig_vpd_boost_pct"){ int v = ci((int)val, 0, 200); if(id(irrig_vpd_boost_pct) != v){ id(irrig_vpd_boost_pct) = v; id(num_irrig_vpd_boost_pct).publish_state(v); applied++; }}
                     if(key == "irrig_vpd_boost_threshold_hrs"){ val = cf(val, 0, 24); if(fabs(id(irrig_vpd_boost_threshold_hrs) - val) > 0.01f){ id(irrig_vpd_boost_threshold_hrs) = val; id(num_irrig_vpd_boost_threshold).publish_state(val); applied++; }}
+                    // ── Vent coordination ──
+                    if(key == "mist_vent_reopen_delay_s"){ int v = ci((int)val, 0, 120); if(id(mist_vent_reopen_delay_s) != v){ id(mist_vent_reopen_delay_s) = v; id(num_mist_vent_reopen_delay).publish_state(v); applied++; }}
+                    if(key == "mist_thermal_relief_s"){ int v = ci((int)val, 30, 300); if(id(mist_thermal_relief_s) != v){ id(mist_thermal_relief_s) = v; id(num_mist_thermal_relief).publish_state(v); applied++; }}
+                    // ── Fog safety gates ──
+                    if(key == "fog_rh_ceiling_pct"){ int v = ci((int)val, 75, 98); if(id(fog_rh_ceiling_pct) != v){ id(fog_rh_ceiling_pct) = v; id(num_fog_rh_ceiling).publish_state(v); applied++; }}
+                    if(key == "fog_min_temp_f"){ int v = ci((int)val, 40, 65); if(id(fog_min_temp_f) != v){ id(fog_min_temp_f) = v; id(num_fog_min_temp).publish_state(v); applied++; }}
+                    if(key == "fog_time_window_start"){ int v = ci((int)val, 5, 12); if(id(fog_time_window_start) != v){ id(fog_time_window_start) = v; id(num_fog_window_start).publish_state(v); applied++; }}
+                    if(key == "fog_time_window_end"){ int v = ci((int)val, 14, 20); if(id(fog_time_window_end) != v){ id(fog_time_window_end) = v; id(num_fog_window_end).publish_state(v); applied++; }}
                     // ── Boolean switches ──
                     if(key == "sw_economiser_enabled"){ bool v = val > 0.5f; if(id(economiser_enabled) != v){ id(economiser_enabled) = v; id(sw_economiser_enabled).publish_state(v); applied++; }}
                     if(key == "sw_fog_closes_vent"){ bool v = val > 0.5f; if(id(fog_closes_vent) != v){ id(fog_closes_vent) = v; id(sw_fog_closes_vent).publish_state(v); applied++; }}

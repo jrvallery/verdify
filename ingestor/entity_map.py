@@ -271,6 +271,12 @@ SETPOINT_MAP: dict[str, str] = {
     "mist_vent_close_lead__s_":     "mist_vent_close_lead_s",
     "mist_max_closed_vent__s_":     "mist_max_closed_vent_s",
     "fog_escalation__kpa_":         "fog_escalation_kpa",
+    "mist_vent_reopen_delay__s_":   "mist_vent_reopen_delay_s",
+    "mist_thermal_relief__s_":      "mist_thermal_relief_s",
+    "fog_rh_ceiling____":           "fog_rh_ceiling_pct",
+    "fog_min_temp__f_":             "fog_min_temp_f",
+    "fog_window_start__hr_":        "fog_time_window_start",
+    "fog_window_end__hr_":          "fog_time_window_end",
 }
 
 # ──────────────────────────────────────────────────────────────

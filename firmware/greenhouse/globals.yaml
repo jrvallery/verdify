@@ -714,6 +714,39 @@ globals:
     restore_value: yes
     initial_value: '0.4'
 
+  # Vent reopen delay after misting completes (let evaporation settle)
+  - id: mist_vent_reopen_delay_s
+    type: int
+    restore_value: yes
+    initial_value: '45'
+
+  # Mandatory thermal relief opening duration
+  - id: mist_thermal_relief_s
+    type: int
+    restore_value: yes
+    initial_value: '90'
+
+  # Fog safety gates
+  - id: fog_rh_ceiling_pct
+    type: int
+    restore_value: yes
+    initial_value: '90'
+
+  - id: fog_min_temp_f
+    type: int
+    restore_value: yes
+    initial_value: '55'
+
+  - id: fog_time_window_start
+    type: int
+    restore_value: yes
+    initial_value: '7'
+
+  - id: fog_time_window_end
+    type: int
+    restore_value: yes
+    initial_value: '17'
+
   - id: mister_closes_vent
     type: bool
     restore_value: yes
