@@ -85,7 +85,7 @@ def main():
     parser.add_argument("--greenhouse-id", default="vallery")
     args = parser.parse_args()
 
-    log.info("Planner starting (model: %s, greenhouse: %s)", GEMINI_MODEL, args.greenhouse_id)
+    log.info("Planner starting (model: %s, greenhouse: %s)", ai.model_name("planner"), args.greenhouse_id)
 
     # Build prompt
     log.info("Gathering context...")
