@@ -57,24 +57,21 @@ SELECT json_build_object(
   'flow_gpm', round(flow_gpm::numeric,2), 'water_total_gal', round(water_total_gal::numeric,0)
 ) FROM climate ORDER BY ts DESC LIMIT 1;
 "
-echo "ZONE VPD NOTE: South zone has highest VPD (hottest + driest). East has lowest (coolest + hydro moisture). Target south zone for misting priority."
+# Dynamic zone ranking from actual current data
+$DB -c "SELECT 'ZONE VPD RANKING: ' || string_agg(z || '=' || v, ', ' ORDER BY v DESC)
+FROM (SELECT unnest(ARRAY['north','south','east','west']) AS z,
+      unnest(ARRAY[round(vpd_north::numeric,2), round(vpd_south::numeric,2),
+                    round(vpd_east::numeric,2), round(vpd_west::numeric,2)]) AS v
+      FROM climate ORDER BY ts DESC LIMIT 1) ranked;" 2>/dev/null
 echo ""
 
-# ── 3. GREENHOUSE STATE + SWITCHES (from HA) ─────────────────────
-echo "--- ESP32 STATE + SWITCHES ---"
-curl -s -H "Authorization: Bearer $HA_TOKEN" "$HA_URL/api/states" 2>/dev/null | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-result = {}
-for e in data:
-    eid = e['entity_id']
-    if eid == 'sensor.greenhouse_greenhouse_state': result['state'] = e['state']
-    elif eid == 'sensor.greenhouse_mister_state': result['mister_state'] = e['state']
-    elif eid.startswith('switch.greenhouse_') and any(k in eid for k in ['economiser','fog_closes','gl_auto','irrigation']):
-        result[eid.replace('switch.greenhouse_','')] = e['state']
-print(json.dumps(result, indent=2))
-" 2>/dev/null
-echo ""
+# ── 3. GREENHOUSE STATE + SWITCHES (from HA or DB) ──────────────
+ESP_STATE=$($DB -c "SELECT value FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
+if [ -n "$ESP_STATE" ] && [ "$ESP_STATE" != "" ]; then
+  echo "--- ESP32 STATE ---"
+  echo "state: $ESP_STATE"
+  echo ""
+fi
 
 # ── 4. 24H HOURLY CLIMATE PATTERN ─────────────────────────────────
 echo "--- 24H HOURLY PATTERN ---"
@@ -117,6 +114,7 @@ echo ""
 
 # ── 8. HYDROPONIC SYSTEM ──────────────────────────────────────────
 echo "--- HYDROPONIC SYSTEM (East Zone) ---"
+echo "ph|ec_us_cm|tds_ppm|water_temp_f|orp_mv|battery_pct"
 $DB -c "
 SELECT round(hydro_ph::numeric,2) as ph, round(hydro_ec_us_cm::numeric,0) as ec_us,
   round(hydro_tds_ppm::numeric,0) as tds, round(hydro_water_temp_f::numeric,1) as water_f,
@@ -127,6 +125,7 @@ echo ""
 
 # ── 9. EQUIPMENT RUNTIME 24H ──────────────────────────────────────
 echo "--- EQUIPMENT RUNTIME 24H ---"
+echo "equipment|on_hours|transitions"
 $DB -c "
 SELECT equipment,
   round(sum(CASE WHEN state NOT IN ('f','off','false') THEN extract(epoch from coalesce(lead_ts - ts, interval '0')) END)::numeric/3600, 2) as on_hours,
@@ -143,6 +142,7 @@ echo ""
 
 # ── 10. ENERGY CONSUMPTION 24H ────────────────────────────────────
 echo "--- ENERGY 24H ---"
+echo "kwh_today|avg_watts|peak_watts|avg_heat_watts"
 $DB -c "
 SELECT round(max(kwh_today)::numeric, 1) as kwh_today,
   round(avg(watts_total)::numeric, 0) as avg_watts,
@@ -374,7 +374,7 @@ alerts AS (
   -- OVERCAST / RAIN
   SELECT 4, 'OVERCAST/RAIN: avg cloud cover ' || round(avg(cloud_cover_pct)::numeric,0)
     || '%, precip prob ' || round(max(precip_prob_pct)::numeric,0)
-    || '% tomorrow. Extend grow light window.'
+    || '% tomorrow. DLI may be low (lighting handled by gl_auto_mode, not this planner).'
   FROM fc
   WHERE ts::date = (CURRENT_DATE + 1)
   HAVING avg(cloud_cover_pct) > 80 OR max(precip_prob_pct) > 60
@@ -404,19 +404,19 @@ echo ""
 
 # ── 23. EXPERIMENT TRACKER (recent hypotheses + outcomes) ─────────
 echo "--- EXPERIMENT TRACKER ---"
+echo "Latest pending:"
 $DB -c "
-SELECT plan_id,
-  to_char(created_at AT TIME ZONE 'America/Denver', 'MM-DD') AS date,
-  COALESCE(experiment, '(no experiment)') AS experiment,
-  outcome_score,
-  COALESCE(lesson_extracted, '') AS lesson,
-  CASE WHEN validated_at IS NULL THEN 'PENDING' ELSE 'done' END AS status
-FROM plan_journal
-WHERE plan_id NOT LIKE 'iris-reactive%'
-ORDER BY created_at DESC LIMIT 5;
-" 2>/dev/null
-echo "Design ONE explicit experiment per plan. State hypothesis, expected outcome, and how to measure."
-echo "Next run: validate the experiment above and extract a lesson if one emerged."
+SELECT plan_id, to_char(created_at AT TIME ZONE 'America/Denver', 'MM-DD HH:MI') AS date,
+  COALESCE(experiment, '(none)') AS experiment
+FROM plan_journal WHERE validated_at IS NULL AND plan_id NOT LIKE 'iris-reactive%'
+ORDER BY created_at DESC LIMIT 1;
+" 2>/dev/null || echo "(none pending)"
+echo "Last completed:"
+$DB -c "
+SELECT plan_id, outcome_score, COALESCE(lesson_extracted, '(no lesson)') AS lesson
+FROM plan_journal WHERE validated_at IS NOT NULL AND plan_id NOT LIKE 'iris-reactive%'
+ORDER BY validated_at DESC LIMIT 1;
+" 2>/dev/null || echo "(none completed)"
 echo ""
 
 # ── 22b. (moved to section 27) ───────────────────────────────────

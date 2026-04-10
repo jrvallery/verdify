@@ -62,15 +62,36 @@ def read_static_context() -> str:
     return ""
 
 
+def check_replan_trigger() -> tuple[bool, str]:
+    """Check if a replan trigger is active."""
+    trigger_file = Path("/srv/verdify/state/replan-needed.json")
+    if trigger_file.exists():
+        try:
+            age = time.time() - trigger_file.stat().st_mtime
+            if age < 900:  # 15 min
+                data = json.loads(trigger_file.read_text())
+                reasons = [f"{d['param']} deviation (observed {d['observed']} vs forecast {d['forecasted']})"
+                          for d in data.get("deviations", [])[:3]]
+                return True, "; ".join(reasons) if reasons else "Forecast deviation detected"
+        except Exception:
+            pass
+    return False, ""
+
+
 def build_prompt(greenhouse_id: str) -> str:
     """Render the planner prompt with live context injected."""
     dynamic_context = gather_context(greenhouse_id)
     static_context = read_static_context()
     current_time = datetime.now(DENVER).strftime("%Y-%m-%dT%H:%M:%S-06:00")
+    replan_mode, replan_reason = check_replan_trigger()
+    if replan_mode:
+        log.info("REPLAN MODE: %s", replan_reason)
     return ai.render_template("planner", "prompt",
                              dynamic_context=dynamic_context,
                              static_context=static_context,
-                             current_time=current_time)
+                             current_time=current_time,
+                             replan_mode=replan_mode,
+                             replan_reason=replan_reason)
 
 
 def parse_plan_json(text: str) -> dict:
