@@ -21,37 +21,33 @@ echo "Generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ($(date '+%Y-%m-%d %H:%M %Z'))
 echo ""
 
 # ── 1. CORE PLANNING VIEW (7 JSON columns in one query) ───────────
-echo "--- IRIS PLANNING CONTEXT (DB view) ---"
-# Core view — conditions, zones, setpoints, health, summary (exclude bloated active_plan)
+echo "--- SYSTEM HEALTH ---"
 $DB -c "
-SELECT json_build_object(
-  'conditions', (SELECT row_to_json(v)->'conditions' FROM v_iris_planning_context v),
-  'zones', (SELECT row_to_json(v)->'zones' FROM v_iris_planning_context v),
-  'setpoints', (SELECT row_to_json(v)->'setpoints' FROM v_iris_planning_context v),
-  'system_health', (SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v),
-  'daily_summary', (SELECT row_to_json(v)->'daily_summary' FROM v_iris_planning_context v)
-);" 2>/dev/null
+SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v;
+" 2>/dev/null || echo "{}"
 echo ""
 
 # Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
-echo "--- ACTIVE PLAN (transitions) ---"
-echo "ts_mdt|plan_id|engage_kpa|all_kpa|pulse_gap|vpd_weight|hysteresis|d_cool_s2|bias_heat|bias_cool"
+echo "--- ACTIVE PLAN (summary per transition) ---"
+echo "Key variables shown per transition. Vent/fog timing params at defaults unless noted."
+echo "ts_mdt|n|engage|all|gap|wt|hyst|vent_max|fog_esc|b_heat|b_cool"
 $DB -c "
 WITH deduped AS (
-  SELECT DISTINCT ON (ts, parameter) ts, parameter, value, plan_id
-  FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata'
+  SELECT DISTINCT ON (ts, parameter) ts, parameter, value
+  FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata' AND is_active = true
   ORDER BY ts, parameter, created_at DESC
 )
-SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH:MI') AS ts_mdt,
-  max(plan_id) AS plan_id,
-  max(CASE WHEN parameter='mister_engage_kpa' THEN value END) AS engage,
-  max(CASE WHEN parameter='mister_all_kpa' THEN value END) AS all_kpa,
-  max(CASE WHEN parameter='mister_pulse_gap_s' THEN value END) AS gap,
-  max(CASE WHEN parameter='mister_vpd_weight' THEN value END) AS weight,
-  max(CASE WHEN parameter='vpd_hysteresis' THEN value END) AS hyst,
-  max(CASE WHEN parameter='d_cool_stage_2' THEN value END) AS d_cool,
-  max(CASE WHEN parameter='bias_heat_f' THEN value END) AS b_heat,
-  max(CASE WHEN parameter='bias_cool_f' THEN value END) AS b_cool
+SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH24:MI'),
+  count(*),
+  COALESCE(max(CASE WHEN parameter='mister_engage_kpa' THEN round(value::numeric,1) END), 1.6),
+  COALESCE(max(CASE WHEN parameter='mister_all_kpa' THEN round(value::numeric,1) END), 1.9),
+  COALESCE(max(CASE WHEN parameter='mister_pulse_gap_s' THEN value::int END), 45),
+  COALESCE(max(CASE WHEN parameter='mister_vpd_weight' THEN round(value::numeric,1) END), 1.5),
+  COALESCE(max(CASE WHEN parameter='vpd_hysteresis' THEN round(value::numeric,1) END), 0.3),
+  COALESCE(max(CASE WHEN parameter='mist_max_closed_vent_s' THEN value::int END), 600),
+  COALESCE(max(CASE WHEN parameter='fog_escalation_kpa' THEN round(value::numeric,1) END), 0.4),
+  COALESCE(max(CASE WHEN parameter='bias_heat' THEN round(value::numeric,1) END), 0),
+  COALESCE(max(CASE WHEN parameter='bias_cool' THEN round(value::numeric,1) END), 0)
 FROM deduped
 GROUP BY ts
 ORDER BY ts;
@@ -341,8 +337,16 @@ FROM (SELECT DISTINCT ON (parameter) parameter, value FROM setpoint_changes ORDE
 WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis','mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s','gl_dli_target','gl_sunrise_hour','gl_sunset_hour')
 ORDER BY parameter;
 " 2>/dev/null
-echo "These are the current active values. Band-driven params (temp_high, temp_low, vpd_high, vpd_low)"
-echo "are computed from crop profiles every 5 min — do not set these in your plan."
+echo "Band-driven values above reflect current diurnal crop profiles and shift with the cycle."
+echo "Values like temp_high=65 or vpd_high=0.6 are normal at night — they do not indicate corruption."
+echo "Do not set band-driven params in your plan."
+echo ""
+echo "Firmware invariants (always active, not planner-controlled):"
+echo "  fog_time_window: 07:00-17:00 (fog blocked outside this window)"
+echo "  fog_rh_ceiling: 90% (fog blocked when RH exceeds)"
+echo "  fog_min_temp: 55°F (fog blocked when temp below)"
+echo "  economiser: always enabled (planner tunes enthalpy thresholds)"
+echo "  fog_closes_vent: always (built into state machine)"
 echo ""
 
 # ── 21. PLANNING GUIDANCE ──────────────────────────────────────────
@@ -441,18 +445,7 @@ echo ""
 
 # ── 22b. (moved to section 27) ───────────────────────────────────
 
-# ── 23. REPLAN TRIGGER ───────────────────────────────────────────
-echo "--- REPLAN TRIGGER ---"
-if [ -f /srv/verdify/state/replan-needed.json ]; then
-  echo "⚠️ DEVIATION-TRIGGERED REPLAN"
-  cat /srv/verdify/state/replan-needed.json
-  echo ""
-  echo "The forecast was significantly wrong. Re-evaluate all waypoints against ACTUAL conditions."
-else
-  echo "Scheduled cycle — no deviation trigger."
-fi
-echo ""
-
+# Replan trigger is handled by planner-gemini.py MODE header — not injected here.
 
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
 echo "--- 72H HOURLY FORECAST ---"
@@ -506,18 +499,20 @@ echo ""
 
 # ── 28. FORECAST ACCURACY ─────────────────────────────────────────
 echo "--- FORECAST ACCURACY (7 days) ---"
-$DB -c "SELECT * FROM v_forecast_accuracy_daily WHERE date >= CURRENT_DATE - 7 ORDER BY date DESC, param;"
+echo "date|metric|forecast|actual|error|abs_error|lead_hours"
+$DB -c "SELECT * FROM v_forecast_accuracy_daily WHERE date >= CURRENT_DATE - 7 ORDER BY date DESC, param;" 2>/dev/null
 echo "Use this to calibrate your trust in the forecast. If 48h accuracy is consistently worse than 24h, weight near-term forecasts more heavily."
 echo ""
 
 # ── 29. PLAN COMPARISON ───────────────────────────────────────────
-echo "--- PLAN COMPARISON (vs previous) ---"
+echo "--- PLAN COMPARISON (current vs previous, top changes) ---"
 echo "parameter|current_avg|previous_avg|delta"
 $DB -c "
-SELECT parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
+SELECT DISTINCT ON (parameter)
+  parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
 FROM v_plan_comparison
-ORDER BY plan_created DESC, abs(delta_avg) DESC
-LIMIT 10;
+WHERE abs(delta_avg) > 0.01
+ORDER BY parameter, plan_created DESC;
 " 2>/dev/null || echo "(not available)"
 echo ""
 
