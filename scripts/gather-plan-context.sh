@@ -517,12 +517,12 @@ WITH shade_clear AS (
   ORDER BY (ts AT TIME ZONE 'America/Denver')::date, ts
 ),
 model AS (
-  SELECT regr_slope(mins, (day - '2026-03-27'::date)::double precision) AS slope,
-         regr_intercept(mins, (day - '2026-03-27'::date)::double precision) AS intercept
+  SELECT regr_slope(mins, extract(doy FROM day)::double precision) AS slope,
+         regr_intercept(mins, extract(doy FROM day)::double precision) AS intercept
   FROM shade_clear
 )
 SELECT to_char(d, 'Dy MM-DD') || '|' ||
-  to_char('00:00'::time + make_interval(secs => (m.intercept + m.slope * ((d::date - '2026-03-27'::date)::double precision)) * 60), 'HH24:MI')
+  to_char('00:00'::time + make_interval(secs => (m.intercept + m.slope * extract(doy FROM d::date)::double precision) * 60), 'HH24:MI')
 FROM model m, generate_series(CURRENT_DATE+1, CURRENT_DATE+3, interval '1 day') AS d
 UNION ALL
 SELECT 'Trend: ' || round(slope::numeric, 1) || ' min/day earlier (sun tracking north)' FROM model;
