@@ -4,7 +4,8 @@ set -uo pipefail
 
 DB="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A -c"
 
-CORE="temp_high,temp_low,vpd_high,vpd_hysteresis,d_cool_stage_2,mister_engage_kpa,mister_all_kpa,mister_pulse_on_s,mister_pulse_gap_s,mister_vpd_weight"
+# Only tuning params — band-driven params (temp_high, vpd_high, etc.) are NOT set by the planner
+CORE="vpd_hysteresis,d_cool_stage_2,mister_pulse_on_s,mister_pulse_gap_s,mister_vpd_weight"
 
 # 1. Get latest plan_id
 LATEST=$($DB "SELECT plan_id FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
@@ -17,8 +18,7 @@ fi
 # 2. For each distinct timestamp, check all 10 core params exist
 RESULT=$($DB "
 WITH core(param) AS (
-  VALUES ('temp_high'),('temp_low'),('vpd_high'),('vpd_hysteresis'),
-         ('d_cool_stage_2'),('mister_engage_kpa'),('mister_all_kpa'),
+  VALUES ('vpd_hysteresis'),('d_cool_stage_2'),
          ('mister_pulse_on_s'),('mister_pulse_gap_s'),('mister_vpd_weight')
 ),
 plan_ts AS (

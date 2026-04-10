@@ -112,3 +112,5 @@ Return ONLY valid JSON (no markdown fencing, no commentary outside the JSON):
 }
 
 Use timezone offset -06:00 (MDT) for all timestamps.
+
+IMPORTANT: Only emit parameters from the "Parameters You Control" section above. Do NOT emit temp_high, temp_low, vpd_high, vpd_low, mister_engage_kpa, or mister_all_kpa — these are band-driven and will be ignored. Use bias_heat_f and bias_cool_f to shift the band instead.
