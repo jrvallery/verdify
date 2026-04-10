@@ -1007,6 +1007,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             FROM v_stress_hours_today WHERE date::date = $1
         """, today)
 
+        # Dew point margin (condensation risk)
+        dp = await conn.fetchrow("""
+            SELECT min_margin_f, COALESCE(risk_hours, 0) AS risk_hours
+            FROM v_dew_point_risk WHERE date = $1
+        """, today)
+
         # Equipment runtimes calculated directly from equipment_state transitions
         _RT_EQUIP = ('fan1','fan2','fog','heat1','heat2','vent',
                      'grow_light_main','grow_light_grow',
@@ -1068,7 +1074,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
                 runtime_drip_wall_h=$26, runtime_drip_center_h=$27,
                 kwh_estimated=$28, therms_estimated=$29,
                 cost_electric=$30, cost_gas=$31, cost_water=$32, cost_total=$33,
-                water_used_gal=$34, mister_water_gal=$35
+                water_used_gal=$34, mister_water_gal=$35,
+                min_dp_margin_f=$36, dp_risk_hours=$37
             WHERE date = $1
         """, today,
             climate["temp_min"] if climate else None, climate["temp_max"] if climate else None,
@@ -1086,6 +1093,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             rt.get("drip_wall", 0)/60.0, rt.get("drip_center", 0)/60.0,
             round(kwh, 2), round(therms, 3),
             ce, cg, cw, ct, float(water_gal),
-            float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0)
+            float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0,
+            float(dp["min_margin_f"]) if dp and dp["min_margin_f"] is not None else None,
+            float(dp["risk_hours"]) if dp else 0)
 
     log.info("Daily summary live: $%.2f, %.1f°F max", ct, float(climate["temp_max"]) if climate and climate["temp_max"] else 0)

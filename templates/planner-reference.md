@@ -24,7 +24,7 @@
 | Fan 1 (SW) | 2,450 CFM, 52W | COOL_S1 (lead rotation every 600s) |
 | Fan 2 (SE) | 2,450 CFM, 52W | COOL_S1 (lag) or COOL_S2 (both) |
 | Heater 1 (electric) | 1,500W | HEAT_S1 (pre-heat inside band) |
-| Heater 2 (gas/Lennox) | 75,000 BTU/hr | HEAT_S2 (below band floor) |
+| Heater 2 (gas/Lennox) | 75,000 BTU/hr | HEAT_S2 (below band floor). Overshoot: ~1-2°F typical |
 | AquaFog XE 2000 | 1,644W, ultrasonic | HUMID_S3 (fog escalation, vent forced closed) |
 | Intake vent (north) | 24"x24", motorized | Economiser logic (enthalpy gate) |
 | Grow lights (main) | 630W, 15x4FT LED | DLI-based automation |
