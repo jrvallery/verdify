@@ -453,6 +453,47 @@ else
 fi
 echo ""
 
+# ── 23b. TRANSITION MILESTONES (computed from forecast + astronomy) ──
+echo "--- TRANSITION MILESTONES (next 3 days) ---"
+echo "date|sunrise|sunset|peak_solar|peak_temp|driest_hour|peak_vpd|cloud_shift|stress_hrs"
+$DB -c "
+WITH fc AS (
+  SELECT DISTINCT ON (ts) ts,
+    ts AT TIME ZONE 'America/Denver' AS mdt,
+    (ts AT TIME ZONE 'America/Denver')::date AS day,
+    extract(hour FROM ts AT TIME ZONE 'America/Denver') AS hr,
+    temp_f, rh_pct, cloud_cover_pct, vpd_kpa,
+    COALESCE(direct_radiation_w_m2, 0) AS solar_w
+  FROM weather_forecast
+  WHERE ts > now() AND ts < now() + interval '72 hours'
+  ORDER BY ts, fetched_at DESC
+),
+daily AS (
+  SELECT day,
+    to_char(min(CASE WHEN solar_w > 10 THEN mdt END), 'HH24:MI') AS sunrise,
+    to_char(max(CASE WHEN solar_w > 10 THEN mdt END), 'HH24:MI') AS sunset,
+    to_char((array_agg(mdt ORDER BY solar_w DESC))[1], 'HH24:MI') AS peak_solar,
+    to_char((array_agg(mdt ORDER BY temp_f DESC))[1], 'HH24:MI') AS peak_temp,
+    to_char((array_agg(mdt ORDER BY rh_pct ASC))[1], 'HH24:MI') AS driest,
+    to_char((array_agg(mdt ORDER BY vpd_kpa DESC))[1], 'HH24:MI') AS peak_vpd,
+    count(*) FILTER (WHERE vpd_kpa > 1.5) || 'h' AS stress_hrs
+  FROM fc GROUP BY day
+)
+SELECT to_char(day, 'Dy MM-DD'), sunrise, sunset, peak_solar, peak_temp, driest, peak_vpd,
+  COALESCE((
+    SELECT to_char(mdt, 'HH24:MI') || CASE
+      WHEN cloud_cover_pct > lag_c THEN ' →cloud' ELSE ' →clear' END
+    FROM (SELECT mdt, cloud_cover_pct, lag(cloud_cover_pct) OVER (ORDER BY ts) AS lag_c
+          FROM fc f2 WHERE f2.day = d.day) cc
+    WHERE abs(cloud_cover_pct - COALESCE(lag_c, cloud_cover_pct)) > 30
+    ORDER BY mdt LIMIT 1
+  ), 'none') AS cloud_shift,
+  stress_hrs
+FROM daily d ORDER BY day;
+" 2>/dev/null || echo "(unavailable)"
+echo "Anchor your transitions to these milestones — not fixed clock times."
+echo ""
+
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
 echo "--- 72H HOURLY FORECAST ---"
 echo "hour_mdt|temp_f|rh_pct|cloud_pct|wind_mph|vpd_kpa|solar_w_m2|et0_mm|precip_prob_pct|weather_code"
