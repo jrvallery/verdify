@@ -387,8 +387,8 @@ interval:
           static uint32_t vent_close_lead_timer_ms = 0;
           bool vent_close_lead_active = false;
 
-          if(VPD > VPDhi + HV){
-            // VPD above band + hysteresis — check if WATCH dwell satisfied
+          if(VPD > VPDhi){
+            // VPD above band ceiling — engage misting after WATCH dwell
             if(h_prev == VPD_WATCH && vpd_watch_timer_ms >= VPD_WATCH_DWELL_MS){
               // Dwell complete — check if vent close lead is satisfied
               if(MIST_VENT_CLOSE_LEAD_MS == 0 || vent_close_lead_timer_ms >= MIST_VENT_CLOSE_LEAD_MS){
@@ -405,13 +405,13 @@ interval:
               h = VPD_WATCH;                                 // enter observation dwell
               vent_close_lead_timer_ms = 0;
             }
-          }else if(VPD > VPDhi){
-            // VPD above band but within hysteresis — watch only (no misting)
-            if(h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3){
-              h = h_prev;                                    // keep misting until below band
-            }else{
-              h = VPD_WATCH;                                 // observe
-            }
+          }else if(VPD < VPDhi - HV){
+            // VPD below band - hysteresis → stop misting, return to idle
+            // (hysteresis is the EXIT condition, not the entry condition)
+            h = HUM_IDLE;
+          }else if(VPD >= VPDhi - HV && VPD <= VPDhi && (h_prev == HUMID_S1 || h_prev == HUMID_S2 || h_prev == HUMID_S3)){
+            // VPD within hysteresis band and currently misting → keep misting
+            h = h_prev;
           }else if(VPD < VPDlo - HV){
             bool ventOK = !econ_block;
             if(ventOK){
