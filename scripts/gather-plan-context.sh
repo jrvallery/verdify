@@ -30,7 +30,7 @@ echo ""
 # Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
 echo "--- ACTIVE PLAN (summary per transition) ---"
 echo "Key variables shown per transition. Vent/fog timing params at defaults unless noted."
-echo "ts_mdt|n|engage|all|gap|wt|hyst|vent_max|fog_esc|b_heat|b_cool"
+echo "ts_mdt|raw_params|engage|all|gap|wt|hyst|vent_max|fog_esc|b_heat|b_cool"
 $DB -c "
 WITH deduped AS (
   SELECT DISTINCT ON (ts, parameter) ts, parameter, value
@@ -258,16 +258,7 @@ FROM daily_summary WHERE date >= CURRENT_DATE - 1
 UNION ALL SELECT 'peak_vpd_kpa', round(COALESCE(max(vpd_max),0)::numeric, 2)
 FROM daily_summary WHERE date >= CURRENT_DATE - 1;
 " 2>/dev/null || echo "(unavailable)"
-# Recent setpoint changes (what the dispatcher actually pushed)
-echo "Recent dispatched changes (24h):"
-echo "time_mdt|parameter|value|source"
-$DB -c "
-SELECT to_char(ts AT TIME ZONE 'America/Denver', 'MM-DD HH:MI AM') as mdt,
-  parameter, round(value::numeric,2), source
-FROM setpoint_changes
-WHERE source = 'plan' AND ts > now() - interval '24 hours'
-ORDER BY ts DESC LIMIT 10;
-" 2>/dev/null || echo "(none)"
+# Dispatched changes removed — planner does not verify dispatch.
 echo ""
 
 # ── 16. WATER USAGE TREND ─────────────────────────────────────────
@@ -505,13 +496,16 @@ echo "Use this to calibrate your trust in the forecast. If 48h accuracy is consi
 echo ""
 
 # ── 29. PLAN COMPARISON ───────────────────────────────────────────
-echo "--- PLAN COMPARISON (current vs previous, top changes) ---"
+echo "--- PLAN COMPARISON (Tier 1 only, current vs previous) ---"
 echo "parameter|current_avg|previous_avg|delta"
 $DB -c "
 SELECT DISTINCT ON (parameter)
   parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
 FROM v_plan_comparison
 WHERE abs(delta_avg) > 0.01
+  AND parameter NOT IN ('temp_high','temp_low','vpd_high','vpd_low',
+    'vpd_target_south','vpd_target_west','vpd_target_east','vpd_target_center',
+    'mister_engage_delay_s','mister_all_delay_s','mister_center_penalty')
 ORDER BY parameter, plan_created DESC;
 " 2>/dev/null || echo "(not available)"
 echo ""
