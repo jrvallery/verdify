@@ -36,6 +36,10 @@ test-fast: ## Run tests excluding slow planner tests
 test-firmware: ## Run native C++ logic tests (same code as ESP32)
 	cd firmware && g++ -std=c++17 -I lib -o test/test_greenhouse test/test_greenhouse_logic.cpp && ./test/test_greenhouse
 
+test-replay: ## Run historical replay simulation (export + simulate)
+	bash scripts/export-replay-data.sh 10
+	cd firmware && g++ -std=c++17 -I lib -o test/replay_harness test/replay_harness.cpp && ./test/replay_harness test/data/replay_data.csv
+
 test-v: ## Run tests with verbose output
 	$(PYTEST) tests/ -v --tb=long
 
