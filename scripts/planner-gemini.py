@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 import asyncpg
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "ingestor"))
-from ai_config import ai
+from ai_config import ai, TEMPLATES_DIR
 from config import DB_DSN
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [planner] %(levelname)s %(message)s")
@@ -47,12 +47,15 @@ def gather_context(greenhouse_id: str) -> str:
 
 
 def read_static_context() -> str:
-    """Read the pre-built static greenhouse reference."""
-    ctx_cfg = ai.config["context"]
+    """Read the compact operational reference (not the full site content)."""
+    ref_path = TEMPLATES_DIR / "planner-reference.md"
+    if ref_path.exists():
+        return ref_path.read_text()
+    # Fallback to the old static context if reference doesn't exist
     static_path = ai.template_path("planner", "static_context")
     if static_path.exists():
         text = static_path.read_text()
-        max_chars = ctx_cfg.get("max_static_chars", 50000)
+        max_chars = ai.config["context"].get("max_static_chars", 50000)
         if len(text) > max_chars:
             text = text[:max_chars] + f"\n\n[TRUNCATED at {max_chars} chars]\n"
         return text
@@ -192,8 +195,7 @@ def main():
              len(prompt), context_time, len(prompt) // 4)
 
     if args.dry_run:
-        print(prompt[:2000])
-        print(f"\n... [{len(prompt)} chars total]")
+        print(prompt)
         return
 
     # Call Gemini

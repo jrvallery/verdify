@@ -12,7 +12,7 @@ if [ "$1" = "--greenhouse-id" ] && [ -n "${2:-}" ]; then
 fi
 
 DB="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
-HA_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIwMzYwYzRjYTFiMTQ0NDcyOWVlNzdkOGNiYzQ3NDY3OCIsImlhdCI6MTc3MDIxMDA4NSwiZXhwIjoyMDg1NTcwMDg1fQ.LgEUEpwfQDgUghzECq3H82wTLeyixNoicvICgfx4xo0"
+HA_TOKEN=$(cat /mnt/jason/agents/shared/credentials/ha_token.txt 2>/dev/null || echo "")
 HA_URL="http://192.168.30.107:8123"
 
 echo "=== GREENHOUSE PLANNING CONTEXT ==="
@@ -64,6 +64,7 @@ echo ""
 
 # ── 4. 24H HOURLY CLIMATE PATTERN ─────────────────────────────────
 echo "--- 24H HOURLY PATTERN ---"
+echo "hour|temp_f|rh_pct|vpd_kpa|co2_ppm|peak_lux"
 $DB -c "
 SELECT to_char(date_trunc('hour', ts) AT TIME ZONE 'America/Denver', 'HH:MI AM') as hour,
   round(avg(temp_avg)::numeric,1) as temp_f, round(avg(rh_avg)::numeric,1) as rh,
@@ -77,6 +78,7 @@ echo ""
 
 # ── 5. STRESS LAST 7 DAYS ─────────────────────────────────────────
 echo "--- STRESS LAST 7 DAYS ---"
+echo "date|cold_stress_hrs|heat_stress_hrs|vpd_high_hrs|vpd_low_hrs"
 $DB -c "
 SELECT date, cold_stress_hours, heat_stress_hours, vpd_stress_hours, vpd_low_hours
 FROM v_stress_hours_today WHERE date >= CURRENT_DATE - 6 ORDER BY date DESC;
@@ -85,11 +87,13 @@ echo ""
 
 # ── 6. COMPLIANCE (24h by zone) ───────────────────────────────────
 echo "--- COMPLIANCE (24h by zone) ---"
+echo "zone|in_band_pct|above_pct|below_pct|na_pct"
 $DB -c "SELECT * FROM fn_compliance_pct('24 hours'::interval);"
 echo ""
 
 # ── 7. DIF (day/night temperature differential, 7 days) ──────────
 echo "--- DIF (7 days) ---"
+echo "day|day_avg_f|night_avg_f|dif_f"
 $DB -c "
 SELECT to_char(date, 'MM-DD') as day, round(day_avg_temp::numeric,1) as day_f,
   round(night_avg_temp::numeric,1) as night_f, round(dif::numeric,1) as dif_f
@@ -206,10 +210,27 @@ $DB -c "SELECT plan_id, waypoints, achieved, accuracy_pct, mean_abs_error FROM v
 UNVALIDATED=$($DB -c "SELECT COUNT(*) FROM plan_journal WHERE validated_at IS NULL AND plan_id NOT LIKE 'iris-reactive%' AND created_at < now() - interval '6 hours';" 2>/dev/null | tr -d ' ')
 if [ "${UNVALIDATED:-0}" -gt 0 ]; then
   echo "ACTION REQUIRED: $UNVALIDATED unvalidated plan(s). Score the previous plan before writing a new one."
-  echo "UPDATE plan_journal SET actual_outcome='...', outcome_score=N, lesson_extracted='...', validated_at=now() WHERE plan_id='...';"
 fi
+# Structured actuals for previous plan period (stress, water, cost, equipment)
+echo "Previous plan actuals (measured outcomes since yesterday):"
+echo "metric|value"
+$DB -c "
+SELECT 'heat_stress_hrs' AS metric, round(COALESCE(sum(heat_stress_hours),0)::numeric, 1) AS val
+FROM v_stress_hours_today WHERE date >= CURRENT_DATE - 1
+UNION ALL SELECT 'vpd_stress_hrs', round(COALESCE(sum(vpd_stress_hours),0)::numeric, 1)
+FROM v_stress_hours_today WHERE date >= CURRENT_DATE - 1
+UNION ALL SELECT 'water_used_gal', round(COALESCE(sum(water_used_gal),0)::numeric, 1)
+FROM daily_summary WHERE date >= CURRENT_DATE - 1
+UNION ALL SELECT 'cost_total', round(COALESCE(sum(cost_total),0)::numeric, 2)
+FROM daily_summary WHERE date >= CURRENT_DATE - 1
+UNION ALL SELECT 'peak_temp_f', round(COALESCE(max(temp_max),0)::numeric, 1)
+FROM daily_summary WHERE date >= CURRENT_DATE - 1
+UNION ALL SELECT 'peak_vpd_kpa', round(COALESCE(max(vpd_max),0)::numeric, 2)
+FROM daily_summary WHERE date >= CURRENT_DATE - 1;
+" 2>/dev/null || echo "(unavailable)"
 # Recent setpoint changes (what the dispatcher actually pushed)
 echo "Recent dispatched changes (24h):"
+echo "time_mdt|parameter|value|source"
 $DB -c "
 SELECT to_char(ts AT TIME ZONE 'America/Denver', 'MM-DD HH:MI AM') as mdt,
   parameter, round(value::numeric,2), source
@@ -397,6 +418,7 @@ echo ""
 
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
 echo "--- 72H HOURLY FORECAST ---"
+echo "hour_mdt|temp_f|rh_pct|cloud_pct|wind_mph|vpd_kpa|solar_w_m2|et0_mm|precip_prob_pct|weather_code"
 $DB -c "
 SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH24:00') as hour_mdt,
   round(temp_f::numeric,0) as temp_f,
