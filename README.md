@@ -2,82 +2,82 @@
 
 **What if a greenhouse could learn?**
 
-367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95F solar peaks. Six crops. One AI.
+367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95°F solar peaks. Six crops. One AI.
 
-172 sensors feed a 42-state climate machine that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Gemini plans 72 hours ahead, three times a day. The system measures every outcome, scores every plan, and gets better.
+172 sensors feed a 48-state climate machine that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Claude Opus 4.6 plans 72 hours ahead, three times a day. The system measures every outcome, scores every plan, and gets better.
 
 **[verdify.ai](https://verdify.ai)**
 
 ## Architecture
 
 ```
-ESP32 Controller (42-state machine, 5s loop)
+ESP32 Controller (48-state machine, 5s loop)
   ├── aioesphomeapi ──→ Ingestor ──→ TimescaleDB (2.5M+ rows)
-  ├── MQTT ──→ Mosquitto (state publishing)
-  └── HTTPS ──→ API (band-driven setpoints)
+  ├── MQTT ──→ Mosquitto (state publishing + occupancy)
+  └── HTTPS ──→ API (band-driven setpoints every 5 min)
 
-TimescaleDB (44 tables, 54 views, 23 functions)
-  ├── Grafana (54 dashboards)
-  ├── FastAPI (crop catalog + setpoints)
+TimescaleDB (44 tables, 55 views, 24 functions)
+  ├── Grafana (54 dashboards, anonymous read)
+  ├── FastAPI (crop catalog + ESP32 setpoints)
   └── Quartz (static site with embedded panels)
 
-Gemini 2.5 Pro (Google AI Studio)
-  └── 72h tactical planning, 3x daily
+Claude Opus 4.6 (Anthropic API)
+  └── 72h tactical planning, 3x daily + deviation-triggered replan
 ```
 
-Everything runs on a single VM. No cloud infrastructure — just an API key.
+Everything runs on a single VM. No cloud infrastructure — just API keys.
 
 ## Components
 
 | Directory | What |
 |-----------|------|
-| `ingestor/` | Python async service — ESP32 data capture, 12 periodic tasks, entity routing |
+| `ingestor/` | Python async service — ESP32 data capture, 15 periodic tasks, entity routing |
 | `api/` | FastAPI crop catalog + ESP32 setpoint endpoint |
-| `firmware/` | ESPHome YAML — 42-state climate controller, VPD/temp bands, mister cascade |
-| `grafana/` | 17 standardized dashboards + provisioning config |
-| `scripts/` | 26 operational scripts — planner, vision analysis, vault export, monitoring |
-| `db/` | Schema (44 tables), migrations, init scripts |
+| `firmware/` | ESPHome YAML — 48-state climate controller, VPD/temp bands, mister cascade |
+| `scripts/` | Operational scripts — planner, vision analysis, forecast sync, monitoring |
+| `provisioning/` | Grafana dashboard JSON (54 dashboards) + datasource config |
+| `db/` | Schema (44 tables, 55 views), migrations (002–077) |
+| `templates/` | Jinja2 planner prompt + reference docs |
+| `config/` | AI model config, zone definitions |
+| `tests/` | 83 smoke tests — full-stack validation against live production |
 | `site/` | Quartz static site content (56 pages) |
-| `mqtt/` | Mosquitto broker config |
-| `traefik/` | Reverse proxy config |
-| `docs/` | System architecture, runbook, roadmap |
 
-## Quick Start
+## Development
 
 ```bash
-# Prerequisites: Docker, Python 3.13+, Node 20+
+# Prerequisites: Docker, Python 3.13+, shared venv at /srv/greenhouse/.venv
 
-# 1. Clone and configure
-git clone https://github.com/jvallery/verdify.git
-cd verdify
-cp .env.example .env  # Edit with your passwords
+# Run all checks (lint + test + firmware compile)
+make check
 
-# 2. Start the stack
-docker compose up -d
-
-# 3. Start the ingestor (requires ESP32 on the network)
-pip install -r ingestor/requirements.txt
-python ingestor/ingestor.py
-
-# 4. Build the site
-cd site && npm install && npx quartz build
+# Individual commands
+make lint              # Ruff linter (0 errors)
+make format            # Auto-format Python
+make test              # 83 smoke tests (~65s)
+make firmware-check    # Compile ESP32 firmware
+make planner-dry       # Render planner prompt (no API call)
+make help              # List all targets
 ```
+
+**Tooling:** ruff (lint + format), pytest, pre-commit hooks, GitHub Actions CI.
+**Config:** `pyproject.toml` is the single source of truth for deps, lint rules, and test config.
 
 ## The Greenhouse
 
 The control system has three layers:
 
-1. **Crop target band** — smooth diurnal VPD/temperature profiles for six active crops, computed from `crop_target_profiles` and interpolated by hour
-2. **AI planner** — Gemini 2.5 Pro reads 14 sections of context (sensor data, 72h forecast, crop band, validated lessons, previous plan scores) and writes tactical setpoint plans
-3. **ESP32 state machine** — 42 climate states evaluated every 5 seconds, enforcing the band with fans, heaters, misters, and fog
+1. **Crop target band** — diurnal VPD/temperature profiles for active crops, computed from `fn_band_setpoints()` every 5 minutes
+2. **AI planner** — Claude Opus 4.6 reads live context (scorecard, forecast, lessons, sensors) and writes 72h tactical setpoint plans with performance targets
+3. **ESP32 state machine** — 48 climate states evaluated every 5 seconds, enforcing the band with fans, heaters, misters, and fog
 
 The crops set the targets. The AI tunes the tactics. The controller enforces it. The telemetry proves what happened.
 
-## Data Flow
+## KPIs
 
-The ESP32 publishes 172 entities via encrypted native API. The ingestor routes them through 9 entity maps into 6 database tables at 60-second cadence. Twelve periodic tasks enrich the data: outdoor weather from Open-Meteo, energy from a Shelly EM50, forecast sync, alert monitoring, and band-driven setpoint dispatch.
-
-The setpoint dispatcher computes crop-science target bands every 5 minutes using `fn_band_setpoints()` and `fn_zone_vpd_targets()`, derives mister engagement thresholds from the band ceiling, and pushes directly to the ESP32 via aioesphomeapi.
+**Planner Score (0–100):** 80% band compliance + 20% cost efficiency.
+4 independent stress states tracked: heat, cold, VPD-high, VPD-low.
+Dew point margin monitored for condensation risk.
+Planner self-scores at every cycle and sets falsifiable performance targets.
 
 ## License
 
