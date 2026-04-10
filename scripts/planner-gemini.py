@@ -198,7 +198,7 @@ def build_prompt(greenhouse_id: str) -> str:
     dynamic_context = gather_context(greenhouse_id)
     static_context = read_static_context()
     milestones = compute_milestones()
-    current_time = datetime.now(DENVER).strftime("%Y-%m-%dT%H:%M:%S-06:00")
+    current_time = datetime.now(DENVER).isoformat()
     replan_mode, replan_reason = check_replan_trigger()
     if replan_mode:
         log.info("REPLAN MODE: %s", replan_reason)
@@ -269,6 +269,12 @@ async def write_plan_to_db(plan: dict, greenhouse_id: str) -> dict:
             # Filter out band-driven params
             filtered = [wp for wp in waypoints if wp["parameter"] in BAND_DRIVEN]
             waypoints = [wp for wp in waypoints if wp["parameter"] not in BAND_DRIVEN]
+
+            # Guard: if Gemini returned no usable waypoints, abort to preserve existing plan
+            if not waypoints:
+                log.error("No usable waypoints after filtering — aborting to preserve existing plan")
+                return {"waypoints": 0, "journal": False, "validation": False,
+                        "lesson": False, "filtered": len(filtered), "aborted": True}
 
             # Ensure immediate coverage: duplicate the first transition at now()
             # so there's no gap between fn_deactivate_future_plans() and the first planned ts

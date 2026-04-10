@@ -351,8 +351,9 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
                 "values": loki_lines,
             }]
         }).encode()
-        req = urllib.request.Request(LOKI_URL, data=payload, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=2)
+        if LOKI_URL:
+            req = urllib.request.Request(LOKI_URL, data=payload, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=2)
     except Exception:
         pass  # Don't fail ingestor if Loki is down
 
