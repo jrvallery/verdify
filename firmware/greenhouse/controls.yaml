@@ -495,10 +495,16 @@ interval:
           // Only runs in SEALED_MIST mode. Zone-targeted pulse rotation.
           // Stages: S1 (single zone) → S2 (all zones rotating) → FOG (escalation)
           {
+            const uint32_t MISTER_ENGAGE_DELAY_MS = uint32_t(id(mister_engage_delay_s)) * 1000UL;
+            const uint32_t MISTER_ALL_DELAY_MS    = uint32_t(id(mister_all_delay_s))    * 1000UL;
+
+            float south_vpd = id(vpd_south).state;
+            float west_vpd  = id(vpd_west).state;
+            float east_vpd  = id(vpd_east).state;
+            float avg_vpd   = VPD;
             bool humidity_demand = (mode == SEALED_MIST);
 
-
-            // NEW HIERARCHY: Misters first (S1/S2), Fog escalation (S3)
+            // Misters only run in SEALED_MIST mode.
             // Misters run in ANY humidity state including with vent open —
             // they spray directionally at surfaces, providing local evaporative cooling.
             // Fog (S3) is the heavy escalation: ~800W, fills the room.
