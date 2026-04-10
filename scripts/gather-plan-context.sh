@@ -28,24 +28,26 @@ SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v;
 echo ""
 
 # Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
-echo "--- ACTIVE PLAN (transitions) ---"
-echo "ts_mdt|plan_id|engage_kpa|all_kpa|pulse_gap|vpd_weight|hysteresis|d_cool_s2|bias_heat|bias_cool"
+echo "--- ACTIVE PLAN (summary per transition) ---"
+echo "Each row = one transition with all 24 params. Key values shown; full set applied."
+echo "ts_mdt|params|engage|all_kpa|gap_s|weight|hyst|vent_max|fog_esc|bias_h|bias_c"
 $DB -c "
 WITH deduped AS (
-  SELECT DISTINCT ON (ts, parameter) ts, parameter, value, plan_id
-  FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata'
+  SELECT DISTINCT ON (ts, parameter) ts, parameter, value
+  FROM setpoint_plan WHERE ts > now() AND parameter != 'plan_metadata' AND is_active = true
   ORDER BY ts, parameter, created_at DESC
 )
-SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH:MI') AS ts_mdt,
-  max(plan_id) AS plan_id,
-  max(CASE WHEN parameter='mister_engage_kpa' THEN value END) AS engage,
-  max(CASE WHEN parameter='mister_all_kpa' THEN value END) AS all_kpa,
-  max(CASE WHEN parameter='mister_pulse_gap_s' THEN value END) AS gap,
-  max(CASE WHEN parameter='mister_vpd_weight' THEN value END) AS weight,
-  max(CASE WHEN parameter='vpd_hysteresis' THEN value END) AS hyst,
-  max(CASE WHEN parameter='d_cool_stage_2' THEN value END) AS d_cool,
-  max(CASE WHEN parameter='bias_heat_f' THEN value END) AS b_heat,
-  max(CASE WHEN parameter='bias_cool_f' THEN value END) AS b_cool
+SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy MM-DD HH24:MI') AS ts_mdt,
+  count(*) AS params,
+  max(CASE WHEN parameter='mister_engage_kpa' THEN round(value::numeric,1) END),
+  max(CASE WHEN parameter='mister_all_kpa' THEN round(value::numeric,1) END),
+  max(CASE WHEN parameter='mister_pulse_gap_s' THEN value::int END),
+  max(CASE WHEN parameter='mister_vpd_weight' THEN round(value::numeric,1) END),
+  max(CASE WHEN parameter='vpd_hysteresis' THEN round(value::numeric,1) END),
+  max(CASE WHEN parameter='mist_max_closed_vent_s' THEN value::int END),
+  max(CASE WHEN parameter='fog_escalation_kpa' THEN round(value::numeric,1) END),
+  max(CASE WHEN parameter='bias_heat' THEN round(value::numeric,1) END),
+  max(CASE WHEN parameter='bias_cool' THEN round(value::numeric,1) END)
 FROM deduped
 GROUP BY ts
 ORDER BY ts;
@@ -500,18 +502,20 @@ echo ""
 
 # ── 28. FORECAST ACCURACY ─────────────────────────────────────────
 echo "--- FORECAST ACCURACY (7 days) ---"
-$DB -c "SELECT * FROM v_forecast_accuracy_daily WHERE date >= CURRENT_DATE - 7 ORDER BY date DESC, param;"
+echo "date|metric|forecast|actual|error|abs_error|lead_hours"
+$DB -c "SELECT * FROM v_forecast_accuracy_daily WHERE date >= CURRENT_DATE - 7 ORDER BY date DESC, param;" 2>/dev/null
 echo "Use this to calibrate your trust in the forecast. If 48h accuracy is consistently worse than 24h, weight near-term forecasts more heavily."
 echo ""
 
 # ── 29. PLAN COMPARISON ───────────────────────────────────────────
-echo "--- PLAN COMPARISON (vs previous) ---"
+echo "--- PLAN COMPARISON (current vs previous, top changes) ---"
 echo "parameter|current_avg|previous_avg|delta"
 $DB -c "
-SELECT parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
+SELECT DISTINCT ON (parameter)
+  parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
 FROM v_plan_comparison
-ORDER BY plan_created DESC, abs(delta_avg) DESC
-LIMIT 10;
+WHERE abs(delta_avg) > 0.01
+ORDER BY parameter, plan_created DESC;
 " 2>/dev/null || echo "(not available)"
 echo ""
 

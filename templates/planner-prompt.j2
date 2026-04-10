@@ -156,6 +156,7 @@ Synthesize each day into overnight, ramp, peak, and restore. Do not mirror every
 4. **Hysteresis:** 0.3 standard, 0.2 mild days, 0.4 extreme days.
 5. **Water budget:** 500 gal. Budget must never be the bottleneck.
 6. **Vent during misting:** Vent always closes during fog/mist. Built into state machine.
+7. **New vent/fog params:** `mist_vent_close_lead_s`, `mist_max_closed_vent_s`, `fog_escalation_kpa`, and enthalpy thresholds are recently added. Use defaults unless forecast clearly warrants adjustment. Document reasoning for changes as experiment candidates.
 
 ---
 
