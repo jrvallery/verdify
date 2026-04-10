@@ -789,7 +789,7 @@ SELECT
 FROM light_events;
 """
 
-WATTAGES = {"heat1": 1500, "fan1": 52, "fan2": 52, "fog": 1644, "grow_light_main": 630, "grow_light_grow": 816, "vent": 10}
+WATTAGES = {"heat1": 1500, "fan1": 52, "fan2": 52, "fog": 800, "grow_light_main": 630, "grow_light_grow": 816, "vent": 10}
 HEAT2_BTU, THERM_BTU = 75000, 100000
 
 async def grow_light_daily(pool: asyncpg.Pool) -> None:
@@ -976,7 +976,7 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
 # ═════════════════════════════════════════════════════════════════
 # 13. LIVE DAILY SUMMARY (every 1800s = 30 min)
 # ═════════════════════════════════════════════════════════════════
-_DS_WATTAGES = {"heat1": 1500, "fan1": 52, "fan2": 52, "fog": 1644, "grow_light_main": 630, "grow_light_grow": 816, "vent": 10}
+_DS_WATTAGES = {"heat1": 1500, "fan1": 52, "fan2": 52, "fog": 800, "grow_light_main": 630, "grow_light_grow": 816, "vent": 10}
 
 async def daily_summary_live(pool: asyncpg.Pool) -> None:
     """Update daily_summary for today with live running aggregates."""
