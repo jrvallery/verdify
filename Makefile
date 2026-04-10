@@ -21,7 +21,7 @@ format: ## Auto-format Python files with ruff
 	$(RUFF) format ingestor/ api/ scripts/*.py tests/
 	$(RUFF) check --fix ingestor/ api/ scripts/*.py tests/
 
-check: lint test firmware-check ## Run all checks (lint + test + firmware compile)
+check: lint test test-firmware firmware-check ## Run all checks (lint + test + native firmware tests + firmware compile)
 	@echo ""
 	@echo "✓ All checks passed"
 
@@ -32,6 +32,9 @@ test: ## Run full smoke test suite against live stack
 
 test-fast: ## Run tests excluding slow planner tests
 	$(PYTEST) tests/ -k "not Planner and not Context"
+
+test-firmware: ## Run native C++ logic tests (same code as ESP32)
+	cd firmware && g++ -std=c++17 -I lib -o test/test_greenhouse test/test_greenhouse_logic.cpp && ./test/test_greenhouse
 
 test-v: ## Run tests with verbose output
 	$(PYTEST) tests/ -v --tb=long
