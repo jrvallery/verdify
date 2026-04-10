@@ -502,16 +502,32 @@ SELECT to_char(day, 'Dy MM-DD'),
 FROM fc GROUP BY day ORDER BY day;
 " 2>/dev/null || echo "(unavailable)"
 
-# Greenhouse-specific: tree shade clearing (from lux sensor history)
-SHADE_CLEAR=$($DB -c "
-SELECT to_char(ts AT TIME ZONE 'America/Denver', 'HH:MI AM')
-FROM climate WHERE ts > now() - interval '7 days'
-  AND extract(hour FROM ts AT TIME ZONE 'America/Denver') BETWEEN 9 AND 12
-  AND lux > 500
-ORDER BY ts LIMIT 1;" 2>/dev/null | tr -d ' ')
-if [ -n "$SHADE_CLEAR" ]; then
-  echo "Tree shade clears east sensor: ~${SHADE_CLEAR} (east zone gets direct sun after this)"
-fi
+# Greenhouse-specific: tree shade clearing (predicted from regression)
+echo ""
+echo "--- TREE SHADE CLEARING (east zone, predicted) ---"
+echo "date|predicted_clear_time"
+$DB -c "
+WITH shade_clear AS (
+  SELECT DISTINCT ON ((ts AT TIME ZONE 'America/Denver')::date)
+    (ts AT TIME ZONE 'America/Denver')::date AS day,
+    extract(epoch FROM (ts AT TIME ZONE 'America/Denver') - (ts AT TIME ZONE 'America/Denver')::date::timestamp) / 60.0 AS mins
+  FROM climate WHERE ts > now() - interval '14 days'
+    AND extract(hour FROM ts AT TIME ZONE 'America/Denver') BETWEEN 9 AND 12
+    AND lux > 500 AND solar_irradiance_w_m2 > 300
+  ORDER BY (ts AT TIME ZONE 'America/Denver')::date, ts
+),
+model AS (
+  SELECT regr_slope(mins, (day - '2026-03-27'::date)::double precision) AS slope,
+         regr_intercept(mins, (day - '2026-03-27'::date)::double precision) AS intercept
+  FROM shade_clear
+)
+SELECT to_char(d, 'Dy MM-DD') || '|' ||
+  to_char('00:00'::time + make_interval(secs => (m.intercept + m.slope * ((d::date - '2026-03-27'::date)::double precision)) * 60), 'HH24:MI')
+FROM model m, generate_series(CURRENT_DATE+1, CURRENT_DATE+3, interval '1 day') AS d
+UNION ALL
+SELECT 'Trend: ' || round(slope::numeric, 1) || ' min/day earlier (sun tracking north)' FROM model;
+" 2>/dev/null || echo "(insufficient data)"
+echo "East zone hydro gets direct sun after shade clears. VPD ramp accelerates."
 echo "Anchor transitions to these computed times — not fixed clock hours."
 echo ""
 
