@@ -6,8 +6,8 @@ All templates live in /srv/verdify/templates/ (or the TEMPLATES_DIR env var).
 """
 
 import os
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 TEMPLATES_DIR = Path(os.environ.get("TEMPLATES_DIR", Path(__file__).parent.parent / "templates"))
 
@@ -23,7 +23,8 @@ def _load_raw(name: str) -> str:
 
 def render(name: str, **kwargs) -> str:
     """Render a Jinja2 template (.j2) with the given variables."""
-    from jinja2 import Environment, BaseLoader
+    from jinja2 import BaseLoader, Environment
+
     env = Environment(loader=BaseLoader(), keep_trailing_newline=True)
     template = env.from_string(_load_raw(name))
     return template.render(**kwargs)

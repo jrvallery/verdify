@@ -10,10 +10,9 @@ Usage:
 """
 
 import logging
-import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -82,9 +81,13 @@ def main():
         log.info("Triggering crop health analysis...")
         try:
             import subprocess
+
             result = subprocess.run(
                 ["/srv/greenhouse/.venv/bin/python3", "/srv/verdify/scripts/analyze-greenhouse-snapshot.py"],
-                capture_output=True, text=True, timeout=120)
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
             if result.returncode == 0:
                 log.info("Analysis complete")
             else:

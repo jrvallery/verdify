@@ -20,130 +20,120 @@ Structure:
 # ──────────────────────────────────────────────────────────────
 CLIMATE_MAP: dict[str, str] = {
     # Temperature (°F)
-    "avg_temp___f_":                "temp_avg",
-    "north_temp___f_":              "temp_north",
-    "south_temp___f_":              "temp_south",
-    "east_temp___f_":               "temp_east",
-    "west_temp___f_":               "temp_west",
-    "case_temp___f_":               "temp_case",
-    "control_tin___f_":             "temp_control",
-    "exterior_intake_temp___f_":    "temp_intake",
-
+    "avg_temp___f_": "temp_avg",
+    "north_temp___f_": "temp_north",
+    "south_temp___f_": "temp_south",
+    "east_temp___f_": "temp_east",
+    "west_temp___f_": "temp_west",
+    "case_temp___f_": "temp_case",
+    "control_tin___f_": "temp_control",
+    "exterior_intake_temp___f_": "temp_intake",
     # Relative Humidity (%)
-    "avg_rh____":                   "rh_avg",
-    "north_rh____":                 "rh_north",
-    "south_rh____":                 "rh_south",
-    "east_rh____":                  "rh_east",
-    "west_rh____":                  "rh_west",
-    "case_rh____":                  "rh_case",
-
+    "avg_rh____": "rh_avg",
+    "north_rh____": "rh_north",
+    "south_rh____": "rh_south",
+    "east_rh____": "rh_east",
+    "west_rh____": "rh_west",
+    "case_rh____": "rh_case",
     # VPD (kPa)
-    "avg_vpd__kpa_":                "vpd_avg",
-    "north_vpd__kpa_":              "vpd_north",
-    "south_vpd__kpa_":              "vpd_south",
-    "east_vpd__kpa_":               "vpd_east",
-    "west_vpd__kpa_":               "vpd_west",
-    "control_vpd__kpa_":            "vpd_control",
-
+    "avg_vpd__kpa_": "vpd_avg",
+    "north_vpd__kpa_": "vpd_north",
+    "south_vpd__kpa_": "vpd_south",
+    "east_vpd__kpa_": "vpd_east",
+    "west_vpd__kpa_": "vpd_west",
+    "control_vpd__kpa_": "vpd_control",
     # Derived climate
-    "dew_point___f_":               "dew_point",
-    "abs_humidity__g_m__":          "abs_humidity",
-    "enthalpy____kj_kg_":           "enthalpy_delta",
-
+    "dew_point___f_": "dew_point",
+    "abs_humidity__g_m__": "abs_humidity",
+    "enthalpy____kj_kg_": "enthalpy_delta",
     # Air quality
-    "co___ppm_":                    "co2_ppm",
-
+    "co___ppm_": "co2_ppm",
     # Light
-    "light__lx_":                   "lux",
-    "dli__mol_m___day___":          "dli_today",
-
+    "light__lx_": "lux",
+    "dli__mol_m___day___": "dli_today",
     # Water
-    "water_flow__gpm_":             "flow_gpm",
-    "water_used__gal_":             "water_total_gal",
-
+    "water_flow__gpm_": "flow_gpm",
+    "water_used__gal_": "water_total_gal",
     # Mister
-    "mister_water_today":           "mister_water_today",
-
+    "mister_water_today": "mister_water_today",
     # Soil sensors (DFRobot SEN0600/SEN0601, Modbus RTU)
     # South 1 (addr 7, SEN0601): moisture + temp + EC
     # South 2 (addr 8, SEN0600): moisture + temp
     # West (addr 9, SEN0600): moisture + temp
     # object_ids verified via esphome.helpers.sanitize()
-    "south_1_soil_moisture____":    "soil_moisture_south_1",
-    "south_1_soil_temp___f_":       "soil_temp_south_1",
-    "south_1_soil_ec___s_cm_":      "soil_ec_south_1",
-    "south_2_soil_moisture____":    "soil_moisture_south_2",
-    "south_2_soil_temp___f_":       "soil_temp_south_2",
-    "west_soil_moisture____":       "soil_moisture_west",
-    "west_soil_temp___f_":          "soil_temp_west",
-
+    "south_1_soil_moisture____": "soil_moisture_south_1",
+    "south_1_soil_temp___f_": "soil_temp_south_1",
+    "south_1_soil_ec___s_cm_": "soil_ec_south_1",
+    "south_2_soil_moisture____": "soil_moisture_south_2",
+    "south_2_soil_temp___f_": "soil_temp_south_2",
+    "west_soil_moisture____": "soil_moisture_west",
+    "west_soil_temp___f_": "soil_temp_west",
     # Exterior intake (additional sensors beyond temp)
-    "exterior_intake_rh____":       "intake_rh",
-    "exterior_intake_vpd__kpa_":    "intake_vpd",
-    "outdoor_illuminance":          "outdoor_illuminance",
-
+    "exterior_intake_rh____": "intake_rh",
+    "exterior_intake_vpd__kpa_": "intake_vpd",
+    "outdoor_illuminance": "outdoor_illuminance",
     # Tempest weather (UDP direct from ESP32, replaces HA tempest_sync)
-    "tempest_temperature":          "outdoor_temp_f",
-    "tempest_humidity":             "outdoor_rh_pct",
-    "tempest_wind_speed":           "wind_speed_mph",
-    "tempest_wind_direction":       "wind_direction_deg",
-    "tempest_wind_gust":            "wind_gust_mph",
-    "tempest_wind_lull":            "wind_lull_mph",
-    "tempest_pressure":             "pressure_hpa",
-    "tempest_solar_irradiance":     "solar_irradiance_w_m2",
-    "tempest_uv_index":             "uv_index",
-    "tempest_illuminance":          "outdoor_lux",
-    "tempest_precipitation_rate":   "precip_in",           # NOTE: arrives as mm/min, DB expects in
-    "tempest_lightning_count":      "lightning_count",
-    "tempest_lightning_distance":   "lightning_avg_dist_mi", # NOTE: arrives as km, DB expects mi
+    "tempest_temperature": "outdoor_temp_f",
+    "tempest_humidity": "outdoor_rh_pct",
+    "tempest_wind_speed": "wind_speed_mph",
+    "tempest_wind_direction": "wind_direction_deg",
+    "tempest_wind_gust": "wind_gust_mph",
+    "tempest_wind_lull": "wind_lull_mph",
+    "tempest_pressure": "pressure_hpa",
+    "tempest_solar_irradiance": "solar_irradiance_w_m2",
+    "tempest_uv_index": "uv_index",
+    "tempest_illuminance": "outdoor_lux",
+    "tempest_precipitation_rate": "precip_in",  # NOTE: arrives as mm/min, DB expects in
+    "tempest_lightning_count": "lightning_count",
+    "tempest_lightning_distance": "lightning_avg_dist_mi",  # NOTE: arrives as km, DB expects mi
 }
 
 # ──────────────────────────────────────────────────────────────
 # Equipment relay states — BinarySensor entities
 # ──────────────────────────────────────────────────────────────
 EQUIPMENT_BINARY_MAP: dict[str, str] = {
-    "fan_1_running":            "fan1",
-    "fan_2_running":            "fan2",
-    "heat_1_running":           "heat1",
-    "heat_2_running":           "heat2",
-    "fog_running":              "fog",
-    "vent_open":                "vent",
-    "mister_running":           "mister_any",
-    "mister_budget_exceeded":   "mister_budget_exceeded",
-    "economiser_blocked":       "economiser_blocked",
-    "leak_detected":            "leak_detected",        # SAFETY CRITICAL
-    "water_flowing":            "water_flowing",
-    "fan_burst_active":         "fan_burst_active",
-    "fog_burst_active":         "fog_burst_active",
-    "vent_bypass_active":       "vent_bypass_active",
-    "sntp_status":              "sntp_status",
+    "fan_1_running": "fan1",
+    "fan_2_running": "fan2",
+    "heat_1_running": "heat1",
+    "heat_2_running": "heat2",
+    "fog_running": "fog",
+    "vent_open": "vent",
+    "mister_running": "mister_any",
+    "mister_budget_exceeded": "mister_budget_exceeded",
+    "economiser_blocked": "economiser_blocked",
+    "leak_detected": "leak_detected",  # SAFETY CRITICAL
+    "water_flowing": "water_flowing",
+    "fan_burst_active": "fan_burst_active",
+    "fog_burst_active": "fog_burst_active",
+    "vent_bypass_active": "vent_bypass_active",
+    "sntp_status": "sntp_status",
 }
 
 # ──────────────────────────────────────────────────────────────
 # Equipment relay states — Switch entities
 # ──────────────────────────────────────────────────────────────
 EQUIPMENT_SWITCH_MAP: dict[str, str] = {
-    "mister___south_wall":          "mister_south",
-    "mister___south_wall__fert__":  "mister_south_fert",
-    "mister___west_wall":           "mister_west",
-    "mister___west_wall__fert__":   "mister_west_fert",
-    "mister___center":              "mister_center",
-    "drip___wall":                  "drip_wall",
-    "drip___wall__fert__":          "drip_wall_fert",
-    "drip___center":                "drip_center",
-    "drip___center__fert__":        "drip_center_fert",
-    "valve___fert__master":         "fert_master_valve",
-    "grow_light_main":              "grow_light_main",
-    "grow_light_grow":              "grow_light_grow",
+    "mister___south_wall": "mister_south",
+    "mister___south_wall__fert__": "mister_south_fert",
+    "mister___west_wall": "mister_west",
+    "mister___west_wall__fert__": "mister_west_fert",
+    "mister___center": "mister_center",
+    "drip___wall": "drip_wall",
+    "drip___wall__fert__": "drip_wall_fert",
+    "drip___center": "drip_center",
+    "drip___center__fert__": "drip_center_fert",
+    "valve___fert__master": "fert_master_valve",
+    "grow_light_main": "grow_light_main",
+    "grow_light_grow": "grow_light_grow",
     # Config switches (boolean tunables exposed as HA switches)
-    "economiser_enabled":           "economiser_enabled",
-    "fog_closes_vent":              "fog_closes_vent",
-    "irrigation_enabled":           "irrigation_enabled",
-    "irrigation_wall_enabled":      "irrigation_wall_enabled",
-    "irrigation_center_enabled":    "irrigation_center_enabled",
-    "irrigation_weather_skip":      "irrigation_weather_skip",
-    "gl_auto_mode":                 "gl_auto_mode",
-    "occupancy_mist_inhibit":       "occupancy_inhibit",
+    "economiser_enabled": "economiser_enabled",
+    "fog_closes_vent": "fog_closes_vent",
+    "irrigation_enabled": "irrigation_enabled",
+    "irrigation_wall_enabled": "irrigation_wall_enabled",
+    "irrigation_center_enabled": "irrigation_center_enabled",
+    "irrigation_weather_skip": "irrigation_weather_skip",
+    "gl_auto_mode": "gl_auto_mode",
+    "occupancy_mist_inhibit": "occupancy_inhibit",
 }
 
 # Combined for legacy callers — not used by ingestor directly
@@ -153,11 +143,11 @@ EQUIPMENT_MAP: dict[str, str] = {**EQUIPMENT_BINARY_MAP, **EQUIPMENT_SWITCH_MAP}
 # State machine text entities (TextSensorInfo)
 # ──────────────────────────────────────────────────────────────
 STATE_MAP: dict[str, str] = {
-    "greenhouse_state":         "greenhouse_state",
-    "lead_fan":                 "lead_fan",
-    "last_state_transition":    "last_transition",
-    "mister_state":             "mister_state",
-    "mister_selected_zone":     "mister_zone",
+    "greenhouse_state": "greenhouse_state",
+    "lead_fan": "lead_fan",
+    "last_state_transition": "last_transition",
+    "mister_state": "mister_state",
+    "mister_selected_zone": "mister_zone",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -165,129 +155,116 @@ STATE_MAP: dict[str, str] = {
 # ──────────────────────────────────────────────────────────────
 SETPOINT_MAP: dict[str, str] = {
     # Temperature band
-    "set_temp_low__f":              "temp_low",
-    "set_temp_high__f":             "temp_high",
-    "__heat_stage_2__f":            "d_heat_stage_2",
-    "__cool_stage_2__f":            "d_cool_stage_2",
-    "temp_hysteresis__f":           "temp_hysteresis",
-    "bias_heat__f":                 "bias_heat",
-    "bias_cool__f":                 "bias_cool",
-
+    "set_temp_low__f": "temp_low",
+    "set_temp_high__f": "temp_high",
+    "__heat_stage_2__f": "d_heat_stage_2",
+    "__cool_stage_2__f": "d_cool_stage_2",
+    "temp_hysteresis__f": "temp_hysteresis",
+    "bias_heat__f": "bias_heat",
+    "bias_cool__f": "bias_cool",
     # VPD band
-    "set_vpd_low_kpa":              "vpd_low",
-    "set_vpd_high_kpa":             "vpd_high",
-    "vpd_hysteresis_kpa":           "vpd_hysteresis",
-
+    "set_vpd_low_kpa": "vpd_low",
+    "set_vpd_high_kpa": "vpd_high",
+    "vpd_hysteresis_kpa": "vpd_hysteresis",
     # Safety rails
-    "safety_min__f":                "safety_min",
-    "safety_max__f":                "safety_max",
-    "safety_vpd_min_kpa":           "safety_vpd_min",
-    "safety_vpd_max_kpa":           "safety_vpd_max",
-
+    "safety_min__f": "safety_min",
+    "safety_max__f": "safety_max",
+    "safety_vpd_min_kpa": "safety_vpd_min",
+    "safety_vpd_max_kpa": "safety_vpd_max",
     # Mister
-    "vpd_mister_engage_kpa":        "mister_engage_kpa",
-    "vpd_mister_all_kpa":           "mister_all_kpa",
-    "mister_engage_delay__s_":      "mister_engage_delay_s",
-    "mister_all_delay__s_":         "mister_all_delay_s",
-    "mister_on__s_":                "mister_on_s",
-    "mister_off__s_":               "mister_off_s",
-    "mister_all_on__s_":            "mister_all_on_s",
-    "mister_all_off__s_":           "mister_all_off_s",
-    "mister_water_budget__gal_":    "mister_water_budget_gal",
-    "mister_max_runtime__min_":     "mister_max_runtime_min",
-
+    "vpd_mister_engage_kpa": "mister_engage_kpa",
+    "vpd_mister_all_kpa": "mister_all_kpa",
+    "mister_engage_delay__s_": "mister_engage_delay_s",
+    "mister_all_delay__s_": "mister_all_delay_s",
+    "mister_on__s_": "mister_on_s",
+    "mister_off__s_": "mister_off_s",
+    "mister_all_on__s_": "mister_all_on_s",
+    "mister_all_off__s_": "mister_all_off_s",
+    "mister_water_budget__gal_": "mister_water_budget_gal",
+    "mister_max_runtime__min_": "mister_max_runtime_min",
     # Equipment timing
-    "min_heat_on__s_":              "min_heat_on_s",
-    "min_heat_off__s_":             "min_heat_off_s",
-    "min_fan_on__s_":               "min_fan_on_s",
-    "min_fan_off__s_":              "min_fan_off_s",
-    "min_vent_on__s_":              "min_vent_on_s",
-    "min_vent_off__s_":             "min_vent_off_s",
-    "lead_rotate__s_":              "lead_rotate_s",
-    "fan_burst__min_":              "fan_burst_min",
-    "vent_bypass__min_":            "vent_bypass_min",
-    "fog_burst__min_":              "fog_burst_min",
-
+    "min_heat_on__s_": "min_heat_on_s",
+    "min_heat_off__s_": "min_heat_off_s",
+    "min_fan_on__s_": "min_fan_on_s",
+    "min_fan_off__s_": "min_fan_off_s",
+    "min_vent_on__s_": "min_vent_on_s",
+    "min_vent_off__s_": "min_vent_off_s",
+    "lead_rotate__s_": "lead_rotate_s",
+    "fan_burst__min_": "fan_burst_min",
+    "vent_bypass__min_": "vent_bypass_min",
+    "fog_burst__min_": "fog_burst_min",
     # Economiser
-    "enthalpy_open__kj_kg_":        "enthalpy_open",
-    "enthalpy_close__kj_kg_":       "enthalpy_close",
-    "site_pressure__hpa_":          "site_pressure_hpa",
-
+    "enthalpy_open__kj_kg_": "enthalpy_open",
+    "enthalpy_close__kj_kg_": "enthalpy_close",
+    "site_pressure__hpa_": "site_pressure_hpa",
     # Irrigation wall
-    "irrig_wall_start_hour":        "irrig_wall_start_hour",
-    "irrig_wall_start_min":         "irrig_wall_start_min",
-    "irrig_wall_duration__min_":    "irrig_wall_duration_min",
+    "irrig_wall_start_hour": "irrig_wall_start_hour",
+    "irrig_wall_start_min": "irrig_wall_start_min",
+    "irrig_wall_duration__min_": "irrig_wall_duration_min",
     "irrig_wall_fert_duration__min_": "irrig_wall_fert_duration_min",
     "irrig_wall_fert_every_n_cycles": "irrig_wall_fert_every_n",
-    "irrig_wall_flush__min_":       "irrig_wall_flush_min",
-    "irrig_wall_interval__days_":   "irrig_wall_interval_days",
-
+    "irrig_wall_flush__min_": "irrig_wall_flush_min",
+    "irrig_wall_interval__days_": "irrig_wall_interval_days",
     # Irrigation center
-    "irrig_center_start_hour":      "irrig_center_start_hour",
-    "irrig_center_start_min":       "irrig_center_start_min",
-    "irrig_center_duration__min_":  "irrig_center_duration_min",
+    "irrig_center_start_hour": "irrig_center_start_hour",
+    "irrig_center_start_min": "irrig_center_start_min",
+    "irrig_center_duration__min_": "irrig_center_duration_min",
     "irrig_center_fert_duration__min_": "irrig_center_fert_duration_min",
     "irrig_center_fert_every_n_cycles": "irrig_center_fert_every_n",
-    "irrig_center_flush__min_":     "irrig_center_flush_min",
+    "irrig_center_flush__min_": "irrig_center_flush_min",
     "irrig_center_interval__days_": "irrig_center_interval_days",
-
     # VPD boost
-    "irrig_vpd_boost__":            "irrig_vpd_boost_pct",
+    "irrig_vpd_boost__": "irrig_vpd_boost_pct",
     "irrig_vpd_boost_threshold__hrs_": "irrig_vpd_boost_threshold_hrs",
-
     # Grow lights
-    "gl_dli_target__mol_":          "gl_dli_target",
-    "gl_lux_threshold":             "gl_lux_threshold",
-    "gl_start_hour":                "gl_sunrise_hour",
-    "gl_cutoff_hour":               "gl_sunset_hour",
-
+    "gl_dli_target__mol_": "gl_dli_target",
+    "gl_lux_threshold": "gl_lux_threshold",
+    "gl_start_hour": "gl_sunrise_hour",
+    "gl_cutoff_hour": "gl_sunset_hour",
     # Switches (boolean, tracked as 0.0/1.0)
-    "economiser_enabled":           "sw_economiser_enabled",
-    "fog_closes_vent":              "sw_fog_closes_vent",
-    "gl_auto_mode":                 "sw_gl_auto_mode",
-    "irrigation_enabled":           "sw_irrigation_enabled",
-    "irrigation_wall_enabled":      "sw_irrigation_wall_enabled",
-    "irrigation_center_enabled":    "sw_irrigation_center_enabled",
-    "irrigation_weather_skip":      "sw_irrigation_weather_skip",
-    "occupancy_mist_inhibit":       "sw_occupancy_inhibit",
-
+    "economiser_enabled": "sw_economiser_enabled",
+    "fog_closes_vent": "sw_fog_closes_vent",
+    "gl_auto_mode": "sw_gl_auto_mode",
+    "irrigation_enabled": "sw_irrigation_enabled",
+    "irrigation_wall_enabled": "sw_irrigation_wall_enabled",
+    "irrigation_center_enabled": "sw_irrigation_center_enabled",
+    "irrigation_weather_skip": "sw_irrigation_weather_skip",
+    "occupancy_mist_inhibit": "sw_occupancy_inhibit",
     # Mister pulse model
-    "mister_pulse_on__s_":          "mister_pulse_on_s",
-    "mister_pulse_gap__s_":         "mister_pulse_gap_s",
-    "mister_vpd_weight":            "mister_vpd_weight",
-
+    "mister_pulse_on__s_": "mister_pulse_on_s",
+    "mister_pulse_gap__s_": "mister_pulse_gap_s",
+    "mister_vpd_weight": "mister_vpd_weight",
     # Per-zone VPD targets (pushed by dispatcher from crop band)
-    "vpd_target_south__kpa_":       "vpd_target_south",
-    "vpd_target_west__kpa_":        "vpd_target_west",
-    "vpd_target_east__kpa_":        "vpd_target_east",
-    "vpd_target_center__kpa_":      "vpd_target_center",
-    "mister_center_penalty":        "mister_center_penalty",
-    "east_adjacency_factor":        "east_adjacency_factor",
-    "min_fog_on__s_":               "min_fog_on_s",
-    "min_fog_off__s_":              "min_fog_off_s",
-
+    "vpd_target_south__kpa_": "vpd_target_south",
+    "vpd_target_west__kpa_": "vpd_target_west",
+    "vpd_target_east__kpa_": "vpd_target_east",
+    "vpd_target_center__kpa_": "vpd_target_center",
+    "mister_center_penalty": "mister_center_penalty",
+    "east_adjacency_factor": "east_adjacency_factor",
+    "min_fog_on__s_": "min_fog_on_s",
+    "min_fog_off__s_": "min_fog_off_s",
     # VPD-primary state machine (Phase 1)
-    "vpd_watch_dwell__s_":          "vpd_watch_dwell_s",
-    "mist_vent_close_lead__s_":     "mist_vent_close_lead_s",
-    "mist_max_closed_vent__s_":     "mist_max_closed_vent_s",
-    "fog_escalation__kpa_":         "fog_escalation_kpa",
-    "mist_vent_reopen_delay__s_":   "mist_vent_reopen_delay_s",
-    "mist_thermal_relief__s_":      "mist_thermal_relief_s",
-    "fog_rh_ceiling____":           "fog_rh_ceiling_pct",
-    "fog_min_temp__f_":             "fog_min_temp_f",
-    "fog_window_start__hr_":        "fog_time_window_start",
-    "fog_window_end__hr_":          "fog_time_window_end",
+    "vpd_watch_dwell__s_": "vpd_watch_dwell_s",
+    "mist_vent_close_lead__s_": "mist_vent_close_lead_s",
+    "mist_max_closed_vent__s_": "mist_max_closed_vent_s",
+    "fog_escalation__kpa_": "fog_escalation_kpa",
+    "mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
+    "mist_thermal_relief__s_": "mist_thermal_relief_s",
+    "fog_rh_ceiling____": "fog_rh_ceiling_pct",
+    "fog_min_temp__f_": "fog_min_temp_f",
+    "fog_window_start__hr_": "fog_time_window_start",
+    "fog_window_end__hr_": "fog_time_window_end",
 }
 
 # ──────────────────────────────────────────────────────────────
 # Diagnostics (SensorInfo + TextSensorInfo)
 # ──────────────────────────────────────────────────────────────
 DIAGNOSTIC_MAP: dict[str, str] = {
-    "wifi_signal":      "wifi_rssi",     # SensorInfo, dBm
-    "free_heap":        "heap_bytes",    # SensorInfo
-    "uptime":           "uptime_s",      # SensorInfo
-    "probe_health":     "probe_health",  # TextSensorInfo
-    "reset_reason":     "reset_reason",  # TextSensorInfo
+    "wifi_signal": "wifi_rssi",  # SensorInfo, dBm
+    "free_heap": "heap_bytes",  # SensorInfo
+    "uptime": "uptime_s",  # SensorInfo
+    "probe_health": "probe_health",  # TextSensorInfo
+    "reset_reason": "reset_reason",  # TextSensorInfo
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -295,31 +272,28 @@ DIAGNOSTIC_MAP: dict[str, str] = {
 # ──────────────────────────────────────────────────────────────
 DAILY_ACCUM_MAP: dict[str, str] = {
     # Cycle counts
-    "cycles___fan_1__today_":           "cycles_fan1",
-    "cycles___fan_2__today_":           "cycles_fan2",
-    "cycles___heat_1__today_":          "cycles_heat1",
-    "cycles___heat_2__today_":          "cycles_heat2",
-    "cycles___fog_fan__today_":         "cycles_fog",
-    "cycles___vent__today_":            "cycles_vent",
-    "de_hum_cycles__today_":            "cycles_dehum",
-    "safety_de_hum_cycles__today_":     "cycles_safety_dehum",
-
+    "cycles___fan_1__today_": "cycles_fan1",
+    "cycles___fan_2__today_": "cycles_fan2",
+    "cycles___heat_1__today_": "cycles_heat1",
+    "cycles___heat_2__today_": "cycles_heat2",
+    "cycles___fog_fan__today_": "cycles_fog",
+    "cycles___vent__today_": "cycles_vent",
+    "de_hum_cycles__today_": "cycles_dehum",
+    "safety_de_hum_cycles__today_": "cycles_safety_dehum",
     # Runtime (relay minutes)
-    "runtime___fan_1__min_today_":      "runtime_fan1_min",
-    "runtime___fan_2__min_today_":      "runtime_fan2_min",
-    "runtime___heat_1__min_today_":     "runtime_heat1_min",
-    "runtime___heat_2__min_today_":     "runtime_heat2_min",
-    "runtime___fog__min_today_":        "runtime_fog_min",
-    "runtime___vent__min_today_":       "runtime_vent_min",
-
+    "runtime___fan_1__min_today_": "runtime_fan1_min",
+    "runtime___fan_2__min_today_": "runtime_fan2_min",
+    "runtime___heat_1__min_today_": "runtime_heat1_min",
+    "runtime___heat_2__min_today_": "runtime_heat2_min",
+    "runtime___fog__min_today_": "runtime_fog_min",
+    "runtime___vent__min_today_": "runtime_vent_min",
     # Runtime (mister hours)
     "mister_south_wall_runtime__today_": "runtime_mister_south_h",
-    "mister_west_wall_runtime__today_":  "runtime_mister_west_h",
-    "mister_center_runtime__today_":     "runtime_mister_center_h",
-
+    "mister_west_wall_runtime__today_": "runtime_mister_west_h",
+    "mister_center_runtime__today_": "runtime_mister_center_h",
     # Drip runtimes
-    "wall_drips_runtime__today_":         "runtime_drip_wall_h",
-    "center_drips_runtime__today_":       "runtime_drip_center_h",
+    "wall_drips_runtime__today_": "runtime_drip_wall_h",
+    "center_drips_runtime__today_": "runtime_drip_center_h",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -328,44 +302,44 @@ DAILY_ACCUM_MAP: dict[str, str] = {
 # Written to setpoint_snapshot table for ground-truth tracking
 # ──────────────────────────────────────────────────────────────
 CFG_READBACK_MAP: dict[str, str] = {
-    "cfg___temp_low___f_":              "temp_low",
-    "cfg___temp_high___f_":             "temp_high",
-    "cfg_____heat_s2___f_":             "d_heat_stage_2",
-    "cfg_____cool_s2___f_":             "d_cool_stage_2",
-    "cfg___temp_hyst___f_":             "temp_hysteresis",
-    "cfg___vpd_low__kpa_":              "vpd_low",
-    "cfg___vpd_high__kpa_":             "vpd_high",
-    "cfg___vpd_hyst__kpa_":             "vpd_hysteresis",
-    "cfg___bias_heat___f_":             "bias_heat",
-    "cfg___bias_cool___f_":             "bias_cool",
-    "cfg___safety_min___f_":            "safety_min",
-    "cfg___safety_max___f_":            "safety_max",
-    "cfg___safety_vpd_min__kpa_":       "safety_vpd_min",
-    "cfg___safety_vpd_max__kpa_":       "safety_vpd_max",
-    "cfg___site_pressure__hpa_":        "site_pressure_hpa",
-    "cfg___enthalpy_open__kj_kg___":    "enthalpy_open",
-    "cfg___enthalpy_close__kj_kg___":   "enthalpy_close",
-    "cfg___fan_burst__min_":            "fan_burst_min",
-    "cfg___vent_bypass__min_":          "vent_bypass_min",
-    "cfg___fog_burst__min_":            "fog_burst_min",
-    "cfg___lead_rotate_timeout__s_":    "lead_rotate_s",
-    "cfg___fallback_window__s_":        "fallback_window_s",
-    "cfg___min_heat_on__s_":            "min_heat_on_s",
-    "cfg___min_heat_off__s_":           "min_heat_off_s",
-    "cfg___min_fan_on__s_":             "min_fan_on_s",
-    "cfg___min_fan_off__s_":            "min_fan_off_s",
-    "cfg___min_vent_on__s_":            "min_vent_on_s",
-    "cfg___min_vent_off__s_":           "min_vent_off_s",
-    "cfg_mister_engage__kpa_":          "mister_engage_kpa",
-    "cfg_mister_all__kpa_":             "mister_all_kpa",
+    "cfg___temp_low___f_": "temp_low",
+    "cfg___temp_high___f_": "temp_high",
+    "cfg_____heat_s2___f_": "d_heat_stage_2",
+    "cfg_____cool_s2___f_": "d_cool_stage_2",
+    "cfg___temp_hyst___f_": "temp_hysteresis",
+    "cfg___vpd_low__kpa_": "vpd_low",
+    "cfg___vpd_high__kpa_": "vpd_high",
+    "cfg___vpd_hyst__kpa_": "vpd_hysteresis",
+    "cfg___bias_heat___f_": "bias_heat",
+    "cfg___bias_cool___f_": "bias_cool",
+    "cfg___safety_min___f_": "safety_min",
+    "cfg___safety_max___f_": "safety_max",
+    "cfg___safety_vpd_min__kpa_": "safety_vpd_min",
+    "cfg___safety_vpd_max__kpa_": "safety_vpd_max",
+    "cfg___site_pressure__hpa_": "site_pressure_hpa",
+    "cfg___enthalpy_open__kj_kg___": "enthalpy_open",
+    "cfg___enthalpy_close__kj_kg___": "enthalpy_close",
+    "cfg___fan_burst__min_": "fan_burst_min",
+    "cfg___vent_bypass__min_": "vent_bypass_min",
+    "cfg___fog_burst__min_": "fog_burst_min",
+    "cfg___lead_rotate_timeout__s_": "lead_rotate_s",
+    "cfg___fallback_window__s_": "fallback_window_s",
+    "cfg___min_heat_on__s_": "min_heat_on_s",
+    "cfg___min_heat_off__s_": "min_heat_off_s",
+    "cfg___min_fan_on__s_": "min_fan_on_s",
+    "cfg___min_fan_off__s_": "min_fan_off_s",
+    "cfg___min_vent_on__s_": "min_vent_on_s",
+    "cfg___min_vent_off__s_": "min_vent_off_s",
+    "cfg_mister_engage__kpa_": "mister_engage_kpa",
+    "cfg_mister_all__kpa_": "mister_all_kpa",
     # Per-zone VPD targets (from crop band, pushed by dispatcher)
-    "vpd_target_south__kpa_":           "vpd_target_south",
-    "vpd_target_west__kpa_":            "vpd_target_west",
-    "vpd_target_east__kpa_":            "vpd_target_east",
-    "vpd_target_center__kpa_":          "vpd_target_center",
-    "mister_center_penalty":            "mister_center_penalty",
+    "vpd_target_south__kpa_": "vpd_target_south",
+    "vpd_target_west__kpa_": "vpd_target_west",
+    "vpd_target_east__kpa_": "vpd_target_east",
+    "vpd_target_center__kpa_": "vpd_target_center",
+    "mister_center_penalty": "mister_center_penalty",
     # Mister vent coordination
-    "sw_mister_closes_vent":            "sw_mister_closes_vent",
+    "sw_mister_closes_vent": "sw_mister_closes_vent",
 }
 
 # ──────────────────────────────────────────────────────────────

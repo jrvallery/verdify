@@ -25,9 +25,9 @@ import json
 import logging
 import os
 import sys
-import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+import urllib.request
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -46,8 +46,8 @@ DIGEST_MODE = "--digest" in sys.argv
 
 SEVERITY_EMOJI = {
     "critical": "\U0001f534",  # 🔴
-    "warn": "\U0001f7e1",      # 🟡
-    "info": "\u2139\ufe0f",    # ℹ️
+    "warn": "\U0001f7e1",  # 🟡
+    "info": "\u2139\ufe0f",  # ℹ️
 }
 
 
@@ -110,39 +110,39 @@ async def check_conditions(conn) -> list[dict]:
     alerts = []
 
     # 1. Sensor offline
-    rows = await conn.fetch(
-        "SELECT sensor_id, type, staleness_ratio FROM v_sensor_staleness WHERE is_stale = true"
-    )
+    rows = await conn.fetch("SELECT sensor_id, type, staleness_ratio FROM v_sensor_staleness WHERE is_stale = true")
     for r in rows:
         ratio = r["staleness_ratio"]
         ratio_str = f"{ratio:.0f}x" if ratio else "no data"
-        alerts.append({
-            "alert_type": "sensor_offline",
-            "severity": "warning",
-            "category": "sensor",
-            "sensor_id": r["sensor_id"],
-            "zone": None,
-            "message": f"Sensor `{r['sensor_id']}` offline ({ratio_str} expected interval)",
-            "details": {"type": r["type"], "staleness_ratio": float(ratio) if ratio else None},
-            "metric_value": float(ratio) if ratio else None,
-        })
+        alerts.append(
+            {
+                "alert_type": "sensor_offline",
+                "severity": "warning",
+                "category": "sensor",
+                "sensor_id": r["sensor_id"],
+                "zone": None,
+                "message": f"Sensor `{r['sensor_id']}` offline ({ratio_str} expected interval)",
+                "details": {"type": r["type"], "staleness_ratio": float(ratio) if ratio else None},
+                "metric_value": float(ratio) if ratio else None,
+            }
+        )
 
     # 2. Relay stuck
-    rows = await conn.fetch(
-        "SELECT equipment, hours_on, threshold_hours FROM v_relay_stuck WHERE is_stuck = true"
-    )
+    rows = await conn.fetch("SELECT equipment, hours_on, threshold_hours FROM v_relay_stuck WHERE is_stuck = true")
     for r in rows:
-        alerts.append({
-            "alert_type": "relay_stuck",
-            "severity": "warning",
-            "category": "equipment",
-            "sensor_id": f"equipment.{r['equipment']}",
-            "zone": None,
-            "message": f"Relay `{r['equipment']}` stuck ON for {r['hours_on']:.1f}h (threshold: {r['threshold_hours']}h)",
-            "details": {"hours_on": float(r["hours_on"]), "threshold": float(r["threshold_hours"])},
-            "metric_value": float(r["hours_on"]),
-            "threshold_value": float(r["threshold_hours"]),
-        })
+        alerts.append(
+            {
+                "alert_type": "relay_stuck",
+                "severity": "warning",
+                "category": "equipment",
+                "sensor_id": f"equipment.{r['equipment']}",
+                "zone": None,
+                "message": f"Relay `{r['equipment']}` stuck ON for {r['hours_on']:.1f}h (threshold: {r['threshold_hours']}h)",
+                "details": {"hours_on": float(r["hours_on"]), "threshold": float(r["threshold_hours"])},
+                "metric_value": float(r["hours_on"]),
+                "threshold_value": float(r["threshold_hours"]),
+            }
+        )
 
     # 3. VPD stress > 2 hours today
     row = await conn.fetchrow("""
@@ -152,17 +152,19 @@ async def check_conditions(conn) -> list[dict]:
     """)
     if row and row["vpd_stress_hours"] and float(row["vpd_stress_hours"]) > 2.0:
         hrs = float(row["vpd_stress_hours"])
-        alerts.append({
-            "alert_type": "vpd_stress",
-            "severity": "warning",
-            "category": "climate",
-            "sensor_id": "climate.vpd_avg",
-            "zone": None,
-            "message": f"VPD stress: {hrs:.1f} hours today (threshold: 2h)",
-            "details": {"vpd_stress_hours": hrs},
-            "metric_value": hrs,
-            "threshold_value": 2.0,
-        })
+        alerts.append(
+            {
+                "alert_type": "vpd_stress",
+                "severity": "warning",
+                "category": "climate",
+                "sensor_id": "climate.vpd_avg",
+                "zone": None,
+                "message": f"VPD stress: {hrs:.1f} hours today (threshold: 2h)",
+                "details": {"vpd_stress_hours": hrs},
+                "metric_value": hrs,
+                "threshold_value": 2.0,
+            }
+        )
 
     # 4. Temperature safety (freeze/overheat)
     row = await conn.fetchrow("""
@@ -173,29 +175,33 @@ async def check_conditions(conn) -> list[dict]:
     if row and row["temp_avg"] is not None:
         t = row["temp_avg"]
         if t < 40:
-            alerts.append({
-                "alert_type": "temp_safety",
-                "severity": "critical",
-                "category": "climate",
-                "sensor_id": "climate.temp_avg",
-                "zone": None,
-                "message": f"FREEZE WARNING — greenhouse temp {t:.1f}°F (threshold: 40°F)",
-                "details": {"temp_f": t, "threshold": 40},
-                "metric_value": t,
-                "threshold_value": 40.0,
-            })
+            alerts.append(
+                {
+                    "alert_type": "temp_safety",
+                    "severity": "critical",
+                    "category": "climate",
+                    "sensor_id": "climate.temp_avg",
+                    "zone": None,
+                    "message": f"FREEZE WARNING — greenhouse temp {t:.1f}°F (threshold: 40°F)",
+                    "details": {"temp_f": t, "threshold": 40},
+                    "metric_value": t,
+                    "threshold_value": 40.0,
+                }
+            )
         elif t > 100:
-            alerts.append({
-                "alert_type": "temp_safety",
-                "severity": "critical",
-                "category": "climate",
-                "sensor_id": "climate.temp_avg",
-                "zone": None,
-                "message": f"OVERHEAT WARNING — greenhouse temp {t:.1f}°F (threshold: 100°F)",
-                "details": {"temp_f": t, "threshold": 100},
-                "metric_value": t,
-                "threshold_value": 100.0,
-            })
+            alerts.append(
+                {
+                    "alert_type": "temp_safety",
+                    "severity": "critical",
+                    "category": "climate",
+                    "sensor_id": "climate.temp_avg",
+                    "zone": None,
+                    "message": f"OVERHEAT WARNING — greenhouse temp {t:.1f}°F (threshold: 100°F)",
+                    "details": {"temp_f": t, "threshold": 100},
+                    "metric_value": t,
+                    "threshold_value": 100.0,
+                }
+            )
 
     # 4b. VPD out of range (instantaneous check)
     if row and row["temp_avg"] is not None:
@@ -207,29 +213,33 @@ async def check_conditions(conn) -> list[dict]:
         if vpd_row and vpd_row["vpd_avg"] is not None:
             v = vpd_row["vpd_avg"]
             if v < 0.3:
-                alerts.append({
-                    "alert_type": "vpd_extreme",
-                    "severity": "warning",
-                    "category": "climate",
-                    "sensor_id": "climate.vpd_avg",
-                    "zone": None,
-                    "message": f"VPD dangerously low: {v:.2f} kPa (min threshold: 0.3 kPa)",
-                    "details": {"vpd_kpa": v, "threshold": 0.3},
-                    "metric_value": v,
-                    "threshold_value": 0.3,
-                })
+                alerts.append(
+                    {
+                        "alert_type": "vpd_extreme",
+                        "severity": "warning",
+                        "category": "climate",
+                        "sensor_id": "climate.vpd_avg",
+                        "zone": None,
+                        "message": f"VPD dangerously low: {v:.2f} kPa (min threshold: 0.3 kPa)",
+                        "details": {"vpd_kpa": v, "threshold": 0.3},
+                        "metric_value": v,
+                        "threshold_value": 0.3,
+                    }
+                )
             elif v > 3.0:
-                alerts.append({
-                    "alert_type": "vpd_extreme",
-                    "severity": "warning",
-                    "category": "climate",
-                    "sensor_id": "climate.vpd_avg",
-                    "zone": None,
-                    "message": f"VPD critically high: {v:.2f} kPa (max threshold: 3.0 kPa)",
-                    "details": {"vpd_kpa": v, "threshold": 3.0},
-                    "metric_value": v,
-                    "threshold_value": 3.0,
-                })
+                alerts.append(
+                    {
+                        "alert_type": "vpd_extreme",
+                        "severity": "warning",
+                        "category": "climate",
+                        "sensor_id": "climate.vpd_avg",
+                        "zone": None,
+                        "message": f"VPD critically high: {v:.2f} kPa (max threshold: 3.0 kPa)",
+                        "details": {"vpd_kpa": v, "threshold": 3.0},
+                        "metric_value": v,
+                        "threshold_value": 3.0,
+                    }
+                )
 
     # 5. Leak detected
     row = await conn.fetchrow("""
@@ -238,15 +248,17 @@ async def check_conditions(conn) -> list[dict]:
         ORDER BY ts DESC LIMIT 1
     """)
     if row and row["state"]:
-        alerts.append({
-            "alert_type": "leak_detected",
-            "severity": "critical",
-            "category": "water",
-            "sensor_id": "equipment.leak_detected",
-            "zone": None,
-            "message": f"LEAK DETECTED — sensor active since {row['ts'].strftime('%H:%M')} UTC",
-            "details": {"since": row["ts"].isoformat()},
-        })
+        alerts.append(
+            {
+                "alert_type": "leak_detected",
+                "severity": "critical",
+                "category": "water",
+                "sensor_id": "equipment.leak_detected",
+                "zone": None,
+                "message": f"LEAK DETECTED — sensor active since {row['ts'].strftime('%H:%M')} UTC",
+                "details": {"since": row["ts"].isoformat()},
+            }
+        )
 
     # 6. ESP32 reboot (uptime < 300s)
     row = await conn.fetchrow("""
@@ -255,46 +267,51 @@ async def check_conditions(conn) -> list[dict]:
         ORDER BY ts DESC LIMIT 1
     """)
     if row and row["uptime_s"] < 300:
-        alerts.append({
-            "alert_type": "esp32_reboot",
-            "severity": "info",
-            "category": "system",
-            "sensor_id": "diag.uptime_s",
-            "zone": None,
-            "message": f"ESP32 rebooted — uptime {row['uptime_s']:.0f}s, reason: {row.get('reset_reason', 'unknown')}",
-            "details": {"uptime_s": row["uptime_s"], "reset_reason": row.get("reset_reason")},
-        })
+        alerts.append(
+            {
+                "alert_type": "esp32_reboot",
+                "severity": "info",
+                "category": "system",
+                "sensor_id": "diag.uptime_s",
+                "zone": None,
+                "message": f"ESP32 rebooted — uptime {row['uptime_s']:.0f}s, reason: {row.get('reset_reason', 'unknown')}",
+                "details": {"uptime_s": row["uptime_s"], "reset_reason": row.get("reset_reason")},
+            }
+        )
 
     # 7. Planner heartbeat — no plan written in 8h
-    plan_age = await conn.fetchval(
-        "SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan"
-    )
+    plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")
     if plan_age is not None and plan_age > 28800:  # 8 hours
-        alerts.append({
-            "alert_type": "planner_stale",
-            "severity": "warning",
-            "category": "system",
-            "sensor_id": "system.planner",
-            "zone": None,
-            "message": f"No setpoint plan written in {plan_age // 3600}h — planner may be offline",
-            "details": {"seconds_since_plan": plan_age},
-        })
+        alerts.append(
+            {
+                "alert_type": "planner_stale",
+                "severity": "warning",
+                "category": "system",
+                "sensor_id": "system.planner",
+                "zone": None,
+                "message": f"No setpoint plan written in {plan_age // 3600}h — planner may be offline",
+                "details": {"seconds_since_plan": plan_age},
+            }
+        )
 
     # 8. Dispatcher heartbeat — log file stale >15 min
     import os
+
     disp_log = "/srv/verdify/state/setpoint-dispatcher.log"
     if os.path.exists(disp_log):
-        disp_age = int(datetime.now(timezone.utc).timestamp()) - int(os.path.getmtime(disp_log))
+        disp_age = int(datetime.now(UTC).timestamp()) - int(os.path.getmtime(disp_log))
         if disp_age > 900:  # 15 min
-            alerts.append({
-                "alert_type": "dispatcher_stale",
-                "severity": "warning",
-                "category": "system",
-                "sensor_id": "system.dispatcher",
-                "zone": None,
-                "message": f"Dispatcher log stale ({disp_age // 60}min) — cron may have stopped",
-                "details": {"seconds_since_dispatch": disp_age},
-            })
+            alerts.append(
+                {
+                    "alert_type": "dispatcher_stale",
+                    "severity": "warning",
+                    "category": "system",
+                    "sensor_id": "system.dispatcher",
+                    "zone": None,
+                    "message": f"Dispatcher log stale ({disp_age // 60}min) — cron may have stopped",
+                    "details": {"seconds_since_dispatch": disp_age},
+                }
+            )
 
     # 9. Heat1 manual override detection — Shelly shows power but ESP32 says heater is OFF
     heat_override = await conn.fetchrow("""
@@ -311,17 +328,19 @@ async def check_conditions(conn) -> list[dict]:
         """)
         if not heat1_on and not heat2_on:
             watts = int(heat_override["avg_watts"])
-            alerts.append({
-                "alert_type": "heat_manual_override",
-                "severity": "warning",
-                "category": "equipment",
-                "sensor_id": "equipment.heat1",
-                "zone": None,
-                "message": f"Heat circuit drawing {watts}W but ESP32 reports both heaters OFF. Check heat1 manual override switch.",
-                "details": {"watts_heat": watts, "heat1_state": heat1_on, "heat2_state": heat2_on},
-                "metric_value": float(watts),
-                "threshold_value": 1000.0,
-            })
+            alerts.append(
+                {
+                    "alert_type": "heat_manual_override",
+                    "severity": "warning",
+                    "category": "equipment",
+                    "sensor_id": "equipment.heat1",
+                    "zone": None,
+                    "message": f"Heat circuit drawing {watts}W but ESP32 reports both heaters OFF. Check heat1 manual override switch.",
+                    "details": {"watts_heat": watts, "heat1_state": heat1_on, "heat2_state": heat2_on},
+                    "metric_value": float(watts),
+                    "threshold_value": 1000.0,
+                }
+            )
 
     # 10. Reactive planning trigger — sustained stress with stale plan
     MARKER = "/srv/verdify/state/reactive-plan-needed.txt"
@@ -335,13 +354,13 @@ async def check_conditions(conn) -> list[dict]:
         marker_exists = os.path.exists(MARKER)
         marker_fresh = False
         if marker_exists:
-            marker_age = int(datetime.now(timezone.utc).timestamp()) - int(os.path.getmtime(MARKER))
+            marker_age = int(datetime.now(UTC).timestamp()) - int(os.path.getmtime(MARKER))
             marker_fresh = marker_age < 7200  # 2h cooldown
 
         if last_plan_age and last_plan_age > 7200 and not marker_fresh:
             trigger = "vpd_stress" if vpd_stress_active else "temp_safety"
             with open(MARKER, "w") as f:
-                f.write(f"{datetime.now(timezone.utc).isoformat()}|{trigger}|plan_age={last_plan_age}s\n")
+                f.write(f"{datetime.now(UTC).isoformat()}|{trigger}|plan_age={last_plan_age}s\n")
             log.info("REACTIVE TRIGGER: %s (last plan %ds ago) — wrote marker", trigger, last_plan_age)
 
     return alerts
@@ -361,13 +380,17 @@ async def post_digest(conn, slack_token: str) -> None:
     """)
 
     lines = ["*Daily Alert Digest*\n"]
-    lines.append(f"Last 24h: {stats_24h['new_24h']} new, {stats_24h['resolved_24h']} resolved, {stats_24h['currently_open']} open\n")
+    lines.append(
+        f"Last 24h: {stats_24h['new_24h']} new, {stats_24h['resolved_24h']} resolved, {stats_24h['currently_open']} open\n"
+    )
 
     if open_alerts:
         lines.append("*Open alerts:*")
         for a in open_alerts:
-            emoji = {"critical": "\U0001f534", "warning": "\U0001f7e1", "info": "\u2139\ufe0f"}.get(a["severity"], "\u2753")
-            age_h = (datetime.now(timezone.utc) - a["ts"]).total_seconds() / 3600
+            emoji = {"critical": "\U0001f534", "warning": "\U0001f7e1", "info": "\u2139\ufe0f"}.get(
+                a["severity"], "\u2753"
+            )
+            age_h = (datetime.now(UTC) - a["ts"]).total_seconds() / 3600
             lines.append(f"  {emoji} `{a['alert_type']}` — {a['sensor_id']} ({age_h:.0f}h ago)")
     else:
         lines.append("\u2705 No open alerts.")
@@ -420,7 +443,8 @@ async def main():
                 slack_ts = post_slack(slack_token, SLACK_CHANNEL, slack_text)
 
             # Insert into alert_log
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO alert_log (alert_type, severity, category, sensor_id, zone, message, details, source, slack_ts, metric_value, threshold_value)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'system', $8, $9, $10)
             """,
@@ -446,26 +470,25 @@ async def main():
                 AND slack_ts IS NULL AND ts < now() - interval '2 hours'
             """)
             for sa in stale_alerts:
-                escalation_text = format_alert("warning", sa["alert_type"],
-                    f"[ESCALATED 2h+] {sa['message']}")
+                escalation_text = format_alert("warning", sa["alert_type"], f"[ESCALATED 2h+] {sa['message']}")
                 esc_ts = post_slack(slack_token, SLACK_CHANNEL, escalation_text)
                 if esc_ts:
-                    await conn.execute(
-                        "UPDATE alert_log SET slack_ts = $1 WHERE id = $2",
-                        esc_ts, sa["id"]
-                    )
+                    await conn.execute("UPDATE alert_log SET slack_ts = $1 WHERE id = $2", esc_ts, sa["id"])
                     log.info("ESCALATED: sensor_offline for %s (2h+ open)", sa["sensor_id"])
 
         # --- Auto-resolve cleared alerts ---
         resolved_count = 0
         for key, row in open_keys.items():
             if key not in active_keys:
-                await conn.execute("""
+                await conn.execute(
+                    """
                     UPDATE alert_log
                     SET disposition = 'resolved', resolved_at = now(), resolved_by = 'system',
                         resolution = 'auto-resolved — condition cleared'
                     WHERE id = $1
-                """, row["id"])
+                """,
+                    row["id"],
+                )
 
                 # Post resolution to Slack thread
                 if row["slack_ts"]:

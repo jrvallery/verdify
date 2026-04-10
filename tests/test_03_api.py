@@ -2,18 +2,20 @@
 Test 03: API — All endpoints respond correctly.
 Tests the FastAPI application at api.verdify.ai via localhost.
 """
+
 import json
 import subprocess
-import pytest
 
 
 def api_get(path: str, host: str = "api.verdify.ai") -> tuple[int, str]:
     """Hit the API via curl through Traefik."""
     result = subprocess.run(
         ["curl", "-sk", f"https://127.0.0.1{path}", "-H", f"Host: {host}", "-w", "\n%{http_code}"],
-        capture_output=True, text=True, timeout=10
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
-    lines = result.stdout.strip().rsplit('\n', 1)
+    lines = result.stdout.strip().rsplit("\n", 1)
     body = lines[0] if len(lines) > 1 else ""
     status = int(lines[-1]) if lines[-1].isdigit() else 0
     return status, body
@@ -40,9 +42,9 @@ class TestAPISetpoints:
     def _parse_setpoints(body: str) -> dict:
         """Parse key=value format returned by /setpoints."""
         data = {}
-        for line in body.strip().split('\n'):
-            if '=' in line:
-                k, v = line.split('=', 1)
+        for line in body.strip().split("\n"):
+            if "=" in line:
+                k, v = line.split("=", 1)
                 try:
                     data[k.strip()] = float(v.strip())
                 except ValueError:

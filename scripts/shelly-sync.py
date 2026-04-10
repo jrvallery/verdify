@@ -21,10 +21,9 @@ Usage:
 import asyncio
 import json
 import logging
-import os
 import sys
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 
@@ -43,7 +42,9 @@ ENTITIES = {
     f"{SHELLY_PREFIX}_1_apparent_power": ("ch1_apparent_va", None),
 }
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [shelly-sync] %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [shelly-sync] %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 log = logging.getLogger(__name__)
 
 
@@ -68,9 +69,9 @@ def fetch_ha_states(entity_ids):
     results = {}
     for eid in entity_ids:
         url = f"{HA_URL}/api/states/{eid}"
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"
-        })
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+        )
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 results[eid] = json.loads(resp.read())
@@ -87,12 +88,12 @@ def fetch_ha_history(entity_id, start, end):
         day_end = min(current + timedelta(days=1), end)
         start_str = current.strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = day_end.strftime("%Y-%m-%dT%H:%M:%SZ")
-        url = (f"{HA_URL}/api/history/period/{start_str}"
-               f"?filter_entity_id={entity_id}"
-               f"&end_time={end_str}&minimal_response")
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"
-        })
+        url = (
+            f"{HA_URL}/api/history/period/{start_str}?filter_entity_id={entity_id}&end_time={end_str}&minimal_response"
+        )
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+        )
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read())
@@ -116,7 +117,7 @@ async def sync_current(conn):
         log.warning("No Shelly states returned")
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     vals = {}
     for eid, (col, conv) in ENTITIES.items():
         if eid in states:
@@ -131,24 +132,31 @@ async def sync_current(conn):
     watts_total = vals.get("ch0_power_w", 0) + vals.get("ch1_power_w", 0)
     kwh_total = vals.get("ch0_energy_kwh") or 0  # only ch0 has cumulative energy in HA
 
-    await conn.execute("""
+    await conn.execute(
+        """
         INSERT INTO energy (ts, watts_total, watts_heat, watts_fans, watts_other, kwh_today)
         VALUES ($1, $2, $3, $4, $5, $6)
     """,
-        now, watts_total,
+        now,
+        watts_total,
         vals.get("ch1_power_w", 0),  # heater channel
         0,  # can't distinguish fans from general circuit
         vals.get("ch0_power_w", 0),  # general circuit
         kwh_total,
     )
-    log.info("Shelly: total=%dW (ch0=%dW ch1=%dW) cumulative=%.1f kWh",
-             watts_total, vals.get("ch0_power_w", 0), vals.get("ch1_power_w", 0), kwh_total)
+    log.info(
+        "Shelly: total=%dW (ch0=%dW ch1=%dW) cumulative=%.1f kWh",
+        watts_total,
+        vals.get("ch0_power_w", 0),
+        vals.get("ch1_power_w", 0),
+        kwh_total,
+    )
 
 
 async def backfill(conn):
     """Pull Shelly history from HA and populate energy table."""
-    start = datetime(2025, 8, 1, tzinfo=timezone.utc)
-    end = datetime.now(timezone.utc)
+    start = datetime(2025, 8, 1, tzinfo=UTC)
+    end = datetime.now(UTC)
 
     # Fetch power readings for both channels
     log.info("Fetching Shelly ch0 power history...")
@@ -180,7 +188,9 @@ async def backfill(conn):
         return
 
     # Bulk insert, skip existing timestamps
-    await conn.execute("CREATE TEMP TABLE _shelly (ts TIMESTAMPTZ, watts_total FLOAT, watts_heat FLOAT, watts_fans FLOAT, watts_other FLOAT, kwh_today FLOAT)")
+    await conn.execute(
+        "CREATE TEMP TABLE _shelly (ts TIMESTAMPTZ, watts_total FLOAT, watts_heat FLOAT, watts_fans FLOAT, watts_other FLOAT, kwh_today FLOAT)"
+    )
     await conn.executemany("INSERT INTO _shelly VALUES ($1,$2,$3,$4,$5,$6)", rows)
 
     result = await conn.execute("""

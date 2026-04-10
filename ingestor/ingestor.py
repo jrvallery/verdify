@@ -11,37 +11,51 @@ Environment: loads from .env in same directory.
 """
 
 import asyncio
+import json
 import logging
-import os
 import math
-from datetime import datetime, timezone, time as dtime
-from collections import defaultdict
+import os
+import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import asyncpg
-import json
-import urllib.request
 import paho.mqtt.client as paho_mqtt
-
+import shared
 from aioesphomeapi import APIClient, APIConnectionError, LogLevel
 from aioesphomeapi.model import (
-    SensorState, BinarySensorState, TextSensorState, NumberState, SwitchState,
-    SensorInfo, BinarySensorInfo, TextSensorInfo, NumberInfo, SwitchInfo,
+    BinarySensorInfo,
+    NumberInfo,
+    SensorInfo,
+    SwitchInfo,
+    TextSensorInfo,
 )
 from dotenv import load_dotenv
-
 from entity_map import (
-    CLIMATE_MAP, EQUIPMENT_BINARY_MAP, EQUIPMENT_SWITCH_MAP, STATE_MAP,
-    SETPOINT_MAP, DIAGNOSTIC_MAP, DAILY_ACCUM_MAP, CFG_READBACK_MAP,
+    CFG_READBACK_MAP,
+    CLIMATE_MAP,
+    DAILY_ACCUM_MAP,
+    DIAGNOSTIC_MAP,
+    EQUIPMENT_BINARY_MAP,
+    EQUIPMENT_SWITCH_MAP,
+    SETPOINT_MAP,
+    STATE_MAP,
 )
 from tasks import (
-    water_flowing_sync, matview_refresh, shelly_sync, tempest_sync,
-    ha_sensor_sync, alert_monitor, setpoint_dispatcher,
-    forecast_sync, grow_light_daily, forecast_action_engine,
-    forecast_deviation_check, daily_summary_live,
+    alert_monitor,
+    daily_summary_live,
+    forecast_action_engine,
+    forecast_deviation_check,
+    forecast_sync,
+    grow_light_daily,
+    ha_sensor_sync,
+    matview_refresh,
+    setpoint_dispatcher,
+    shelly_sync,
+    tempest_sync,
+    water_flowing_sync,
 )
-import shared
 
 # ──────────────────────────────────────────────────────────────
 # Config
@@ -51,8 +65,8 @@ load_dotenv(Path(__file__).parent / ".env")
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")
 
 # ESP32 config: loaded from DB in main(), fallback to .env
-ESP32_HOST    = os.environ.get("ESP32_HOST", "192.168.10.111")
-ESP32_PORT    = int(os.environ.get("ESP32_PORT", 6053))
+ESP32_HOST = os.environ.get("ESP32_HOST", "192.168.10.111")
+ESP32_PORT = int(os.environ.get("ESP32_PORT", 6053))
 ESP32_API_KEY = os.environ.get("ESP32_API_KEY", "")
 
 DB_DSN = (
@@ -60,9 +74,9 @@ DB_DSN = (
     f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
 )
 
-CLIMATE_FLUSH_INTERVAL = 60   # seconds between climate row writes
-DIAG_FLUSH_INTERVAL    = 60   # seconds between diagnostics row writes
-LOG_FLUSH_INTERVAL     = 10   # seconds between log batch writes
+CLIMATE_FLUSH_INTERVAL = 60  # seconds between climate row writes
+DIAG_FLUSH_INTERVAL = 60  # seconds between diagnostics row writes
+LOG_FLUSH_INTERVAL = 10  # seconds between log batch writes
 
 # Loki push endpoint (nexus management VM)
 LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
@@ -93,14 +107,14 @@ class State:
 
     def __init__(self):
         # Fresh values received since last flush (cleared after each write)
-        self.climate: dict[str, float]   = {}
+        self.climate: dict[str, float] = {}
         # Last-known values with timestamps (never cleared, used as fallback)
         self.climate_latest: dict[str, tuple[float, datetime]] = {}
-        self.equipment: dict[str, bool]  = {}
-        self.system: dict[str, str]      = {}
+        self.equipment: dict[str, bool] = {}
+        self.system: dict[str, str] = {}
         self.setpoints: dict[str, float] = {}
         self.diagnostics: dict[str, Any] = {}
-        self.daily: dict[str, float]     = {}
+        self.daily: dict[str, float] = {}
 
         # Debounce: recently pushed params (suppress ESP32 echo)
         self.recently_pushed: dict[str, float] = {}  # param → timestamp
@@ -174,7 +188,7 @@ async def write_climate(pool: asyncpg.Pool, ts: datetime) -> None:
     if not cols:
         return
     cols_sql = ", ".join(["ts"] + cols)
-    placeholders = ", ".join([f"${i+1}" for i in range(len(cols) + 1)])
+    placeholders = ", ".join([f"${i + 1}" for i in range(len(cols) + 1)])
     values = [ts] + [merged.get(c) for c in cols]
     async with pool.acquire() as conn:
         await conn.execute(
@@ -247,7 +261,7 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
 
 async def write_daily_summary(pool: asyncpg.Pool) -> None:
     """Snapshot daily accumulator values. Called at 00:05 each day."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     today_str = str(today)
     if state._daily_snapshot_date == today_str:
         return  # already done today
@@ -330,7 +344,7 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
         return
     logs = state.pending_logs.copy()
     state.pending_logs.clear()
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
 
     # Write to DB
     async with pool.acquire() as conn:
@@ -345,12 +359,16 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
         ts_ns = str(int(ts.timestamp() * 1e9))
         for lvl, tag, msg in logs:
             loki_lines.append([ts_ns, f"[{lvl}] [{tag or 'esp32'}] {msg}"])
-        payload = json.dumps({
-            "streams": [{
-                "stream": {"job": "esp32", "host": "greenhouse"},
-                "values": loki_lines,
-            }]
-        }).encode()
+        payload = json.dumps(
+            {
+                "streams": [
+                    {
+                        "stream": {"job": "esp32", "host": "greenhouse"},
+                        "values": loki_lines,
+                    }
+                ]
+            }
+        ).encode()
         if LOKI_URL:
             req = urllib.request.Request(LOKI_URL, data=payload, headers={"Content-Type": "application/json"})
             urllib.request.urlopen(req, timeout=2)
@@ -363,15 +381,16 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
 def on_log_message(msg) -> None:
     """Callback for ESP32 log messages via aioesphomeapi."""
     import re
+
     level = LOG_LEVEL_MAP.get(msg.level, "UNKNOWN")
-    tag = msg.tag if hasattr(msg, 'tag') else None
-    raw = msg.message if hasattr(msg, 'message') else str(msg)
+    tag = msg.tag if hasattr(msg, "tag") else None
+    raw = msg.message if hasattr(msg, "message") else str(msg)
     # Decode bytes if needed, strip ANSI escape codes
     if isinstance(raw, bytes):
-        raw = raw.decode('utf-8', errors='replace')
+        raw = raw.decode("utf-8", errors="replace")
     if isinstance(tag, bytes):
-        tag = tag.decode('utf-8', errors='replace')
-    message = re.sub(r'\x1b\[[0-9;]*m', '', raw)  # Strip ANSI colors
+        tag = tag.decode("utf-8", errors="replace")
+    message = re.sub(r"\x1b\[[0-9;]*m", "", raw)  # Strip ANSI colors
     # Only capture INFO and above (skip DEBUG/VERBOSE flood)
     if msg.level <= LogLevel.LOG_LEVEL_INFO:
         state.pending_logs.append((level, tag, message))
@@ -473,6 +492,7 @@ def on_state_change(entity_state) -> None:
             if old != val:
                 # Suppress echo: if we pushed this param in the last 5s, skip DB write
                 import time as _time
+
                 pushed_at = state.recently_pushed.get(param, 0)
                 if _time.time() - pushed_at < 5.0:
                     return
@@ -491,7 +511,7 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
     while True:
         await asyncio.sleep(5)
         now = asyncio.get_event_loop().time()
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
 
         # Climate row every 60s
         if now - last_climate >= CLIMATE_FLUSH_INTERVAL:
@@ -515,7 +535,7 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                     async with pool.acquire() as conn:
                         await conn.executemany(
                             "INSERT INTO setpoint_snapshot (ts, parameter, value) VALUES ($1, $2, $3)",
-                            [(ts, param, val) for param, val in state.cfg_readback.items()]
+                            [(ts, param, val) for param, val in state.cfg_readback.items()],
                         )
                 except Exception as e:
                     log.error(f"setpoint_snapshot write error: {e}")
@@ -593,7 +613,7 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
 
         try:
             await client.connect(on_stop=on_stop, login=True)
-            connected_at = datetime.now(timezone.utc)
+            connected_at = datetime.now(UTC)
 
             # Log reconnect gap and backfill if applicable
             if last_connected_at:
@@ -633,11 +653,16 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             log.info("ESP32 client shared: %d entity keys for direct push", len(shared.esp32["keys"]))
 
             tracked = sum(
-                1 for obj_id in state.key_to_object_id.values()
-                if obj_id in CLIMATE_MAP or obj_id in EQUIPMENT_BINARY_MAP
-                or obj_id in EQUIPMENT_SWITCH_MAP or obj_id in STATE_MAP
-                or obj_id in SETPOINT_MAP or obj_id in DIAGNOSTIC_MAP
-                or obj_id in DAILY_ACCUM_MAP or obj_id in CFG_READBACK_MAP
+                1
+                for obj_id in state.key_to_object_id.values()
+                if obj_id in CLIMATE_MAP
+                or obj_id in EQUIPMENT_BINARY_MAP
+                or obj_id in EQUIPMENT_SWITCH_MAP
+                or obj_id in STATE_MAP
+                or obj_id in SETPOINT_MAP
+                or obj_id in DIAGNOSTIC_MAP
+                or obj_id in DAILY_ACCUM_MAP
+                or obj_id in CFG_READBACK_MAP
             )
             log.info(f"Tracking {tracked} entities across all maps (incl {len(CFG_READBACK_MAP)} cfg readback)")
 
@@ -656,11 +681,11 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
                     await asyncio.wait_for(connection_lost.wait(), timeout=60.0)
                     # If we get here, connection_lost was set
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 60s passed without disconnect — send keepalive ping
                     try:
                         await asyncio.wait_for(client.device_info(), timeout=10.0)
-                    except (asyncio.TimeoutError, Exception) as ping_err:
+                    except (TimeoutError, Exception) as ping_err:
                         log.warning(f"Keepalive ping failed: {ping_err}")
                         connection_lost.set()
                         break
@@ -688,17 +713,17 @@ async def task_loop(pool: asyncpg.Pool) -> None:
     """Run periodic tasks on defined intervals."""
     TASKS = [
         # (name, interval_seconds, coroutine_factory)
-        ("water_flowing",      60, water_flowing_sync),
-        ("matview_refresh",   300, matview_refresh),
-        ("shelly_sync",       300, shelly_sync),
-        ("tempest_sync",      300, tempest_sync),
-        ("ha_sensor_sync",    300, ha_sensor_sync),
-        ("alert_monitor",     300, alert_monitor),
+        ("water_flowing", 60, water_flowing_sync),
+        ("matview_refresh", 300, matview_refresh),
+        ("shelly_sync", 300, shelly_sync),
+        ("tempest_sync", 300, tempest_sync),
+        ("ha_sensor_sync", 300, ha_sensor_sync),
+        ("alert_monitor", 300, alert_monitor),
         # reactive_planner removed in Sprint 5 P6 — replaced by forecast deviation monitor
         ("setpoint_dispatch", 300, setpoint_dispatcher),
-        ("forecast_sync",    3600, forecast_sync),
-        ("forecast_actions",  900, forecast_action_engine),
-        ("deviation_check",  900, forecast_deviation_check),
+        ("forecast_sync", 3600, forecast_sync),
+        ("forecast_actions", 900, forecast_action_engine),
+        ("deviation_check", 900, forecast_deviation_check),
         ("daily_summary_live", 1800, daily_summary_live),
         ("grow_light_daily", 86400, grow_light_daily),
     ]
@@ -717,7 +742,7 @@ async def task_loop(pool: asyncpg.Pool) -> None:
                 last_run[name] = now
                 try:
                     await asyncio.wait_for(coro_fn(pool), timeout=120)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     log.error("Task %s timed out (120s)", name)
                 except Exception as e:
                     log.error("Task %s failed: %s", name, e)
@@ -753,6 +778,7 @@ async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
             pushed += 1
             # Mark as recently pushed to suppress echo (Bug #3 fix)
             import time as _time
+
             db_param = SETPOINT_MAP.get(obj_id)
             if db_param:
                 state.recently_pushed[db_param] = _time.time()
@@ -767,7 +793,8 @@ async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
 # ──────────────────────────────────────────────────────────────
 async def mqtt_loop(pool: asyncpg.Pool) -> None:
     """Subscribe to Sentinel MQTT for greenhouse occupancy."""
-    from config import MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
+    from config import MQTT_HOST, MQTT_PASS, MQTT_PORT, MQTT_USER
+
     TOPIC = "sentinel/occupancy/greenhouse_zone"
 
     last_state = None
@@ -775,10 +802,9 @@ async def mqtt_loop(pool: asyncpg.Pool) -> None:
 
     async def _write_occupancy(val: str) -> None:
         async with pool.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO system_state (ts, entity, value) VALUES (now(), 'occupancy', $1)", val)
+            await conn.execute("INSERT INTO system_state (ts, entity, value) VALUES (now(), 'occupancy', $1)", val)
         # Direct push to ESP32 — occupancy_mist_inhibit switch
-        occupied = (val == "occupied")
+        occupied = val == "occupied"
         try:
             pushed = await push_to_esp32([("occupancy_mist_inhibit", 1.0 if occupied else 0.0, "switch")])
             if pushed:
@@ -835,9 +861,12 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
     from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
 
     _ALIASES = {
-        "set_vpd_high_kpa": "vpd_high", "set_vpd_low_kpa": "vpd_low",
-        "set_temp_low__f": "temp_low", "set_temp_high__f": "temp_high",
-        "vpd_mister_engage_kpa": "mister_engage_kpa", "vpd_mister_all_kpa": "mister_all_kpa",
+        "set_vpd_high_kpa": "vpd_high",
+        "set_vpd_low_kpa": "vpd_low",
+        "set_temp_low__f": "temp_low",
+        "set_temp_high__f": "temp_high",
+        "vpd_mister_engage_kpa": "mister_engage_kpa",
+        "vpd_mister_all_kpa": "mister_all_kpa",
     }
 
     async def _on_notify(conn, pid, channel, payload):
@@ -888,16 +917,23 @@ async def backfill_gap(pool: asyncpg.Pool, gap_start: datetime, gap_end: datetim
         await conn.execute(
             "INSERT INTO data_gaps (start_ts, end_ts, duration_s, reason, backfill_status) "
             "VALUES ($1, $2, $3, 'ingestor_restart', 'snapshot_taken')",
-            gap_start, gap_end, duration)
+            gap_start,
+            gap_end,
+            duration,
+        )
 
         # Snapshot current equipment state (we know NOW, not what happened during gap)
         for obj_id in list(state.key_to_object_id.values()):
             from entity_map import EQUIPMENT_BINARY_MAP, EQUIPMENT_SWITCH_MAP
+
             equip = EQUIPMENT_BINARY_MAP.get(obj_id) or EQUIPMENT_SWITCH_MAP.get(obj_id)
             if equip and obj_id in state.equipment:
                 await conn.execute(
                     "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
-                    gap_end, equip, state.equipment[obj_id])
+                    gap_end,
+                    equip,
+                    state.equipment[obj_id],
+                )
 
     log.info("Gap backfill: %.0fs gap recorded, equipment state snapshot taken", duration)
 
@@ -916,8 +952,8 @@ async def main() -> None:
     try:
         async with pool.acquire() as conn:
             gh = await conn.fetchrow(
-                "SELECT esp32_host, esp32_port, esp32_api_key FROM greenhouses WHERE id = $1",
-                GREENHOUSE_ID)
+                "SELECT esp32_host, esp32_port, esp32_api_key FROM greenhouses WHERE id = $1", GREENHOUSE_ID
+            )
             if gh and gh["esp32_host"]:
                 ESP32_HOST = gh["esp32_host"]
                 ESP32_PORT = gh["esp32_port"] or 6053

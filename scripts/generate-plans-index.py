@@ -2,7 +2,6 @@
 """generate-plans-index.py — Regenerate plans/index.md with summary stats table."""
 
 import subprocess
-import json
 from datetime import date
 from pathlib import Path
 
@@ -53,14 +52,18 @@ def main():
         if len(row) >= 8:
             d = row[0].strip()
             link = f"[{d}](/plans/{d}/)"
-            lines.append(f"| {link} | {row[1].strip()} | {row[2].strip()}h | {row[3].strip()}h | {row[5].strip()}°F | ${row[4].strip()} | {row[6].strip()[:40]} | {row[7].strip()} |")
+            lines.append(
+                f"| {link} | {row[1].strip()} | {row[2].strip()}h | {row[3].strip()}h | {row[5].strip()}°F | ${row[4].strip()} | {row[6].strip()[:40]} | {row[7].strip()} |"
+            )
 
-    lines.extend([
-        "",
-        "---",
-        "",
-        "*Auto-generated from daily_summary + plan_journal data.*",
-    ])
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            "*Auto-generated from daily_summary + plan_journal data.*",
+        ]
+    )
 
     (CONTENT_DIR / "index.md").write_text("\n".join(lines))
     print(f"Plans index: {len(rows)} days")

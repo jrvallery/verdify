@@ -13,10 +13,9 @@ Usage:
     python3 standardize-dashboards.py [--dry-run] [--phase N]
 """
 
-import json
 import copy
+import json
 import sys
-import os
 from pathlib import Path
 
 DASHBOARD_DIR = Path("/srv/verdify/provisioning/dashboards/json")
@@ -99,11 +98,13 @@ FROM weather_forecast WHERE ts > now() AND ts < now() + interval '72 hours'
 ORDER BY date_trunc('hour', ts), fetched_at DESC)
 ORDER BY time"""
 
+
 def sql_equipment_dot(equipment, y_val, alias):
-    return f'SELECT $__time(ts), CASE WHEN state THEN {y_val} ELSE NULL END AS "{alias}" FROM equipment_state WHERE equipment=\'{equipment}\' AND $__timeFilter(ts) ORDER BY ts'
+    return f"SELECT $__time(ts), CASE WHEN state THEN {y_val} ELSE NULL END AS \"{alias}\" FROM equipment_state WHERE equipment='{equipment}' AND $__timeFilter(ts) ORDER BY ts"
 
 
 # ─── Canonical targets ───────────────────────────────────────────────
+
 
 def make_target(sql, ref_id, fmt="table"):
     return {"datasource": DS, "editorMode": "code", "format": fmt, "rawQuery": True, "rawSql": sql, "refId": ref_id}
@@ -111,78 +112,114 @@ def make_target(sql, ref_id, fmt="table"):
 
 # ─── Canonical overrides ─────────────────────────────────────────────
 
+
 def override_fixed_color(name, color, extra_props=None):
     props = [{"id": "color", "value": {"fixedColor": color, "mode": "fixed"}}]
     if extra_props:
         props.extend(extra_props)
     return {"matcher": {"id": "byName", "options": name}, "properties": props}
 
+
 def override_indoor_temp():
     return override_fixed_color("Indoor", "#73BF69", [{"id": "custom.lineWidth", "value": 2}])
+
 
 def override_indoor_vpd():
     return override_fixed_color("Indoor VPD", "#73BF69", [{"id": "custom.lineWidth", "value": 2}])
 
+
 def override_outdoor_forecast():
-    return override_fixed_color("Outdoor Forecast", "#8C8C8C", [
-        {"id": "custom.lineWidth", "value": 1},
-        {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}}
-    ])
+    return override_fixed_color(
+        "Outdoor Forecast",
+        "#8C8C8C",
+        [
+            {"id": "custom.lineWidth", "value": 1},
+            {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}},
+        ],
+    )
+
 
 def override_outdoor_vpd_forecast():
-    return override_fixed_color("Outdoor VPD Forecast", "#8C8C8C", [
-        {"id": "custom.lineWidth", "value": 1},
-        {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}}
-    ])
+    return override_fixed_color(
+        "Outdoor VPD Forecast",
+        "#8C8C8C",
+        [
+            {"id": "custom.lineWidth", "value": 1},
+            {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}},
+        ],
+    )
+
 
 def override_outdoor():
     return override_fixed_color("Outdoor", "#8C8C8C", [{"id": "custom.lineWidth", "value": 1}])
 
+
 def override_outdoor_vpd():
     return override_fixed_color("Outdoor VPD", "#8C8C8C", [{"id": "custom.lineWidth", "value": 1}])
 
+
 def override_band_high():
-    return override_fixed_color("Band High", "#56A64B", [
-        {"id": "custom.lineWidth", "value": 1},
-        {"id": "custom.fillBelowTo", "value": "Band Low"},
-        {"id": "custom.fillOpacity", "value": 10},
-        {"id": "custom.hideFrom", "value": {"legend": True, "tooltip": False, "viz": False}}
-    ])
+    return override_fixed_color(
+        "Band High",
+        "#56A64B",
+        [
+            {"id": "custom.lineWidth", "value": 1},
+            {"id": "custom.fillBelowTo", "value": "Band Low"},
+            {"id": "custom.fillOpacity", "value": 10},
+            {"id": "custom.hideFrom", "value": {"legend": True, "tooltip": False, "viz": False}},
+        ],
+    )
+
 
 def override_band_low():
-    return override_fixed_color("Band Low", "#56A64B", [
-        {"id": "custom.lineWidth", "value": 1},
-        {"id": "custom.hideFrom", "value": {"legend": True, "tooltip": False, "viz": False}}
-    ])
+    return override_fixed_color(
+        "Band Low",
+        "#56A64B",
+        [
+            {"id": "custom.lineWidth", "value": 1},
+            {"id": "custom.hideFrom", "value": {"legend": True, "tooltip": False, "viz": False}},
+        ],
+    )
+
 
 def override_solar_observed():
-    return override_fixed_color("Solar W/m\u00b2", "#FFA726", [
-        {"id": "custom.lineWidth", "value": 0},
-        {"id": "custom.fillOpacity", "value": 35},
-        {"id": "custom.gradientMode", "value": "opacity"},
-        {"id": "custom.axisPlacement", "value": "right"},
-        {"id": "unit", "value": "watt"},
-        {"id": "min", "value": 0},
-        {"id": "max", "value": 1200}
-    ])
+    return override_fixed_color(
+        "Solar W/m\u00b2",
+        "#FFA726",
+        [
+            {"id": "custom.lineWidth", "value": 0},
+            {"id": "custom.fillOpacity", "value": 35},
+            {"id": "custom.gradientMode", "value": "opacity"},
+            {"id": "custom.axisPlacement", "value": "right"},
+            {"id": "unit", "value": "watt"},
+            {"id": "min", "value": 0},
+            {"id": "max", "value": 1200},
+        ],
+    )
+
 
 def override_solar_forecast():
-    return override_fixed_color("Solar Forecast", "#FFD740", [
-        {"id": "custom.lineWidth", "value": 0},
-        {"id": "custom.fillOpacity", "value": 18},
-        {"id": "custom.gradientMode", "value": "opacity"},
-        {"id": "custom.axisPlacement", "value": "right"},
-        {"id": "unit", "value": "watt"},
-        {"id": "min", "value": 0},
-        {"id": "max", "value": 1200},
-        {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}}
-    ])
+    return override_fixed_color(
+        "Solar Forecast",
+        "#FFD740",
+        [
+            {"id": "custom.lineWidth", "value": 0},
+            {"id": "custom.fillOpacity", "value": 18},
+            {"id": "custom.gradientMode", "value": "opacity"},
+            {"id": "custom.axisPlacement", "value": "right"},
+            {"id": "unit", "value": "watt"},
+            {"id": "min", "value": 0},
+            {"id": "max", "value": 1200},
+            {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}},
+        ],
+    )
+
 
 def override_equip_dot(name, color):
-    return override_fixed_color(name, color, [
-        {"id": "custom.drawStyle", "value": "points"},
-        {"id": "custom.pointSize", "value": 3}
-    ])
+    return override_fixed_color(
+        name, color, [{"id": "custom.drawStyle", "value": "points"}, {"id": "custom.pointSize", "value": 3}]
+    )
+
 
 # Equipment dot overrides
 TEMP_EQUIP_OVERRIDES = [
@@ -235,7 +272,7 @@ CANONICAL_CUSTOM_DEFAULTS = {
     "showPoints": "never",
     "spanNulls": True,
     "stacking": {"group": "A", "mode": "none"},
-    "thresholdsStyle": {"mode": "off"}
+    "thresholdsStyle": {"mode": "off"},
 }
 
 CANONICAL_TOOLTIP = {"mode": "multi", "sort": "desc"}
@@ -243,6 +280,7 @@ CANONICAL_LEGEND = {"displayMode": "list", "placement": "bottom", "showLegend": 
 
 
 # ─── Transform functions ─────────────────────────────────────────────
+
 
 def apply_defaults(panel):
     """Apply canonical defaults to a timeseries panel."""
@@ -320,12 +358,14 @@ def add_band_overlay_temp(panel):
     panel["targets"].append(make_target(SQL_SOLAR_FORECAST, chr(ord(new_ref) + 2)))
 
     # Add band + solar overrides (keep existing zone color overrides)
-    panel["fieldConfig"]["overrides"].extend([
-        override_band_high(),
-        override_band_low(),
-        override_solar_observed(),
-        override_solar_forecast(),
-    ])
+    panel["fieldConfig"]["overrides"].extend(
+        [
+            override_band_high(),
+            override_band_low(),
+            override_solar_observed(),
+            override_solar_forecast(),
+        ]
+    )
 
 
 def add_band_overlay_vpd(panel):
@@ -336,10 +376,12 @@ def add_band_overlay_vpd(panel):
     new_ref = chr(ord("A") + len(panel["targets"]))
     panel["targets"].append(make_target(SQL_VPD_BAND, new_ref))
 
-    panel["fieldConfig"]["overrides"].extend([
-        override_band_high(),
-        override_band_low(),
-    ])
+    panel["fieldConfig"]["overrides"].extend(
+        [
+            override_band_high(),
+            override_band_low(),
+        ]
+    )
 
 
 def upgrade_solar_gradient(panel):
@@ -372,13 +414,11 @@ def add_rolling_avg_to_actual(panel, metric="temp"):
         if "Actual" in sql and "Indoor" in sql:
             if metric == "temp":
                 target["rawSql"] = sql.replace(
-                    "temp_avg AS",
-                    'avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS'
+                    "temp_avg AS", "avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS"
                 )
             elif metric == "vpd":
                 target["rawSql"] = sql.replace(
-                    "vpd_avg AS",
-                    'avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS'
+                    "vpd_avg AS", "avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS"
                 )
     # Fix colors
     for override in panel.get("fieldConfig", {}).get("overrides", []):
@@ -405,6 +445,7 @@ def tooltip_legend_sweep(panel):
 
 
 # ─── Dashboard-specific transforms ───────────────────────────────────
+
 
 def transform_climate_cooling(dash):
     for panel in dash["panels"]:
@@ -570,9 +611,9 @@ def main():
     phases = {phase_filter: ALL_PHASES[phase_filter]} if phase_filter else ALL_PHASES
 
     for phase_num, phase_files in sorted(phases.items()):
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Phase {phase_num}: {len(phase_files)} dashboards")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         for filename, transform_fn in phase_files.items():
             filepath = DASHBOARD_DIR / filename
@@ -599,7 +640,7 @@ def main():
     if dry_run:
         print("\nDry run complete. No files were modified.")
     else:
-        print(f"\nDone. Reload Grafana dashboards to see changes.")
+        print("\nDone. Reload Grafana dashboards to see changes.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,80 @@
+[project]
+name = "verdify"
+version = "1.0.0"
+description = "Greenhouse management platform — ESP32 control, AI planning, climate monitoring"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+dependencies = [
+    "asyncpg>=0.29",
+    "aioesphomeapi>=24.0",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+planner = [
+    "anthropic>=0.90",
+    "google-genai>=0.5",
+]
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.11",
+    "pre-commit>=4.0",
+]
+
+# ── Ruff (linter + formatter) ──────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "S",     # flake8-bandit (security)
+    "T20",   # flake8-print (catch stray prints)
+]
+ignore = [
+    "E501",  # line too long — we use 120, but don't hard-fail on long lines
+    "E701",  # multiple statements on one line — used in dense config/query sections
+    "E702",  # semicolons — used in dense config sections
+    "S101",  # assert in tests is fine
+    "S310",  # URL construction — internal trusted URLs only
+    "S603",  # subprocess calls are intentional (ESP32, docker exec)
+    "S607",  # partial path subprocess — we trust our own scripts
+    "S608",  # SQL injection — all queries use trusted internal inputs, not user data
+    "T201",  # print() is used intentionally in CLI scripts
+    "B904",  # raise from — too strict for our error handling style
+    "B023",  # function variable binding in loops — intentional in lambdas
+    "E402",  # import not at top — sys.path manipulation requires it
+    "E722",  # bare except — used for resilient error handling in long-running services
+    "S105",  # hardcoded passwords — these are local dev defaults, production uses env vars
+    "S110",  # try-except-pass — intentional resilience in ingestor/scripts
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S603", "S607"]
+"scripts/*" = ["T201", "S603", "S607", "S602", "S104", "F841", "W291"]
+"ingestor/*" = ["S110", "S701", "F811"]  # try/except/pass for resilience; jinja2 not user-facing; WATTAGES re-export
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ── Pytest ──────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--tb=short -q"

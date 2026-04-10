@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff lint
+        run: ruff check ingestor/ api/ scripts/*.py tests/
+      - name: Ruff format check
+        run: ruff format --check ingestor/ api/ scripts/*.py tests/
+
+  firmware:
+    name: Firmware Compile Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ESPHome
+        run: pip install esphome
+      - name: Validate firmware config
+        run: cd firmware && esphome config greenhouse-v2.yaml
+        # Note: full compile requires ESP-IDF toolchain (~1.5GB)
+        # Config validation catches YAML errors and missing references

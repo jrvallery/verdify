@@ -13,8 +13,8 @@ Usage:
 
 import os
 import re
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 import yaml
 
@@ -24,11 +24,13 @@ TEMPLATES_DIR = Path(os.environ.get("TEMPLATES_DIR", Path(__file__).parent.paren
 
 def _expand_env(val: str) -> str:
     """Expand ${VAR:-default} patterns in strings."""
+
     def _replace(m):
         var = m.group(1)
         default = m.group(3) if m.group(3) is not None else ""
         return os.environ.get(var, default)
-    return re.sub(r'\$\{([A-Z_]+)(:-([^}]*))?\}', _replace, val)
+
+    return re.sub(r"\$\{([A-Z_]+)(:-([^}]*))?\}", _replace, val)
 
 
 def _expand_dict(d):
@@ -81,9 +83,11 @@ class AIConfig:
         provider = self.config["models"][task]["provider"]
         if provider == "anthropic":
             import anthropic
+
             return anthropic.Anthropic(api_key=self.api_key(provider))
         else:
             from google import genai
+
             return genai.Client(api_key=self.api_key(provider))
 
     def template_path(self, task: str, template_key: str) -> Path:
@@ -101,7 +105,8 @@ class AIConfig:
 
     def render_template(self, task: str, template_key: str, **kwargs) -> str:
         """Render a Jinja2 template with the given variables."""
-        from jinja2 import Environment, BaseLoader
+        from jinja2 import BaseLoader, Environment
+
         env = Environment(loader=BaseLoader(), keep_trailing_newline=True)
         template = env.from_string(self.load_template(task, template_key))
         return template.render(**kwargs)

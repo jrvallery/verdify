@@ -51,16 +51,19 @@ def render_markdown(row: dict) -> str:
 
     # Compute derived fields
     fan_h = (float(row.get("runtime_fan1_min") or 0) + float(row.get("runtime_fan2_min") or 0)) / 60
-    mister_h = (float(row.get("runtime_mister_south_h") or 0)
-                + float(row.get("runtime_mister_west_h") or 0)
-                + float(row.get("runtime_mister_center_h") or 0))
+    mister_h = (
+        float(row.get("runtime_mister_south_h") or 0)
+        + float(row.get("runtime_mister_west_h") or 0)
+        + float(row.get("runtime_mister_center_h") or 0)
+    )
     heat1_h = float(row.get("runtime_heat1_min") or 0) / 60
     heat2_h = float(row.get("runtime_heat2_min") or 0) / 60
     fog_h = float(row.get("runtime_fog_min") or 0) / 60
     vent_h = float(row.get("runtime_vent_min") or 0) / 60
     gl_h = float(row.get("runtime_grow_light_min") or 0) / 60
-    total_cycles = sum(int(row.get(f"cycles_{e}") or 0) for e in
-                       ["fan1", "fan2", "heat1", "heat2", "fog", "vent", "grow_light"])
+    total_cycles = sum(
+        int(row.get(f"cycles_{e}") or 0) for e in ["fan1", "fan2", "heat1", "heat2", "fog", "vent", "grow_light"]
+    )
 
     lines = []
 
@@ -87,9 +90,15 @@ def render_markdown(row: dict) -> str:
     lines.append("")
     lines.append("| Metric | Min | Avg | Max |")
     lines.append("|--------|-----|-----|-----|")
-    lines.append(f"| Temperature (°F) | {fmt(row.get('temp_min'))} | {fmt(row.get('temp_avg'))} | {fmt(row.get('temp_max'))} |")
-    lines.append(f"| Relative Humidity (%) | {fmt(row.get('rh_min'))} | {fmt(row.get('rh_avg'))} | {fmt(row.get('rh_max'))} |")
-    lines.append(f"| VPD (kPa) | {fmt(row.get('vpd_min'), decimals=2)} | {fmt(row.get('vpd_avg'), decimals=2)} | {fmt(row.get('vpd_max'), decimals=2)} |")
+    lines.append(
+        f"| Temperature (°F) | {fmt(row.get('temp_min'))} | {fmt(row.get('temp_avg'))} | {fmt(row.get('temp_max'))} |"
+    )
+    lines.append(
+        f"| Relative Humidity (%) | {fmt(row.get('rh_min'))} | {fmt(row.get('rh_avg'))} | {fmt(row.get('rh_max'))} |"
+    )
+    lines.append(
+        f"| VPD (kPa) | {fmt(row.get('vpd_min'), decimals=2)} | {fmt(row.get('vpd_avg'), decimals=2)} | {fmt(row.get('vpd_max'), decimals=2)} |"
+    )
     lines.append("")
     lines.append(f"- **DLI:** {fmt(row.get('dli_final'))} mol/m²/d")
     lines.append(f"- **CO₂:** {fmt(row.get('co2_avg'), decimals=0)} ppm")
@@ -118,7 +127,9 @@ def render_markdown(row: dict) -> str:
     lines.append("|-----------|---------|--------|")
     lines.append(f"| Heater 1 (electric) | {heat1_h:.1f}h | {row.get('cycles_heat1') or 0} |")
     lines.append(f"| Heater 2 (gas) | {heat2_h:.1f}h | {row.get('cycles_heat2') or 0} |")
-    lines.append(f"| Fans (combined) | {fan_h:.1f}h | {(row.get('cycles_fan1') or 0) + (row.get('cycles_fan2') or 0)} |")
+    lines.append(
+        f"| Fans (combined) | {fan_h:.1f}h | {(row.get('cycles_fan1') or 0) + (row.get('cycles_fan2') or 0)} |"
+    )
     lines.append(f"| Fog | {fog_h:.1f}h | {row.get('cycles_fog') or 0} |")
     lines.append(f"| Vent | {vent_h:.1f}h | {row.get('cycles_vent') or 0} |")
     lines.append(f"| Misters (all zones) | {mister_h:.2f}h | — |")
@@ -136,8 +147,12 @@ def render_markdown(row: dict) -> str:
     # Energy & Cost
     lines.append("## Energy & Cost")
     lines.append("")
-    lines.append(f"- **Electricity:** {fmt(row.get('kwh_estimated'))} kWh (${fmt(row.get('cost_electric'), decimals=2)})")
-    lines.append(f"- **Gas:** {fmt(row.get('therms_estimated'), decimals=3)} therms (${fmt(row.get('cost_gas'), decimals=2)})")
+    lines.append(
+        f"- **Electricity:** {fmt(row.get('kwh_estimated'))} kWh (${fmt(row.get('cost_electric'), decimals=2)})"
+    )
+    lines.append(
+        f"- **Gas:** {fmt(row.get('therms_estimated'), decimals=3)} therms (${fmt(row.get('cost_gas'), decimals=2)})"
+    )
     lines.append(f"- **Water:** ${fmt(row.get('cost_water'), decimals=2)}")
     lines.append(f"- **Total:** **${fmt(row.get('cost_total'), decimals=2)}**")
     lines.append("")
@@ -172,9 +187,7 @@ async def main():
     try:
         if "--backfill" in sys.argv:
             # Find all dates with data but no vault file
-            rows = await conn.fetch(
-                "SELECT date FROM daily_summary WHERE temp_avg IS NOT NULL ORDER BY date"
-            )
+            rows = await conn.fetch("SELECT date FROM daily_summary WHERE temp_avg IS NOT NULL ORDER BY date")
             written = 0
             for r in rows:
                 filepath = VAULT_DIR / f"{r['date']}.md"

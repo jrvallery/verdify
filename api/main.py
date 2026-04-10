@@ -10,14 +10,14 @@ Usage:
 
 import os
 from contextlib import asynccontextmanager
-from datetime import date, datetime
-from typing import Optional
+from datetime import date
 
 import asyncpg
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 # ── DB Connection ──
+
 
 def get_db_dsn():
     if os.environ.get("DATABASE_URL"):
@@ -30,7 +30,9 @@ def get_db_dsn():
         return f"postgresql://{user}:{pw}@/{name}?host={host}"
     return f"postgresql://{user}:{pw}@{host}:5432/{name}"
 
+
 pool: asyncpg.Pool = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,6 +40,7 @@ async def lifespan(app: FastAPI):
     pool = await asyncpg.create_pool(get_db_dsn(), min_size=1, max_size=3, max_inactive_connection_lifetime=60)
     yield
     await pool.close()
+
 
 app = FastAPI(
     title="Verdify Crop Catalog API",
@@ -48,68 +51,71 @@ app = FastAPI(
 
 # ── Models ──
 
+
 class CropCreate(BaseModel):
     name: str
-    variety: Optional[str] = None
+    variety: str | None = None
     position: str
     zone: str
     planted_date: date
-    expected_harvest: Optional[date] = None
+    expected_harvest: date | None = None
     stage: str = "seed"
-    count: Optional[int] = None
-    seed_lot_id: Optional[str] = None
-    supplier: Optional[str] = None
+    count: int | None = None
+    seed_lot_id: str | None = None
+    supplier: str | None = None
     base_temp_f: float = 50.0
-    target_dli: Optional[float] = None
-    target_vpd_low: Optional[float] = None
-    target_vpd_high: Optional[float] = None
-    notes: Optional[str] = None
+    target_dli: float | None = None
+    target_vpd_low: float | None = None
+    target_vpd_high: float | None = None
+    notes: str | None = None
+
 
 class CropUpdate(BaseModel):
-    name: Optional[str] = None
-    variety: Optional[str] = None
-    position: Optional[str] = None
-    zone: Optional[str] = None
-    stage: Optional[str] = None
-    expected_harvest: Optional[date] = None
-    count: Optional[int] = None
-    target_dli: Optional[float] = None
-    target_vpd_low: Optional[float] = None
-    target_vpd_high: Optional[float] = None
-    notes: Optional[str] = None
+    name: str | None = None
+    variety: str | None = None
+    position: str | None = None
+    zone: str | None = None
+    stage: str | None = None
+    expected_harvest: date | None = None
+    count: int | None = None
+    target_dli: float | None = None
+    target_vpd_low: float | None = None
+    target_vpd_high: float | None = None
+    notes: str | None = None
+
 
 class ObservationCreate(BaseModel):
     obs_type: str = "health_check"
-    notes: Optional[str] = None
-    severity: Optional[int] = None
-    observer: Optional[str] = None
-    health_score: Optional[float] = Field(None, ge=0, le=1)
+    notes: str | None = None
+    severity: int | None = None
+    observer: str | None = None
+    health_score: float | None = Field(None, ge=0, le=1)
+
 
 class EventCreate(BaseModel):
     event_type: str
-    old_stage: Optional[str] = None
-    new_stage: Optional[str] = None
-    count: Optional[int] = None
-    operator: Optional[str] = None
-    notes: Optional[str] = None
+    old_stage: str | None = None
+    new_stage: str | None = None
+    count: int | None = None
+    operator: str | None = None
+    notes: str | None = None
+
 
 DEFAULT_GREENHOUSE = "vallery"
 
 # ── Setpoints (ESP32 pulls this every 5 min) ──
 
+
 @app.get("/setpoints")
 @app.get("/api/v1/greenhouses/{greenhouse_id}/setpoints")
 async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     """Return setpoints in key=value format for ESP32 consumption."""
-    # Full set of band-driven params (planner should not override these)
-    BAND_DRIVEN = {"temp_high", "temp_low", "vpd_high", "vpd_low",
-                    "vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center",
-                    "mister_engage_delay_s", "mister_all_delay_s", "mister_center_penalty"}
-    # Subset that fn_band_setpoints() actually returns (4 columns only)
+    # Band-driven params that fn_band_setpoints() computes from crop profiles
     BAND_COMPUTED = {"temp_high", "temp_low", "vpd_high", "vpd_low"}
     async with pool.acquire() as conn:
         # Get latest value per parameter (Tier 1 + band-driven only, no legacy params)
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT DISTINCT ON (parameter) parameter, value
             FROM setpoint_changes WHERE greenhouse_id = $1
               AND parameter IN (
@@ -130,7 +136,9 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min'
               )
             ORDER BY parameter, ts DESC
-        """, greenhouse_id)
+        """,
+            greenhouse_id,
+        )
         # For band-driven params, compute from crop science + sun angle
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
@@ -165,11 +173,14 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             # Band defaults — will be overwritten by planner values from setpoint_changes if present
             params.setdefault("mister_engage_kpa", round(vpd_hi, 2))
             params.setdefault("mister_all_kpa", round(vpd_hi + 0.3, 2))
-        outdoor = await conn.fetchrow("""
+        outdoor = await conn.fetchrow(
+            """
             SELECT outdoor_temp_f, outdoor_rh_pct FROM climate
             WHERE outdoor_temp_f IS NOT NULL AND greenhouse_id = $1
             ORDER BY ts DESC LIMIT 1
-        """, greenhouse_id)
+        """,
+            greenhouse_id,
+        )
         if outdoor:
             if outdoor["outdoor_temp_f"]:
                 params["outdoor_temp"] = round(outdoor["outdoor_temp_f"], 1)
@@ -178,9 +189,12 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     lines = [f"{k}={v}" for k, v in sorted(params.items())]
     lines.append("source=local")
     from fastapi.responses import PlainTextResponse
+
     return PlainTextResponse(content="\n".join(lines) + "\n")
 
+
 # ── Lights (ESP32 grow light control via MQTT command) ──
+
 
 @app.post("/api/v1/greenhouses/{greenhouse_id}/lights/{circuit}/{action}")
 async def control_lights(greenhouse_id: str, circuit: str, action: str):
@@ -190,13 +204,20 @@ async def control_lights(greenhouse_id: str, circuit: str, action: str):
     # For now, record the intent in the DB. The local Lutron bridge
     # or a future MQTT subscriber handles the actual switch.
     async with pool.acquire() as conn:
-        await conn.execute("""
+        await conn.execute(
+            """
             INSERT INTO equipment_state (ts, equipment, state, greenhouse_id)
             VALUES (now(), $1, $2, $3)
-        """, f"grow_light_{circuit}", action == "on", greenhouse_id)
+        """,
+            f"grow_light_{circuit}",
+            action == "on",
+            greenhouse_id,
+        )
     return {"light": circuit, "action": action, "greenhouse_id": greenhouse_id, "status": "recorded"}
 
+
 # ── Root + Health ──
+
 
 @app.get("/")
 async def root():
@@ -208,6 +229,7 @@ async def root():
         "status": "/api/v1/status",
     }
 
+
 @app.get("/health")
 async def health():
     try:
@@ -217,13 +239,16 @@ async def health():
     except Exception as e:
         return {"status": "degraded", "error": str(e)}
 
+
 # ── Greenhouse ──
+
 
 @app.get("/api/v1/greenhouses")
 async def list_greenhouses():
     async with pool.acquire() as conn:
         rows = await conn.fetch("SELECT * FROM greenhouses ORDER BY name")
     return [dict(r) for r in rows]
+
 
 @app.get("/api/v1/greenhouses/{greenhouse_id}")
 async def get_greenhouse(greenhouse_id: str):
@@ -236,14 +261,16 @@ async def get_greenhouse(greenhouse_id: str):
         result["active_crops"] = crops
     return result
 
+
 # ── Crops (greenhouse-scoped + legacy aliases) ──
+
 
 @app.get("/api/v1/greenhouses/{greenhouse_id}/crops")
 @app.get("/api/v1/crops")  # Legacy alias (defaults to vallery)
 async def list_crops(
     greenhouse_id: str = DEFAULT_GREENHOUSE,
-    zone: Optional[str] = None,
-    stage: Optional[str] = None,
+    zone: str | None = None,
+    stage: str | None = None,
     active: bool = True,
 ):
     query = "SELECT c.*, (SELECT ROUND(AVG(o.health_score)::numeric, 2) FROM observations o WHERE o.crop_id = c.id AND o.health_score IS NOT NULL AND o.ts > now() - interval '7 days') AS latest_health FROM crops c WHERE c.is_active = $1 AND c.greenhouse_id = $2"
@@ -267,18 +294,19 @@ async def list_crops(
 @app.get("/api/v1/crops/{crop_id}")
 async def get_crop(crop_id: int):
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM crops WHERE id = $1", crop_id)
+        row = await conn.fetchrow("SELECT * FROM crops WHERE id = $1", crop_id)
         if not row:
             raise HTTPException(404, "Crop not found")
 
         health = await conn.fetchval(
             "SELECT ROUND(AVG(health_score)::numeric, 2) FROM observations WHERE crop_id = $1 AND health_score IS NOT NULL AND ts > now() - interval '7 days'",
-            crop_id)
+            crop_id,
+        )
 
         recent_obs = await conn.fetch(
             "SELECT ts, obs_type, notes, health_score, observer FROM observations WHERE crop_id = $1 ORDER BY ts DESC LIMIT 5",
-            crop_id)
+            crop_id,
+        )
 
         result = dict(row)
         result["latest_health"] = float(health) if health else None
@@ -290,21 +318,39 @@ async def get_crop(crop_id: int):
 @app.post("/api/v1/crops", status_code=201)
 async def create_crop(crop: CropCreate, greenhouse_id: str = DEFAULT_GREENHOUSE):
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             INSERT INTO crops (name, variety, position, zone, planted_date, expected_harvest,
                 stage, count, seed_lot_id, supplier, base_temp_f, target_dli,
                 target_vpd_low, target_vpd_high, notes, greenhouse_id)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
             RETURNING *
-        """, crop.name, crop.variety, crop.position, crop.zone, crop.planted_date,
-            crop.expected_harvest, crop.stage, crop.count, crop.seed_lot_id,
-            crop.supplier, crop.base_temp_f, crop.target_dli,
-            crop.target_vpd_low, crop.target_vpd_high, crop.notes, greenhouse_id)
+        """,
+            crop.name,
+            crop.variety,
+            crop.position,
+            crop.zone,
+            crop.planted_date,
+            crop.expected_harvest,
+            crop.stage,
+            crop.count,
+            crop.seed_lot_id,
+            crop.supplier,
+            crop.base_temp_f,
+            crop.target_dli,
+            crop.target_vpd_low,
+            crop.target_vpd_high,
+            crop.notes,
+            greenhouse_id,
+        )
 
         # Record the planting event
         await conn.execute(
             "INSERT INTO crop_events (crop_id, event_type, new_stage, source, notes) VALUES ($1, 'planted', $2, 'api', $3)",
-            row["id"], crop.stage, f"Created via API: {crop.name} at {crop.position}")
+            row["id"],
+            crop.stage,
+            f"Created via API: {crop.name} at {crop.position}",
+        )
 
     return dict(row)
 
@@ -316,9 +362,22 @@ async def update_crop(crop_id: int, crop: CropUpdate):
         if not existing:
             raise HTTPException(404, "Crop not found")
 
-        ALLOWED_COLUMNS = {"name", "variety", "zone", "position", "stage", "planted_date",
-                           "expected_harvest", "notes", "is_active", "vpd_min", "vpd_max",
-                           "temp_min_f", "temp_max_f", "dli_target"}
+        ALLOWED_COLUMNS = {
+            "name",
+            "variety",
+            "zone",
+            "position",
+            "stage",
+            "planted_date",
+            "expected_harvest",
+            "notes",
+            "is_active",
+            "vpd_min",
+            "vpd_max",
+            "temp_min_f",
+            "temp_max_f",
+            "dli_target",
+        }
         updates = {k: v for k, v in crop.model_dump().items() if v is not None and k in ALLOWED_COLUMNS}
         if not updates:
             return dict(existing)
@@ -326,20 +385,23 @@ async def update_crop(crop_id: int, crop: CropUpdate):
         set_parts = []
         vals = []
         for i, (k, v) in enumerate(updates.items()):
-            set_parts.append(f"{k} = ${i+1}")
+            set_parts.append(f"{k} = ${i + 1}")
             vals.append(v)
         vals.append(crop_id)
         set_sql = ", ".join(set_parts)
 
         row = await conn.fetchrow(
-            f"UPDATE crops SET {set_sql}, updated_at = now() WHERE id = ${len(vals)} RETURNING *",
-            *vals)
+            f"UPDATE crops SET {set_sql}, updated_at = now() WHERE id = ${len(vals)} RETURNING *", *vals
+        )
 
         # Record stage change event if stage changed
         if "stage" in updates and updates["stage"] != existing["stage"]:
             await conn.execute(
                 "INSERT INTO crop_events (crop_id, event_type, old_stage, new_stage, source) VALUES ($1, 'stage_change', $2, $3, 'api')",
-                crop_id, existing["stage"], updates["stage"])
+                crop_id,
+                existing["stage"],
+                updates["stage"],
+            )
 
     return dict(row)
 
@@ -348,25 +410,28 @@ async def update_crop(crop_id: int, crop: CropUpdate):
 async def delete_crop(crop_id: int):
     async with pool.acquire() as conn:
         result = await conn.execute(
-            "UPDATE crops SET is_active = false, updated_at = now() WHERE id = $1 AND is_active = true",
-            crop_id)
+            "UPDATE crops SET is_active = false, updated_at = now() WHERE id = $1 AND is_active = true", crop_id
+        )
         if result == "UPDATE 0":
             raise HTTPException(404, "Crop not found or already inactive")
 
         await conn.execute(
             "INSERT INTO crop_events (crop_id, event_type, source, notes) VALUES ($1, 'removed', 'api', 'Deactivated via API')",
-            crop_id)
+            crop_id,
+        )
 
     return {"status": "deactivated", "id": crop_id}
 
+
 # ── Observations ──
+
 
 @app.get("/api/v1/crops/{crop_id}/observations")
 async def list_observations(crop_id: int, limit: int = 20):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM observations WHERE crop_id = $1 ORDER BY ts DESC LIMIT $2",
-            crop_id, limit)
+            "SELECT * FROM observations WHERE crop_id = $1 ORDER BY ts DESC LIMIT $2", crop_id, limit
+        )
     return [dict(r) for r in rows]
 
 
@@ -377,34 +442,48 @@ async def create_observation(crop_id: int, obs: ObservationCreate):
         if not crop:
             raise HTTPException(404, "Crop not found")
 
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             INSERT INTO observations (crop_id, zone, position, obs_type, notes, severity, observer, health_score, source)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'api')
             RETURNING *
-        """, crop_id, crop["zone"], crop["position"], obs.obs_type, obs.notes,
-            obs.severity, obs.observer, obs.health_score)
+        """,
+            crop_id,
+            crop["zone"],
+            crop["position"],
+            obs.obs_type,
+            obs.notes,
+            obs.severity,
+            obs.observer,
+            obs.health_score,
+        )
     return dict(row)
 
 
 @app.get("/api/v1/observations/recent")
 async def recent_observations(limit: int = 20):
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT o.*, c.name AS crop_name, c.zone AS crop_zone
             FROM observations o
             LEFT JOIN crops c ON o.crop_id = c.id
             ORDER BY o.ts DESC LIMIT $1
-        """, limit)
+        """,
+            limit,
+        )
     return [dict(r) for r in rows]
 
+
 # ── Events ──
+
 
 @app.get("/api/v1/crops/{crop_id}/events")
 async def list_events(crop_id: int, limit: int = 20):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM crop_events WHERE crop_id = $1 ORDER BY ts DESC LIMIT $2",
-            crop_id, limit)
+            "SELECT * FROM crop_events WHERE crop_id = $1 ORDER BY ts DESC LIMIT $2", crop_id, limit
+        )
     return [dict(r) for r in rows]
 
 
@@ -415,32 +494,46 @@ async def create_event(crop_id: int, event: EventCreate):
         if not crop:
             raise HTTPException(404, "Crop not found")
 
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             INSERT INTO crop_events (crop_id, event_type, old_stage, new_stage, count, operator, source, notes)
             VALUES ($1, $2, $3, $4, $5, $6, 'api', $7)
             RETURNING *
-        """, crop_id, event.event_type, event.old_stage, event.new_stage,
-            event.count, event.operator, event.notes)
+        """,
+            crop_id,
+            event.event_type,
+            event.old_stage,
+            event.new_stage,
+            event.count,
+            event.operator,
+            event.notes,
+        )
 
         # Auto-update crop stage if new_stage provided
         if event.new_stage:
             await conn.execute(
-                "UPDATE crops SET stage = $1, updated_at = now() WHERE id = $2",
-                event.new_stage, crop_id)
+                "UPDATE crops SET stage = $1, updated_at = now() WHERE id = $2", event.new_stage, crop_id
+            )
 
     return dict(row)
 
+
 # ── Health ──
+
 
 @app.get("/api/v1/crops/{crop_id}/health")
 async def crop_health(crop_id: int, days: int = 30):
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT ts, health_score, obs_type, notes, source
             FROM observations
             WHERE crop_id = $1 AND health_score IS NOT NULL AND ts > now() - ($2 || ' days')::interval
             ORDER BY ts
-        """, crop_id, str(days))
+        """,
+            crop_id,
+            str(days),
+        )
     return [dict(r) for r in rows]
 
 
@@ -448,7 +541,8 @@ async def crop_health(crop_id: int, days: int = 30):
 @app.get("/api/v1/health/summary")
 async def health_summary(greenhouse_id: str = DEFAULT_GREENHOUSE):
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT c.name, c.zone, c.position, c.stage,
                 ROUND(AVG(o.health_score)::numeric, 2) AS avg_health,
                 COUNT(o.id) AS obs_count,
@@ -458,10 +552,14 @@ async def health_summary(greenhouse_id: str = DEFAULT_GREENHOUSE):
             WHERE c.is_active = true AND c.greenhouse_id = $1
             GROUP BY c.id, c.name, c.zone, c.position, c.stage
             ORDER BY c.zone, c.position
-        """, greenhouse_id)
+        """,
+            greenhouse_id,
+        )
     return [dict(r) for r in rows]
 
+
 # ── Zones ──
+
 
 @app.get("/api/v1/zones")
 async def list_zones():
@@ -479,17 +577,19 @@ async def list_zones():
 @app.get("/api/v1/zones/{zone}")
 async def get_zone(zone: str):
     async with pool.acquire() as conn:
-        crops = await conn.fetch(
-            "SELECT * FROM crops WHERE zone = $1 AND is_active ORDER BY position", zone)
+        crops = await conn.fetch("SELECT * FROM crops WHERE zone = $1 AND is_active ORDER BY position", zone)
         if not crops:
             raise HTTPException(404, f"No crops in zone '{zone}'")
 
-        observations = await conn.fetch("""
+        observations = await conn.fetch(
+            """
             SELECT o.*, c.name AS crop_name
             FROM observations o JOIN crops c ON o.crop_id = c.id
             WHERE c.zone = $1 AND o.ts > now() - interval '7 days'
             ORDER BY o.ts DESC LIMIT 10
-        """, zone)
+        """,
+            zone,
+        )
 
     return {
         "zone": zone,
@@ -497,7 +597,9 @@ async def get_zone(zone: str):
         "recent_observations": [dict(o) for o in observations],
     }
 
+
 # ── System ──
+
 
 @app.get("/api/v1/status")
 async def status():

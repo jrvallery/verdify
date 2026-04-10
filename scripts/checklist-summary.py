@@ -50,7 +50,8 @@ async def main():
 
     conn = await asyncpg.connect(get_db_url())
     try:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT
                 t.task, t.zone, t.priority, t.frequency,
                 l.completed_at, l.completed_by, l.skipped, l.skip_reason, l.notes
@@ -58,22 +59,26 @@ async def main():
             LEFT JOIN daily_checklist_log l ON l.template_id = t.id AND l.date = $1
             WHERE t.is_active = true
             ORDER BY (l.completed_at IS NOT NULL) ASC, t.priority ASC, t.zone NULLS LAST
-        """, target)
+        """,
+            target,
+        )
 
         if fmt == "json":
             items = []
             for r in rows:
-                items.append({
-                    "task": r["task"],
-                    "zone": r["zone"],
-                    "priority": r["priority"],
-                    "frequency": r["frequency"],
-                    "completed": r["completed_at"] is not None,
-                    "completed_at": r["completed_at"].strftime("%H:%M") if r["completed_at"] else None,
-                    "completed_by": r["completed_by"],
-                    "skipped": r["skipped"] or False,
-                    "notes": r["notes"],
-                })
+                items.append(
+                    {
+                        "task": r["task"],
+                        "zone": r["zone"],
+                        "priority": r["priority"],
+                        "frequency": r["frequency"],
+                        "completed": r["completed_at"] is not None,
+                        "completed_at": r["completed_at"].strftime("%H:%M") if r["completed_at"] else None,
+                        "completed_by": r["completed_by"],
+                        "skipped": r["skipped"] or False,
+                        "notes": r["notes"],
+                    }
+                )
             print(json.dumps(items, indent=2))
         else:
             pending = sum(1 for r in rows if r["completed_at"] is None and not (r["skipped"] or False))

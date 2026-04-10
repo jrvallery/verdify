@@ -51,9 +51,7 @@ async def main():
 
     conn = await asyncpg.connect(get_db_url())
     try:
-        templates = await conn.fetch(
-            "SELECT id, task, frequency FROM daily_checklist_template WHERE is_active = true"
-        )
+        templates = await conn.fetch("SELECT id, task, frequency FROM daily_checklist_template WHERE is_active = true")
 
         inserted = 0
         skipped = 0
@@ -65,9 +63,7 @@ async def main():
             # Check if due: daily always, others based on last completion
             if min_days > 0:
                 last = await conn.fetchval(
-                    "SELECT MAX(date) FROM daily_checklist_log "
-                    "WHERE template_id = $1 AND completed_at IS NOT NULL",
-                    tid
+                    "SELECT MAX(date) FROM daily_checklist_log WHERE template_id = $1 AND completed_at IS NOT NULL", tid
                 )
                 if last and (target - last).days <= min_days:
                     continue  # Not due yet
@@ -76,7 +72,8 @@ async def main():
             result = await conn.execute(
                 "INSERT INTO daily_checklist_log (template_id, date) "
                 "VALUES ($1, $2) ON CONFLICT (template_id, date) DO NOTHING",
-                tid, target
+                tid,
+                target,
             )
             if result == "INSERT 0 1":
                 inserted += 1

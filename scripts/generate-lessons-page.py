@@ -10,7 +10,6 @@ import subprocess
 import sys
 from datetime import date
 
-
 DB_CONTAINER = "verdify-timescaledb"
 DB_USER = "verdify"
 DB_NAME = "verdify"
@@ -20,9 +19,10 @@ OUTPUT_PATH = "/srv/verdify/verdify-site/content/greenhouse/lessons.md"
 def query_db(sql: str) -> str:
     """Run a SQL query via docker exec and return raw output."""
     result = subprocess.run(
-        ["docker", "exec", DB_CONTAINER, "psql", "-U", DB_USER, "-d", DB_NAME,
-         "-t", "-A", "-F", "\t", "-c", sql],
-        capture_output=True, text=True, timeout=30,
+        ["docker", "exec", DB_CONTAINER, "psql", "-U", DB_USER, "-d", DB_NAME, "-t", "-A", "-F", "\t", "-c", sql],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         print(f"DB error: {result.stderr}", file=sys.stderr)
@@ -70,18 +70,20 @@ def fetch_lessons(active: bool) -> list[dict]:
         raw_ids = parts[6].strip("{}")
         plan_ids = [p.strip() for p in raw_ids.split(",") if p.strip()] if raw_ids else []
 
-        lessons.append({
-            "id": int(parts[0]),
-            "category": parts[1],
-            "condition": parts[2],
-            "lesson": parts[3],
-            "confidence": parts[4],
-            "times_validated": int(parts[5]),
-            "source_plan_ids": plan_ids,
-            "created_at": parts[7],
-            "last_validated": parts[8],
-            "superseded_by": int(parts[9]) if parts[9].strip() else None,
-        })
+        lessons.append(
+            {
+                "id": int(parts[0]),
+                "category": parts[1],
+                "condition": parts[2],
+                "lesson": parts[3],
+                "confidence": parts[4],
+                "times_validated": int(parts[5]),
+                "source_plan_ids": plan_ids,
+                "created_at": parts[7],
+                "last_validated": parts[8],
+                "superseded_by": int(parts[9]) if parts[9].strip() else None,
+            }
+        )
     return lessons
 
 

@@ -16,14 +16,12 @@ Usage:
 import asyncio
 import json
 import logging
-import os
-import sys
-import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+import urllib.request
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import asyncpg
-from zoneinfo import ZoneInfo
 
 LATITUDE = 40.1672
 LONGITUDE = -105.1019
@@ -80,34 +78,36 @@ def fetch_forecast() -> list[dict] | None:
         n = len(times)
         rows = []
         for i in range(n):
-            rows.append({
-                "ts": times[i],
-                "temp_f": hourly.get("temperature_2m", [None]*n)[i],
-                "rh_pct": hourly.get("relative_humidity_2m", [None]*n)[i],
-                "dew_point_f": hourly.get("dew_point_2m", [None]*n)[i],
-                "feels_like_f": hourly.get("apparent_temperature", [None]*n)[i],
-                "vpd_kpa": hourly.get("vapour_pressure_deficit", [None]*n)[i],
-                "precip_prob_pct": hourly.get("precipitation_probability", [None]*n)[i],
-                "precip_in": hourly.get("precipitation", [None]*n)[i],
-                "rain_in": hourly.get("rain", [None]*n)[i],
-                "snow_in": hourly.get("snowfall", [None]*n)[i],
-                "weather_code": hourly.get("weather_code", [None]*n)[i],
-                "cloud_cover_pct": hourly.get("cloud_cover", [None]*n)[i],
-                "cloud_cover_low_pct": hourly.get("cloud_cover_low", [None]*n)[i],
-                "cloud_cover_high_pct": hourly.get("cloud_cover_high", [None]*n)[i],
-                "wind_speed_mph": hourly.get("wind_speed_10m", [None]*n)[i],
-                "wind_dir_deg": hourly.get("wind_direction_10m", [None]*n)[i],
-                "wind_gust_mph": hourly.get("wind_gusts_10m", [None]*n)[i],
-                "solar_w_m2": hourly.get("shortwave_radiation", [None]*n)[i],
-                "direct_radiation_w_m2": hourly.get("direct_radiation", [None]*n)[i],
-                "diffuse_radiation_w_m2": hourly.get("diffuse_radiation", [None]*n)[i],
-                "uv_index": hourly.get("uv_index", [None]*n)[i],
-                "sunshine_duration_s": hourly.get("sunshine_duration", [None]*n)[i],
-                "surface_pressure_hpa": hourly.get("surface_pressure", [None]*n)[i],
-                "et0_mm": hourly.get("et0_fao_evapotranspiration", [None]*n)[i],
-                "soil_temp_f": hourly.get("soil_temperature_0cm", [None]*n)[i],
-                "visibility_m": hourly.get("visibility", [None]*n)[i],
-            })
+            rows.append(
+                {
+                    "ts": times[i],
+                    "temp_f": hourly.get("temperature_2m", [None] * n)[i],
+                    "rh_pct": hourly.get("relative_humidity_2m", [None] * n)[i],
+                    "dew_point_f": hourly.get("dew_point_2m", [None] * n)[i],
+                    "feels_like_f": hourly.get("apparent_temperature", [None] * n)[i],
+                    "vpd_kpa": hourly.get("vapour_pressure_deficit", [None] * n)[i],
+                    "precip_prob_pct": hourly.get("precipitation_probability", [None] * n)[i],
+                    "precip_in": hourly.get("precipitation", [None] * n)[i],
+                    "rain_in": hourly.get("rain", [None] * n)[i],
+                    "snow_in": hourly.get("snowfall", [None] * n)[i],
+                    "weather_code": hourly.get("weather_code", [None] * n)[i],
+                    "cloud_cover_pct": hourly.get("cloud_cover", [None] * n)[i],
+                    "cloud_cover_low_pct": hourly.get("cloud_cover_low", [None] * n)[i],
+                    "cloud_cover_high_pct": hourly.get("cloud_cover_high", [None] * n)[i],
+                    "wind_speed_mph": hourly.get("wind_speed_10m", [None] * n)[i],
+                    "wind_dir_deg": hourly.get("wind_direction_10m", [None] * n)[i],
+                    "wind_gust_mph": hourly.get("wind_gusts_10m", [None] * n)[i],
+                    "solar_w_m2": hourly.get("shortwave_radiation", [None] * n)[i],
+                    "direct_radiation_w_m2": hourly.get("direct_radiation", [None] * n)[i],
+                    "diffuse_radiation_w_m2": hourly.get("diffuse_radiation", [None] * n)[i],
+                    "uv_index": hourly.get("uv_index", [None] * n)[i],
+                    "sunshine_duration_s": hourly.get("sunshine_duration", [None] * n)[i],
+                    "surface_pressure_hpa": hourly.get("surface_pressure", [None] * n)[i],
+                    "et0_mm": hourly.get("et0_fao_evapotranspiration", [None] * n)[i],
+                    "soil_temp_f": hourly.get("soil_temperature_0cm", [None] * n)[i],
+                    "visibility_m": hourly.get("visibility", [None] * n)[i],
+                }
+            )
         return rows
     except Exception as e:
         log.warning("Forecast fetch failed: %s", e)
@@ -117,7 +117,7 @@ def fetch_forecast() -> list[dict] | None:
 async def main():
     db_url = get_db_url()
     conn = await asyncpg.connect(db_url)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         rows = fetch_forecast()
@@ -136,9 +136,10 @@ async def main():
         for row in rows:
             ts = datetime.fromisoformat(row["ts"])
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=DENVER).astimezone(timezone.utc)
+                ts = ts.replace(tzinfo=DENVER).astimezone(UTC)
 
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO weather_forecast
                     (ts, fetched_at, temp_f, rh_pct, wind_speed_mph, wind_dir_deg,
                      cloud_cover_pct, precip_prob_pct, solar_w_m2,
@@ -148,21 +149,37 @@ async def main():
                      surface_pressure_hpa, soil_temp_f, visibility_m)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
             """,
-                ts, now,
-                row.get("temp_f"), row.get("rh_pct"), row.get("wind_speed_mph"), row.get("wind_dir_deg"),
-                row.get("cloud_cover_pct"), row.get("precip_prob_pct"), row.get("solar_w_m2"),
-                row.get("dew_point_f"), row.get("feels_like_f"), row.get("vpd_kpa"),
-                row.get("precip_in"), row.get("rain_in"), row.get("snow_in"),
-                row.get("wind_gust_mph"), row.get("uv_index"), row.get("et0_mm"),
-                row.get("direct_radiation_w_m2"), row.get("diffuse_radiation_w_m2"),
-                row.get("sunshine_duration_s"), row.get("weather_code"),
-                row.get("cloud_cover_low_pct"), row.get("cloud_cover_high_pct"),
-                row.get("surface_pressure_hpa"), row.get("soil_temp_f"), row.get("visibility_m"),
+                ts,
+                now,
+                row.get("temp_f"),
+                row.get("rh_pct"),
+                row.get("wind_speed_mph"),
+                row.get("wind_dir_deg"),
+                row.get("cloud_cover_pct"),
+                row.get("precip_prob_pct"),
+                row.get("solar_w_m2"),
+                row.get("dew_point_f"),
+                row.get("feels_like_f"),
+                row.get("vpd_kpa"),
+                row.get("precip_in"),
+                row.get("rain_in"),
+                row.get("snow_in"),
+                row.get("wind_gust_mph"),
+                row.get("uv_index"),
+                row.get("et0_mm"),
+                row.get("direct_radiation_w_m2"),
+                row.get("diffuse_radiation_w_m2"),
+                row.get("sunshine_duration_s"),
+                row.get("weather_code"),
+                row.get("cloud_cover_low_pct"),
+                row.get("cloud_cover_high_pct"),
+                row.get("surface_pressure_hpa"),
+                row.get("soil_temp_f"),
+                row.get("visibility_m"),
             )
             inserted += 1
 
-        log.info("Forecast: %d rows inserted (16-day, 25 params), fetched_at=%s",
-                 inserted, now.strftime("%H:%M UTC"))
+        log.info("Forecast: %d rows inserted (16-day, 25 params), fetched_at=%s", inserted, now.strftime("%H:%M UTC"))
 
         stats = await conn.fetchrow(
             "SELECT count(*) AS cnt, MIN(ts) AS min_ts, MAX(ts) AS max_ts FROM weather_forecast"
