@@ -398,9 +398,10 @@ def main():
         log.error("Raw output (first 500 chars): %s", output[:500])
         sys.exit(1)
 
-    log.info("Plan %s: %d waypoints, hypothesis: %s",
+    transitions = plan.get("transitions", plan.get("waypoints", []))
+    log.info("Plan %s: %d transitions, hypothesis: %s",
              plan.get("plan_id", "?"),
-             len(plan.get("waypoints", [])),
+             len(transitions),
              plan.get("hypothesis", "?")[:100])
 
     # Write to DB
