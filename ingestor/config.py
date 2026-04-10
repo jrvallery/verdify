@@ -61,10 +61,10 @@ BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/mnt/iris/backups"))
 WATTAGES = {
     "heat1": 1500, "heat2": 0,  # heat2 is gas (BTU, not watts)
     "fan1": 52, "fan2": 52,
-    "fog": 1644, "vent": 10,
+    "fog": 800, "vent": 10,  # AquaFog XE 2000: centrifugal atomizer, ~750-850W actual
     "grow_light_main": 630, "grow_light_grow": 816,
 }
-HEAT2_BTU_PER_HOUR = 75000
+HEAT2_BTU_PER_HOUR = 54000  # Lennox nameplate 75K, altitude-derated ~20% at 5,090 ft
 BTU_PER_THERM = 100000
 
 # ── Utility rates ($/unit) ───────────────────────────────────────

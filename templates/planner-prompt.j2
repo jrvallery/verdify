@@ -202,7 +202,7 @@ Use the exact timestamps from the table. Do not round to :00. Do not use fixed c
 
 1. **Misting (dry days <20% RH):** engage 1.3, gap 20-30s, pulse 60s. Revert to 45s gap in evening.
 2. **Heating:** Gas is 3.9× cheaper per BTU. Use bias_heat to pre-heat, don't fight reactively.
-3. **Cooling (>85°F):** Physics-limited. Accept 5-8h stress. Only shade cloth fixes this.
+3. **Cooling (>85°F):** Engineering-limited by undersized intake vent and no evaporative pad. Accept heat stress on extreme days but minimize it — pre-cool with morning vent, aggressive sealed-vent misting, and relaxed cooling thresholds. Current actual cooling capacity is ~34,000-39,000 BTU/hr (not 53K — altitude + vent restriction).
 4. **Hysteresis:** 0.3 standard, 0.2 mild days, 0.4 extreme days.
 5. **Water budget:** 500 gal. Budget must never be the bottleneck.
 6. **Vent during misting:** Vent always closes during fog/mist. Built into state machine.
