@@ -613,7 +613,20 @@ interval:
           set_relay(R[3], willFan2);
           set_relay(R[4], willFog);
           // Vent hold timer — prevent rapid cycling
-          if(id(vent_hold_timer_ms) > 0){
+          // VPD misting/fog BYPASSES the hold timer: misting with vent open
+          // wastes 70%+ of water. The hold timer prevents chattering from
+          // thermal state transitions, but VPD-priority close is deliberate.
+          bool vpd_vent_override = (vpd_misting_active || vpd_fogging || vent_close_lead_active)
+                                   && !willVent && R[5].sw->state;
+          if(vpd_vent_override){
+            // Force vent closed immediately — bypass hold timer AND min_on
+            R[5].sw->turn_off();
+            R[5].last_off_ms = now_ms;
+            update_runtime(R[5]);
+            id(vent_hold_timer_ms) = 0;
+            ESP_LOGI("vent","VPD override: vent forced closed (mist=%d fog=%d lead=%d)",
+                     vpd_misting_active, vpd_fogging, vent_close_lead_active);
+          }else if(id(vent_hold_timer_ms) > 0){
             id(vent_hold_timer_ms) = (dt_ms >= id(vent_hold_timer_ms)) ? 0 : id(vent_hold_timer_ms) - dt_ms;
             // Don't change vent state during hold period
           }else{
