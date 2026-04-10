@@ -36,6 +36,7 @@ archive/
 
 # Quartz site (separate build, too large for main repo)
 verdify-site/
+site/public
 
 # OS
 .DS_Store
