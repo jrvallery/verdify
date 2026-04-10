@@ -265,6 +265,12 @@ SETPOINT_MAP: dict[str, str] = {
     "east_adjacency_factor":        "east_adjacency_factor",
     "min_fog_on__s_":               "min_fog_on_s",
     "min_fog_off__s_":              "min_fog_off_s",
+
+    # VPD-primary state machine (Phase 1)
+    "vpd_watch_dwell__s_":          "vpd_watch_dwell_s",
+    "mist_vent_close_lead__s_":     "mist_vent_close_lead_s",
+    "mist_max_closed_vent__s_":     "mist_max_closed_vent_s",
+    "fog_escalation__kpa_":         "fog_escalation_kpa",
 }
 
 # ──────────────────────────────────────────────────────────────
