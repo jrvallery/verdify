@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Greenhouse ID: from arg or default
 GREENHOUSE_ID="${1:-vallery}"
-if [ "$1" = "--greenhouse-id" ] && [ -n "${2:-}" ]; then
+if [ "${1:-}" = "--greenhouse-id" ] && [ -n "${2:-}" ]; then
     GREENHOUSE_ID="$2"
 fi
 

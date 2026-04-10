@@ -281,10 +281,13 @@ def parse_plan_json(text: str) -> dict:
     # Strip markdown code fences (may appear anywhere, not just at start)
     text = re.sub(r'```(?:json)?\s*\n', '', text)
     text = re.sub(r'\n```', '', text)
-    # Strip any preamble text before the first {
+    # Strip any preamble text before the first { and trailing text after last }
     brace_start = text.find('{')
     if brace_start > 0:
         text = text[brace_start:]
+    brace_end = text.rfind('}')
+    if brace_end > 0:
+        text = text[:brace_end + 1]
 
     try:
         return json.loads(text)
