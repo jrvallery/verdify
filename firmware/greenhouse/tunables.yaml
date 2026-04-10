@@ -731,7 +731,7 @@ number:
     id: num_mister_water_budget
     name: "Mister Water Budget (gal)"
     min_value: 20
-    max_value: 200
+    max_value: 600
     step: 10
     lambda: "return id(mister_water_budget_gal);"
     set_action:

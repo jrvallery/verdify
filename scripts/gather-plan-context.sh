@@ -21,16 +21,10 @@ echo "Generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ($(date '+%Y-%m-%d %H:%M %Z'))
 echo ""
 
 # ── 1. CORE PLANNING VIEW (7 JSON columns in one query) ───────────
-echo "--- IRIS PLANNING CONTEXT (DB view) ---"
-# Core view — conditions, zones, setpoints, health, summary (exclude bloated active_plan)
+echo "--- SYSTEM HEALTH ---"
 $DB -c "
-SELECT json_build_object(
-  'conditions', (SELECT row_to_json(v)->'conditions' FROM v_iris_planning_context v),
-  'zones', (SELECT row_to_json(v)->'zones' FROM v_iris_planning_context v),
-  'setpoints', (SELECT row_to_json(v)->'setpoints' FROM v_iris_planning_context v),
-  'system_health', (SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v),
-  'daily_summary', (SELECT row_to_json(v)->'daily_summary' FROM v_iris_planning_context v)
-);" 2>/dev/null
+SELECT row_to_json(v)->'system_health' FROM v_iris_planning_context v;
+" 2>/dev/null || echo "{}"
 echo ""
 
 # Active plan: compact transition summary (grouped by timestamp, Tier 1 only)
