@@ -64,6 +64,19 @@ esphome:
           if(id(target_temp_low_f) < 40 || id(target_temp_low_f) > 80){ id(target_temp_low_f) = 58; fixes++; }
           if(id(target_temp_high_f) < 60 || id(target_temp_high_f) > 100){ id(target_temp_high_f) = 82; fixes++; }
           if(id(target_vpd_high_kpa) < 0.5 || id(target_vpd_high_kpa) > 4){ id(target_vpd_high_kpa) = 2.0; fixes++; }
+          if(id(target_vpd_low_kpa) < 0.1 || id(target_vpd_low_kpa) > 2){ id(target_vpd_low_kpa) = 0.5; fixes++; }
+          // VPD-primary state machine globals
+          if(id(vpd_watch_dwell_s) < 15 || id(vpd_watch_dwell_s) > 120){ id(vpd_watch_dwell_s) = 60; fixes++; }
+          if(id(mist_max_closed_vent_s) < 60){ id(mist_max_closed_vent_s) = 600; fixes++; }
+          if(id(mist_thermal_relief_s) < 15){ id(mist_thermal_relief_s) = 90; fixes++; }
+          if(id(fog_escalation_kpa) < 0.1 || id(fog_escalation_kpa) > 1.0){ id(fog_escalation_kpa) = 0.4; fixes++; }
+          if(id(mister_pulse_on_s) < 15){ id(mister_pulse_on_s) = 60; fixes++; }
+          if(id(mister_pulse_gap_s) < 5){ id(mister_pulse_gap_s) = 45; fixes++; }
+          if(id(mister_engage_kpa) < 0.5 || id(mister_engage_kpa) > 3){ id(mister_engage_kpa) = 1.6; fixes++; }
+          if(id(min_fog_on_s) < 10){ id(min_fog_on_s) = 60; fixes++; }
+          if(id(min_fog_off_s) < 10){ id(min_fog_off_s) = 60; fixes++; }
+          if(id(fog_rh_ceiling_pct) < 50 || id(fog_rh_ceiling_pct) > 100){ id(fog_rh_ceiling_pct) = 90; fixes++; }
+          if(id(fog_min_temp_f) < 30 || id(fog_min_temp_f) > 70){ id(fog_min_temp_f) = 55; fixes++; }
           if(fixes > 0){ ESP_LOGE("boot","Fixed %d corrupted globals", fixes); }
           else { ESP_LOGI("boot","All globals valid"); }
 

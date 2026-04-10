@@ -101,7 +101,9 @@ DEFAULT_GREENHOUSE = "vallery"
 @app.get("/api/v1/greenhouses/{greenhouse_id}/setpoints")
 async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     """Return setpoints in key=value format for ESP32 consumption."""
-    BAND_DRIVEN = {"temp_high", "temp_low", "vpd_high", "vpd_low"}
+    BAND_DRIVEN = {"temp_high", "temp_low", "vpd_high", "vpd_low",
+                    "vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center",
+                    "mister_engage_delay_s", "mister_all_delay_s", "mister_center_penalty"}
     async with pool.acquire() as conn:
         # Get latest value per parameter (tactical + misc)
         rows = await conn.fetch("""
