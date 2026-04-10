@@ -90,12 +90,14 @@ These are computed from crop profiles every 5 minutes. Use `bias_heat_f`/`bias_c
 
 ## Transition Timing
 
-Derive timestamps from the TRANSITION MILESTONES in the live data — not fixed clock times.
+Anchor your transitions to these computed milestones — not fixed clock times:
+
+{{ milestones }}
 
 | Transition | Anchor | What Changes |
 |-----------|--------|-------------|
 | Pre-dawn | 1h before sunrise | Heat bias, tighten hysteresis before solar ramp |
-| Solar ramp | Sunrise → peak solar hour | Reduce pulse gap as VPD climbs |
+| Tree shade clears | See table above | East zone hydro gets direct sun, VPD ramp accelerates |
 | Peak stress | Peak VPD hour ± 1h | Most aggressive misting posture |
 | Cloud shift | Cloud transition time (if any) | Adjust posture at clear↔cloud boundary |
 | Afternoon decline | 2h after peak solar | Relax pulse gap, solar dropping |
