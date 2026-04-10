@@ -66,13 +66,13 @@ fi
 
   while IFS='|' read -r d plans temp_range vpd cost experiment score; do
     [[ -z "$d" ]] && continue
-    d=$(echo "$d" | xargs)
-    plans=$(echo "$plans" | xargs)
-    temp_range=$(echo "$temp_range" | xargs)
-    vpd=$(echo "$vpd" | xargs)
-    cost=$(echo "$cost" | xargs)
-    experiment=$(echo "$experiment" | xargs)
-    score=$(echo "$score" | xargs)
+    d="${d## }"; d="${d%% }"
+    plans="${plans## }"; plans="${plans%% }"
+    temp_range="${temp_range## }"; temp_range="${temp_range%% }"
+    vpd="${vpd## }"; vpd="${vpd%% }"
+    cost="${cost## }"; cost="${cost%% }"
+    experiment="${experiment## }"; experiment="${experiment%% }"
+    score="${score## }"; score="${score%% }"
     # Truncate experiment for table width
     experiment="${experiment:0:40}"
     echo "| [${d}](/plans/${d}) | ${plans} | ${temp_range}°F | ${vpd}h | \$${cost} | ${experiment} | ${score} |"

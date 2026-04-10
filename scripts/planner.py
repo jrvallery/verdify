@@ -338,7 +338,7 @@ async def write_plan_to_db(plan: dict, greenhouse_id: str) -> dict:
             filtered = [wp for wp in waypoints if wp["parameter"] in BAND_DRIVEN]
             waypoints = [wp for wp in waypoints if wp["parameter"] not in BAND_DRIVEN]
 
-            # Guard: if Gemini returned no usable waypoints, abort to preserve existing plan
+            # Guard: if model returned no usable waypoints, abort to preserve existing plan
             if not waypoints:
                 log.error("No usable waypoints after filtering — aborting to preserve existing plan")
                 return {"waypoints": 0, "journal": False, "validation": False,

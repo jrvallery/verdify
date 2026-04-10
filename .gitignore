@@ -31,5 +31,11 @@ grafana/data/
 *.dump
 *.bak
 
+# Archived / deprecated
+archive/
+
+# Quartz site (separate build, too large for main repo)
+verdify-site/
+
 # OS
 .DS_Store

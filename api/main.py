@@ -316,7 +316,10 @@ async def update_crop(crop_id: int, crop: CropUpdate):
         if not existing:
             raise HTTPException(404, "Crop not found")
 
-        updates = {k: v for k, v in crop.model_dump().items() if v is not None}
+        ALLOWED_COLUMNS = {"name", "variety", "zone", "position", "stage", "planted_date",
+                           "expected_harvest", "notes", "is_active", "vpd_min", "vpd_max",
+                           "temp_min_f", "temp_max_f", "dli_target"}
+        updates = {k: v for k, v in crop.model_dump().items() if v is not None and k in ALLOWED_COLUMNS}
         if not updates:
             return dict(existing)
 

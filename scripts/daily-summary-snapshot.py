@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 WATTAGE = {
     "heat1": 1500, "heat2": 0,  # heat2 is gas
     "fan1": 52, "fan2": 52,
-    "fog": 1644,
+    "fog": 800,  # AquaFog XE 2000: centrifugal atomizer ~750-850W
     "vent": 10,
     "grow_light_main": 816, "grow_light_grow": 630,  # main: 34x 2FT@24W=816W, grow: 15x 4FT@42W=630W, total 1446W
 }
