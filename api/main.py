@@ -101,14 +101,34 @@ DEFAULT_GREENHOUSE = "vallery"
 @app.get("/api/v1/greenhouses/{greenhouse_id}/setpoints")
 async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     """Return setpoints in key=value format for ESP32 consumption."""
+    # Full set of band-driven params (planner should not override these)
     BAND_DRIVEN = {"temp_high", "temp_low", "vpd_high", "vpd_low",
                     "vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center",
                     "mister_engage_delay_s", "mister_all_delay_s", "mister_center_penalty"}
+    # Subset that fn_band_setpoints() actually returns (4 columns only)
+    BAND_COMPUTED = {"temp_high", "temp_low", "vpd_high", "vpd_low"}
     async with pool.acquire() as conn:
-        # Get latest value per parameter (tactical + misc)
+        # Get latest value per parameter (Tier 1 + band-driven only, no legacy params)
         rows = await conn.fetch("""
             SELECT DISTINCT ON (parameter) parameter, value
             FROM setpoint_changes WHERE greenhouse_id = $1
+              AND parameter IN (
+                'vpd_hysteresis','vpd_watch_dwell_s','mister_engage_kpa','mister_all_kpa',
+                'mister_pulse_on_s','mister_pulse_gap_s','mister_vpd_weight','mister_water_budget_gal',
+                'mist_vent_close_lead_s','mist_max_closed_vent_s','mist_vent_reopen_delay_s','mist_thermal_relief_s',
+                'enthalpy_open','enthalpy_close','min_vent_on_s','min_vent_off_s',
+                'min_fog_on_s','min_fog_off_s','fog_escalation_kpa',
+                'd_cool_stage_2','bias_heat','bias_cool','min_heat_on_s','min_heat_off_s',
+                'temp_high','temp_low','vpd_high','vpd_low',
+                'vpd_target_south','vpd_target_west','vpd_target_east','vpd_target_center',
+                'mister_engage_delay_s','mister_all_delay_s','mister_center_penalty',
+                'lead_rotate_s','min_fan_on_s','min_fan_off_s',
+                'east_adjacency_factor','irrig_vpd_boost_pct','irrig_vpd_boost_threshold_hrs',
+                'fog_rh_ceiling_pct','fog_min_temp_f','fog_time_window_start','fog_time_window_end',
+                'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold',
+                'safety_min','safety_max','safety_vpd_min','safety_vpd_max',
+                'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min'
+              )
             ORDER BY parameter, ts DESC
         """, greenhouse_id)
         # For band-driven params, compute from crop science + sun angle
@@ -124,8 +144,8 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         # Otherwise, use the band value directly.
         if band_row:
             # Collect planner values (from v_active_plan only, not stale setpoint_changes)
-            planner_band = {r["parameter"]: r["value"] for r in plan_rows if r["parameter"] in BAND_DRIVEN}
-            for param in BAND_DRIVEN:
+            planner_band = {r["parameter"]: r["value"] for r in plan_rows if r["parameter"] in BAND_COMPUTED}
+            for param in BAND_COMPUTED:
                 band_val = round(float(band_row[param]), 1)
                 if param in planner_band:
                     pv = float(planner_band[param])

@@ -77,6 +77,18 @@ esphome:
           if(id(min_fog_off_s) < 10){ id(min_fog_off_s) = 60; fixes++; }
           if(id(fog_rh_ceiling_pct) < 50 || id(fog_rh_ceiling_pct) > 100){ id(fog_rh_ceiling_pct) = 90; fixes++; }
           if(id(fog_min_temp_f) < 30 || id(fog_min_temp_f) > 70){ id(fog_min_temp_f) = 55; fixes++; }
+          // Additional VPD-primary globals
+          if(id(hyst_vpd_kpa) < 0.1 || id(hyst_vpd_kpa) > 0.5){ id(hyst_vpd_kpa) = 0.3; fixes++; }
+          if(id(mister_all_kpa) < 1.0 || id(mister_all_kpa) > 2.5){ id(mister_all_kpa) = 1.9; fixes++; }
+          if(id(mister_vpd_weight) < 0.5 || id(mister_vpd_weight) > 5){ id(mister_vpd_weight) = 1.5; fixes++; }
+          if(id(mist_vent_close_lead_s) < 0 || id(mist_vent_close_lead_s) > 60){ id(mist_vent_close_lead_s) = 15; fixes++; }
+          if(id(mist_vent_reopen_delay_s) < 0 || id(mist_vent_reopen_delay_s) > 120){ id(mist_vent_reopen_delay_s) = 45; fixes++; }
+          if(id(enthalpy_open_kjkg) < -5 || id(enthalpy_open_kjkg) > 0){ /* valid range */ } else { id(enthalpy_open_kjkg) = -2; fixes++; }
+          if(id(enthalpy_close_kjkg) < 0 || id(enthalpy_close_kjkg) > 5){ /* valid range */ } else { id(enthalpy_close_kjkg) = 1; fixes++; }
+          if(id(stage2_cool_delta_f) < 2 || id(stage2_cool_delta_f) > 5){ id(stage2_cool_delta_f) = 3; fixes++; }
+          if(id(mister_water_budget_gal) < 100 || id(mister_water_budget_gal) > 600){ id(mister_water_budget_gal) = 500; fixes++; }
+          if(id(bias_heat_f) < -10 || id(bias_heat_f) > 10){ id(bias_heat_f) = 0; fixes++; }
+          if(id(bias_cool_f) < -10 || id(bias_cool_f) > 10){ id(bias_cool_f) = 0; fixes++; }
           if(fixes > 0){ ESP_LOGE("boot","Fixed %d corrupted globals", fixes); }
           else { ESP_LOGI("boot","All globals valid"); }
 
