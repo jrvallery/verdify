@@ -36,7 +36,8 @@ inline bool sensors_plausible(const SensorInputs& in) noexcept {
         && in.local_hour >= 0        && in.local_hour <= 23;
 }
 
-// ── R2-5: Occupancy blocks moisture injection ──
+// ── Occupancy blocks ALL moisture injection (fog + misters) ──
+// When occupied, do not seal for misting and do not fire fog.
 inline bool moisture_blocked_by_occupancy(const SensorInputs& in, const Setpoints& sp) noexcept {
     return sp.occupancy_inhibit && in.occupied;
 }
@@ -55,10 +56,19 @@ inline Mode determine_mode(
         state = initial_state();
     }
 
-    // ── R2-4: Plausibility guard (replaces bare isnan check) ──
+    // ── R2-4: Plausibility guard ──
     if (!sensors_plausible(in)) {
         state.mode = SENSOR_FAULT;
-        // R2-2: DO NOT overwrite mode_prev — preserve hysteresis for recovery
+        // R2-2: Preserve mode_prev for recovery hysteresis.
+        // But scrub ALL active control state — especially mist_stage,
+        // because ESPHome reads mist_stage to drive physical relays.
+        // A stale MIST_S2 during SENSOR_FAULT = misters running with no feedback.
+        state.mist_stage = MIST_WATCH;
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.mist_stage_timer_ms = 0;
+        state.relief_cycle_count = 0;
         return SENSOR_FAULT;
     }
 
@@ -93,6 +103,11 @@ inline Mode determine_mode(
     } else if (!vpd_above_band
         && prev != SEALED_MIST && prev != THERMAL_RELIEF) {
         state.vpd_watch_timer_ms = 0;
+        // VPD is below band and we're not in a sealed/relief cycle.
+        // Reset the relief cycle breaker so misting can re-engage next time.
+        // Without this, hitting max_relief_cycles permanently latches
+        // VENTILATE and the greenhouse can never mist again.
+        state.relief_cycle_count = 0;
     }
     bool vpd_wants_seal = vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
 
@@ -123,9 +138,12 @@ inline Mode determine_mode(
         }
     }
 
+    const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
+
     if (mode != SAFETY_COOL && mode != SAFETY_HEAT && mode != THERMAL_RELIEF) {
         if (was_sealed && !relief_just_expired) {
-            if (vpd_below_exit) {
+            // Exit sealed if: VPD resolved, sealed too long, OR someone is present
+            if (vpd_below_exit || moisture_blocked) {
                 mode = needs_cooling ? VENTILATE : IDLE;
                 state.sealed_timer_ms = 0;
                 state.vpd_watch_timer_ms = 0;
@@ -139,8 +157,9 @@ inline Mode determine_mode(
                 mode = SEALED_MIST;
                 state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
             }
-        // R2-6: Gate seal entry by relief cycle count
-        } else if (vpd_wants_seal && state.relief_cycle_count < sp.max_relief_cycles) {
+        // R2-6: Gate seal entry by relief cycle count AND occupancy
+        } else if (vpd_wants_seal && !moisture_blocked
+                   && state.relief_cycle_count < sp.max_relief_cycles) {
             mode = SEALED_MIST;
             state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
@@ -168,6 +187,7 @@ inline Mode determine_mode(
             && (mode != THERMAL_RELIEF)
             && (mode != VENTILATE)
             && !needs_cooling
+            && !moisture_blocked
             && (in.temp_f < (Thigh - sp.temp_hysteresis));
 
         if (in.vpd_kpa > sp.vpd_max_safe && can_seal_for_dryness) {
@@ -184,6 +204,11 @@ inline Mode determine_mode(
 
     // ── Mist stage progression ──
     if (mode == SEALED_MIST) {
+        // Occupancy blocks ALL moisture — freeze mist stage if occupied
+        if (moisture_blocked) {
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else {
         state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);
         switch (state.mist_stage) {
             case MIST_WATCH:
@@ -227,6 +252,7 @@ inline Mode determine_mode(
                 state.mist_stage_timer_ms = 0;
                 break;
         }
+        } // close occupancy else block
     } else {
         if (state.mist_stage != MIST_WATCH) {
             state.mist_stage = MIST_WATCH;

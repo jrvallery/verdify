@@ -132,6 +132,8 @@ inline Setpoints default_setpoints() {
     };
 }
 
+// Caller must invoke before passing setpoints to determine_mode().
+// This function is NOT called automatically — the contract is explicit.
 inline void validate_setpoints(Setpoints& sp) {
     sp.temp_high = std::max(50.0f, std::min(110.0f, sp.temp_high));
     sp.temp_low = std::max(30.0f, std::min(90.0f, sp.temp_low));
