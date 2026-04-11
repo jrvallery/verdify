@@ -14,7 +14,7 @@
 
 // ── Greenhouse operating modes (mutually exclusive, priority-ordered) ──
 enum Mode {
-    SENSOR_FAULT,     // NaN/invalid sensor readings — safe default posture
+    SENSOR_FAULT,     // NaN/invalid/implausible sensor readings — ALL relays off
     SAFETY_COOL,      // temp >= safety_max → vent open, both fans, fog allowed
     SAFETY_HEAT,      // temp <= safety_min → vent closed, both heaters
     SEALED_MIST,      // VPD > band ceiling → vent closed, fans off, misters pulsing
@@ -29,8 +29,6 @@ static_assert(IDLE == 7, "Mode enum ordering changed — update MODE_NAMES and s
 // Mister sub-stages within SEALED_MIST (owned by this code, not ESPHome)
 enum MistStage { MIST_WATCH, MIST_S1, MIST_S2, MIST_FOG };
 
-// Mode name lookup (same order as enum)
-// C1 FIX: inline constexpr prevents per-TU duplication
 inline constexpr const char* MODE_NAMES[] = {
     "SENSOR_FAULT", "SAFETY_COOL", "SAFETY_HEAT", "SEALED_MIST",
     "THERMAL_RELIEF", "VENTILATE", "DEHUM_VENT", "IDLE"
@@ -54,59 +52,52 @@ struct SensorInputs {
 
 // ── Setpoints (band + planner tunables + firmware config) ──
 struct Setpoints {
-    // Band (from crop profiles, updated every 5 min by dispatcher)
-    float temp_high;            // band ceiling (°F)
-    float temp_low;             // band floor (°F)
-    float vpd_high;             // VPD ceiling (kPa)
-    float vpd_low;              // VPD floor (kPa)
-    // Planner tunables
-    float bias_cool;            // shift cooling threshold
-    float bias_heat;            // shift heating threshold
-    float vpd_hysteresis;       // exit hysteresis for sealed mist + dehum (kPa)
-    float temp_hysteresis;      // exit hysteresis for VENTILATE (°F)
-    float heat_hysteresis;      // entry offset for gas heater below temp_low (°F)
-    float dH2;                  // heat stage 2 delta: electric pre-heat zone above temp_low
-    float dC2;                  // cool stage 2 delta: aggressive cooling trigger above temp_high
-    // Safety limits
-    float safety_max;           // absolute temp ceiling (°F)
-    float safety_min;           // absolute temp floor (°F)
-    float vpd_max_safe;         // absolute VPD ceiling (kPa)
-    float vpd_min_safe;         // absolute VPD floor (kPa)
-    // Timing
-    uint32_t sealed_max_ms;     // max sealed time before thermal relief
-    uint32_t relief_duration_ms;// thermal relief vent-open duration
-    uint32_t vpd_watch_dwell_ms;// observation dwell before sealing
-    uint32_t mist_s2_delay_ms;  // time in S1 before escalating to S2
-    // Fog configuration
-    float fog_escalation_kpa;   // VPD above band ceiling that triggers fog
-    float fog_rh_ceiling;       // firmware safety gate (%)
-    float fog_min_temp;         // firmware safety gate (°F)
-    int   fog_window_start;     // firmware safety gate (hour)
-    int   fog_window_end;       // firmware safety gate (hour)
-    // Dehumidification
-    float dehum_aggressive_kpa; // VPD threshold for dual-fan dehum (default 0.6)
-    // Occupancy
-    bool  occupancy_inhibit;    // occupancy blocks fog/mist
-    // Economiser
-    bool  econ_block;           // economiser blocks venting
+    float temp_high;
+    float temp_low;
+    float vpd_high;
+    float vpd_low;
+    float bias_cool;
+    float bias_heat;
+    float vpd_hysteresis;
+    float temp_hysteresis;
+    float heat_hysteresis;
+    float dH2;
+    float dC2;
+    float safety_max;
+    float safety_min;
+    float vpd_max_safe;
+    float vpd_min_safe;
+    uint32_t sealed_max_ms;
+    uint32_t relief_duration_ms;
+    uint32_t vpd_watch_dwell_ms;
+    uint32_t mist_s2_delay_ms;
+    uint32_t max_relief_cycles;   // R2-6: consecutive sealed→relief cycles before forced vent
+    float fog_escalation_kpa;
+    float fog_rh_ceiling;
+    float fog_min_temp;
+    int   fog_window_start;
+    int   fog_window_end;
+    float dehum_aggressive_kpa;
+    bool  occupancy_inhibit;
+    bool  econ_block;
 };
 
-// C2 FIX: Sentinel for corruption detection
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
+static constexpr float ECON_HEAT_MARGIN_F = 5.0f;
 
-// ── Persistent control state (survives across 5s evaluation cycles) ──
+// ── Persistent control state ──
 struct ControlState {
-    uint32_t sentinel;          // C2: must equal STATE_SENTINEL or state is corrupt
-    Mode mode;                  // current mode (written at end of determine_mode)
-    Mode mode_prev;             // previous cycle's mode (read at top of determine_mode)
-    MistStage mist_stage;       // mister escalation stage (owned by this code)
-    uint32_t sealed_timer_ms;   // time spent in current sealed period
-    uint32_t relief_timer_ms;   // time spent in current relief period
-    uint32_t vpd_watch_timer_ms;// dwell timer before sealing
-    uint32_t mist_stage_timer_ms;// time in current mist stage (for escalation)
+    uint32_t sentinel;
+    Mode mode;
+    Mode mode_prev;
+    MistStage mist_stage;
+    uint32_t sealed_timer_ms;
+    uint32_t relief_timer_ms;
+    uint32_t vpd_watch_timer_ms;
+    uint32_t mist_stage_timer_ms;
+    uint32_t relief_cycle_count;
 };
 
-// ── Relay outputs (computed from mode, applied to hardware) ──
 struct RelayOutputs {
     bool heat1;
     bool heat2;
@@ -116,14 +107,10 @@ struct RelayOutputs {
     bool vent;
 };
 
-// ── Saturating addition for timers (C5 FIX) ──
-inline uint32_t sat_add(uint32_t a, uint32_t b) {
-    uint32_t result = a + b;
-    return (result < a) ? UINT32_MAX : result;  // overflow → cap at max
+// ── Saturating addition (prevents uint32_t overflow at 49.7 days) ──
+inline uint32_t sat_add(uint32_t a, uint32_t b) noexcept {
+    return (a > UINT32_MAX - b) ? UINT32_MAX : a + b;
 }
-
-// Q2 FIX: Named constant for econ heat margin
-static constexpr float ECON_HEAT_MARGIN_F = 5.0f;
 
 // ── Defaults ──
 inline Setpoints default_setpoints() {
@@ -137,6 +124,7 @@ inline Setpoints default_setpoints() {
         .vpd_max_safe = 3.0f, .vpd_min_safe = 0.3f,
         .sealed_max_ms = 600000, .relief_duration_ms = 90000,
         .vpd_watch_dwell_ms = 60000, .mist_s2_delay_ms = 300000,
+        .max_relief_cycles = 3,
         .fog_escalation_kpa = 0.4f, .fog_rh_ceiling = 90.0f,
         .fog_min_temp = 55.0f, .fog_window_start = 7, .fog_window_end = 17,
         .dehum_aggressive_kpa = 0.6f,
@@ -144,7 +132,6 @@ inline Setpoints default_setpoints() {
     };
 }
 
-// R7 FIX: Clamp setpoints to sane ranges (call before determine_mode)
 inline void validate_setpoints(Setpoints& sp) {
     sp.temp_high = std::max(50.0f, std::min(110.0f, sp.temp_high));
     sp.temp_low = std::max(30.0f, std::min(90.0f, sp.temp_low));
@@ -158,6 +145,7 @@ inline void validate_setpoints(Setpoints& sp) {
     sp.safety_min = std::max(30.0f, std::min(sp.temp_low - 5.0f, sp.safety_min));
     sp.sealed_max_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.sealed_max_ms));
     sp.relief_duration_ms = std::max(uint32_t(15000), std::min(uint32_t(600000), sp.relief_duration_ms));
+    sp.max_relief_cycles = std::max(uint32_t(1), std::min(uint32_t(10), sp.max_relief_cycles));
 }
 
 inline ControlState initial_state() {
@@ -166,6 +154,7 @@ inline ControlState initial_state() {
         .mode = IDLE, .mode_prev = IDLE,
         .mist_stage = MIST_WATCH,
         .sealed_timer_ms = 0, .relief_timer_ms = 0,
-        .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0
+        .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
+        .relief_cycle_count = 0
     };
 }

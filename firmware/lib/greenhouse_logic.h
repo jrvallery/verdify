@@ -6,24 +6,43 @@
  * SINGLE SOURCE OF TRUTH. Same compiled code on ESP32 and x86.
  * ZERO ESPHome dependencies.
  *
- * NOTE: determine_mode() mutates ControlState (timers, mode_prev).
- * resolve_equipment() is pure (reads only, no side effects).
+ * determine_mode() mutates ControlState (timers, mode_prev, mist_stage).
+ * resolve_equipment() is pure (reads only).
  *
- * HARDWARE DEPENDENCIES (not enforced here, must be enforced by caller):
- *   - Relay minimum on/off times (ESPHome set_relay with min_on_ms/min_off_ms)
- *   - Gas heater minimum off time (MIN_HEAT_OFF_MS, typically 300s)
- *   - Vent actuator travel time (1-5 min, ESPHome min_vent_on_s/min_vent_off_s)
+ * HARDWARE DEPENDENCIES (enforced by caller, not here):
+ *   - Relay min on/off times (ESPHome set_relay with min_on_ms/min_off_ms)
+ *   - Gas heater min off time (MIN_HEAT_OFF_MS, typically 300s)
+ *   - Vent actuator travel time (ESPHome min_vent_on_s/min_vent_off_s)
  *
- * SENSOR_FAULT recovery note: when sensors return to valid after SENSOR_FAULT,
- * the next cycle re-evaluates from scratch (prev=SENSOR_FAULT matches no
- * stateful branch). Accumulated timers in ControlState are stale but harmless.
+ * SENSOR_FAULT: ALL relays off. Freeze protection must be handled by a
+ * hardware thermostat wired in parallel, not blind software logic.
+ * SENSOR_FAULT does NOT overwrite mode_prev — preserves hysteresis
+ * context for graceful recovery from transient I2C glitches.
+ *
+ * OWNERSHIP: This code owns ControlState.mist_stage. ESPHome/controls.yaml
+ * reads mist_stage to drive physical mister relays but does not write it.
+ *
+ * CONCURRENCY: This code is single-threaded. ControlState must not be
+ * accessed from ISRs or other tasks without synchronization.
  */
 
 #include "greenhouse_types.h"
 
+// ── R2-4: Plausibility validation — catches NaN, inf, and garbage ──
+inline bool sensors_plausible(const SensorInputs& in) noexcept {
+    return std::isfinite(in.temp_f)  && in.temp_f  > -20.0f && in.temp_f  < 140.0f
+        && std::isfinite(in.rh_pct)  && in.rh_pct  >= 0.0f  && in.rh_pct  <= 100.0f
+        && std::isfinite(in.vpd_kpa) && in.vpd_kpa >= 0.0f  && in.vpd_kpa < 10.0f
+        && in.local_hour >= 0        && in.local_hour <= 23;
+}
+
+// ── R2-5: Occupancy blocks moisture injection ──
+inline bool moisture_blocked_by_occupancy(const SensorInputs& in, const Setpoints& sp) noexcept {
+    return sp.occupancy_inhibit && in.occupied;
+}
+
 // ═══════════════════════════════════════════════════════════════════
-// determine_mode() — Core mode decision, called every 5s.
-// Mutates state (timers, mode_prev, mist_stage). Not pure.
+// determine_mode()
 // ═══════════════════════════════════════════════════════════════════
 inline Mode determine_mode(
     const SensorInputs& in,
@@ -31,16 +50,15 @@ inline Mode determine_mode(
     ControlState& state,
     uint32_t dt_ms
 ) {
-    // ── C2: Sentinel check — detect state corruption ──
+    // ── Sentinel check — detect state corruption ──
     if (state.sentinel != STATE_SENTINEL) {
         state = initial_state();
-        // Corruption detected — start fresh from IDLE
     }
 
-    // ── NaN guard — sensor fault takes highest priority ──
-    if (std::isnan(in.temp_f) || std::isnan(in.vpd_kpa) || std::isnan(in.rh_pct)) {
+    // ── R2-4: Plausibility guard (replaces bare isnan check) ──
+    if (!sensors_plausible(in)) {
         state.mode = SENSOR_FAULT;
-        state.mode_prev = SENSOR_FAULT;
+        // R2-2: DO NOT overwrite mode_prev — preserve hysteresis for recovery
         return SENSOR_FAULT;
     }
 
@@ -48,11 +66,8 @@ inline Mode determine_mode(
     const Mode prev = state.mode_prev;
 
     const float Thigh = sp.temp_high + sp.bias_cool;
-    const float Tlow  = sp.temp_low  + sp.bias_heat;
-    // R2 FIX: Clamp hysteresis to prevent contradictory exit conditions
     const float HV    = std::min(sp.vpd_hysteresis, sp.vpd_high * 0.5f);
 
-    // ── Evaluate conditions ──
     bool safety_cool    = in.temp_f >= sp.safety_max;
     bool safety_heat    = in.temp_f <= sp.safety_min;
     bool vpd_above_band = in.vpd_kpa > sp.vpd_high;
@@ -74,7 +89,7 @@ inline Mode determine_mode(
     if (vpd_above_band
         && prev != SEALED_MIST && prev != THERMAL_RELIEF
         && prev != SAFETY_COOL && prev != SAFETY_HEAT) {
-        state.vpd_watch_timer_ms = sat_add(state.vpd_watch_timer_ms, dt_ms);  // C5 FIX
+        state.vpd_watch_timer_ms = sat_add(state.vpd_watch_timer_ms, dt_ms);
     } else if (!vpd_above_band
         && prev != SEALED_MIST && prev != THERMAL_RELIEF) {
         state.vpd_watch_timer_ms = 0;
@@ -89,16 +104,20 @@ inline Mode determine_mode(
         mode = SAFETY_COOL;
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;
+        state.relief_cycle_count = 0;
     } else if (safety_heat) {
         mode = SAFETY_HEAT;
         state.sealed_timer_ms = 0;
+        state.relief_cycle_count = 0;
     } else if (in_thermal_relief) {
-        state.relief_timer_ms = sat_add(state.relief_timer_ms, dt_ms);  // C5 FIX
+        state.relief_timer_ms = sat_add(state.relief_timer_ms, dt_ms);
         if (state.relief_timer_ms >= sp.relief_duration_ms) {
             state.relief_timer_ms = 0;
             state.sealed_timer_ms = 0;
             state.vpd_watch_timer_ms = 0;
             relief_just_expired = true;
+            if (vpd_above_band) state.relief_cycle_count++;
+            else state.relief_cycle_count = 0;
         } else {
             mode = THERMAL_RELIEF;
         }
@@ -110,6 +129,7 @@ inline Mode determine_mode(
                 mode = needs_cooling ? VENTILATE : IDLE;
                 state.sealed_timer_ms = 0;
                 state.vpd_watch_timer_ms = 0;
+                state.relief_cycle_count = 0;
                 state.mist_stage = MIST_WATCH;
                 state.mist_stage_timer_ms = 0;
             } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
@@ -117,16 +137,21 @@ inline Mode determine_mode(
                 state.relief_timer_ms = 0;
             } else {
                 mode = SEALED_MIST;
-                state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);  // C5 FIX
+                state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
             }
-        } else if (vpd_wants_seal) {
+        // R2-6: Gate seal entry by relief cycle count
+        } else if (vpd_wants_seal && state.relief_cycle_count < sp.max_relief_cycles) {
             mode = SEALED_MIST;
             state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
             state.mist_stage_timer_ms = 0;
+        } else if (vpd_wants_seal && state.relief_cycle_count >= sp.max_relief_cycles) {
+            // R2-6: Exceeded max consecutive sealed→relief. Force vent to break cycle.
+            mode = VENTILATE;
         } else if (vpd_too_low_enter) {
             mode = DEHUM_VENT;
-        } else if (was_dehum && !vpd_dehum_exit) {
+        } else if (was_dehum && !vpd_dehum_exit && !sp.econ_block) {
+            // R2-8: Sticky dehum respects econ_block changes mid-cycle
             mode = DEHUM_VENT;
         } else if (needs_cooling) {
             mode = VENTILATE;
@@ -135,16 +160,23 @@ inline Mode determine_mode(
         }
     }
 
-    // ── VPD safety overrides — cannot stomp safety or relief ──
-    if (in.vpd_kpa > sp.vpd_max_safe
-        && mode != SAFETY_COOL
-        && mode != SAFETY_HEAT
-        && mode != THERMAL_RELIEF) {
-        mode = SEALED_MIST;
-        state.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
-        state.sealed_timer_ms = 0;
-        state.mist_stage = MIST_S1;
-        state.mist_stage_timer_ms = 0;
+    // ── R2-3: VPD dry override — cannot stomp active cooling or safety ──
+    {
+        const bool can_seal_for_dryness =
+            (mode != SAFETY_COOL)
+            && (mode != SAFETY_HEAT)
+            && (mode != THERMAL_RELIEF)
+            && (mode != VENTILATE)
+            && !needs_cooling
+            && (in.temp_f < (Thigh - sp.temp_hysteresis));
+
+        if (in.vpd_kpa > sp.vpd_max_safe && can_seal_for_dryness) {
+            mode = SEALED_MIST;
+            state.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+            state.sealed_timer_ms = dt_ms;
+            state.mist_stage = MIST_S1;
+            state.mist_stage_timer_ms = 0;
+        }
     }
     if (in.vpd_kpa < sp.vpd_min_safe && mode == IDLE) {
         mode = sp.econ_block ? IDLE : DEHUM_VENT;
@@ -152,7 +184,7 @@ inline Mode determine_mode(
 
     // ── Mist stage progression ──
     if (mode == SEALED_MIST) {
-        state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);  // C5 FIX
+        state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);
         switch (state.mist_stage) {
             case MIST_WATCH:
                 state.mist_stage = MIST_S1;
@@ -165,24 +197,32 @@ inline Mode determine_mode(
                     state.mist_stage_timer_ms = 0;
                 }
                 break;
-            case MIST_S2:
-                if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa) {
+            case MIST_S2: {
+                // R2-9: Only escalate to FOG if fog is both demanded AND currently allowed
+                bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
+                    || (in.temp_f < sp.fog_min_temp)
+                    || (in.local_hour < sp.fog_window_start)
+                    || (in.local_hour >= sp.fog_window_end)
+                    || moisture_blocked_by_occupancy(in, sp);
+
+                if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
                     state.mist_stage = MIST_FOG;
                     state.mist_stage_timer_ms = 0;
                 }
-                // R4 FIX: De-escalate with hysteresis (not raw vpd_high)
+                // De-escalate with hysteresis
                 if (in.vpd_kpa < sp.vpd_high - HV) {
                     state.mist_stage = MIST_S1;
                     state.mist_stage_timer_ms = 0;
                 }
                 break;
+            }
             case MIST_FOG:
                 if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
                     state.mist_stage = MIST_S2;
                     state.mist_stage_timer_ms = 0;
                 }
                 break;
-            default:  // C3 FIX: Corrupted mist_stage → reset
+            default:
                 state.mist_stage = MIST_WATCH;
                 state.mist_stage_timer_ms = 0;
                 break;
@@ -200,7 +240,7 @@ inline Mode determine_mode(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// resolve_equipment() — Map mode to relay outputs. Pure function.
+// resolve_equipment() — Pure function. No side effects.
 // ═══════════════════════════════════════════════════════════════════
 inline RelayOutputs resolve_equipment(
     Mode mode,
@@ -219,18 +259,20 @@ inline RelayOutputs resolve_equipment(
 
     switch (mode) {
         case SENSOR_FAULT:
-            out.heat1 = true;  // keep warm, don't cook
+            // R2-1: ALL relays off. No actuator should run without sensor feedback.
+            // Freeze protection: hardware thermostat wired in parallel.
             break;
 
         case SAFETY_COOL:
             out.vent = true;
             out.fan1 = true; out.fan2 = true;
             {
+                // R2-5: Check live occupancy, not just config flag
                 bool fog_ok = !(in.rh_pct > sp.fog_rh_ceiling)
                     && !(in.temp_f < sp.fog_min_temp)
                     && (in.local_hour >= sp.fog_window_start)
                     && (in.local_hour < sp.fog_window_end)
-                    && !sp.occupancy_inhibit;
+                    && !moisture_blocked_by_occupancy(in, sp);
                 out.fog = fog_ok && in.vpd_kpa > sp.vpd_high;
             }
             break;
@@ -247,7 +289,9 @@ inline RelayOutputs resolve_equipment(
                     || (in.temp_f < sp.fog_min_temp)
                     || (in.local_hour < sp.fog_window_start)
                     || (in.local_hour >= sp.fog_window_end);
-                out.fog = (state.mist_stage == MIST_FOG) && !fog_gated && !sp.occupancy_inhibit;
+                // R2-5: Check live occupancy for fog output
+                out.fog = (state.mist_stage == MIST_FOG) && !fog_gated
+                    && !moisture_blocked_by_occupancy(in, sp);
             }
             break;
 
@@ -281,8 +325,8 @@ inline RelayOutputs resolve_equipment(
             }
             break;
 
-        default:  // C4 FIX: Corrupted mode → fail warm
-            out.heat1 = true;
+        default:
+            // Corrupted mode — all off (same as SENSOR_FAULT)
             break;
     }
 

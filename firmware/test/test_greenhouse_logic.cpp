@@ -265,11 +265,102 @@ TEST(fix8_nan_vpd) {
 }
 
 TEST(fix8_sensor_fault_equipment) {
+    // R2-1: ALL relays off on sensor fault — no blind actuation
     auto out = equip(SENSOR_FAULT, 72, 0.9);
-    ASSERT_TRUE(out.heat1);    // keep warm
-    ASSERT_FALSE(out.heat2);   // no gas
-    ASSERT_FALSE(out.vent);    // sealed
+    ASSERT_FALSE(out.heat1);
+    ASSERT_FALSE(out.heat2);
+    ASSERT_FALSE(out.vent);
     ASSERT_FALSE(out.fan1);
+    ASSERT_FALSE(out.fog);
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// R2 FIXES — Round 2 review
+// ═══════════════════════════════════════════════════════════════
+
+TEST(r2_2_sensor_fault_preserves_mode_prev) {
+    auto sp = default_setpoints(); auto s = initial_state();
+    // Enter VENTILATE
+    determine_mode(make_inputs(84, 0.9), sp, s, 5000);
+    ASSERT_EQ(s.mode_prev, VENTILATE);
+    // Transient sensor fault
+    auto bad = make_inputs(NAN, 0.9);
+    determine_mode(bad, sp, s, 5000);
+    ASSERT_EQ(s.mode, SENSOR_FAULT);
+    // mode_prev should STILL be VENTILATE (not SENSOR_FAULT)
+    ASSERT_EQ(s.mode_prev, VENTILATE);
+    PASS();
+}
+
+TEST(r2_3_vpd_override_no_stomp_ventilate) {
+    auto sp = default_setpoints(); auto s = initial_state();
+    // Temp is hot (needs cooling) AND VPD is extreme
+    auto in = make_inputs(84, 3.5);
+    Mode m = determine_mode(in, sp, s, 5000);
+    // Should be VENTILATE (cooling takes priority), not SEALED_MIST
+    ASSERT_EQ(m, VENTILATE);
+    PASS();
+}
+
+TEST(r2_4_implausible_temp_triggers_fault) {
+    auto s = initial_state();
+    auto in = make_inputs(-127, 0.9);  // disconnected SHT sensor
+    ASSERT_EQ(determine_mode(in, default_setpoints(), s, 5000), SENSOR_FAULT);
+    PASS();
+}
+
+TEST(r2_4_implausible_rh_triggers_fault) {
+    auto s = initial_state();
+    SensorInputs in = make_inputs(72, 0.9, 105.0f);  // RH > 100%
+    ASSERT_EQ(determine_mode(in, default_setpoints(), s, 5000), SENSOR_FAULT);
+    PASS();
+}
+
+TEST(r2_5_occupancy_blocks_fog) {
+    auto sp = default_setpoints(); sp.occupancy_inhibit = true;
+    auto s = initial_state(); s.mist_stage = MIST_FOG;
+    SensorInputs in = make_inputs(72, 1.7, 60);
+    in.occupied = true;
+    auto out = resolve_equipment(SEALED_MIST, in, sp, s, true);
+    ASSERT_FALSE(out.fog);  // occupied + inhibit → no fog
+    PASS();
+}
+
+TEST(r2_6_relief_cycle_forces_ventilate) {
+    auto sp = default_setpoints(); sp.max_relief_cycles = 3;
+    auto s = initial_state();
+    s.relief_cycle_count = 3;  // at the limit
+    s.vpd_watch_timer_ms = 60000;
+    // VPD wants seal but relief cycles exhausted → force VENTILATE
+    Mode m = determine_mode(make_inputs(72, 1.5), sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    PASS();
+}
+
+TEST(r2_8_dehum_respects_econ_block_change) {
+    auto sp = default_setpoints(); auto s = initial_state();
+    // Enter DEHUM
+    determine_mode(make_inputs(72, 0.15), sp, s, 5000);
+    ASSERT_EQ(s.mode, DEHUM_VENT);
+    // Econ blocks mid-cycle
+    sp.econ_block = true;
+    determine_mode(make_inputs(72, 0.35), sp, s, 5000);
+    // Should exit DEHUM because econ now blocks venting
+    ASSERT_EQ(s.mode, IDLE);
+    PASS();
+}
+
+TEST(r2_9_fog_stage_blocked_by_time_window) {
+    auto sp = default_setpoints(); auto s = initial_state();
+    s.mode_prev = SEALED_MIST; s.sealed_timer_ms = 100000;
+    s.mist_stage = MIST_S2; s.mist_stage_timer_ms = 0;
+    // VPD demands fog BUT it's outside the fog time window
+    SensorInputs in = make_inputs(72, 1.7, 60);
+    in.local_hour = 22;  // 10 PM — outside 7-17 window
+    determine_mode(in, sp, s, 5000);
+    // Should NOT escalate to MIST_FOG
+    ASSERT_EQ(s.mist_stage, MIST_S2);
     PASS();
 }
 
