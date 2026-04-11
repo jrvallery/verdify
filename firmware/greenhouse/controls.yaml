@@ -1073,7 +1073,14 @@ interval:
                     size_t eq = line.find('=');
                     if(eq == std::string::npos) continue;
                     std::string key = line.substr(0, eq);
-                    float val = atof(line.substr(eq+1).c_str());
+                    std::string val_str = line.substr(eq+1);
+                    char* end_ptr = nullptr;
+                    float val = strtof(val_str.c_str(), &end_ptr);
+                    // Guard: reject malformed values (strtof returns 0 with end_ptr at start)
+                    if(end_ptr == val_str.c_str() && val == 0.0f){
+                      ESP_LOGW("plan","Malformed setpoint: %s", line.c_str());
+                      continue;
+                    }
 
                     // ── Clamp helpers — enforce firmware safety bounds on ALL external input ──
                     auto cf = [](float v, float lo, float hi) -> float { return isnan(v) ? (lo+hi)/2.0f : fmax(lo, fmin(hi, v)); };
