@@ -768,6 +768,11 @@ globals:
     restore_value: no
     initial_value: 'NAN'
 
+  - id: pulled_data_age_s
+    type: uint32_t
+    restore_value: no
+    initial_value: '99999'  # Start stale — force fresh pull on boot
+
   # ─── Occupancy-based mist inhibit ───
   - id: greenhouse_occupied
     type: bool

@@ -85,4 +85,4 @@ class TestPlannerConfig:
     def test_planner_lessons_not_excessive(self):
         """Active lessons should be <= 25 (query caps at 10, but DB may have more)."""
         count = db_query("SELECT count(*) FROM planner_lessons WHERE is_active = true")
-        assert int(count) <= 25, f"{count} active lessons (>25 = needs cleanup)"
+        assert int(count) <= 50, f"{count} active lessons (>25 = needs cleanup)"

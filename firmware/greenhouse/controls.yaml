@@ -113,29 +113,74 @@ interval:
           /**************** 4 — sensor ingest & derived fields ********************/
           auto vpd_calc = [&](float T,float RH){
             float tc=(T-32.0f)*5.0f/9.0f;
+            if(fabs(tc + 237.3f) < 0.1f) return 1.0f;  // guard against division by ~zero
             float es=0.6108f*expf((17.27f*tc)/(tc+237.3f));
             return es*(1.0f-RH/100.0f);
           };
+
+          // Age pulled outdoor data — invalidate if >1 hour stale
+          id(pulled_data_age_s) += dt_ms / 1000;
+          if(id(pulled_data_age_s) > 3600){
+            id(pulled_outdoor_temp_f) = NAN;
+            id(pulled_outdoor_rh_pct) = NAN;
+          }
           float Tin;
           float RHin;
           // Use average sensors if valid, otherwise fall back to case probe.
-          if(isnan(id(average_temperature).state) || isnan(id(average_humidity).state)){
-            Tin = id(case_temperature).state;
-            RHin = id(case_humidity).state;
-            // If case probe also NaN, use safe defaults
-            if(isnan(Tin)) Tin = 65.0f;  // safe mid-range assumption
-            if(isnan(RHin)) RHin = 50.0f;  // safe mid-range assumption
-          }else{
+          bool avg_ok = !isnan(id(average_temperature).state) && !isnan(id(average_humidity).state);
+          bool case_ok_t = !isnan(id(case_temperature).state);
+          if(avg_ok){
             Tin = id(average_temperature).state;
             RHin = id(average_humidity).state;
+          }else if(case_ok_t){
+            Tin = id(case_temperature).state;
+            RHin = isnan(id(case_humidity).state) ? 50.0f : id(case_humidity).state;
+            ESP_LOGW("sensor","Average sensors NaN — using case probe (%.1f°F)", Tin);
+          }else{
+            Tin = 65.0f;  // safe mid-range assumption
+            RHin = 50.0f;
+            ESP_LOGE("sensor","ALL temperature probes NaN — using safe default 65°F");
           }
+
+          // Track how long ALL probes have been offline
+          static uint32_t all_probes_nan_ms = 0;
+          if(!avg_ok && !case_ok_t){
+            all_probes_nan_ms += dt_ms;
+            if(all_probes_nan_ms > 300000 && (all_probes_nan_ms % 60000) < dt_ms){
+              ESP_LOGE("health","ALL temperature probes offline for %.0f min!",
+                       all_probes_nan_ms / 60000.0f);
+            }
+          }else{
+            all_probes_nan_ms = 0;
+          }
+
+          // Sanity check: reject physically impossible indoor readings
+          if(Tin < -20.0f || Tin > 150.0f){
+            ESP_LOGE("sensor","Tin=%.1f out of range — clamping to 65°F", Tin);
+            Tin = 65.0f;
+          }
+
           float VPD = id(average_vpd_kpa).state;
           if(isnan(VPD) && !isnan(Tin) && !isnan(RHin)){
             VPD = vpd_calc(Tin,RHin);
           }
           if(isnan(VPD)) VPD = 1.0f;  // safe mid-range if all else fails
           if(VPD < 0.0f) VPD = 0.0f;
+          if(VPD > 10.0f) VPD = 10.0f;  // cap at physically reasonable max
+
           float dH = id(enthalpy_diff).state;   // outside - inside
+          // Track enthalpy staleness — if no update in 10 min, treat as NaN
+          static uint32_t enthalpy_age_ms = 0;
+          static float last_dH = NAN;
+          if(!isnan(dH) && dH != last_dH){
+            enthalpy_age_ms = 0;
+            last_dH = dH;
+          }else{
+            enthalpy_age_ms += dt_ms;
+          }
+          if(enthalpy_age_ms > 600000){  // 10 min stale → treat as NaN
+            dH = NAN;
+          }
 
           /**************** 5 — apply safety rails & NaN handling (A6 graduated) */
           bool tin_nan = isnan(Tin);
@@ -1188,8 +1233,8 @@ interval:
                     if(key == "mister_pulse_on_s"){ int v = ci((int)val, 30, 90); if(id(mister_pulse_on_s) != v){ id(mister_pulse_on_s) = v; id(num_mister_pulse_on).publish_state(v); applied++; }}
                     if(key == "mister_pulse_gap_s"){ int v = ci((int)val, 10, 60); if(id(mister_pulse_gap_s) != v){ id(mister_pulse_gap_s) = v; id(num_mister_pulse_gap).publish_state(v); applied++; }}
                     if(key == "mister_vpd_weight"){ val = cf(val, 0.5, 5.0); if(fabs(id(mister_vpd_weight) - val) > 0.01f){ id(mister_vpd_weight) = val; id(num_mister_vpd_weight).publish_state(val); applied++; }}
-                    if(key == "outdoor_temp"){ id(pulled_outdoor_temp_f) = val; ESP_LOGI("plan","Outdoor temp: %.1f°F (from DB)", val); }
-                    if(key == "outdoor_rh"){ id(pulled_outdoor_rh_pct) = val; ESP_LOGI("plan","Outdoor RH: %.0f%% (from DB)", val); }
+                    if(key == "outdoor_temp"){ id(pulled_outdoor_temp_f) = val; id(pulled_data_age_s) = 0; ESP_LOGI("plan","Outdoor temp: %.1f°F (from DB)", val); }
+                    if(key == "outdoor_rh"){ id(pulled_outdoor_rh_pct) = val; id(pulled_data_age_s) = 0; ESP_LOGI("plan","Outdoor RH: %.0f%% (from DB)", val); }
                   }
                   if(applied > 0){
                     ESP_LOGI("plan","Applied %d setpoint(s) from pull", applied);
