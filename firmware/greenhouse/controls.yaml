@@ -455,7 +455,7 @@ interval:
 
               // --- S1 ENGAGE: misters start when any zone is stressed OR global threshold exceeded ---
               int pre_zone = select_most_stressed_zone();
-              bool global_stressed = (avg_vpd > id(mister_engage_kpa));
+              bool global_stressed = (avg_vpd > VPDhi);
 
               if(id(mister_state) == 0
                  && (humidity_demand || any_zone_stressed)
@@ -516,7 +516,7 @@ interval:
               }
 
               // --- DE-ESCALATE S1 → off ---
-              if(id(mister_state) == 1 && avg_vpd < (id(mister_engage_kpa) - HV)){
+              if(id(mister_state) == 1 && avg_vpd < (VPDhi - HV)){
                 ESP_LOGI("mister","S1→off: VPD=%.2f", avg_vpd);
                 turn_off_all_misters();
                 id(mister_state) = 0;
@@ -1112,7 +1112,7 @@ interval:
                     if(key == "fan_burst_min"){ int v = ci((int)val, 1, 60); if(id(fan_burst_minutes) != v){ id(fan_burst_minutes) = v; id(num_fan_burst).publish_state(v); applied++; }}
                     if(key == "fog_burst_min"){ int v = ci((int)val, 1, 60); if(id(fog_burst_minutes) != v){ id(fog_burst_minutes) = v; id(num_fog_burst).publish_state(v); applied++; }}
                     // ── Misting (clamped) ──
-                    if(key == "mister_engage_kpa"){ val = cf(val, 0.8, 2.0); if(fabs(id(mister_engage_kpa) - val) > 0.01f){ id(mister_engage_kpa) = val; id(num_mister_engage_kpa).publish_state(val); applied++; }}
+                    // mister_engage_kpa: REMOVED — band ceiling (vpd_high) is the engage threshold
                     if(key == "mister_all_kpa"){ val = cf(val, 1.0, 2.5); if(fabs(id(mister_all_kpa) - val) > 0.01f){ id(mister_all_kpa) = val; id(num_mister_all_kpa).publish_state(val); applied++; }}
                     if(key == "mister_engage_delay_s"){ int v = ci((int)val, 10, 900); if(id(mister_engage_delay_s) != v){ id(mister_engage_delay_s) = v; id(num_mister_engage_delay).publish_state(v); applied++; }}
                     if(key == "mister_all_delay_s"){ int v = ci((int)val, 0, 600); if(id(mister_all_delay_s) != v){ id(mister_all_delay_s) = v; id(num_mister_all_delay).publish_state(v); applied++; }}
