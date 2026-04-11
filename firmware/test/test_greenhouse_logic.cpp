@@ -55,10 +55,7 @@ static SensorInputs make_inputs(float temp, float vpd, float rh = 60.0f) {
         .enthalpy_delta = -5.0f,
         .vpd_south = vpd, .vpd_west = vpd, .vpd_east = vpd,
         .local_hour = 12, .occupied = false,
-        .mister_state = 0, .humid_s2_duration_ms = 0,
-        .fog_escalation_kpa = 0.4f, .fog_rh_ceiling = 90.0f,
-        .fog_min_temp = 55.0f, .fog_window_start = 7, .fog_window_end = 17,
-        .mister_all_delay_ms = 300000, .occupancy_inhibit = false
+        .mister_state = 0, .humid_s2_duration_ms = 0
     };
 }
 
@@ -407,6 +404,115 @@ TEST(hot_dry_day_sealed_cycle) {
     out = resolve_equipment(m, in1, sp, true);
     ASSERT_TRUE(out.vent);
 
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BUG REGRESSION TESTS (from external review, 2026-04-11)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(bug1_mode_prev_reads_last_cycle) {
+    // Bug 1: mode_prev must reflect LAST cycle, not current
+    auto in = make_inputs(72.0f, 1.3f);
+    auto sp = default_setpoints();
+    auto state = initial_state();
+    // Cycle 1: VPD above band, dwell complete → enters SEALED_MIST
+    state.vpd_watch_timer_ms = 60000;
+    Mode m1 = determine_mode(in, sp, state, 5000);
+    ASSERT_EQ(m1, SEALED_MIST);
+    // Cycle 2: VPD drops below exit → should exit to IDLE
+    // This requires mode_prev == SEALED_MIST (from cycle 1)
+    auto in2 = make_inputs(72.0f, 0.85f);  // below vpd_high - hysteresis
+    Mode m2 = determine_mode(in2, sp, state, 5000);
+    ASSERT_EQ(m2, IDLE);
+    PASS();
+}
+
+TEST(bug3_vpd_safety_cannot_override_safety_heat) {
+    // Bug 3: VPD > vpd_max_safe must NOT override SAFETY_HEAT
+    auto in = make_inputs(40.0f, 3.5f);  // freezing + extreme dry VPD
+    auto sp = default_setpoints();
+    auto state = initial_state();
+    Mode m = determine_mode(in, sp, state, 5000);
+    // Must be SAFETY_HEAT (temp takes priority), not SEALED_MIST
+    ASSERT_EQ(m, SAFETY_HEAT);
+    PASS();
+}
+
+TEST(bug4_dehum_vent_has_hysteresis) {
+    // Bug 4: DEHUM_VENT should stay until VPD rises to vpd_low (not exit immediately)
+    auto sp = default_setpoints();
+    auto state = initial_state();
+    // Enter DEHUM_VENT
+    auto in1 = make_inputs(72.0f, 0.15f);  // below vpd_low - hysteresis (0.5 - 0.3 = 0.2)
+    Mode m1 = determine_mode(in1, sp, state, 5000);
+    ASSERT_EQ(m1, DEHUM_VENT);
+    // VPD rises to 0.3 (still below vpd_low 0.5) → should STAY in DEHUM_VENT
+    auto in2 = make_inputs(72.0f, 0.3f);
+    Mode m2 = determine_mode(in2, sp, state, 5000);
+    ASSERT_EQ(m2, DEHUM_VENT);
+    // VPD rises to 0.5 (at vpd_low) → should exit to IDLE
+    auto in3 = make_inputs(72.0f, 0.5f);
+    Mode m3 = determine_mode(in3, sp, state, 5000);
+    ASSERT_EQ(m3, IDLE);
+    PASS();
+}
+
+TEST(gap_ventilate_has_temp_hysteresis) {
+    // VENTILATE should not exit until temp drops below Thigh - temp_hysteresis
+    auto sp = default_setpoints();
+    sp.temp_high = 78.0f;
+    sp.temp_hysteresis = 1.0f;  // exit at 77°F, not 78°F
+    auto state = initial_state();
+    // Enter VENTILATE at 79°F
+    auto in1 = make_inputs(79.0f, 0.9f);
+    Mode m1 = determine_mode(in1, sp, state, 5000);
+    ASSERT_EQ(m1, VENTILATE);
+    // Drop to 77.5°F (still above Thigh - hysteresis = 77°F) → stay VENTILATE
+    auto in2 = make_inputs(77.5f, 0.9f);
+    Mode m2 = determine_mode(in2, sp, state, 5000);
+    ASSERT_EQ(m2, VENTILATE);
+    // Drop to 76.9°F (below 77°F) → exit to IDLE
+    auto in3 = make_inputs(76.9f, 0.9f);
+    Mode m3 = determine_mode(in3, sp, state, 5000);
+    ASSERT_EQ(m3, IDLE);
+    PASS();
+}
+
+TEST(gap_relief_cycle_counter_tracks) {
+    // Relief cycle counter should increment on consecutive sealed→relief cycles
+    auto in = make_inputs(72.0f, 1.5f);
+    auto sp = default_setpoints();
+    auto state = initial_state();
+    state.vpd_watch_timer_ms = 60000;
+    // Enter sealed
+    determine_mode(in, sp, state, 5000);
+    // Run to relief
+    state.sealed_timer_ms = 600000;
+    determine_mode(in, sp, state, 5000);
+    ASSERT_EQ(state.relief_cycle_count, 0u);  // not incremented until relief COMPLETES
+    // Complete relief
+    state.relief_timer_ms = 90000;
+    determine_mode(in, sp, state, 5000);
+    ASSERT_EQ(state.relief_cycle_count, 1u);  // incremented
+    // Second cycle
+    state.sealed_timer_ms = 600000;
+    determine_mode(in, sp, state, 5000);
+    state.relief_timer_ms = 90000;
+    determine_mode(in, sp, state, 5000);
+    ASSERT_EQ(state.relief_cycle_count, 2u);
+    PASS();
+}
+
+TEST(bug6_idle_no_heater_for_vpd) {
+    // Bug 6: IDLE should NOT fire heaters to raise VPD (oscillation risk)
+    auto in = make_inputs(72.0f, 0.3f);  // VPD below vpd_low but temp is fine
+    auto sp = default_setpoints();
+    sp.econ_block = true;  // can't vent
+    auto out = resolve_equipment(IDLE, in, sp, true);
+    // Should NOT have heaters (temp 72 is well above Tlow 58+5=63)
+    ASSERT_FALSE(out.heat1);
+    ASSERT_FALSE(out.heat2);
     PASS();
 }
 

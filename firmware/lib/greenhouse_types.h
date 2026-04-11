@@ -19,17 +19,14 @@ enum Mode {
     IDLE              // everything in band → vent closed, no active equipment
 };
 
-// Mister sub-states within SEALED_MIST
-enum MistStage { MIST_WATCH, MIST_S1, MIST_S2, MIST_FOG };
-
 // Mode name lookup (same order as enum)
 static const char* MODE_NAMES[] = {
     "SAFETY_COOL", "SAFETY_HEAT", "SEALED_MIST",
     "THERMAL_RELIEF", "VENTILATE", "DEHUM_VENT", "IDLE"
 };
-static const char* MIST_NAMES[] = {"WATCH", "S1", "S2", "FOG"};
 
 // ── Sensor inputs (read-only, populated by ESPHome or test harness) ──
+// Pure sensor readings only. Configuration lives in Setpoints.
 struct SensorInputs {
     float temp_f;           // indoor average temperature (°F)
     float vpd_kpa;          // indoor average VPD (kPa)
@@ -44,33 +41,40 @@ struct SensorInputs {
     bool  occupied;         // greenhouse occupancy (from Sentinel)
     int   mister_state;     // current mister state machine stage (0=off, 1=S1, 2=S2)
     uint32_t humid_s2_duration_ms;  // how long in S2 (for fog escalation)
-    float fog_escalation_kpa;       // planner tunable
-    float fog_rh_ceiling;           // firmware safety gate
-    float fog_min_temp;             // firmware safety gate
-    int   fog_window_start;         // firmware safety gate (hour)
-    int   fog_window_end;           // firmware safety gate (hour)
-    uint32_t mister_all_delay_ms;   // S2 delay for fog escalation
-    bool  occupancy_inhibit;        // occupancy blocks fog
 };
 
-// ── Setpoints (band-driven + planner tunables) ──
+// ── Setpoints (band-driven + planner tunables + firmware config) ──
 struct Setpoints {
+    // Band (from crop profiles, updated every 5 min)
     float temp_high;        // band ceiling (°F)
     float temp_low;         // band floor (°F)
     float vpd_high;         // VPD ceiling (kPa)
     float vpd_low;          // VPD floor (kPa)
-    float bias_cool;        // planner shift on cooling threshold
-    float bias_heat;        // planner shift on heating threshold
-    float vpd_hysteresis;   // exit hysteresis for misting
+    // Planner tunables
+    float bias_cool;        // shift cooling threshold
+    float bias_heat;        // shift heating threshold
+    float vpd_hysteresis;   // exit hysteresis for misting AND dehumidification
+    float temp_hysteresis;  // exit hysteresis for ventilation (prevents vent chatter)
     float dH2;              // heat stage 2 delta (electric pre-heat zone)
     float dC2;              // cool stage 2 delta (aggressive cooling trigger)
+    // Safety limits
     float safety_max;       // absolute temp ceiling (°F)
     float safety_min;       // absolute temp floor (°F)
     float vpd_max_safe;     // absolute VPD ceiling (kPa)
     float vpd_min_safe;     // absolute VPD floor (kPa)
+    // Timing
     uint32_t sealed_max_ms;       // max sealed time before thermal relief
     uint32_t relief_duration_ms;  // thermal relief vent-open duration
     uint32_t vpd_watch_dwell_ms;  // observation dwell before sealing
+    // Fog configuration
+    float fog_escalation_kpa;     // VPD above band that triggers fog
+    float fog_rh_ceiling;         // firmware safety gate
+    float fog_min_temp;           // firmware safety gate
+    int   fog_window_start;       // firmware safety gate (hour)
+    int   fog_window_end;         // firmware safety gate (hour)
+    uint32_t mister_all_delay_ms; // S2 delay for fog escalation
+    bool  occupancy_inhibit;      // occupancy blocks fog/mist
+    // Economiser
     bool econ_block;        // economiser blocks venting
 };
 
@@ -78,10 +82,11 @@ struct Setpoints {
 struct ControlState {
     Mode mode;
     Mode mode_prev;
-    MistStage mist_stage;
     uint32_t sealed_timer_ms;
     uint32_t relief_timer_ms;
     uint32_t vpd_watch_timer_ms;
+    uint32_t relief_cycle_count;   // consecutive sealed→relief cycles (for escalation)
+    bool     in_dehum;             // sticky flag for DEHUM_VENT hysteresis
 };
 
 // ── Relay outputs (computed from mode, applied to hardware) ──
@@ -101,11 +106,15 @@ inline Setpoints default_setpoints() {
         .vpd_high = 1.2f, .vpd_low = 0.5f,
         .bias_cool = 0.0f, .bias_heat = 0.0f,
         .vpd_hysteresis = 0.3f,
+        .temp_hysteresis = 1.0f,
         .dH2 = 5.0f, .dC2 = 3.0f,
         .safety_max = 95.0f, .safety_min = 45.0f,
         .vpd_max_safe = 3.0f, .vpd_min_safe = 0.3f,
         .sealed_max_ms = 600000, .relief_duration_ms = 90000,
         .vpd_watch_dwell_ms = 60000,
+        .fog_escalation_kpa = 0.4f, .fog_rh_ceiling = 90.0f,
+        .fog_min_temp = 55.0f, .fog_window_start = 7, .fog_window_end = 17,
+        .mister_all_delay_ms = 300000, .occupancy_inhibit = false,
         .econ_block = false
     };
 }
@@ -113,8 +122,9 @@ inline Setpoints default_setpoints() {
 inline ControlState initial_state() {
     return {
         .mode = IDLE, .mode_prev = IDLE,
-        .mist_stage = MIST_WATCH,
         .sealed_timer_ms = 0, .relief_timer_ms = 0,
-        .vpd_watch_timer_ms = 0
+        .vpd_watch_timer_ms = 0,
+        .relief_cycle_count = 0,
+        .in_dehum = false
     };
 }
