@@ -308,7 +308,7 @@ interval:
           static ControlState ctl_state = initial_state();
           // Mister telemetry (local tracking for state labels — not in ControlState
           // because the mister state machine in section 12 is the authority)
-          static int mist_telemetry = 0;  // 0=off, 1=S1, 2=S2
+          // mist_telemetry replaced by ctl_state.mist_stage (the authority)  // 0=off, 1=S1, 2=S2
 
           auto sntp_now = id(sntp_time).now();
           int local_hour = sntp_now.is_valid() ? sntp_now.hour : 12;
@@ -322,9 +322,7 @@ interval:
               .vpd_west = id(vpd_west).state,
               .vpd_east = id(vpd_east).state,
               .local_hour = local_hour,
-              .occupied = id(greenhouse_occupied),
-              .mister_state = id(mister_state),
-              .humid_s2_duration_ms = id(humid_s2_duration_ms)
+              .occupied = id(greenhouse_occupied)
           };
 
           Setpoints setpts = {
@@ -334,24 +332,26 @@ interval:
               .bias_cool = id(bias_cool_f), .bias_heat = id(bias_heat_f),
               .vpd_hysteresis = HV,
               .temp_hysteresis = id(hyst_temp_f),
+              .heat_hysteresis = 1.0f,
               .dH2 = dH2, .dC2 = dC2,
               .safety_max = TmaxSafe, .safety_min = TminSafe,
               .vpd_max_safe = VPDmaxSafe, .vpd_min_safe = VPDminSafe,
               .sealed_max_ms = uint32_t(id(mist_max_closed_vent_s)) * 1000UL,
               .relief_duration_ms = uint32_t(id(mist_thermal_relief_s)) * 1000UL,
               .vpd_watch_dwell_ms = uint32_t(id(vpd_watch_dwell_s)) * 1000UL,
+              .mist_s2_delay_ms = uint32_t(id(mister_all_delay_s)) * 1000UL,
               .fog_escalation_kpa = id(fog_escalation_kpa),
               .fog_rh_ceiling = id(fog_rh_ceiling_pct),
               .fog_min_temp = id(fog_min_temp_f),
               .fog_window_start = id(fog_time_window_start),
               .fog_window_end = id(fog_time_window_end),
-              .mister_all_delay_ms = uint32_t(id(mister_all_delay_s)) * 1000UL,
+              .dehum_aggressive_kpa = 0.6f,
               .occupancy_inhibit = id(occupancy_inhibit_enabled) && id(greenhouse_occupied),
               .econ_block = econ_block
           };
 
           Mode mode = determine_mode(sensor_in, setpts, ctl_state, dt_ms);
-          RelayOutputs relay_out = resolve_equipment(mode, sensor_in, setpts, leadIs1);
+          RelayOutputs relay_out = resolve_equipment(mode, sensor_in, setpts, ctl_state, leadIs1);
 
           bool willHeat1 = relay_out.heat1, willHeat2 = relay_out.heat2;
           bool willFan1 = relay_out.fan1, willFan2 = relay_out.fan2;
@@ -521,7 +521,6 @@ interval:
                   ESP_LOGI("mister","S1 MISTERS: pulse %s %ds (VPD=%.2f, target=%.2f)",
                            zone_names[zone], id(mister_pulse_on_s), avg_vpd,
                            zone == 1 ? id(vpd_target_south) : zone == 2 ? id(vpd_target_west) : id(vpd_target_center));
-                  mist_telemetry = 1;
                 }
               }
 
@@ -543,9 +542,7 @@ interval:
                   id(mister_pulse_timer_ms) = weighted_ms;
                   ESP_LOGI("mister","S2 ALL-ROTATE: start %s %dms (VPD=%.2f)",
                            zone_names[zone], weighted_ms, avg_vpd);
-                  mist_telemetry = 2;
                 }else{
-                  mist_telemetry = 1;
                 }
               }
 
@@ -562,7 +559,6 @@ interval:
                 int zone = select_most_stressed_zone();
                 turn_on_zone(zone);
                 id(mister_pulse_timer_ms) = PULSE_ON_MS;
-                mist_telemetry = 1;
               }
 
               // --- DE-ESCALATE S1 → off ---
@@ -633,8 +629,6 @@ interval:
               }
 
               // Update h for telemetry (new hierarchy: S1=misters, S2=all-rotate, S3=fog)
-              if(id(mister_state) == 2) mist_telemetry = 2;
-              else if(id(mister_state) == 1) mist_telemetry = 1;
 
               // --- RUNTIME TRACKING ---
               if(id(south_wall_mister).state) id(runtime_mister_south_ms) += dt_ms;
@@ -652,22 +646,19 @@ interval:
           }
 
           /**************** 14 — Telemetry & debug *******************************/
-          static const char* ModeNames[] = {"SAFETY_COOL","SAFETY_HEAT","SEALED_MIST",
-                                             "THERMAL_RELIEF","VENTILATE","DEHUM_VENT","IDLE"};
-          static const char* MistNames[] = {"WATCH","S1","S2","FOG"};
           char lbl[48];
           if(mode == SEALED_MIST){
-            snprintf(lbl, sizeof(lbl), "SEALED_MIST_%s", MistNames[mist_telemetry]);
+            snprintf(lbl, sizeof(lbl), "SEALED_MIST_%s", MIST_NAMES[ctl_state.mist_stage]);
           }else{
-            snprintf(lbl, sizeof(lbl), "%s", ModeNames[mode]);
+            snprintf(lbl, sizeof(lbl), "%s", MODE_NAMES[mode]);
           }
           id(gh_state).publish_state(lbl);
 
           /*** A1 — State transition logging ***/
           {
             static Mode prev_log_mode = IDLE;
-            static int prev_log_mist = 0;
-            if(mode != prev_log_mode || (mode == SEALED_MIST && mist_telemetry != prev_log_mist)){
+            static MistStage prev_log_mist = MIST_WATCH;
+            if(mode != prev_log_mode || (mode == SEALED_MIST && ctl_state.mist_stage != prev_log_mist)){
               char trans[80];
               auto hm = id(sntp_time).now();
               if(hm.is_valid()){
@@ -679,7 +670,7 @@ interval:
               ESP_LOGI("transition","State change: %s", trans);
               id(ts_last_transition).publish_state(trans);
               prev_log_mode = mode;
-              prev_log_mist = mist_telemetry;
+              prev_log_mist = ctl_state.mist_stage;
             }
           }
 

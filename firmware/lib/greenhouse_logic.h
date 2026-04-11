@@ -3,82 +3,87 @@
  * greenhouse_logic.h — Greenhouse Climate Controller Logic
  * =========================================================
  *
- * THIS IS THE SINGLE SOURCE OF TRUTH. The exact same compiled code runs on:
- *   - ESP32 via ESPHome (#include in controls.yaml)
- *   - x86 native via g++ (unit tests + historical replay simulation)
+ * SINGLE SOURCE OF TRUTH. Same compiled code on ESP32 and x86.
+ * ZERO ESPHome dependencies. Pure functions on structs.
  *
- * ZERO ESPHome dependencies. Pure functions operating on structs.
+ * This code OWNS all control state including mist_stage.
+ * ESPHome/controls.yaml is an I/O bridge, not the authority.
  *
- * MODES (priority order, highest wins):
- *   SAFETY_COOL    — temp at absolute max: all fans + vent open
- *   SAFETY_HEAT    — temp at absolute min: both heaters, sealed
- *   SEALED_MIST    — VPD above band: seal, mist, fog escalation
- *   THERMAL_RELIEF — sealed too long: mandatory vent burst
- *   VENTILATE      — temp above band: vent open, fans
- *   DEHUM_VENT     — VPD below band: vent open, dump humidity
- *   IDLE           — in band: heaters if cold, otherwise nothing
- *
- * INVARIANTS (proven across 176K+ input combinations):
- *   - SEALED_MIST never has vent open or fans running
- *   - Heaters never run with vent open
- *   - Fans never run without vent open
+ * Fixes applied (from 4-LLM review synthesis, 2026-04-11):
+ *   1. mode_prev captured at top, written at bottom
+ *   2. VPD safety cannot override SAFETY_HEAT or THERMAL_RELIEF
+ *   3. Temperature hysteresis for VENTILATE exit + heater exit
+ *   4. DEHUM_VENT sticky exit hysteresis
+ *   5. Relief exit re-runs full cascade (no inline mini-decision)
+ *   6. IDLE econ heating: electric only, temp-capped
+ *   7. VPD watch timer suspended during safety modes
+ *   8. NaN guard → SENSOR_FAULT mode
+ *   9. mist_stage is the authority (not in.mister_state)
+ *  10. DEHUM_VENT dual-fan threshold is tunable
+ *  11. Config moved from SensorInputs to Setpoints
  */
 
 #include "greenhouse_types.h"
 
-/*
- * determine_mode() — Core mode decision, called every 5s.
- *
- * FIXES applied (from external review, 2026-04-11):
- *   Bug 1: mode_prev saved at top, not bottom (prevents same-cycle overwrite)
- *   Bug 2: sealed_timer increments on entry cycle (no off-by-one)
- *   Bug 3: VPD safety override cannot stomp SAFETY_HEAT
- *   Bug 4: DEHUM_VENT uses sticky hysteresis (prevents vent chatter)
- *   Gap:   VENTILATE uses temp_hysteresis for exit (prevents vent chatter)
- *   Gap:   Relief cycle counter escalates after consecutive cycles
- */
+// ═══════════════════════════════════════════════════════════════════
+// determine_mode() — Core mode decision, called every 5s.
+// ═══════════════════════════════════════════════════════════════════
 inline Mode determine_mode(
     const SensorInputs& in,
     const Setpoints& sp,
     ControlState& state,
     uint32_t dt_ms
 ) {
-    // ── BUG 1 FIX: Save previous mode BEFORE any logic ──
-    // This ensures was_sealed/in_thermal_relief read LAST cycle's mode,
-    // not the current one being computed.
+    // ── FIX 8: NaN guard — sensor fault takes highest priority ──
+    if (std::isnan(in.temp_f) || std::isnan(in.vpd_kpa) || std::isnan(in.rh_pct)) {
+        state.mode = SENSOR_FAULT;
+        state.mode_prev = SENSOR_FAULT;
+        return SENSOR_FAULT;
+    }
+
+    // ── FIX 1: Capture previous mode BEFORE any logic ──
     const Mode prev = state.mode_prev;
 
     const float Thigh = sp.temp_high + sp.bias_cool;
     const float Tlow  = sp.temp_low  + sp.bias_heat;
     const float HV    = sp.vpd_hysteresis;
-    const float TH    = sp.temp_hysteresis;
 
     // ── Evaluate conditions ──
     bool safety_cool    = in.temp_f >= sp.safety_max;
     bool safety_heat    = in.temp_f <= sp.safety_min;
     bool vpd_above_band = in.vpd_kpa > sp.vpd_high;
     bool vpd_below_exit = in.vpd_kpa < (sp.vpd_high - HV);
-    bool needs_cooling  = in.temp_f > Thigh;
 
-    // BUG 4 FIX: DEHUM_VENT entry uses hysteresis, exit uses vpd_low
+    // FIX 4: DEHUM_VENT entry vs exit thresholds (sticky hysteresis)
     bool vpd_too_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block;
-    bool vpd_too_low_exit  = in.vpd_kpa >= sp.vpd_low;  // exit when VPD returns to band floor
+    bool vpd_dehum_exit    = in.vpd_kpa >= sp.vpd_low;
 
+    // FIX 3: VENTILATE entry vs exit (temperature hysteresis)
+    bool was_ventilating = (prev == VENTILATE);
+    bool needs_cooling   = was_ventilating
+        ? in.temp_f > (Thigh - sp.temp_hysteresis)
+        : in.temp_f > Thigh;
+
+    bool was_sealed = (prev == SEALED_MIST);
+    bool was_dehum  = (prev == DEHUM_VENT);
     bool in_thermal_relief = (prev == THERMAL_RELIEF);
-    bool was_sealed        = (prev == SEALED_MIST);
-    bool was_dehum         = (prev == DEHUM_VENT);
-    bool was_ventilating   = (prev == VENTILATE);
 
-    // ── VPD watch dwell ──
-    if (vpd_above_band && prev != SEALED_MIST && prev != THERMAL_RELIEF) {
+    // ── FIX 7: VPD watch timer — suspended during safety modes ──
+    if (vpd_above_band
+        && prev != SEALED_MIST && prev != THERMAL_RELIEF
+        && prev != SAFETY_COOL && prev != SAFETY_HEAT) {
         state.vpd_watch_timer_ms += dt_ms;
-    } else if (!vpd_above_band && prev != SEALED_MIST && prev != THERMAL_RELIEF) {
+    } else if (!vpd_above_band
+        && prev != SEALED_MIST && prev != THERMAL_RELIEF) {
         state.vpd_watch_timer_ms = 0;
     }
     bool vpd_wants_seal = vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
 
     // ── Priority-ordered mode determination ──
     Mode mode = IDLE;
+
+    // FIX 5: Relief exit flag — when relief expires, fall through to full cascade
+    bool relief_just_expired = false;
 
     if (safety_cool) {
         mode = SAFETY_COOL;
@@ -90,92 +95,150 @@ inline Mode determine_mode(
         state.sealed_timer_ms = 0;
         state.relief_cycle_count = 0;
     } else if (in_thermal_relief) {
+        // FIX 5: When relief expires, DON'T pick mode inline — fall through
         state.relief_timer_ms += dt_ms;
         if (state.relief_timer_ms >= sp.relief_duration_ms) {
             state.relief_timer_ms = 0;
             state.sealed_timer_ms = 0;
-            if (vpd_above_band) {
-                mode = SEALED_MIST;
-                // Gap FIX: track consecutive relief cycles
-                state.relief_cycle_count++;
-            } else {
-                mode = IDLE;
-                state.vpd_watch_timer_ms = 0;
-                state.relief_cycle_count = 0;
-            }
-        } else {
-            mode = THERMAL_RELIEF;
-        }
-    } else if (was_sealed) {
-        if (vpd_below_exit) {
-            mode = needs_cooling ? VENTILATE : IDLE;
-            state.sealed_timer_ms = 0;
             state.vpd_watch_timer_ms = 0;
-            state.relief_cycle_count = 0;
-        } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
-            mode = THERMAL_RELIEF;
-            state.relief_timer_ms = 0;
+            relief_just_expired = true;
+            // Track consecutive cycles
+            if (vpd_above_band) state.relief_cycle_count++;
+            else state.relief_cycle_count = 0;
+            // Don't set mode — fall through to cascade below
         } else {
-            mode = SEALED_MIST;
-            state.sealed_timer_ms += dt_ms;
+            mode = THERMAL_RELIEF;
         }
-    } else if (vpd_wants_seal) {
-        mode = SEALED_MIST;
-        // BUG 2 FIX: start sealed timer at dt_ms, not 0 (count entry cycle)
-        state.sealed_timer_ms = dt_ms;
-    } else if (was_dehum) {
-        // BUG 4 FIX: DEHUM_VENT stays until VPD rises to vpd_low (sticky hysteresis)
-        mode = vpd_too_low_exit ? IDLE : DEHUM_VENT;
-    } else if (vpd_too_low_enter) {
-        mode = DEHUM_VENT;
-    } else if (was_ventilating) {
-        // Gap FIX: VENTILATE exits with temp hysteresis (prevents vent chatter)
-        // Stay ventilating until temp drops below Thigh - temp_hysteresis
-        mode = (in.temp_f <= (Thigh - TH)) ? IDLE : VENTILATE;
-    } else if (needs_cooling) {
-        mode = VENTILATE;
-    } else {
-        mode = IDLE;
     }
 
-    // ── VPD safety overrides ──
-    // BUG 3 FIX: cannot override SAFETY_HEAT (cold + dry = heat first)
-    if (in.vpd_kpa > sp.vpd_max_safe && mode != SAFETY_COOL && mode != SAFETY_HEAT) {
+    // The rest of the cascade runs if we haven't landed on a mode yet
+    if (mode != SAFETY_COOL && mode != SAFETY_HEAT && mode != THERMAL_RELIEF) {
+        // FIX 5: Skip was_sealed on the tick relief just expired
+        if (was_sealed && !relief_just_expired) {
+            if (vpd_below_exit) {
+                mode = needs_cooling ? VENTILATE : IDLE;
+                state.sealed_timer_ms = 0;
+                state.vpd_watch_timer_ms = 0;
+                state.relief_cycle_count = 0;
+                state.mist_stage = MIST_WATCH;
+                state.mist_stage_timer_ms = 0;
+            } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
+                mode = THERMAL_RELIEF;
+                state.relief_timer_ms = 0;
+            } else {
+                mode = SEALED_MIST;
+                state.sealed_timer_ms += dt_ms;
+            }
+        } else if (vpd_wants_seal) {
+            mode = SEALED_MIST;
+            state.sealed_timer_ms = dt_ms;  // FIX 2 (off-by-one): count entry tick
+            state.mist_stage = MIST_S1;
+            state.mist_stage_timer_ms = 0;
+        } else if (vpd_too_low_enter) {
+            mode = DEHUM_VENT;
+        } else if (was_dehum && !vpd_dehum_exit) {
+            // FIX 4: Stay in DEHUM_VENT until VPD recovers to vpd_low
+            mode = DEHUM_VENT;
+        } else if (needs_cooling) {
+            mode = VENTILATE;
+        } else {
+            mode = IDLE;
+        }
+    }
+
+    // ── FIX 2: VPD safety overrides — cannot stomp safety or relief ──
+    if (in.vpd_kpa > sp.vpd_max_safe
+        && mode != SAFETY_COOL
+        && mode != SAFETY_HEAT
+        && mode != THERMAL_RELIEF) {
         mode = SEALED_MIST;
         state.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
-        state.sealed_timer_ms = dt_ms;
+        state.sealed_timer_ms = 0;
+        state.mist_stage = MIST_S1;
+        state.mist_stage_timer_ms = 0;
     }
     if (in.vpd_kpa < sp.vpd_min_safe && mode == IDLE) {
         mode = sp.econ_block ? IDLE : DEHUM_VENT;
     }
 
-    // ── BUG 1 FIX: Update mode_prev at the END, after all logic ──
+    // ── FIX 9: Mist stage progression (this code is the authority) ──
+    if (mode == SEALED_MIST) {
+        state.mist_stage_timer_ms += dt_ms;
+        switch (state.mist_stage) {
+            case MIST_WATCH:
+                // Should not be in WATCH while sealed — promote to S1
+                state.mist_stage = MIST_S1;
+                state.mist_stage_timer_ms = 0;
+                break;
+            case MIST_S1:
+                // Escalate to S2 after mist_s2_delay_ms
+                if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms
+                    && in.vpd_kpa > sp.vpd_high) {
+                    state.mist_stage = MIST_S2;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            case MIST_S2:
+                // Escalate to FOG if VPD exceeds ceiling + fog_escalation_kpa
+                if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa) {
+                    state.mist_stage = MIST_FOG;
+                    state.mist_stage_timer_ms = 0;
+                }
+                // De-escalate to S1 if VPD drops below band ceiling
+                if (in.vpd_kpa < sp.vpd_high) {
+                    state.mist_stage = MIST_S1;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            case MIST_FOG:
+                // De-escalate to S2 if VPD drops below fog threshold
+                if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
+                    state.mist_stage = MIST_S2;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+        }
+    } else {
+        // Not sealed — reset mist state
+        if (state.mist_stage != MIST_WATCH) {
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        }
+    }
+
+    // ── FIX 1: Write mode_prev at the END ──
     state.mode = mode;
     state.mode_prev = mode;
     return mode;
 }
 
-/*
- * resolve_equipment() — Map mode to relay outputs.
- *
- * FIXES applied:
- *   Bug 5: mist_stage removed (dead state; mister_state from ESPHome is authority)
- *   Bug 6: IDLE low-VPD heating removed (bang-bang oscillation with 54K BTU gas)
- */
+// ═══════════════════════════════════════════════════════════════════
+// resolve_equipment() — Map mode to relay outputs.
+// FIX 9: Takes ControlState for mist_stage authority.
+// ═══════════════════════════════════════════════════════════════════
 inline RelayOutputs resolve_equipment(
     Mode mode,
     const SensorInputs& in,
     const Setpoints& sp,
+    const ControlState& state,
     bool lead_is_fan1
 ) {
     const float Tlow = sp.temp_low + sp.bias_heat;
     const float Thigh = sp.temp_high + sp.bias_cool;
+
+    // FIX 3: Heater thresholds with asymmetric hysteresis
+    // Heat2 (gas) requires temp BELOW Tlow by heat_hysteresis (avoid gas short-cycle)
     bool needs_heating_s1 = in.temp_f < (Tlow + sp.dH2);
-    bool needs_heating_s2 = in.temp_f < Tlow;
+    bool needs_heating_s2 = in.temp_f < (Tlow - sp.heat_hysteresis);
 
     RelayOutputs out = {false, false, false, false, false, false};
 
     switch (mode) {
+        case SENSOR_FAULT:
+            // FIX 8: Safe posture — heat1 on (keep warm), everything else off
+            out.heat1 = true;
+            break;
+
         case SAFETY_COOL:
             out.vent = true;
             out.fan1 = true; out.fan2 = true;
@@ -196,15 +259,13 @@ inline RelayOutputs resolve_equipment(
         case SEALED_MIST:
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
+            // FIX 9: Fog based on mist_stage (this code is authority)
             {
                 bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
                     || (in.temp_f < sp.fog_min_temp)
                     || (in.local_hour < sp.fog_window_start)
                     || (in.local_hour >= sp.fog_window_end);
-                bool fog_escalation = (in.mister_state == 2)
-                    && (in.humid_s2_duration_ms > sp.mister_all_delay_ms)
-                    && (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa);
-                out.fog = fog_escalation && !fog_gated && !sp.occupancy_inhibit;
+                out.fog = (state.mist_stage == MIST_FOG) && !fog_gated && !sp.occupancy_inhibit;
             }
             break;
 
@@ -223,7 +284,8 @@ inline RelayOutputs resolve_equipment(
 
         case DEHUM_VENT:
             out.vent = true;
-            if (in.vpd_kpa < sp.vpd_low - 2 * sp.vpd_hysteresis) {
+            // FIX 10: Tunable dual-fan threshold
+            if (in.vpd_kpa < sp.vpd_low - sp.dehum_aggressive_kpa) {
                 out.fan1 = true; out.fan2 = true;
             } else {
                 if (lead_is_fan1) out.fan1 = true; else out.fan2 = true;
@@ -231,11 +293,12 @@ inline RelayOutputs resolve_equipment(
             break;
 
         case IDLE:
-            // BUG 6 FIX: removed low-VPD heating override (caused 54K BTU oscillation)
-            // Heating is purely temperature-driven. VPD dehumidification goes through
-            // DEHUM_VENT mode which opens the vent — not through heating in IDLE.
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
+            // FIX 6: Econ heating — electric only, temp-capped (no gas oscillation)
+            if (in.vpd_kpa < sp.vpd_low && sp.econ_block && in.temp_f < Thigh - 5.0f) {
+                out.heat1 = true;
+            }
             break;
     }
 
