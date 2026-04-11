@@ -4,29 +4,26 @@
  * =========================================================
  *
  * SINGLE SOURCE OF TRUTH. Same compiled code on ESP32 and x86.
- * ZERO ESPHome dependencies. Pure functions on structs.
+ * ZERO ESPHome dependencies.
  *
- * This code OWNS all control state including mist_stage.
- * ESPHome/controls.yaml is an I/O bridge, not the authority.
+ * NOTE: determine_mode() mutates ControlState (timers, mode_prev).
+ * resolve_equipment() is pure (reads only, no side effects).
  *
- * Fixes applied (from 4-LLM review synthesis, 2026-04-11):
- *   1. mode_prev captured at top, written at bottom
- *   2. VPD safety cannot override SAFETY_HEAT or THERMAL_RELIEF
- *   3. Temperature hysteresis for VENTILATE exit + heater exit
- *   4. DEHUM_VENT sticky exit hysteresis
- *   5. Relief exit re-runs full cascade (no inline mini-decision)
- *   6. IDLE econ heating: electric only, temp-capped
- *   7. VPD watch timer suspended during safety modes
- *   8. NaN guard → SENSOR_FAULT mode
- *   9. mist_stage is the authority (not in.mister_state)
- *  10. DEHUM_VENT dual-fan threshold is tunable
- *  11. Config moved from SensorInputs to Setpoints
+ * HARDWARE DEPENDENCIES (not enforced here, must be enforced by caller):
+ *   - Relay minimum on/off times (ESPHome set_relay with min_on_ms/min_off_ms)
+ *   - Gas heater minimum off time (MIN_HEAT_OFF_MS, typically 300s)
+ *   - Vent actuator travel time (1-5 min, ESPHome min_vent_on_s/min_vent_off_s)
+ *
+ * SENSOR_FAULT recovery note: when sensors return to valid after SENSOR_FAULT,
+ * the next cycle re-evaluates from scratch (prev=SENSOR_FAULT matches no
+ * stateful branch). Accumulated timers in ControlState are stale but harmless.
  */
 
 #include "greenhouse_types.h"
 
 // ═══════════════════════════════════════════════════════════════════
 // determine_mode() — Core mode decision, called every 5s.
+// Mutates state (timers, mode_prev, mist_stage). Not pure.
 // ═══════════════════════════════════════════════════════════════════
 inline Mode determine_mode(
     const SensorInputs& in,
@@ -34,19 +31,26 @@ inline Mode determine_mode(
     ControlState& state,
     uint32_t dt_ms
 ) {
-    // ── FIX 8: NaN guard — sensor fault takes highest priority ──
+    // ── C2: Sentinel check — detect state corruption ──
+    if (state.sentinel != STATE_SENTINEL) {
+        state = initial_state();
+        // Corruption detected — start fresh from IDLE
+    }
+
+    // ── NaN guard — sensor fault takes highest priority ──
     if (std::isnan(in.temp_f) || std::isnan(in.vpd_kpa) || std::isnan(in.rh_pct)) {
         state.mode = SENSOR_FAULT;
         state.mode_prev = SENSOR_FAULT;
         return SENSOR_FAULT;
     }
 
-    // ── FIX 1: Capture previous mode BEFORE any logic ──
+    // ── Capture previous mode BEFORE any logic ──
     const Mode prev = state.mode_prev;
 
     const float Thigh = sp.temp_high + sp.bias_cool;
     const float Tlow  = sp.temp_low  + sp.bias_heat;
-    const float HV    = sp.vpd_hysteresis;
+    // R2 FIX: Clamp hysteresis to prevent contradictory exit conditions
+    const float HV    = std::min(sp.vpd_hysteresis, sp.vpd_high * 0.5f);
 
     // ── Evaluate conditions ──
     bool safety_cool    = in.temp_f >= sp.safety_max;
@@ -54,11 +58,9 @@ inline Mode determine_mode(
     bool vpd_above_band = in.vpd_kpa > sp.vpd_high;
     bool vpd_below_exit = in.vpd_kpa < (sp.vpd_high - HV);
 
-    // FIX 4: DEHUM_VENT entry vs exit thresholds (sticky hysteresis)
     bool vpd_too_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block;
     bool vpd_dehum_exit    = in.vpd_kpa >= sp.vpd_low;
 
-    // FIX 3: VENTILATE entry vs exit (temperature hysteresis)
     bool was_ventilating = (prev == VENTILATE);
     bool needs_cooling   = was_ventilating
         ? in.temp_f > (Thigh - sp.temp_hysteresis)
@@ -68,11 +70,11 @@ inline Mode determine_mode(
     bool was_dehum  = (prev == DEHUM_VENT);
     bool in_thermal_relief = (prev == THERMAL_RELIEF);
 
-    // ── FIX 7: VPD watch timer — suspended during safety modes ──
+    // ── VPD watch timer — suspended during safety modes ──
     if (vpd_above_band
         && prev != SEALED_MIST && prev != THERMAL_RELIEF
         && prev != SAFETY_COOL && prev != SAFETY_HEAT) {
-        state.vpd_watch_timer_ms += dt_ms;
+        state.vpd_watch_timer_ms = sat_add(state.vpd_watch_timer_ms, dt_ms);  // C5 FIX
     } else if (!vpd_above_band
         && prev != SEALED_MIST && prev != THERMAL_RELIEF) {
         state.vpd_watch_timer_ms = 0;
@@ -81,45 +83,33 @@ inline Mode determine_mode(
 
     // ── Priority-ordered mode determination ──
     Mode mode = IDLE;
-
-    // FIX 5: Relief exit flag — when relief expires, fall through to full cascade
     bool relief_just_expired = false;
 
     if (safety_cool) {
         mode = SAFETY_COOL;
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;
-        state.relief_cycle_count = 0;
     } else if (safety_heat) {
         mode = SAFETY_HEAT;
         state.sealed_timer_ms = 0;
-        state.relief_cycle_count = 0;
     } else if (in_thermal_relief) {
-        // FIX 5: When relief expires, DON'T pick mode inline — fall through
-        state.relief_timer_ms += dt_ms;
+        state.relief_timer_ms = sat_add(state.relief_timer_ms, dt_ms);  // C5 FIX
         if (state.relief_timer_ms >= sp.relief_duration_ms) {
             state.relief_timer_ms = 0;
             state.sealed_timer_ms = 0;
             state.vpd_watch_timer_ms = 0;
             relief_just_expired = true;
-            // Track consecutive cycles
-            if (vpd_above_band) state.relief_cycle_count++;
-            else state.relief_cycle_count = 0;
-            // Don't set mode — fall through to cascade below
         } else {
             mode = THERMAL_RELIEF;
         }
     }
 
-    // The rest of the cascade runs if we haven't landed on a mode yet
     if (mode != SAFETY_COOL && mode != SAFETY_HEAT && mode != THERMAL_RELIEF) {
-        // FIX 5: Skip was_sealed on the tick relief just expired
         if (was_sealed && !relief_just_expired) {
             if (vpd_below_exit) {
                 mode = needs_cooling ? VENTILATE : IDLE;
                 state.sealed_timer_ms = 0;
                 state.vpd_watch_timer_ms = 0;
-                state.relief_cycle_count = 0;
                 state.mist_stage = MIST_WATCH;
                 state.mist_stage_timer_ms = 0;
             } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
@@ -127,17 +117,16 @@ inline Mode determine_mode(
                 state.relief_timer_ms = 0;
             } else {
                 mode = SEALED_MIST;
-                state.sealed_timer_ms += dt_ms;
+                state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);  // C5 FIX
             }
         } else if (vpd_wants_seal) {
             mode = SEALED_MIST;
-            state.sealed_timer_ms = dt_ms;  // FIX 2 (off-by-one): count entry tick
+            state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
             state.mist_stage_timer_ms = 0;
         } else if (vpd_too_low_enter) {
             mode = DEHUM_VENT;
         } else if (was_dehum && !vpd_dehum_exit) {
-            // FIX 4: Stay in DEHUM_VENT until VPD recovers to vpd_low
             mode = DEHUM_VENT;
         } else if (needs_cooling) {
             mode = VENTILATE;
@@ -146,7 +135,7 @@ inline Mode determine_mode(
         }
     }
 
-    // ── FIX 2: VPD safety overrides — cannot stomp safety or relief ──
+    // ── VPD safety overrides — cannot stomp safety or relief ──
     if (in.vpd_kpa > sp.vpd_max_safe
         && mode != SAFETY_COOL
         && mode != SAFETY_HEAT
@@ -161,17 +150,15 @@ inline Mode determine_mode(
         mode = sp.econ_block ? IDLE : DEHUM_VENT;
     }
 
-    // ── FIX 9: Mist stage progression (this code is the authority) ──
+    // ── Mist stage progression ──
     if (mode == SEALED_MIST) {
-        state.mist_stage_timer_ms += dt_ms;
+        state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);  // C5 FIX
         switch (state.mist_stage) {
             case MIST_WATCH:
-                // Should not be in WATCH while sealed — promote to S1
                 state.mist_stage = MIST_S1;
                 state.mist_stage_timer_ms = 0;
                 break;
             case MIST_S1:
-                // Escalate to S2 after mist_s2_delay_ms
                 if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms
                     && in.vpd_kpa > sp.vpd_high) {
                     state.mist_stage = MIST_S2;
@@ -179,42 +166,41 @@ inline Mode determine_mode(
                 }
                 break;
             case MIST_S2:
-                // Escalate to FOG if VPD exceeds ceiling + fog_escalation_kpa
                 if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa) {
                     state.mist_stage = MIST_FOG;
                     state.mist_stage_timer_ms = 0;
                 }
-                // De-escalate to S1 if VPD drops below band ceiling
-                if (in.vpd_kpa < sp.vpd_high) {
+                // R4 FIX: De-escalate with hysteresis (not raw vpd_high)
+                if (in.vpd_kpa < sp.vpd_high - HV) {
                     state.mist_stage = MIST_S1;
                     state.mist_stage_timer_ms = 0;
                 }
                 break;
             case MIST_FOG:
-                // De-escalate to S2 if VPD drops below fog threshold
                 if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
                     state.mist_stage = MIST_S2;
                     state.mist_stage_timer_ms = 0;
                 }
                 break;
+            default:  // C3 FIX: Corrupted mist_stage → reset
+                state.mist_stage = MIST_WATCH;
+                state.mist_stage_timer_ms = 0;
+                break;
         }
     } else {
-        // Not sealed — reset mist state
         if (state.mist_stage != MIST_WATCH) {
             state.mist_stage = MIST_WATCH;
             state.mist_stage_timer_ms = 0;
         }
     }
 
-    // ── FIX 1: Write mode_prev at the END ──
     state.mode = mode;
     state.mode_prev = mode;
     return mode;
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// resolve_equipment() — Map mode to relay outputs.
-// FIX 9: Takes ControlState for mist_stage authority.
+// resolve_equipment() — Map mode to relay outputs. Pure function.
 // ═══════════════════════════════════════════════════════════════════
 inline RelayOutputs resolve_equipment(
     Mode mode,
@@ -226,8 +212,6 @@ inline RelayOutputs resolve_equipment(
     const float Tlow = sp.temp_low + sp.bias_heat;
     const float Thigh = sp.temp_high + sp.bias_cool;
 
-    // FIX 3: Heater thresholds with asymmetric hysteresis
-    // Heat2 (gas) requires temp BELOW Tlow by heat_hysteresis (avoid gas short-cycle)
     bool needs_heating_s1 = in.temp_f < (Tlow + sp.dH2);
     bool needs_heating_s2 = in.temp_f < (Tlow - sp.heat_hysteresis);
 
@@ -235,8 +219,7 @@ inline RelayOutputs resolve_equipment(
 
     switch (mode) {
         case SENSOR_FAULT:
-            // FIX 8: Safe posture — heat1 on (keep warm), everything else off
-            out.heat1 = true;
+            out.heat1 = true;  // keep warm, don't cook
             break;
 
         case SAFETY_COOL:
@@ -259,7 +242,6 @@ inline RelayOutputs resolve_equipment(
         case SEALED_MIST:
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
-            // FIX 9: Fog based on mist_stage (this code is authority)
             {
                 bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
                     || (in.temp_f < sp.fog_min_temp)
@@ -284,7 +266,6 @@ inline RelayOutputs resolve_equipment(
 
         case DEHUM_VENT:
             out.vent = true;
-            // FIX 10: Tunable dual-fan threshold
             if (in.vpd_kpa < sp.vpd_low - sp.dehum_aggressive_kpa) {
                 out.fan1 = true; out.fan2 = true;
             } else {
@@ -295,10 +276,13 @@ inline RelayOutputs resolve_equipment(
         case IDLE:
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
-            // FIX 6: Econ heating — electric only, temp-capped (no gas oscillation)
-            if (in.vpd_kpa < sp.vpd_low && sp.econ_block && in.temp_f < Thigh - 5.0f) {
+            if (in.vpd_kpa < sp.vpd_low && sp.econ_block && in.temp_f < Thigh - ECON_HEAT_MARGIN_F) {
                 out.heat1 = true;
             }
+            break;
+
+        default:  // C4 FIX: Corrupted mode → fail warm
+            out.heat1 = true;
             break;
     }
 

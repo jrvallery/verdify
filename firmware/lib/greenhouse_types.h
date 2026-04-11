@@ -3,10 +3,14 @@
  * greenhouse_types.h — Shared types for greenhouse climate controller.
  * Used by both ESP32 firmware (via ESPHome) and native x86 tests.
  * NO ESPHome dependencies. Pure C++.
+ *
+ * All floats are single-precision by design — ESP32 has hardware FPU
+ * for float but emulates double. Do not use double.
  */
 
 #include <cstdint>
 #include <cmath>
+#include <algorithm>
 
 // ── Greenhouse operating modes (mutually exclusive, priority-ordered) ──
 enum Mode {
@@ -20,15 +24,18 @@ enum Mode {
     IDLE              // everything in band → vent closed, no active equipment
 };
 
+static_assert(IDLE == 7, "Mode enum ordering changed — update MODE_NAMES and switch statements");
+
 // Mister sub-stages within SEALED_MIST (owned by this code, not ESPHome)
 enum MistStage { MIST_WATCH, MIST_S1, MIST_S2, MIST_FOG };
 
 // Mode name lookup (same order as enum)
-static const char* MODE_NAMES[] = {
+// C1 FIX: inline constexpr prevents per-TU duplication
+inline constexpr const char* MODE_NAMES[] = {
     "SENSOR_FAULT", "SAFETY_COOL", "SAFETY_HEAT", "SEALED_MIST",
     "THERMAL_RELIEF", "VENTILATE", "DEHUM_VENT", "IDLE"
 };
-static const char* MIST_NAMES[] = {"WATCH", "S1", "S2", "FOG"};
+inline constexpr const char* MIST_NAMES[] = {"WATCH", "S1", "S2", "FOG"};
 
 // ── Sensor inputs (ONLY actual sensor readings, no config) ──
 struct SensorInputs {
@@ -38,7 +45,7 @@ struct SensorInputs {
     float dew_point_f;      // indoor dew point (°F)
     float outdoor_rh_pct;   // outdoor RH (%)
     float enthalpy_delta;   // outdoor - indoor enthalpy (kJ/kg)
-    float vpd_south;        // zone VPD sensors
+    float vpd_south;        // zone VPD sensors (NaN-tolerant — checked where used)
     float vpd_west;
     float vpd_east;
     int   local_hour;       // 0-23, from SNTP
@@ -57,7 +64,7 @@ struct Setpoints {
     float bias_heat;            // shift heating threshold
     float vpd_hysteresis;       // exit hysteresis for sealed mist + dehum (kPa)
     float temp_hysteresis;      // exit hysteresis for VENTILATE (°F)
-    float heat_hysteresis;      // exit hysteresis for heater off (°F)
+    float heat_hysteresis;      // entry offset for gas heater below temp_low (°F)
     float dH2;                  // heat stage 2 delta: electric pre-heat zone above temp_low
     float dC2;                  // cool stage 2 delta: aggressive cooling trigger above temp_high
     // Safety limits
@@ -84,8 +91,12 @@ struct Setpoints {
     bool  econ_block;           // economiser blocks venting
 };
 
+// C2 FIX: Sentinel for corruption detection
+static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
+
 // ── Persistent control state (survives across 5s evaluation cycles) ──
 struct ControlState {
+    uint32_t sentinel;          // C2: must equal STATE_SENTINEL or state is corrupt
     Mode mode;                  // current mode (written at end of determine_mode)
     Mode mode_prev;             // previous cycle's mode (read at top of determine_mode)
     MistStage mist_stage;       // mister escalation stage (owned by this code)
@@ -93,7 +104,6 @@ struct ControlState {
     uint32_t relief_timer_ms;   // time spent in current relief period
     uint32_t vpd_watch_timer_ms;// dwell timer before sealing
     uint32_t mist_stage_timer_ms;// time in current mist stage (for escalation)
-    uint32_t relief_cycle_count; // consecutive sealed→relief cycles
 };
 
 // ── Relay outputs (computed from mode, applied to hardware) ──
@@ -105,6 +115,15 @@ struct RelayOutputs {
     bool fog;
     bool vent;
 };
+
+// ── Saturating addition for timers (C5 FIX) ──
+inline uint32_t sat_add(uint32_t a, uint32_t b) {
+    uint32_t result = a + b;
+    return (result < a) ? UINT32_MAX : result;  // overflow → cap at max
+}
+
+// Q2 FIX: Named constant for econ heat margin
+static constexpr float ECON_HEAT_MARGIN_F = 5.0f;
 
 // ── Defaults ──
 inline Setpoints default_setpoints() {
@@ -125,12 +144,28 @@ inline Setpoints default_setpoints() {
     };
 }
 
+// R7 FIX: Clamp setpoints to sane ranges (call before determine_mode)
+inline void validate_setpoints(Setpoints& sp) {
+    sp.temp_high = std::max(50.0f, std::min(110.0f, sp.temp_high));
+    sp.temp_low = std::max(30.0f, std::min(90.0f, sp.temp_low));
+    if (sp.temp_low >= sp.temp_high) sp.temp_low = sp.temp_high - 5.0f;
+    sp.vpd_high = std::max(0.3f, std::min(5.0f, sp.vpd_high));
+    sp.vpd_low = std::max(0.1f, std::min(sp.vpd_high - 0.1f, sp.vpd_low));
+    sp.vpd_hysteresis = std::max(0.05f, std::min(sp.vpd_high * 0.5f, sp.vpd_hysteresis));
+    sp.temp_hysteresis = std::max(0.5f, std::min(5.0f, sp.temp_hysteresis));
+    sp.heat_hysteresis = std::max(0.0f, std::min(3.0f, sp.heat_hysteresis));
+    sp.safety_max = std::max(sp.temp_high + 5.0f, std::min(120.0f, sp.safety_max));
+    sp.safety_min = std::max(30.0f, std::min(sp.temp_low - 5.0f, sp.safety_min));
+    sp.sealed_max_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.sealed_max_ms));
+    sp.relief_duration_ms = std::max(uint32_t(15000), std::min(uint32_t(600000), sp.relief_duration_ms));
+}
+
 inline ControlState initial_state() {
     return {
+        .sentinel = STATE_SENTINEL,
         .mode = IDLE, .mode_prev = IDLE,
         .mist_stage = MIST_WATCH,
         .sealed_timer_ms = 0, .relief_timer_ms = 0,
-        .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
-        .relief_cycle_count = 0
+        .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0
     };
 }
