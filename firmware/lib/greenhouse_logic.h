@@ -209,50 +209,47 @@ inline Mode determine_mode(
             state.mist_stage = MIST_WATCH;
             state.mist_stage_timer_ms = 0;
         } else {
-        state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);
-        switch (state.mist_stage) {
-            case MIST_WATCH:
-                state.mist_stage = MIST_S1;
-                state.mist_stage_timer_ms = 0;
-                break;
-            case MIST_S1:
-                if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms
-                    && in.vpd_kpa > sp.vpd_high) {
-                    state.mist_stage = MIST_S2;
-                    state.mist_stage_timer_ms = 0;
-                }
-                break;
-            case MIST_S2: {
-                // R2-9: Only escalate to FOG if fog is both demanded AND currently allowed
-                bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
-                    || (in.temp_f < sp.fog_min_temp)
-                    || (in.local_hour < sp.fog_window_start)
-                    || (in.local_hour >= sp.fog_window_end)
-                    || moisture_blocked_by_occupancy(in, sp);
-
-                if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
-                    state.mist_stage = MIST_FOG;
-                    state.mist_stage_timer_ms = 0;
-                }
-                // De-escalate with hysteresis
-                if (in.vpd_kpa < sp.vpd_high - HV) {
+            state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);
+            switch (state.mist_stage) {
+                case MIST_WATCH:
                     state.mist_stage = MIST_S1;
                     state.mist_stage_timer_ms = 0;
+                    break;
+                case MIST_S1:
+                    if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms
+                        && in.vpd_kpa > sp.vpd_high) {
+                        state.mist_stage = MIST_S2;
+                        state.mist_stage_timer_ms = 0;
+                    }
+                    break;
+                case MIST_S2: {
+                    bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
+                        || (in.temp_f < sp.fog_min_temp)
+                        || (in.local_hour < sp.fog_window_start)
+                        || (in.local_hour >= sp.fog_window_end)
+                        || moisture_blocked_by_occupancy(in, sp);
+                    if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
+                        state.mist_stage = MIST_FOG;
+                        state.mist_stage_timer_ms = 0;
+                    }
+                    if (in.vpd_kpa < sp.vpd_high - HV) {
+                        state.mist_stage = MIST_S1;
+                        state.mist_stage_timer_ms = 0;
+                    }
+                    break;
                 }
-                break;
-            }
-            case MIST_FOG:
-                if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
-                    state.mist_stage = MIST_S2;
+                case MIST_FOG:
+                    if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
+                        state.mist_stage = MIST_S2;
+                        state.mist_stage_timer_ms = 0;
+                    }
+                    break;
+                default:
+                    state.mist_stage = MIST_WATCH;
                     state.mist_stage_timer_ms = 0;
-                }
-                break;
-            default:
-                state.mist_stage = MIST_WATCH;
-                state.mist_stage_timer_ms = 0;
-                break;
+                    break;
+            }
         }
-        } // close occupancy else block
     } else {
         if (state.mist_stage != MIST_WATCH) {
             state.mist_stage = MIST_WATCH;
