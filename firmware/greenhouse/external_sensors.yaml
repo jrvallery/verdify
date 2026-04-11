@@ -118,6 +118,12 @@ udp:
               JsonArray obs = root["obs"][0];
               if (obs.size() < 18) return false;
 
+              // Validate critical fields are numeric before parsing
+              if (!obs[7].is<float>() || !obs[8].is<float>()) {
+                ESP_LOGW("tempest", "obs_st: temp or rh field is not numeric");
+                return false;
+              }
+
               // Wind (m/s to mph: multiply by 2.237)
               float wind_lull = obs[1].as<float>() * 2.237f;
               float wind_avg  = obs[2].as<float>() * 2.237f;
@@ -127,8 +133,12 @@ udp:
               // Pressure (MB to hPa: 1:1)
               float pressure = obs[6].as<float>();
 
-              // Temp (C to F)
+              // Temp (C to F) — reject physically impossible values
               float temp_c = obs[7].as<float>();
+              if (temp_c < -50.0f || temp_c > 60.0f) {
+                ESP_LOGW("tempest", "obs_st: temp_c %.1f out of range [-50,60]", temp_c);
+                return false;
+              }
               float temp_f = temp_c * 9.0f / 5.0f + 32.0f;
 
               // Humidity (%)
@@ -387,12 +397,24 @@ interval:
                     // Shelly Pro EM-50 returns em1:0 and em1:1 objects
                     JsonObject ch0 = root["em1:0"];
                     JsonObject ch1 = root["em1:1"];
-                    if (ch0) {
-                      id(shelly_ch0_power_w) = ch0["act_power"].as<float>();
-                      id(shelly_voltage) = ch0["voltage"].as<float>();
+                    if (ch0 && ch0.containsKey("act_power") && ch0.containsKey("voltage")) {
+                      float p = ch0["act_power"].as<float>();
+                      float v = ch0["voltage"].as<float>();
+                      // Reject physically impossible values
+                      if (p >= -1000 && p <= 10000 && v >= 100 && v <= 260) {
+                        id(shelly_ch0_power_w) = p;
+                        id(shelly_voltage) = v;
+                      } else {
+                        ESP_LOGW("shelly", "ch0 values out of range: P=%.0f V=%.0f", p, v);
+                      }
+                    } else {
+                      ESP_LOGW("shelly", "ch0 missing act_power or voltage");
                     }
-                    if (ch1) {
-                      id(shelly_ch1_power_w) = ch1["act_power"].as<float>();
+                    if (ch1 && ch1.containsKey("act_power")) {
+                      float p = ch1["act_power"].as<float>();
+                      if (p >= -1000 && p <= 10000) {
+                        id(shelly_ch1_power_w) = p;
+                      }
                     }
                     id(shelly_total_power_w) = id(shelly_ch0_power_w) + id(shelly_ch1_power_w);
                     ESP_LOGI("shelly", "EM50: total %.1fW, ch0 %.1fW, ch1 %.1fW, %.1fV",
