@@ -13,6 +13,7 @@ import logging
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
+from datetime import timedelta as _td
 from zoneinfo import ZoneInfo
 
 import asyncpg
@@ -1188,9 +1189,40 @@ async def forecast_action_engine(pool: asyncpg.Pool) -> None:
 # ═════════════════════════════════════════════════════════════════
 # 12. FORECAST DEVIATION CHECK (every 900s = 15 min)
 # ═════════════════════════════════════════════════════════════════
+_last_deviation_trigger_ts: float = 0.0
+
+
 async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
-    """Compare current conditions to forecast. Write trigger file if deviation exceeds threshold."""
+    """Compare outdoor observed conditions to outdoor forecast. Write trigger file if deviation exceeds threshold.
+
+    Guards against false triggers:
+    - Only runs during daytime (sunrise to sunset+1h) — nighttime RH divergence is normal
+    - Cooldown tracked in-memory (not via trigger file which gets consumed by heartbeat)
+    - Only logs to deviation_log when outside cooldown (prevents log pollution)
+    """
+    global _last_deviation_trigger_ts
     trigger_file = STATE_DIR / "replan-needed.json"
+
+    # Time-of-day gate: only check during daytime + 1h buffer after sunset
+    # Nighttime RH/temp deviations are climatologically normal and not actionable
+    from astral import LocationInfo
+    from astral.sun import sun as _astral_sun
+
+    now = datetime.now(ZoneInfo("America/Denver"))
+    loc = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
+    s = _astral_sun(loc.observer, date=now.date(), tzinfo=ZoneInfo("America/Denver"))
+    sunrise = s["sunrise"]
+    sunset_buffer = s["sunset"] + _td(hours=1)
+
+    if now < sunrise or now > sunset_buffer:
+        return  # Night — skip deviation check entirely
+
+    # In-memory cooldown (survives trigger file consumption by heartbeat)
+    import time as _t
+
+    cooldown_s = 3600  # 1 hour minimum between triggers
+    if _t.time() - _last_deviation_trigger_ts < cooldown_s:
+        return
 
     async with pool.acquire() as conn:
         current = await conn.fetchrow("""
@@ -1204,10 +1236,9 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
         forecast = await conn.fetchrow("""
             SELECT temp_f, rh_pct,
                    COALESCE(direct_radiation_w_m2 + diffuse_radiation_w_m2, 0) as solar_w_m2
-            FROM weather_forecast
-            WHERE ts >= date_trunc('hour', now())
-              AND ts < date_trunc('hour', now()) + interval '1 hour'
-            ORDER BY fetched_at DESC LIMIT 1
+            FROM (SELECT DISTINCT ON (ts) * FROM weather_forecast
+                  WHERE ts >= date_trunc('hour', now()) AND ts < date_trunc('hour', now()) + interval '1 hour'
+                  ORDER BY ts, fetched_at DESC) sub
         """)
         if not forecast:
             return
@@ -1240,34 +1271,30 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
                         "threshold": t["threshold"],
                     }
                 )
-                await conn.execute(
-                    "INSERT INTO forecast_deviation_log (parameter, observed, forecasted, delta, threshold) VALUES ($1,$2,$3,$4,$5)",
-                    t["parameter"],
-                    float(observed),
-                    float(forecasted),
-                    delta,
-                    t["threshold"],
-                )
 
         if not deviations:
             return
 
-        # Check cooldown
-        if trigger_file.exists():
-            import time as _t
+        # Log deviations to DB (only when we're actually going to trigger)
+        for d in deviations:
+            await conn.execute(
+                "INSERT INTO forecast_deviation_log (parameter, observed, forecasted, delta, threshold) VALUES ($1,$2,$3,$4,$5)",
+                d["parameter"],
+                d["observed"],
+                d["forecasted"],
+                d["delta"],
+                d["threshold"],
+            )
 
-            age_min = (_t.time() - trigger_file.stat().st_mtime) / 60
-            min_cooldown = min(t["cooldown_min"] for t in thresholds)
-            if age_min < min_cooldown:
-                return
-
-        trigger = {
-            "ts": datetime.now(UTC).isoformat(),
-            "deviations": deviations,
-            "reason": f"Forecast deviation: {', '.join(d['parameter'] for d in deviations)}",
-        }
-        trigger_file.write_text(json.dumps(trigger, indent=2))
-        log.warning("Replan triggered: %s", trigger["reason"])
+    # Write trigger file and update cooldown
+    _last_deviation_trigger_ts = _t.time()
+    trigger = {
+        "ts": datetime.now(UTC).isoformat(),
+        "deviations": deviations,
+        "reason": f"Forecast deviation: {', '.join(d['parameter'] for d in deviations)}",
+    }
+    trigger_file.write_text(json.dumps(trigger, indent=2))
+    log.warning("Replan triggered: %s", trigger["reason"])
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -1544,8 +1571,6 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
 # ═════════════════════════════════════════════════════════════════
 # 15. PLANNING HEARTBEAT (every 60s) — Iris event-driven planner
 # ═════════════════════════════════════════════════════════════════
-
-from datetime import timedelta as _td
 
 from astral import LocationInfo
 from astral.sun import sun as _sun
