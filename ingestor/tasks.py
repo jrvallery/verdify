@@ -1194,9 +1194,9 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
 
     async with pool.acquire() as conn:
         current = await conn.fetchrow("""
-            SELECT temp_avg, rh_avg,
-                   COALESCE(NULLIF(lux, 0) * 0.0185, 0) as solar_est_w_m2
-            FROM climate WHERE temp_avg IS NOT NULL ORDER BY ts DESC LIMIT 1
+            SELECT outdoor_temp_f, outdoor_rh_pct,
+                   COALESCE(solar_irradiance_w_m2, 0) as solar_w_m2
+            FROM climate WHERE outdoor_temp_f IS NOT NULL ORDER BY ts DESC LIMIT 1
         """)
         if not current:
             return
@@ -1215,9 +1215,9 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
         thresholds = await conn.fetch("SELECT * FROM forecast_deviation_thresholds WHERE enabled")
 
         param_map = {
-            "temp_f": ("temp_avg", "temp_f"),
-            "rh_pct": ("rh_avg", "rh_pct"),
-            "solar_w_m2": ("solar_est_w_m2", "solar_w_m2"),
+            "temp_f": ("outdoor_temp_f", "temp_f"),
+            "rh_pct": ("outdoor_rh_pct", "rh_pct"),
+            "solar_w_m2": ("solar_w_m2", "solar_w_m2"),
         }
 
         deviations = []
