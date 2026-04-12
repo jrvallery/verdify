@@ -1,0 +1,1651 @@
+{
+  "uid": "greenhouse-hydroponics",
+  "title": "Greenhouse: Hydroponics",
+  "tags": [
+    "greenhouse",
+    "hydroponics",
+    "standardized",
+    "verdify"
+  ],
+  "timezone": "America/Denver",
+  "graphTooltip": 2,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "panels": [
+    {
+      "id": 900,
+      "type": "stat",
+      "title": "System Health",
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#EF5350",
+                "value": null
+              },
+              {
+                "color": "#FFA726",
+                "value": 70
+              },
+              {
+                "color": "#66BB6A",
+                "value": 90
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, health_score AS \"Health\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Summarizes the current health of the greenhouse system."
+    },
+    {
+      "id": 901,
+      "type": "stat",
+      "title": "Temp",
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#42A5F5",
+                "value": null
+              },
+              {
+                "color": "#66BB6A",
+                "value": 60
+              },
+              {
+                "color": "#FFA726",
+                "value": 82
+              },
+              {
+                "color": "#EF5350",
+                "value": 90
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, temp_avg AS \"Temp\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows temperature conditions for the greenhouse."
+    },
+    {
+      "id": 902,
+      "type": "stat",
+      "title": "VPD",
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 7,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kPa",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#42A5F5",
+                "value": null
+              },
+              {
+                "color": "#66BB6A",
+                "value": 0.4
+              },
+              {
+                "color": "#FFA726",
+                "value": 1.5
+              },
+              {
+                "color": "#EF5350",
+                "value": 2.0
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, vpd_avg AS \"VPD\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows vapor pressure deficit, one of the most important plant-stress metrics."
+    },
+    {
+      "id": 903,
+      "type": "stat",
+      "title": "State",
+      "gridPos": {
+        "h": 3,
+        "w": 5,
+        "x": 10,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#78909C"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, state AS \"State\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows the current controller or equipment state for this subsystem."
+    },
+    {
+      "id": 904,
+      "type": "stat",
+      "title": "Cost",
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#66BB6A",
+                "value": null
+              },
+              {
+                "color": "#FFA726",
+                "value": 5
+              },
+              {
+                "color": "#EF5350",
+                "value": 15
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, cost_total AS \"Cost\" FROM v_cost_today",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows current or recent operating cost for this subsystem."
+    },
+    {
+      "id": 905,
+      "type": "stat",
+      "title": "DLI",
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#EF5350",
+                "value": null
+              },
+              {
+                "color": "#FFA726",
+                "value": 5
+              },
+              {
+                "color": "#66BB6A",
+                "value": 10
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, dli_today AS \"DLI\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows daily light integral, the accumulated plant light for the day."
+    },
+    {
+      "id": 906,
+      "type": "stat",
+      "title": "Alerts",
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#66BB6A",
+                "value": null
+              },
+              {
+                "color": "#EF5350",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, open_alerts AS \"Alerts\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows current or recent alerts that need attention."
+    },
+    {
+      "type": "row",
+      "title": "Reservoir Status",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Water Temp",
+      "description": "Nutrient solution temperature. Target: 60-75\u00b0F. >75\u00b0F breeds pathogens, <60\u00b0F slows nutrient uptake.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_water_temp_f AS v FROM climate WHERE hydro_water_temp_f IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#42A5F5",
+                "value": null
+              },
+              {
+                "color": "#42A5F5",
+                "value": 0
+              },
+              {
+                "color": "#66BB6A",
+                "value": 60
+              },
+              {
+                "color": "#FFA726",
+                "value": 75
+              },
+              {
+                "color": "#EF5350",
+                "value": 80
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {}
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "EC",
+      "description": "Electrical Conductivity \u2014 nutrient strength. Target varies by crop stage: seedling 400-600, veg 800-1200, flower 1200-1800 \u00b5S/cm.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 5,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_ec_us_cm AS v FROM climate WHERE hydro_ec_us_cm IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "\u00b5S/cm",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#FFA726",
+                "value": null
+              },
+              {
+                "color": "#FFA726",
+                "value": 0
+              },
+              {
+                "color": "#66BB6A",
+                "value": 500
+              },
+              {
+                "color": "#66BB6A",
+                "value": 1800
+              },
+              {
+                "color": "#EF5350",
+                "value": 2500
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {}
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "TDS",
+      "description": "Total Dissolved Solids \u2014 correlates with EC. ~500 ppm per 1000 \u00b5S/cm.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 10,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_tds_ppm AS v FROM climate WHERE hydro_tds_ppm IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#42A5F5"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "pH",
+      "description": "Acidity/alkalinity. Target: 5.5-6.5 for hydroponics. Raw sensor value \u2014 may need scaling calibration.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 15,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_ph AS v FROM climate WHERE hydro_ph IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#EF5350",
+                "value": null
+              },
+              {
+                "color": "#EF5350",
+                "value": 0
+              },
+              {
+                "color": "#FFA726",
+                "value": 5
+              },
+              {
+                "color": "#66BB6A",
+                "value": 5.5
+              },
+              {
+                "color": "#66BB6A",
+                "value": 6.5
+              },
+              {
+                "color": "#FFA726",
+                "value": 7
+              },
+              {
+                "color": "#EF5350",
+                "value": 8
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {}
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "ORP",
+      "description": "Oxidation-Reduction Potential. >200 mV = well-oxygenated. Negative = reducing conditions (root rot risk).",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_orp_mv AS v FROM climate WHERE hydro_orp_mv IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mV",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#EF5350",
+                "value": null
+              },
+              {
+                "color": "#EF5350",
+                "value": -500
+              },
+              {
+                "color": "#FFA726",
+                "value": 0
+              },
+              {
+                "color": "#66BB6A",
+                "value": 200
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {}
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Nutrient Chemistry",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "EC & TDS",
+      "description": "Nutrient concentration over time. Green band = target EC range (800-1600 \u00b5S/cm). Rising EC = evaporation concentrating nutrients. Falling EC = plants consuming faster than you're dosing.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_ec_us_cm AS \"EC (\u00b5S/cm)\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_ec_us_cm IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_tds_ppm AS \"TDS (ppm)\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_tds_ppm IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "EC (\u00b5S/cm)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#26A69A"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "\u00b5S/cm"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
+              },
+              {
+                "id": "custom.thresholdsStyle",
+                "value": {
+                  "mode": "area"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(102,187,106,0.1)",
+                      "value": 800
+                    },
+                    {
+                      "color": "transparent",
+                      "value": 1600
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TDS (ppm)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#42A5F5"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "ppm"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "pH & ORP",
+      "description": "pH (target 5.5-6.5 green band) and Oxidation-Reduction Potential. ORP >200mV indicates good oxygenation.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_ph AS \"pH\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_ph IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_orp_mv AS \"ORP (mV)\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_orp_mv IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pH"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FFA726"
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.thresholdsStyle",
+                "value": {
+                  "mode": "area"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(102,187,106,0.1)",
+                      "value": 5.5
+                    },
+                    {
+                      "color": "transparent",
+                      "value": 6.5
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ORP (mV)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#CE93D8"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "mV"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Temperature Correlation",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Water \u2192 Air \u2192 Outdoor Temperature",
+      "description": "Thermal chain: outdoor temp drives air temp, air temp drives water temp with lag. Water temp >75\u00b0F = pythium risk. Watch for afternoon peaks that push reservoir into danger zone.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), hydro_water_temp_f AS \"Water (\u00b0F)\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_water_temp_f IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), temp_avg AS \"Air Indoor (\u00b0F)\"\nFROM climate WHERE $__timeFilter(ts) AND temp_avg IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), outdoor_temp_f AS \"Outdoor (\u00b0F)\"\nFROM climate WHERE $__timeFilter(ts) AND outdoor_temp_f IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Water (\u00b0F)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#42A5F5"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
+              },
+              {
+                "id": "custom.thresholdsStyle",
+                "value": {
+                  "mode": "line"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(239,83,80,0.5)",
+                      "value": 75
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Air Indoor (\u00b0F)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9800"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor (\u00b0F)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#78909C"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Trends & History",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Daily Water Temp Range",
+      "description": "Min/max/avg water temperature per day. Large daily swings stress roots. Target: <5\u00b0F daily swing.",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date_trunc('day', ts AT TIME ZONE 'America/Denver')::timestamptz),\n  ROUND(AVG(hydro_water_temp_f)::numeric, 1) AS \"Avg\",\n  ROUND(MIN(hydro_water_temp_f)::numeric, 1) AS \"Min\",\n  ROUND(MAX(hydro_water_temp_f)::numeric, 1) AS \"Max\"\nFROM climate\nWHERE $__timeFilter(ts) AND hydro_water_temp_f IS NOT NULL\nGROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "rgba(180, 180, 180, 0.5)"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Min"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#64B5F6"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    4,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Avg"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#EF5350"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    4,
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "EC & TDS Daily Average",
+      "description": "Daily average nutrient concentration. Rising trend = evaporation > consumption (add water). Falling = plants consuming > dosing (add nutrients).",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date_trunc('day', ts AT TIME ZONE 'America/Denver')::timestamptz),\n  ROUND(AVG(hydro_ec_us_cm)::numeric, 0) AS \"EC Daily Avg\",\n  ROUND(AVG(hydro_tds_ppm)::numeric, 0) AS \"TDS Daily Avg\"\nFROM climate\nWHERE $__timeFilter(ts) AND (hydro_ec_us_cm IS NOT NULL OR hydro_tds_ppm IS NOT NULL)\nGROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "barMaxWidth": 20,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "EC Daily Avg"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "rgba(180, 180, 180, 0.5)"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "\u00b5S/cm"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TDS Daily Avg"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "rgba(180, 180, 180, 0.5)"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "ppm"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 910,
+      "type": "table",
+      "title": "Hydro Status (Latest)",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT ts::time AS time, ph, ec_us_cm, tds_ppm, orp_mv, water_temp_f, battery_pct, ph_in_range, ec_in_range, temp_in_range, battery_ok FROM v_hydro_status",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        }
+      },
+      "description": "Shows the latest hydroponic water-quality and system readings."
+    }
+  ],
+  "templating": {
+    "list": []
+  }
+}

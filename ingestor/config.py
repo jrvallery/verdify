@@ -46,6 +46,11 @@ FRIGATE_URL = os.environ.get("FRIGATE_URL", "http://192.168.30.142:5000")
 LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
 GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/jason/agents/shared/credentials/gemini_api_key.txt")
 
+# ── OpenClaw (Iris planner gateway) ──────────────────────────────
+OPENCLAW_URL = os.environ.get("OPENCLAW_URL", "http://127.0.0.1:18789")
+OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "iris-hooks-verdify-2026-04")
+OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", "agent:iris-planner:main")
+
 # ── Greenhouse ────────────────────────────────────────────────────
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")
 LATITUDE = float(os.environ.get("LATITUDE", "40.1672"))

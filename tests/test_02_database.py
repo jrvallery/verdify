@@ -78,13 +78,13 @@ class TestDataFreshness:
         assert int(age) < 300, f"Climate data is {age}s old (>5min)"
 
     def test_equipment_state_fresh(self):
-        """Equipment state must be < 10 minutes old."""
+        """Equipment state must be < 2 hours old (longer at night when IDLE — no transitions)."""
         age = db_query("SELECT extract(epoch FROM now() - max(ts))::int FROM equipment_state")
-        assert int(age) < 600, f"Equipment state is {age}s old (>10min)"
+        assert int(age) < 7200, f"Equipment state is {age}s old (>2h)"
 
     def test_daily_summary_exists_today(self):
         """Today's daily_summary row must exist."""
-        count = db_query("SELECT count(*) FROM daily_summary WHERE date = CURRENT_DATE")
+        count = db_query("SELECT count(*) FROM daily_summary WHERE date = (now() AT TIME ZONE 'America/Denver')::date")
         assert int(count) >= 1, "No daily_summary row for today"
 
     def test_forecast_data_recent(self):
@@ -97,7 +97,7 @@ class TestViewsCompute:
     """Key views must return data without errors."""
 
     def test_scorecard_returns_data(self):
-        rows = db_query_rows("SELECT * FROM fn_planner_scorecard(CURRENT_DATE)")
+        rows = db_query_rows("SELECT * FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date)")
         assert len(rows) >= 10, f"Scorecard returned only {len(rows)} rows"
 
     def test_stress_hours_computes(self):
@@ -105,11 +105,15 @@ class TestViewsCompute:
         assert len(rows) >= 1, "v_stress_hours_today returned no rows"
 
     def test_dew_point_risk_computes(self):
-        rows = db_query_rows("SELECT * FROM v_dew_point_risk WHERE date >= CURRENT_DATE - 1 LIMIT 1")
+        rows = db_query_rows(
+            "SELECT * FROM v_dew_point_risk WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 1 LIMIT 1"
+        )
         assert len(rows) >= 1, "v_dew_point_risk returned no rows"
 
     def test_planner_performance_computes(self):
-        rows = db_query_rows("SELECT * FROM v_planner_performance WHERE date >= CURRENT_DATE - 7 LIMIT 1")
+        rows = db_query_rows(
+            "SELECT * FROM v_planner_performance WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 7 LIMIT 1"
+        )
         assert len(rows) >= 1, "v_planner_performance returned no rows"
 
     def test_band_setpoints_returns(self):

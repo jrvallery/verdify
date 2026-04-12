@@ -62,16 +62,17 @@ class TestGrafana:
         assert status == 200, f"Grafana anonymous access returned {status}"
 
     def test_grafana_datasource(self):
-        """verdify-tsdb datasource must exist."""
+        """verdify-tsdb datasource must exist (checked via internal Grafana API)."""
+        # Public /api/datasources is blocked by security proxy.
+        # Check via docker exec to verify datasource is configured.
         result = subprocess.run(
             [
+                "docker",
+                "exec",
+                "verdify-grafana",
                 "curl",
-                "-sk",
-                "https://127.0.0.1/api/datasources",
-                "-H",
-                "Host: graphs.verdify.ai",
-                "-w",
-                "\n%{http_code}",
+                "-s",
+                "http://localhost:3000/api/datasources",
             ],
             capture_output=True,
             text=True,

@@ -1,3 +1,6 @@
+{# DEPRECATED: This template was used by planner.py (cron-based, removed 2026-04-11).
+   Active planner prompts are now in /srv/verdify/ingestor/iris_planner.py
+   which delivers context to the Iris planner agent via OpenClaw. #}
 {% if replan_mode %}MODE: REPLAN — {{ replan_reason }}
 - Observed conditions override forecast-derived tactics for next 24h
 - Experiment is optional

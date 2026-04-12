@@ -116,6 +116,7 @@ async def water_flowing_sync(pool: asyncpg.Pool) -> None:
                 "mister_south",
                 "mister_west",
                 "mister_center",
+                "mister_any",
                 "drip_wall",
                 "drip_center",
                 "mister_south_fert",
@@ -396,10 +397,13 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
     async with pool.acquire() as conn:
         alerts = []
 
-        # 1. sensor_offline
+        # 1. sensor_offline (exclude legacy firmware entities)
+        _STALE_EXCLUDE = {"state.mister_state", "state.mister_zone"}
         for r in await conn.fetch(
             "SELECT sensor_id, type, staleness_ratio FROM v_sensor_staleness WHERE is_stale = true"
         ):
+            if r["sensor_id"] in _STALE_EXCLUDE:
+                continue
             ratio = r["staleness_ratio"]
             alerts.append(
                 {
@@ -1304,15 +1308,88 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             today,
         )
 
-        # Stress hours from v_stress_hours_today
-        stress = await conn.fetchrow(
+        # Stress hours — computed with time-appropriate setpoints
+        # Load today's setpoint timeline for band parameters
+        band_changes = await conn.fetch(
             """
-            SELECT COALESCE(heat_stress_hours, 0) AS heat, COALESCE(vpd_stress_hours, 0) AS vpd_high,
-                   COALESCE(cold_stress_hours, 0) AS cold, COALESCE(vpd_low_hours, 0) AS vpd_low
-            FROM v_stress_hours_today WHERE date::date = $1
-        """,
+            SELECT parameter, value, ts
+            FROM setpoint_changes
+            WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
+              AND ts <= ($1::date + 1) AT TIME ZONE 'America/Denver'
+              AND CASE
+                  WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
+                  WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
+              END
+            ORDER BY parameter, ts
+            """,
             today,
         )
+        # Build per-parameter sorted timeline
+        from bisect import bisect_right
+
+        _timelines: dict[str, list[tuple]] = {}
+        for r in band_changes:
+            _timelines.setdefault(r["parameter"], []).append((r["ts"], float(r["value"])))
+
+        def _band_at(param: str, ts):
+            tl = _timelines.get(param, [])
+            if not tl:
+                return None
+            idx = bisect_right(tl, (ts,)) - 1
+            return tl[idx][1] if idx >= 0 else tl[0][1]
+
+        # Load today's climate readings
+        readings = await conn.fetch(
+            """
+            SELECT ts, temp_avg, vpd_avg FROM climate
+            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+              AND temp_avg IS NOT NULL
+            ORDER BY ts
+            """,
+            today,
+        )
+
+        # Compute stress with time-appropriate bands
+        heat_s = cold_s = vpd_hi_s = vpd_lo_s = 0
+        temp_in_band = vpd_in_band = both_in_band = 0
+        interval_h = 1.0 / 60.0  # ~1 minute per reading
+        for r in readings:
+            th = _band_at("temp_high", r["ts"])
+            tl = _band_at("temp_low", r["ts"])
+            vh = _band_at("vpd_high", r["ts"])
+            vl = _band_at("vpd_low", r["ts"])
+            if th is None or tl is None or vh is None or vl is None:
+                continue
+            temp = float(r["temp_avg"])
+            vpd = float(r["vpd_avg"])
+            if temp > th:
+                heat_s += interval_h
+            elif temp < tl:
+                cold_s += interval_h
+            if vpd > vh:
+                vpd_hi_s += interval_h
+            elif vpd < vl:
+                vpd_lo_s += interval_h
+            t_ok = tl <= temp <= th
+            v_ok = vl <= vpd <= vh
+            if t_ok:
+                temp_in_band += 1
+            if v_ok:
+                vpd_in_band += 1
+            if t_ok and v_ok:
+                both_in_band += 1
+
+        n = len(readings) or 1
+        compliance_pct = round((both_in_band / n) * 100, 1)
+        temp_compliance_pct = round((temp_in_band / n) * 100, 1)
+        vpd_compliance_pct = round((vpd_in_band / n) * 100, 1)
+        stress = {
+            "heat": round(heat_s, 2),
+            "vpd_high": round(vpd_hi_s, 2),
+            "cold": round(cold_s, 2),
+            "vpd_low": round(vpd_lo_s, 2),
+        }
 
         # Dew point margin (condensation risk)
         dp = await conn.fetchrow(
@@ -1408,7 +1485,10 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
                 kwh_estimated=$28, therms_estimated=$29,
                 cost_electric=$30, cost_gas=$31, cost_water=$32, cost_total=$33,
                 water_used_gal=$34, mister_water_gal=$35,
-                min_dp_margin_f=$36, dp_risk_hours=$37
+                min_dp_margin_f=$36, dp_risk_hours=$37,
+                compliance_pct=$38,
+                temp_compliance_pct=$39,
+                vpd_compliance_pct=$40
             WHERE date = $1
         """,
             today,
@@ -1448,10 +1528,200 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0,
             float(dp["min_margin_f"]) if dp and dp["min_margin_f"] is not None else None,
             float(dp["risk_hours"]) if dp else 0,
+            compliance_pct,
+            temp_compliance_pct,
+            vpd_compliance_pct,
         )
 
     log.info(
-        "Daily summary live: $%.2f, %.1f°F max",
+        "Daily summary live: $%.2f, %.1f°F max, compliance %.1f%%",
         ct,
         float(climate["temp_max"]) if climate and climate["temp_max"] else 0,
+        compliance_pct,
     )
+
+
+# ═════════════════════════════════════════════════════════════════
+# 15. PLANNING HEARTBEAT (every 60s) — Iris event-driven planner
+# ═════════════════════════════════════════════════════════════════
+
+from datetime import timedelta as _td
+
+from astral import LocationInfo
+from astral.sun import sun as _sun
+from iris_planner import gather_context, send_to_iris
+
+_LOCATION = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
+_DENVER = ZoneInfo("America/Denver")
+
+# Milestone state — persisted to disk across restarts
+_milestones_cache: dict[str, datetime] = {}
+_milestones_fired: dict[str, bool] = {}
+_milestones_date: str = ""
+_last_forecast_fetch: str = ""
+_MILESTONE_STATE_FILE = STATE_DIR / "milestones-fired.json"
+
+
+def _load_milestone_state():
+    """Load fired milestones from disk (survives restarts)."""
+    global _milestones_fired, _milestones_date
+    try:
+        if _MILESTONE_STATE_FILE.exists():
+            data = json.loads(_MILESTONE_STATE_FILE.read_text())
+            if data.get("date") == datetime.now(_DENVER).strftime("%Y-%m-%d"):
+                _milestones_fired = data.get("fired", {})
+                _milestones_date = data["date"]
+                log.info("Loaded milestone state: %d fired today", len(_milestones_fired))
+    except Exception as e:
+        log.warning("Could not load milestone state: %s", e)
+
+
+def _save_milestone_state():
+    """Save fired milestones to disk."""
+    try:
+        data = {"date": _milestones_date, "fired": _milestones_fired}
+        _MILESTONE_STATE_FILE.write_text(json.dumps(data))
+    except Exception as e:
+        log.warning("Could not save milestone state: %s", e)
+
+
+def _compute_milestones() -> dict[str, datetime]:
+    """Compute today's planning milestones from solar ephemeris. Cached per day."""
+    global _milestones_cache, _milestones_fired, _milestones_date
+
+    today_str = datetime.now(_DENVER).strftime("%Y-%m-%d")
+    if _milestones_date == today_str:
+        return _milestones_cache
+
+    # New day — reset state
+    _milestones_date = today_str
+    _milestones_fired = {}
+
+    today = datetime.now(_DENVER).date()
+    s = _sun(_LOCATION.observer, date=today, tzinfo=_DENVER)
+    noon = s["noon"]
+
+    _milestones_cache = {
+        "SUNRISE": s["sunrise"],
+        "TRANSITION:peak_stress": noon + _td(hours=2),
+        "TRANSITION:tree_shade": noon + _td(hours=4),
+        "TRANSITION:decline": s["sunset"] - _td(hours=1),
+        "SUNSET": s["sunset"],
+    }
+
+    # Load any previously fired milestones from disk (in case of restart)
+    _load_milestone_state()
+
+    return _milestones_cache
+
+
+async def planning_heartbeat(pool: asyncpg.Pool) -> None:
+    """Check if a planning event should fire. Triggers Iris planner session."""
+    now = datetime.now(_DENVER)
+
+    # ── 1. Compute/cache today's milestones ──
+    all_milestones = _compute_milestones()
+    if not _milestones_fired:
+        log.info("Planning milestones: %s", ", ".join(f"{k}={v.strftime('%H:%M')}" for k, v in all_milestones.items()))
+
+    # ── 2. Check each milestone ──
+    for key, milestone_time in all_milestones.items():
+        if key in _milestones_fired:
+            continue
+
+        # Fire if we're within the window after the milestone
+        # Normal: 0-5 min. Catch-up: 5 min - 2 hours (handles ingestor restarts)
+        delta = (now - milestone_time).total_seconds()
+        is_catchup = 300 <= delta < 7200
+        if 0 <= delta < 300 or is_catchup:
+            _milestones_fired[key] = True
+            _save_milestone_state()
+
+            # Determine event type and label
+            catchup_tag = " (catch-up)" if is_catchup else ""
+            if key == "SUNRISE":
+                event_type, label = "SUNRISE", f"Morning planning cycle{catchup_tag}"
+            elif key == "SUNSET":
+                event_type, label = "SUNSET", f"Evening planning cycle{catchup_tag}"
+            else:
+                event_type = "TRANSITION"
+                label = key.split(":", 1)[1].replace("_", " ").title() + catchup_tag
+
+            log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
+
+            # Gather context and send to Iris (blocking — runs in executor)
+            loop = asyncio.get_event_loop()
+            context = await loop.run_in_executor(None, gather_context)
+            await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+
+    # ── 3. Check for forecast changes ──
+    global _last_forecast_fetch
+    async with pool.acquire() as conn:
+        latest_fetch = await conn.fetchval(
+            "SELECT MAX(fetched_at)::text FROM weather_forecast WHERE fetched_at > now() - interval '2 hours'"
+        )
+        if latest_fetch and latest_fetch != _last_forecast_fetch:
+            if _last_forecast_fetch:
+                log.info("New forecast detected (fetched_at=%s), notifying Iris", latest_fetch)
+                loop = asyncio.get_event_loop()
+                context = await loop.run_in_executor(None, gather_context)
+                await loop.run_in_executor(None, send_to_iris, "FORECAST", "New forecast data", context)
+            _last_forecast_fetch = latest_fetch
+
+    # ── 4. Check for deviations (route to Iris instead of trigger file) ──
+    trigger_file = STATE_DIR / "replan-needed.json"
+    if trigger_file.exists():
+        import time as _t
+
+        age_s = _t.time() - trigger_file.stat().st_mtime
+        if age_s < 300:
+            try:
+                trigger_data = json.loads(trigger_file.read_text())
+                deviations_str = json.dumps(trigger_data.get("deviations", []), indent=2)
+                reason = trigger_data.get("reason", "Unknown deviation")
+
+                log.info("Deviation trigger found, routing to Iris: %s", reason)
+                loop = asyncio.get_event_loop()
+                context = await loop.run_in_executor(None, gather_context)
+                await loop.run_in_executor(None, send_to_iris, "DEVIATION", deviations_str, context)
+
+                trigger_file.unlink(missing_ok=True)
+            except Exception as e:
+                log.error("Failed to process deviation trigger: %s", e)
+
+    # ── 5. Verify plan delivery (30 min after SUNRISE/SUNSET) ──
+    for key in ("SUNRISE", "SUNSET"):
+        if key not in _milestones_fired:
+            continue
+        milestone_time = all_milestones.get(key)
+        if not milestone_time:
+            continue
+        mins_since = (now - milestone_time).total_seconds() / 60
+        verify_key = f"_verified_{key}"
+        if 30 <= mins_since < 35 and verify_key not in _milestones_fired:
+            _milestones_fired[verify_key] = True
+            _save_milestone_state()
+            # Check if a plan was written after the milestone
+            async with pool.acquire() as conn:
+                plan_count = await conn.fetchval(
+                    "SELECT count(*) FROM plan_journal WHERE created_at > $1",
+                    milestone_time,
+                )
+            if plan_count == 0:
+                log.warning(
+                    "PLAN DELIVERY FAILED: No plan_journal entry after %s (fired %s ago)", key, f"{mins_since:.0f}m"
+                )
+                # Post alert to Slack
+                try:
+                    token = _load_token(SLACK_TOKEN_FILE)
+                    _post_slack(
+                        token,
+                        SLACK_CHANNEL,
+                        f":warning: *Planning alert:* No plan written after {key} event "
+                        f"({mins_since:.0f} min ago). Iris may have failed to process the event. "
+                        f"<@U0A9KJHFJSU> please check `tmux attach -t agent-iris-planner`.",
+                    )
+                except Exception:
+                    pass
+            else:
+                log.info("Plan delivery verified: %d plan(s) written after %s", plan_count, key)

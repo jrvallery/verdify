@@ -1,0 +1,1067 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Ops Snapshot",
+      "type": "row"
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Indoor Temp",
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#42A5F5",
+                "value": null
+              },
+              {
+                "color": "#66BB6A",
+                "value": 60
+              },
+              {
+                "color": "#FFA726",
+                "value": 82
+              },
+              {
+                "color": "#EF5350",
+                "value": 90
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, temp_avg AS \"Temp\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows temperature conditions for the greenhouse."
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Indoor VPD",
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kPa",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#42A5F5",
+                "value": null
+              },
+              {
+                "color": "#66BB6A",
+                "value": 0.4
+              },
+              {
+                "color": "#FFA726",
+                "value": 1.5
+              },
+              {
+                "color": "#EF5350",
+                "value": 2.0
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, vpd_avg AS \"VPD\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows vapor pressure deficit, one of the most important plant-stress metrics."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Current Controller State",
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1",
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Shows greenhouse equipment or controller state over time."
+    },
+    {
+      "id": 5,
+      "title": "WiFi Signal",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "uid": "verdify-tsdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dBm",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": -80
+              },
+              {
+                "color": "green",
+                "value": -60
+              }
+            ]
+          },
+          "custom": {}
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT $__time(ts), wifi_rssi AS \"RSSI\" FROM diagnostics WHERE $__timeFilter(ts) AND wifi_rssi IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "description": "Shows current controller WiFi signal strength."
+    },
+    {
+      "id": 6,
+      "title": "Free Heap",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "uid": "verdify-tsdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kbytes",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "custom": {}
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT $__time(ts), heap_bytes / 1024.0 AS \"Heap kB\" FROM diagnostics WHERE $__timeFilter(ts) AND heap_bytes IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "description": "Shows free memory on the ESP32 controller over time."
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Open Alerts",
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#66BB6A",
+                "value": null
+              },
+              {
+                "color": "#EF5350",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "background_solid",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, open_alerts AS \"Alerts\" FROM v_greenhouse_now",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Shows current or recent alerts that need attention."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 8,
+      "panels": [],
+      "title": "Control & Dispatch",
+      "type": "row"
+    },
+    {
+      "id": 9,
+      "type": "state-timeline",
+      "title": "State Timeline (24h)",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT $__time(ts), value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "A",
+          "format": "time_series",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Shows the sequence of controller states over the last 24 hours."
+    },
+    {
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Compliant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bool"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Delta"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT planned_ts AS time, CASE WHEN compliant THEN 1 ELSE 0 END AS \"Compliant\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT planned_ts AS time, delta AS \"Delta\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Plan Compliance",
+      "type": "timeseries",
+      "description": "Shows whether key planned setpoints were actually achieved and by how far they missed when they were not."
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Writes (24h)",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT COUNT(*) FROM setpoint_changes WHERE ts > now() - interval '24 hours'",
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Shows how many setpoint writes were issued over the last 24 hours."
+    },
+    {
+      "id": 12,
+      "type": "piechart",
+      "title": "Write Source Split",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT source AS \"Source\", COUNT(*) AS \"Writes\" FROM setpoint_changes WHERE ts > now() - interval '24 hours' GROUP BY source",
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Shows where controller writes came from, split by source."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 13,
+      "panels": [],
+      "title": "Planning & Reliability",
+      "type": "row"
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Active Plan",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT plan_id FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1",
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Shows planning behavior, compliance, or planning outcomes over time."
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Plan Age",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 22
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int / 3600 AS \"Hours\" FROM setpoint_plan WHERE is_active = true",
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 12
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Shows planning behavior, compliance, or planning outcomes over time."
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Last 10 Plans",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 22
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT plan_id, to_char(created_at AT TIME ZONE 'America/Denver', 'MM/DD HH:MI') AS \"Created\", COALESCE(outcome_score::text, '-') AS \"Score\", COALESCE(LEFT(hypothesis, 60), '-') AS \"Hypothesis\" FROM plan_journal ORDER BY created_at DESC LIMIT 10",
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      },
+      "description": "Shows planning behavior, compliance, or planning outcomes over time."
+    },
+    {
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Task WDT"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 35
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Guru/Panic"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 35
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, CASE WHEN reset_reason='Task WDT' THEN 1 ELSE 0 END AS \"Task WDT\" FROM diagnostics WHERE ts > now() - interval '14 days' ORDER BY 1",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, CASE WHEN reset_reason='Guru/Panic' THEN 1 ELSE 0 END AS \"Guru/Panic\" FROM diagnostics WHERE ts > now() - interval '14 days' ORDER BY 1",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Reset Reasons Over Time",
+      "type": "timeseries",
+      "description": "Marks watchdog and panic resets so reliability problems are visible instead of hidden in logs."
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Health Components",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT component, score_pct, details FROM v_system_health_score",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        }
+      },
+      "description": "Shows the underlying components feeding the overall system health score."
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "role-dashboard",
+    "ops",
+    "new-architecture",
+    "standardized"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Role: Ops Command Center",
+  "version": 1,
+  "weekStart": ""
+}

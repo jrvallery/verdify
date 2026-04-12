@@ -46,19 +46,13 @@ test-v: ## Run tests with verbose output
 # ── Firmware ────────────────────────────────────────────────────────
 
 firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
-	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse-v2.yaml
+	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 
 firmware-deploy: ## Compile + OTA deploy to ESP32
-	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse-v2.yaml
-	cd /srv/greenhouse/esphome && $(ESPHOME) upload --device 192.168.10.111 greenhouse-v2.yaml
+	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
+	cd /srv/greenhouse/esphome && $(ESPHOME) upload --device 192.168.10.111 greenhouse.yaml
 
-# ── Planner ─────────────────────────────────────────────────────────
-
-planner-dry: ## Render planner prompt (no API call)
-	$(PYTHON) scripts/planner.py --dry-run 2>/dev/null
-
-planner-run: ## Run a live planning cycle
-	$(PYTHON) scripts/planner.py
+# ── Planner (event-driven via Iris agent) ────────────────────────────
 
 planner-publish: ## Publish today's plan to verdify.ai
 	bash scripts/publish-daily-plan.sh

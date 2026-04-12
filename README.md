@@ -4,25 +4,27 @@
 
 367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95°F solar peaks. Six crops. One AI.
 
-172 sensors feed a 48-state climate machine that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Claude Opus 4.6 plans 72 hours ahead, three times a day. The system measures every outcome, scores every plan, and gets better.
+172 sensors feed a 7-mode climate controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. An AI agent named Iris (Claude Opus 4.6) plans event-driven — adjusting 24 tunables at sunrise, sunset, and every transition in between. The system measures every outcome, scores every plan, and gets better.
 
 **[verdify.ai](https://verdify.ai)**
 
 ## Architecture
 
 ```
-ESP32 Controller (48-state machine, 5s loop)
+ESP32 Controller (7-mode, greenhouse_logic.h, 5s loop)
   ├── aioesphomeapi ──→ Ingestor ──→ TimescaleDB (2.5M+ rows)
   ├── MQTT ──→ Mosquitto (state publishing + occupancy)
   └── HTTPS ──→ API (band-driven setpoints every 5 min)
 
-TimescaleDB (44 tables, 55 views, 24 functions)
+TimescaleDB (47 tables, 56 views, 100+ functions)
   ├── Grafana (54 dashboards, anonymous read)
-  ├── FastAPI (crop catalog + ESP32 setpoints)
+  ├─��� FastAPI (crop catalog + ESP32 setpoints)
+  ├── MCP Server (9 tools for Iris agent)
   └── Quartz (static site with embedded panels)
 
-Claude Opus 4.6 (Anthropic API)
-  └── 72h tactical planning, 3x daily + deviation-triggered replan
+Iris Planner (Claude Opus 4.6, OpenClaw agent)
+  └── Event-driven: sunrise, transitions, sunset, forecast, deviation
+      → MCP tools → set_tunable() → Slack #greenhouse
 ```
 
 Everything runs on a single VM. No cloud infrastructure — just API keys.
@@ -33,7 +35,8 @@ Everything runs on a single VM. No cloud infrastructure — just API keys.
 |-----------|------|
 | `ingestor/` | Python async service — ESP32 data capture, 15 periodic tasks, entity routing |
 | `api/` | FastAPI crop catalog + ESP32 setpoint endpoint |
-| `firmware/` | ESPHome YAML — 48-state climate controller, VPD/temp bands, mister cascade |
+| `firmware/` | ESPHome YAML + C++ headers — 7-mode climate controller (greenhouse_logic.h) |
+| `mcp/` | FastMCP server — 9 tools for Iris agent (climate, scorecard, set_tunable, etc.) |
 | `scripts/` | Operational scripts — planner, vision analysis, forecast sync, monitoring |
 | `provisioning/` | Grafana dashboard JSON (54 dashboards) + datasource config |
 | `db/` | Schema (44 tables, 55 views), migrations (002–077) |

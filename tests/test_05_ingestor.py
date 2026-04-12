@@ -45,9 +45,9 @@ class TestESP32Connection:
             assert val, f"Zone sensor {zone} has no data"
 
     def test_equipment_state_tracked(self):
-        """Equipment state transitions must be logged."""
-        count = db_query("SELECT count(DISTINCT equipment) FROM equipment_state WHERE ts > now() - interval '1 hour'")
-        assert int(count) >= 1, "No equipment state transitions in last hour"
+        """Equipment state transitions must be logged (wider window at night when IDLE)."""
+        count = db_query("SELECT count(DISTINCT equipment) FROM equipment_state WHERE ts > now() - interval '4 hours'")
+        assert int(count) >= 1, "No equipment state transitions in last 4 hours"
 
 
 class TestIngestorTasks:

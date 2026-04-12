@@ -1,0 +1,121 @@
+{
+  "uid": "site-evidence-compliance",
+  "title": "Site: Compliance & KPI",
+  "editable": true,
+  "timezone": "America/Denver",
+  "schemaVersion": 39,
+  "annotations": {"list": []},
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Planner Score",
+      "description": "80% compliance + 20% cost efficiency",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT (now() AT TIME ZONE 'America/Denver')::date AS time, planner_score AS \"Score\" FROM v_daily_kpi WHERE date = (now() AT TIME ZONE 'America/Denver')::date", "format": "table", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "none", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "#d44a3a", "value": null}, {"color": "#FF9830", "value": 40}, {"color": "#73BF69", "value": 70}]}, "color": {"mode": "thresholds"}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "id": 2,
+      "title": "Temp Compliance",
+      "description": "% of readings where temperature is within the crop band",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT (now() AT TIME ZONE 'America/Denver')::date AS time, temp_compliance_pct AS \"Temp %\" FROM v_daily_kpi WHERE date = (now() AT TIME ZONE 'America/Denver')::date", "format": "table", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "#d44a3a", "value": null}, {"color": "#FF9830", "value": 50}, {"color": "#73BF69", "value": 80}]}, "color": {"mode": "thresholds"}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "id": 3,
+      "title": "VPD Compliance",
+      "description": "% of readings where VPD is within the crop band",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT (now() AT TIME ZONE 'America/Denver')::date AS time, vpd_compliance_pct AS \"VPD %\" FROM v_daily_kpi WHERE date = (now() AT TIME ZONE 'America/Denver')::date", "format": "table", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "#d44a3a", "value": null}, {"color": "#FF9830", "value": 50}, {"color": "#73BF69", "value": 80}]}, "color": {"mode": "thresholds"}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "id": 4,
+      "title": "Cost Today",
+      "description": "Total utility cost (electric + gas + water)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT (now() AT TIME ZONE 'America/Denver')::date AS time, cost_total AS \"Cost\" FROM v_daily_kpi WHERE date = (now() AT TIME ZONE 'America/Denver')::date", "format": "table", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "#73BF69", "value": null}, {"color": "#FF9830", "value": 5}, {"color": "#d44a3a", "value": 10}]}, "color": {"mode": "thresholds"}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "id": 5,
+      "title": "Compliance Over Time",
+      "description": "Temp, VPD, and combined band compliance by day",
+      "type": "timeseries",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 4},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT date AS time, temp_compliance_pct AS \"Temp Compliance %\", vpd_compliance_pct AS \"VPD Compliance %\", compliance_pct AS \"Both In Band %\" FROM v_daily_kpi WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY date", "format": "time_series", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"lineWidth": 2, "fillOpacity": 10, "pointSize": 5, "showPoints": "auto"}}, "overrides": [{"matcher": {"id": "byName", "options": "Temp Compliance %"}, "properties": [{"id": "color", "value": {"fixedColor": "#FF9830", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "VPD Compliance %"}, "properties": [{"id": "color", "value": {"fixedColor": "#6ED0E0", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Both In Band %"}, "properties": [{"id": "color", "value": {"fixedColor": "#73BF69", "mode": "fixed"}}, {"id": "custom.lineWidth", "value": 3}]}]},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 6,
+      "title": "Stress Hours by Category",
+      "description": "Daily stress hours: heat, cold, VPD-high, VPD-low",
+      "type": "barchart",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 13},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT date AS time, heat_stress_h AS \"Heat\", cold_stress_h AS \"Cold\", vpd_high_stress_h AS \"VPD High\", vpd_low_stress_h AS \"VPD Low\" FROM v_daily_kpi WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY date", "format": "time_series", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "h", "custom": {"stacking": {"mode": "normal"}, "fillOpacity": 80}}, "overrides": [{"matcher": {"id": "byName", "options": "Heat"}, "properties": [{"id": "color", "value": {"fixedColor": "#d44a3a", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Cold"}, "properties": [{"id": "color", "value": {"fixedColor": "#5794F2", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "VPD High"}, "properties": [{"id": "color", "value": {"fixedColor": "#FF9830", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "VPD Low"}, "properties": [{"id": "color", "value": {"fixedColor": "#B877D9", "mode": "fixed"}}]}]},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 7,
+      "title": "Daily Cost Breakdown",
+      "description": "Electric, gas, and water costs stacked per day",
+      "type": "barchart",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 13},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT date AS time, cost_electric AS \"Electric\", cost_gas AS \"Gas\", cost_water AS \"Water\" FROM v_daily_kpi WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY date", "format": "time_series", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "custom": {"stacking": {"mode": "normal"}, "fillOpacity": 80}}, "overrides": [{"matcher": {"id": "byName", "options": "Electric"}, "properties": [{"id": "color", "value": {"fixedColor": "#FF9830", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Gas"}, "properties": [{"id": "color", "value": {"fixedColor": "#5794F2", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Water"}, "properties": [{"id": "color", "value": {"fixedColor": "#6ED0E0", "mode": "fixed"}}]}]},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 8,
+      "title": "Utility Usage",
+      "description": "Electricity (kWh), gas (therms), and water (gallons) per day",
+      "type": "timeseries",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 22},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT date AS time, kwh AS \"Electricity (kWh)\", therms * 10 AS \"Gas (therms ×10)\", water_gal / 10.0 AS \"Water (gal ÷10)\" FROM v_daily_kpi WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY date", "format": "time_series", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 10, "showPoints": "auto", "pointSize": 4}}, "overrides": [{"matcher": {"id": "byName", "options": "Electricity (kWh)"}, "properties": [{"id": "color", "value": {"fixedColor": "#FF9830", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Gas (therms ×10)"}, "properties": [{"id": "color", "value": {"fixedColor": "#5794F2", "mode": "fixed"}}]}, {"matcher": {"id": "byName", "options": "Water (gal ÷10)"}, "properties": [{"id": "color", "value": {"fixedColor": "#6ED0E0", "mode": "fixed"}}]}]},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 9,
+      "title": "Planner Score Trend",
+      "description": "Daily planner score (80% compliance + 20% cost efficiency). Target: 70+",
+      "type": "timeseries",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 22},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT date AS time, planner_score AS \"Score\" FROM v_daily_kpi WHERE date >= $__timeFrom()::date AND date <= $__timeTo()::date ORDER BY date", "format": "time_series", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {"unit": "none", "min": 0, "max": 100, "custom": {"lineWidth": 2, "fillOpacity": 15, "showPoints": "auto", "pointSize": 5, "thresholdsStyle": {"mode": "line"}}, "thresholds": {"mode": "absolute", "steps": [{"color": "#d44a3a", "value": null}, {"color": "#FF9830", "value": 40}, {"color": "#73BF69", "value": 70}]}, "color": {"mode": "thresholds"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 10,
+      "title": "Daily KPI Table",
+      "description": "Last 14 days of key performance metrics",
+      "type": "table",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 31},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"},
+      "targets": [{"rawSql": "SELECT date AS \"Date\", planner_score AS \"Score\", compliance_pct AS \"Both %\", temp_compliance_pct AS \"Temp %\", vpd_compliance_pct AS \"VPD %\", total_stress_h AS \"Stress h\", kwh AS \"kWh\", therms AS \"Therms\", water_gal AS \"Water gal\", cost_total AS \"Cost $\" FROM v_daily_kpi WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 14 ORDER BY date DESC", "format": "table", "refId": "A", "datasource": {"type": "grafana-postgresql-datasource", "uid": "verdify-tsdb"}}],
+      "fieldConfig": {"defaults": {}, "overrides": [{"matcher": {"id": "byName", "options": "Score"}, "properties": [{"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "#d44a3a", "value": null}, {"color": "#FF9830", "value": 40}, {"color": "#73BF69", "value": 70}]}}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]}, {"matcher": {"id": "byName", "options": "Both %"}, "properties": [{"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "#d44a3a", "value": null}, {"color": "#FF9830", "value": 50}, {"color": "#73BF69", "value": 80}]}}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]}]},
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Date", "desc": true}]}
+    }
+  ]
+}

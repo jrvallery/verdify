@@ -35,16 +35,16 @@
 | Grow lights (main) | 630W, 15x4FT LED | DLI-based automation |
 | Grow lights (shelf) | 816W, 15x2FT LED | DLI-based automation |
 
-## State Machine (48 states (6 thermal × 8 VPD))
+## Mode Controller (7 priority-ordered modes)
 
-Temperature axis: HEAT_S2 → HEAT_S1 → TEMP_IDLE → COOL_S1 → COOL_S2 → COOL_S3
-VPD axis: DEHUM_HEAT → DEHUM_V2 → DEHUM_V1 → HUM_IDLE → VPD_WATCH → HUMID_S1 → HUMID_S2 → HUMID_S3
+SENSOR_FAULT → SAFETY_COOL → SAFETY_HEAT → SEALED_MIST → THERMAL_RELIEF → VENTILATE → DEHUM_VENT → IDLE
 
 Key thresholds:
-- HEAT_S2 at temp_low, HEAT_S1 at temp_low + d_heat_stage_2
-- COOL_S1 at temp_high, COOL_S2 at temp_high + d_cool_stage_2
-- HUMID_S1 at vpd_high + vpd_hysteresis
-- Safety: force HEAT_S2 below 45°F, force COOL_S3 above 95°F
+- SAFETY_HEAT at 35°F, SAFETY_COOL at 100°F
+- SEALED_MIST when VPD > vpd_high (after vpd_watch_dwell_s observation)
+- VENTILATE when temp > temp_high + bias_cool
+- THERMAL_RELIEF after mist_max_closed_vent_s sealed
+- Mist stages within SEALED_MIST: WATCH → S1 → S2 → FOG
 
 ## Utility Rates
 

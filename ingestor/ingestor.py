@@ -51,6 +51,7 @@ from tasks import (
     grow_light_daily,
     ha_sensor_sync,
     matview_refresh,
+    planning_heartbeat,
     setpoint_dispatcher,
     shelly_sync,
     tempest_sync,
@@ -726,6 +727,7 @@ async def task_loop(pool: asyncpg.Pool) -> None:
         ("deviation_check", 900, forecast_deviation_check),
         ("daily_summary_live", 1800, daily_summary_live),
         ("grow_light_daily", 86400, grow_light_daily),
+        ("planning_heartbeat", 60, planning_heartbeat),
     ]
     last_run: dict[str, float] = {name: 0.0 for name, _, _ in TASKS}
 

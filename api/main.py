@@ -232,12 +232,62 @@ async def root():
 
 @app.get("/health")
 async def health():
+    """Health check endpoint for external monitoring (Prometheus, uptime checks)."""
+    import subprocess
+
+    checks = {}
+    overall = "ok"
+
+    async with pool.acquire() as conn:
+        # Climate data freshness
+        age = await conn.fetchval("SELECT extract(epoch FROM now() - max(ts))::int FROM climate")
+        checks["climate_age_seconds"] = age
+        if age and age > 300:
+            overall = "degraded"
+
+        # Scorecard
+        score_row = await conn.fetchrow(
+            "SELECT compliance_pct, planner_score FROM v_planner_performance WHERE date = CURRENT_DATE"
+        )
+        if score_row:
+            checks["compliance_pct"] = float(score_row["compliance_pct"]) if score_row["compliance_pct"] else 0
+            checks["planner_score"] = float(score_row["planner_score"]) if score_row["planner_score"] else 0
+
+        # Active alerts
+        alert_count = await conn.fetchval("SELECT count(*) FROM alert_log WHERE ts > now() - interval '1 hour'")
+        checks["active_alerts_1h"] = alert_count
+
+        # Setpoint dispatch freshness
+        last_dispatch = await conn.fetchval("SELECT extract(epoch FROM now() - max(ts))::int FROM setpoint_changes")
+        checks["last_setpoint_change_seconds"] = last_dispatch
+
+        # ESP32 mode
+        mode = await conn.fetchval(
+            "SELECT value FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1"
+        )
+        checks["greenhouse_mode"] = mode
+
+    # Service checks (non-blocking)
+    for svc in ["verdify-ingestor", "verdify-mcp"]:
+        try:
+            result = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True, timeout=3)
+            checks[f"service_{svc.replace('verdify-', '')}"] = result.stdout.strip()
+        except Exception:
+            checks[f"service_{svc.replace('verdify-', '')}"] = "unknown"
+
+    # Container count
     try:
-        async with pool.acquire() as conn:
-            ts = await conn.fetchval("SELECT ts FROM climate ORDER BY ts DESC LIMIT 1")
-        return {"status": "ok", "latest_climate": str(ts)}
-    except Exception as e:
-        return {"status": "degraded", "error": str(e)}
+        result = subprocess.run(
+            ["docker", "compose", "-f", "/srv/verdify/docker-compose.yml", "ps", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        checks["containers_running"] = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
+    except Exception:
+        checks["containers_running"] = "unknown"
+
+    return {"status": overall, "checks": checks}
 
 
 # ── Greenhouse ──
@@ -613,3 +663,5 @@ async def status():
         "observations": obs_count,
         "latest_climate_ts": latest,
     }
+
+    # (duplicate /health removed — defined at line 233)

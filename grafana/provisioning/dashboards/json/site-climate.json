@@ -1,0 +1,2263 @@
+{
+  "uid": "site-climate",
+  "title": "Site: Climate",
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Indoor temperature (solid = observed, dashed = forecast) against the forecast-driven target band. The band widens on sunny days and narrows on cloudy days. Gray line shows outdoor temperature for context.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "fahrenheit"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Indoor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor Forecast"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Band High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Band Low"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Band Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Solar W/m\u00b2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 35
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Solar Forecast"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFD740",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 18
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1200
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(50,150,255,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(80,180,255,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(200,100,255,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(255,80,50,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2 (gas)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(255,140,50,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor Temp\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "(SELECT ts AS time, outdoor_temp_f AS \"Outdoor Forecast\"\n FROM climate WHERE outdoor_temp_f IS NOT NULL ORDER BY ts DESC LIMIT 1)\nUNION ALL\n(SELECT DISTINCT ON (date_trunc('hour', ts))\n     date_trunc('hour', ts) AS time,\n     temp_f::float AS \"Outdoor Forecast\"\n FROM weather_forecast\n WHERE ts > now() AND ts < now() + interval '72 hours'\n ORDER BY date_trunc('hour', ts), fetched_at DESC)\nORDER BY time",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH timeline AS (\n    SELECT generate_series($__timeFrom(), $__timeTo(), interval '30 minutes') AS ts\n)\nSELECT t.ts AS time,\n    (fn_band_setpoints(t.ts)).temp_low::float AS \"Band Low\",\n    (fn_band_setpoints(t.ts)).temp_high::float AS \"Band High\"\nFROM timeline t ORDER BY t.ts",
+          "refId": "C",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, outdoor_temp_f AS \"Outdoor\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND outdoor_temp_f IS NOT NULL\nORDER BY ts",
+          "refId": "D",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "J",
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "K",
+          "rawSql": "(SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar Forecast\"\nFROM climate WHERE solar_irradiance_w_m2 IS NOT NULL ORDER BY ts DESC LIMIT 1)\nUNION ALL\n(SELECT DISTINCT ON (date_trunc('hour', ts))\n    date_trunc('hour', ts) AS time, solar_w_m2 AS \"Solar Forecast\"\nFROM weather_forecast WHERE ts > now() AND ts < now() + interval '72 hours'\nORDER BY date_trunc('hour', ts), fetched_at DESC)\nORDER BY time"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "E",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 82 ELSE NULL END AS \"Fan 1\" FROM equipment_state WHERE equipment='fan1' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "F",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 84 ELSE NULL END AS \"Fan 2\" FROM equipment_state WHERE equipment='fan2' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "H",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 86 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "G",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 58 ELSE NULL END AS \"Heat 1\" FROM equipment_state WHERE equipment='heat1' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "I",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 56 ELSE NULL END AS \"Heat 2 (gas)\" FROM equipment_state WHERE equipment='heat2' AND $__timeFilter(ts) ORDER BY ts"
+        }
+      ],
+      "title": "Temperature vs Target Band",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Indoor VPD (solid = observed, dashed = forecast) against the forecast-driven target band. The band widens when outdoor humidity is low. Gray line shows outdoor relative humidity for context.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "pressurekpa"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Indoor VPD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor VPD Forecast"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Band High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Band Low"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Band Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor VPD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(239,83,80,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(255,167,38,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(171,71,188,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(126,87,194,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "(SELECT ts AS time,\n     (0.6108 * EXP(17.27 * ((outdoor_temp_f-32)/1.8) / (((outdoor_temp_f-32)/1.8)+237.3)) * (1.0 - outdoor_rh_pct/100.0))::float AS \"Outdoor VPD Forecast\"\n FROM climate WHERE outdoor_temp_f IS NOT NULL AND outdoor_rh_pct IS NOT NULL ORDER BY ts DESC LIMIT 1)\nUNION ALL\n(SELECT DISTINCT ON (date_trunc('hour', ts))\n     date_trunc('hour', ts) AS time,\n     vpd_kpa::float AS \"Outdoor VPD Forecast\"\n FROM weather_forecast\n WHERE ts > now() AND ts < now() + interval '72 hours'\n ORDER BY date_trunc('hour', ts), fetched_at DESC)\nORDER BY time",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH timeline AS (\n    SELECT generate_series($__timeFrom(), $__timeTo(), interval '30 minutes') AS ts\n)\nSELECT t.ts AS time,\n    (fn_band_setpoints(t.ts)).vpd_low::float AS \"Band Low\",\n    (fn_band_setpoints(t.ts)).vpd_high::float AS \"Band High\"\nFROM timeline t ORDER BY t.ts",
+          "refId": "C",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time,\n    (0.6108 * EXP(17.27 * ((outdoor_temp_f-32)/1.8) / (((outdoor_temp_f-32)/1.8)+237.3)) * (1.0 - outdoor_rh_pct/100.0))::float AS \"Outdoor VPD\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND outdoor_temp_f IS NOT NULL AND outdoor_rh_pct IS NOT NULL\nORDER BY ts",
+          "refId": "D",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "E",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.8 ELSE NULL END AS \"Mister South\" FROM equipment_state WHERE equipment='mister_south' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "F",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.9 ELSE NULL END AS \"Mister West\" FROM equipment_state WHERE equipment='mister_west' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "G",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.0 ELSE NULL END AS \"Mister Center\" FROM equipment_state WHERE equipment='mister_center' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "H",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts"
+        }
+      ],
+      "title": "VPD vs Target Band",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Shows temperature conditions for the greenhouse.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {},
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#42A5F5",
+                "value": null
+              },
+              {
+                "color": "#66BB6A",
+                "value": 60
+              },
+              {
+                "color": "#FFA726",
+                "value": 82
+              },
+              {
+                "color": "#EF5350",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "fahrenheit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT now() AS time, temp_avg AS \"Temp\" FROM v_greenhouse_now",
+          "refId": "A"
+        }
+      ],
+      "title": "Indoor Avg Temp",
+      "type": "stat"
+    },
+    {
+      "id": 108,
+      "type": "stat",
+      "title": "$/Day Avg",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#78909C"
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Average daily total cost across the selected period"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Shows outdoor solar irradiance, one of the main drivers of greenhouse heat gain.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {},
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#78909C",
+                "value": null
+              },
+              {
+                "color": "#FFA726",
+                "value": 200
+              },
+              {
+                "color": "#FFEE58",
+                "value": 500
+              },
+              {
+                "color": "#FFD600",
+                "value": 800
+              }
+            ]
+          },
+          "unit": "watt"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "id": 113,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar\" FROM climate WHERE ts > now() - interval '1 hour' AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Outdoor Solar Irradiance",
+      "type": "stat"
+    },
+    {
+      "id": 105,
+      "type": "stat",
+      "title": "kWh",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, SUM(kwh_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#FF9800"
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Estimated kWh from equipment runtimes \u00d7 rated wattages"
+    },
+    {
+      "id": 106,
+      "type": "stat",
+      "title": "Therms",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, SUM(therms_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#F44336"
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 107,
+      "type": "stat",
+      "title": "Gallons",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, SUM(water_used_gal) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2196F3"
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "description": "Shows the sequence of controller states over the last 24 hours.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "id": 19,
+      "options": {},
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "A"
+        }
+      ],
+      "title": "State Timeline (24h)",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Solid = Tempest observed. Dashed = Open-Meteo forecast. Includes feels-like and dew point.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "fahrenheit"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Observed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    5
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 5
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Feels Like"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dew Point"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Wet Bulb"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    2,
+                    4
+                  ],
+                  "fill": "dot"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), outdoor_temp_f AS \"Observed\" FROM climate WHERE $__timeFilter(ts) AND outdoor_temp_f IS NOT NULL ORDER BY ts",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT DISTINCT ON (ts) $__time(ts), temp_f AS \"Forecast\" FROM weather_forecast WHERE $__timeFilter(ts) ORDER BY ts, fetched_at DESC",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), feels_like_f AS \"Feels Like\" FROM climate WHERE $__timeFilter(ts) AND feels_like_f IS NOT NULL ORDER BY ts",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), dew_point AS \"Dew Point\" FROM climate WHERE $__timeFilter(ts) AND dew_point IS NOT NULL ORDER BY ts",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), wet_bulb_temp_f AS \"Wet Bulb\" FROM climate WHERE $__timeFilter(ts) AND wet_bulb_temp_f IS NOT NULL ORDER BY ts",
+          "refId": "E"
+        }
+      ],
+      "title": "Indoor vs Outdoor Temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Shows humidity behavior over time for this part of the greenhouse system.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Observed RH"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast RH"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    5
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 5
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), outdoor_rh_pct AS \"Observed RH\" FROM climate WHERE $__timeFilter(ts) AND outdoor_rh_pct IS NOT NULL ORDER BY ts",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT DISTINCT ON (ts) $__time(ts), rh_pct AS \"Forecast RH\" FROM weather_forecast WHERE $__timeFilter(ts) ORDER BY ts, fetched_at DESC",
+          "refId": "B"
+        }
+      ],
+      "title": "Indoor vs Outdoor Humidity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "VPD intensity by hour of day across dates. Dark = high VPD stress.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 120,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "reverse": true,
+          "scheme": "RdYlGn",
+          "steps": 64
+        },
+        "tooltip": {
+          "show": true
+        },
+        "yAxis": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT\n  date_trunc('hour', ts) AS time,\n  ROUND(AVG(vpd_avg)::numeric, 2) AS \"VPD\"\nFROM climate\nWHERE ts > now() - interval '14 days' AND vpd_avg IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "VPD Heatmap (Hour \u00d7 Day)",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Direct temperature comparison for the three most important growing zones.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "\u00b0F",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "fahrenheit"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South Temp"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "fahrenheit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "East Temp"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "fahrenheit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West Temp"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "fahrenheit"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, temp_south AS \"South Temp\" FROM climate WHERE ts > now() - interval '7 days' ORDER BY 1",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, temp_east AS \"East Temp\" FROM climate WHERE ts > now() - interval '7 days' ORDER BY 1",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, temp_west AS \"West Temp\" FROM climate WHERE ts > now() - interval '7 days' ORDER BY 1",
+          "refId": "C",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Zone Temperature Comparison",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Direct VPD comparison for the three main growing zones.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "kPa",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "pressurekpa"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South VPD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "pressurekpa"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "East VPD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "pressurekpa"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West VPD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "pressurekpa"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, vpd_south AS \"South VPD\" FROM climate WHERE ts > now() - interval '7 days' ORDER BY 1",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, vpd_east AS \"East VPD\" FROM climate WHERE ts > now() - interval '7 days' ORDER BY 1",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, vpd_west AS \"West VPD\" FROM climate WHERE ts > now() - interval '7 days' ORDER BY 1",
+          "refId": "C",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Zone VPD Comparison",
+      "type": "timeseries"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "schemaVersion": 39,
+  "timezone": "America/Denver"
+}

@@ -17,13 +17,16 @@ class TestCronJobs:
         result = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=5)
         return result.stdout
 
-    def test_planner_cron(self, crontab):
-        assert "planner.py" in crontab, "Planner cron not found"
-        assert "6,12,18" in crontab, "Planner schedule not 6/12/18"
+    def test_planner_heartbeat(self, crontab):
+        """Planner runs via ingestor planning_heartbeat task (event-driven), not cron."""
+        import subprocess as sp
 
-    def test_replan_trigger_cron(self, crontab):
-        assert "check-replan-trigger.sh" in crontab, "Replan trigger cron not found"
-        assert "*/5" in crontab, "Replan trigger not every 5 min"
+        result = sp.run(["systemctl", "is-active", "verdify-ingestor"], capture_output=True, text=True, timeout=5)
+        assert result.stdout.strip() == "active", "Ingestor service not running (planning_heartbeat lives here)"
+
+    def test_metrics_cron(self, crontab):
+        """Verdify metrics collection must run every minute."""
+        assert "verdify-metrics" in crontab, "Metrics collection cron not found"
 
     def test_daily_snapshot_cron(self, crontab):
         assert "daily-summary-snapshot" in crontab, "Daily snapshot cron not found"
@@ -43,14 +46,17 @@ class TestReplanFlow:
     def test_replan_trigger_script_exists(self):
         assert os.path.isfile("/srv/verdify/scripts/check-replan-trigger.sh")
 
-    def test_replan_trigger_references_planner(self):
+    def test_replan_trigger_routes_to_iris(self):
+        """Replan trigger should route to Iris planner via OpenClaw, not planner.py."""
         with open("/srv/verdify/scripts/check-replan-trigger.sh") as f:
             content = f.read()
-        assert "planner.py" in content, "Replan trigger doesn't reference planner.py"
+        assert "hooks/agent" in content or "OPENCLAW" in content, "Replan trigger doesn't route to Iris"
 
     def test_planner_journal_has_recent_entries(self):
         """At least one plan should have been generated today."""
-        count = db_query("SELECT count(*) FROM plan_journal WHERE created_at::date = CURRENT_DATE")
+        count = db_query(
+            "SELECT count(*) FROM plan_journal WHERE created_at::date = (now() AT TIME ZONE 'America/Denver')::date"
+        )
         assert int(count) >= 1, "No plans generated today"
 
     def test_plan_has_waypoints(self):

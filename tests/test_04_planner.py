@@ -10,7 +10,6 @@ import sys
 import pytest
 
 sys.path.insert(0, "/srv/verdify/ingestor")
-sys.path.insert(0, "/srv/verdify/scripts")
 
 
 class TestContextGathering:
@@ -62,92 +61,68 @@ class TestContextGathering:
         assert "POSTGRES_PASSWORD" not in context
 
 
-class TestPromptRendering:
-    """planner.py --dry-run must produce a valid, complete prompt."""
+class TestPlannerPrompt:
+    """The Iris planner prompt (iris_planner.py) must contain essential knowledge."""
 
     @pytest.fixture(scope="class")
-    def prompt(self):
-        result = subprocess.run(
-            ["/srv/greenhouse/.venv/bin/python", "/srv/verdify/scripts/planner.py", "--dry-run"],
-            capture_output=True,
-            text=True,
-            timeout=90,
-        )
-        # stdout is the prompt, stderr is log messages
-        assert len(result.stdout) > 1000, f"Prompt too short: {len(result.stdout)} chars"
-        return result.stdout
+    def preamble(self):
+        import sys
 
-    def test_prompt_has_mode(self, prompt):
-        assert prompt.startswith("MODE: NORMAL") or prompt.startswith("MODE: REPLAN")
+        sys.path.insert(0, "/srv/verdify/ingestor")
+        from iris_planner import _PREAMBLE
 
-    def test_prompt_has_horizon(self, prompt):
-        assert "Plan horizon" in prompt
-        assert "72 hours" in prompt
+        assert len(_PREAMBLE) > 5000, f"Preamble too short: {len(_PREAMBLE)} chars"
+        return _PREAMBLE
 
-    def test_prompt_has_state_machine(self, prompt):
-        assert "SEALED_MIST" in prompt or "HUMID_S1" in prompt
+    def test_has_standing_directives(self, preamble):
+        assert "Standing Directives" in preamble
+        assert "MCP tools ONLY" in preamble
 
-    def test_prompt_has_kpi(self, prompt):
-        assert "Planner Score" in prompt
-        assert "80% Compliance" in prompt
+    def test_has_decision_precedence(self, preamble):
+        assert "Safety" in preamble
+        assert "Band compliance" in preamble
+        assert "Cost" in preamble
 
-    def test_prompt_has_24_params(self, prompt):
-        assert "vpd_hysteresis" in prompt
-        assert "bias_cool" in prompt
-        assert "mist_max_closed_vent_s" in prompt
+    def test_has_kpi(self, preamble):
+        assert "Planner Score" in preamble
+        assert "80% Compliance" in preamble or "80%" in preamble
 
-    def test_prompt_has_milestones(self, prompt):
-        assert "SUGGESTED TRANSITION TIMESTAMPS" in prompt
+    def test_has_compliance_metrics(self, preamble):
+        assert "temp_compliance_pct" in preamble
+        assert "vpd_compliance_pct" in preamble
 
-    def test_prompt_has_output_format(self, prompt):
-        assert "previous_plan_validation" in prompt
-        assert "performance_target" in prompt
+    def test_has_tunables(self, preamble):
+        assert "vpd_hysteresis" in preamble
+        assert "bias_cool" in preamble
+        assert "fog_escalation_kpa" in preamble
 
-    def test_prompt_has_dew_point_guidance(self, prompt):
-        assert "Dew point margin" in prompt
-        assert "dp_risk_hours" in prompt
+    def test_has_modes(self, preamble):
+        assert "SEALED_MIST" in preamble
+        assert "VENTILATE" in preamble
 
-    def test_prompt_no_secrets(self, prompt):
-        assert "sk-ant-" not in prompt
-        assert "AIza" not in prompt
+    def test_has_lessons(self, preamble):
+        assert "Fog is 7x" in preamble or "fog is 7x" in preamble
 
-    def test_milestones_include_today(self, prompt):
-        """Today must appear in the suggested timestamps table."""
-        from datetime import datetime
+    def test_no_secrets(self, preamble):
+        assert "sk-ant-" not in preamble
+        assert "AIza" not in preamble
 
-        day_abbr = datetime.now().strftime("%a")
-        assert day_abbr in prompt, f"Today ({day_abbr}) not found in milestones"
+    def test_has_utility_guidance(self, preamble):
+        assert "kwh" in preamble
+        assert "therms" in preamble
+        assert "3.9x" in preamble or "3.9×" in preamble
 
 
-class TestOutputParsing:
-    """The JSON parser must handle various model output formats."""
+class TestMCPToolAvailability:
+    """The MCP server must expose all 18 planning tools."""
 
-    def test_parse_clean_json(self):
-        from planner import parse_plan_json
+    def test_mcp_server_running(self):
+        import subprocess
 
-        raw = '{"plan_id": "test", "transitions": []}'
-        result = parse_plan_json(raw)
-        assert result["plan_id"] == "test"
+        result = subprocess.run(["systemctl", "is-active", "verdify-mcp"], capture_output=True, text=True, timeout=5)
+        assert result.stdout.strip() == "active", "MCP server not running"
 
-    def test_parse_code_fenced_json(self):
-        from planner import parse_plan_json
+    def test_skill_file_exists(self):
+        import os
 
-        raw = '```json\n{"plan_id": "test", "transitions": []}\n```'
-        result = parse_plan_json(raw)
-        assert result["plan_id"] == "test"
-
-    def test_parse_preamble_json(self):
-        from planner import parse_plan_json
-
-        raw = 'Here is my plan:\n\n```json\n{"plan_id": "test", "transitions": []}\n```\n\nLet me explain...'
-        result = parse_plan_json(raw)
-        assert result["plan_id"] == "test"
-
-    def test_parse_truncated_json(self):
-        from planner import parse_plan_json
-
-        # Simulate a complete-enough JSON that just has an extra trailing comma
-        raw = '{"plan_id": "test", "transitions": [{"ts": "2026-04-10T10:00:00-06:00", "params": {"vpd_hysteresis": 0.3}}]}'
-        result = parse_plan_json(raw)
-        assert result["plan_id"] == "test"
-        assert len(result["transitions"]) == 1
+        assert os.path.isfile("/mnt/jason/agents/iris/skills/greenhouse-planner.md"), "Skill file missing"

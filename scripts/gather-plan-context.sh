@@ -107,20 +107,22 @@ echo ""
 TODAY=$(date +%Y-%m-%d)
 echo "--- PLANNER SCORECARD (${TODAY} — partial if before midnight, informational only) ---"
 echo "metric|value"
-$DB -c "SELECT * FROM fn_planner_scorecard(CURRENT_DATE);"
+$DB -c "SELECT * FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date);"
 echo ""
 echo "--- PLANNER SCORE TREND (7 complete calendar days, excludes today) ---"
-echo "date|score|compliance_pct|total_stress_h|heat|cold|vpd_high|vpd_low|cost|dp_min|dp_risk_h"
+echo "date|score|comp|temp%|vpd%|stress_h|heat|cold|vpd_hi|vpd_lo|kwh|therms|water_gal|cost"
 $DB -c "
-SELECT p.date, p.planner_score, p.compliance_pct, p.total_stress_h,
-       p.heat_stress_h, p.cold_stress_h, p.vpd_high_stress_h, p.vpd_low_stress_h, p.cost_total,
-       COALESCE(d.min_margin_f, 0), COALESCE(d.risk_hours, 0)
-FROM v_planner_performance p
-LEFT JOIN v_dew_point_risk d ON p.date = d.date
-WHERE p.date >= CURRENT_DATE - 7 AND p.date < CURRENT_DATE ORDER BY p.date DESC;
+SELECT date, planner_score, compliance_pct, temp_compliance_pct, vpd_compliance_pct,
+       total_stress_h, heat_stress_h, cold_stress_h, vpd_high_stress_h, vpd_low_stress_h,
+       kwh, therms, water_gal, cost_total
+FROM v_daily_kpi
+WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 7
+  AND date < (now() AT TIME ZONE 'America/Denver')::date
+ORDER BY date DESC;
 "
-echo "Score formula: 80% compliance (in-band time) + 20% cost efficiency (<\$5/day=full marks)"
-echo "Priority 1: stay in band. Priority 2: minimize cost. Target: score >70, compliance >90%, total stress <3h/day"
+echo "Score = 80% compliance (both temp AND VPD in band) + 20% cost efficiency (<\$5/day=full marks)"
+echo "compliance_pct = % time both temp AND VPD in band. temp_comp / vpd_comp = individual axes."
+echo "VPD compliance is usually the bottleneck on dry spring days (tight band, 15% outdoor RH)."
 echo "Dew point margin: <5°F = condensation risk, <3°F = imminent. dp_risk_h = hours below 5°F. Target: 0h."
 echo ""
 
