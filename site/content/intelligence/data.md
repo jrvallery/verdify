@@ -3,14 +3,14 @@ title: "Data Model"
 tags: [intelligence, database, timescaledb]
 date: 2026-04-07
 type: reference
-tables: 44
-views: 54
-functions: 23
+tables: 47
+views: 56
+functions: 100
 aliases:
 
-  - platform/data
-rows_climate: 199000
-rows_energy: 512000
+  - data-model
+rows_climate: 221000
+rows_energy: 516000
 ---
 
 <link rel="stylesheet" href="/static/grafana-controls.f0ea8065.css">
@@ -29,9 +29,9 @@ TimescaleDB (PostgreSQL 16 + hypertables) stores every measurement, event, plan,
 
 | Table | Type | Rows | Write Pattern |
 |-------|------|------|---------------|
-| `climate` | Hypertable | 199K+ | ~2 min batch (ESP32 sensors + outdoor merge) |
+| `climate` | Hypertable | 221K+ | ~2 min batch (ESP32 sensors + outdoor merge) |
 | `equipment_state` | Hypertable | 39K+ | Event-driven (relay changes) |
-| `energy` | Hypertable | 512K+ | Every 5 min (Shelly EM50) |
+| `energy` | Hypertable | 516K+ | Every 5 min (Shelly EM50) |
 | `setpoint_changes` | Hypertable | — | Event-driven (ESP32 reports + plan pushes) |
 | `setpoint_plan` | Hypertable | 144+ | 3× daily (AI planner waypoints) |
 | `weather_forecast` | Hypertable | 28K+ | Hourly (Open-Meteo, 16-day, 27 columns) |
@@ -48,9 +48,9 @@ TimescaleDB (PostgreSQL 16 + hypertables) stores every measurement, event, plan,
 | `treatments` | Spray/biological applications with PHI/REI | Empty |
 | `harvests` | Yield records | Empty |
 | `plan_journal` | Per-plan hypothesis, outcome, score | 12 entries |
-| `planner_lessons` | Validated patterns from planning cycles | 4 lessons |
+| `planner_lessons` | Validated patterns from planning cycles | 75 lessons |
 
-## Key Views (34 total)
+## Key Views (56 total)
 
 | View | Purpose |
 |------|---------|
@@ -79,17 +79,17 @@ TimescaleDB (PostgreSQL 16 + hypertables) stores every measurement, event, plan,
 
 <div class="grafana-controls"></div>
 
-<div class="pg s2"><iframe src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=13&theme=dark" width="100%" height="320px" frameborder="0"></iframe>
+<div class="pg s2"><div class="grafana-lazy" data-src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=13&theme=dark" data-width="100%" data-height="320px" style="width:100%;height:320px;background:#111;border-radius:4px;"></div>
 
-<iframe src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=17&theme=dark" width="100%" height="320px" frameborder="0"></iframe></div>
+<div class="grafana-lazy" data-src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=17&theme=dark" data-width="100%" data-height="320px" style="width:100%;height:320px;background:#111;border-radius:4px;"></div></div>
 
-<div class="pg s4"><iframe src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=1&theme=dark" width="100%" height="130px" frameborder="0"></iframe>
+<div class="pg s4"><div class="grafana-lazy" data-src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=1&theme=dark" data-width="100%" data-height="130px" style="width:100%;height:130px;background:#111;border-radius:4px;"></div>
 
-<iframe src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=2&theme=dark" width="100%" height="130px" frameborder="0"></iframe>
+<div class="grafana-lazy" data-src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=2&theme=dark" data-width="100%" data-height="130px" style="width:100%;height:130px;background:#111;border-radius:4px;"></div>
 
-<iframe src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=3&theme=dark" width="100%" height="130px" frameborder="0"></iframe>
+<div class="grafana-lazy" data-src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=3&theme=dark" data-width="100%" data-height="130px" style="width:100%;height:130px;background:#111;border-radius:4px;"></div>
 
-<iframe src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=4&theme=dark" width="100%" height="130px" frameborder="0"></iframe></div>
+<div class="grafana-lazy" data-src="https://graphs.verdify.ai/d-solo/site-intelligence-data/?orgId=1&panelId=4&theme=dark" data-width="100%" data-height="130px" style="width:100%;height:130px;background:#111;border-radius:4px;"></div></div>
 
 ## Compression & Retention
 
@@ -106,4 +106,4 @@ TimescaleDB (PostgreSQL 16 + hypertables) stores every measurement, event, plan,
 
 - [Planning Loop](/intelligence/planning/) — how the AI planner reads this data and writes setpoints
 - [Operations](/evidence/operations/) — live health checks and data freshness monitoring
-- [Lessons Learned](/evidence/lessons/) — what the data has taught us about greenhouse control
+- [Lessons Learned](/intelligence/lessons/) — what the data has taught us about greenhouse control
