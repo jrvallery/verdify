@@ -469,7 +469,7 @@ echo ""
 
 # ── 22b. (moved to section 27) ───────────────────────────────────
 
-# Replan trigger is handled by planner.py MODE header — not injected here.
+# Replan triggers are handled by iris_planner.py event dispatch — not injected here.
 
 # ── 24. 72-HOUR HOURLY FORECAST ──────────────────────────────────
 echo "--- 72H HOURLY FORECAST ---"
