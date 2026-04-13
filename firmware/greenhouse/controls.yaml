@@ -397,8 +397,11 @@ interval:
             // they spray directionally at surfaces, providing local evaporative cooling.
             // Fog (S3) is the heavy escalation: ~800W, fills the room.
             bool occupancy_blocks = id(occupancy_inhibit_enabled) && id(greenhouse_occupied);
+            // FW-9: VPD emergency override — allow misting even if budget exhausted
+            float vpd_max_zone = fmax(south_vpd, fmax(west_vpd, east_vpd));
+            bool vpd_emergency = !isnan(vpd_max_zone) && (vpd_max_zone > id(safety_vpd_max_kpa));
             bool mister_blocked =
-                (id(mister_water_today) >= id(mister_water_budget_gal))
+                (id(mister_water_today) >= id(mister_water_budget_gal) && !vpd_emergency)
                 || !humidity_demand
                 || occupancy_blocks;
 

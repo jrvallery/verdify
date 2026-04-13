@@ -108,6 +108,7 @@ inline Mode determine_mode(
         // Without this, hitting max_relief_cycles permanently latches
         // VENTILATE and the greenhouse can never mist again.
         state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;  // FW-8
     }
     bool vpd_wants_seal = vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
 
@@ -120,6 +121,7 @@ inline Mode determine_mode(
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;
         state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;  // FW-8
     } else if (safety_heat) {
         mode = SAFETY_HEAT;
         state.sealed_timer_ms = 0;
@@ -148,9 +150,11 @@ inline Mode determine_mode(
                 state.sealed_timer_ms = 0;
                 state.vpd_watch_timer_ms = 0;
                 state.relief_cycle_count = 0;
+                state.vent_latch_timer_ms = 0;  // FW-8
                 state.mist_stage = MIST_WATCH;
                 state.mist_stage_timer_ms = 0;
-            } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
+            } else if (state.sealed_timer_ms >= sp.sealed_max_ms
+                       || in.temp_f >= (sp.safety_max - 5.0f)) {  // FW-7: bail if too hot
                 mode = THERMAL_RELIEF;
                 state.relief_timer_ms = 0;
             } else {
@@ -158,15 +162,24 @@ inline Mode determine_mode(
                 state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
             }
         // R2-6: Gate seal entry by relief cycle count AND occupancy
+        // FW-7: Also gate by temperature — don't seal when within 5°F of safety_max
         } else if (vpd_wants_seal && !moisture_blocked
-                   && state.relief_cycle_count < sp.max_relief_cycles) {
+                   && state.relief_cycle_count < sp.max_relief_cycles
+                   && in.temp_f < (sp.safety_max - 5.0f)) {
             mode = SEALED_MIST;
             state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
             state.mist_stage_timer_ms = 0;
+            state.vent_latch_timer_ms = 0;  // FW-8: reset on successful seal entry
         } else if (vpd_wants_seal && state.relief_cycle_count >= sp.max_relief_cycles) {
             // R2-6: Exceeded max consecutive sealed→relief. Force vent to break cycle.
             mode = VENTILATE;
+            // FW-8: Timeout — if latched >30 min with VPD still above band, try again
+            state.vent_latch_timer_ms = sat_add(state.vent_latch_timer_ms, dt_ms);
+            if (state.vent_latch_timer_ms >= 1800000) {  // 30 minutes
+                state.relief_cycle_count = 0;
+                state.vent_latch_timer_ms = 0;
+            }
         } else if (vpd_too_low_enter) {
             mode = DEHUM_VENT;
         } else if (was_dehum && !vpd_dehum_exit && !sp.econ_block) {

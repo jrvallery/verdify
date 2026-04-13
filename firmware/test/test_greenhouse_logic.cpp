@@ -488,6 +488,72 @@ TEST(cold_night_no_vent_oscillation) {
 // MAIN
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// FW-7/8/9: SEALED_MIST SAFETY TESTS
+// ═══════════════════════════════════════════════════════════════
+
+TEST(fw7_sealed_mist_temp_guard) {
+    // SEALED_MIST should NOT engage when temp is within 5°F of safety_max
+    auto sp = default_setpoints();
+    sp.safety_max = 95.0f;
+    sp.vpd_high = 1.0f;
+    auto s = initial_state();
+    // VPD above band at 91°F (within 5°F of safety_max=95)
+    auto in = make_inputs(91.0f, 1.5f);
+    // Run enough cycles to pass vpd_watch_dwell
+    for (int i = 0; i < 15; i++) determine_mode(in, sp, s, 5000);
+    // Should NOT be in SEALED_MIST — too hot
+    ASSERT_TRUE(s.mode != SEALED_MIST);
+    // At 85°F (safe margin), it SHOULD seal
+    s = initial_state();
+    in = make_inputs(85.0f, 1.5f);
+    for (int i = 0; i < 15; i++) determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(s.mode, SEALED_MIST);
+    PASS();
+}
+
+TEST(fw7_sealed_mist_exit_on_high_temp) {
+    // Enter SEALED_MIST at safe temp, then temp climbs — should exit
+    auto sp = default_setpoints();
+    sp.safety_max = 95.0f;
+    sp.vpd_high = 1.0f;
+    auto s = initial_state();
+    // Enter at 80°F
+    auto in = make_inputs(80.0f, 1.5f);
+    for (int i = 0; i < 15; i++) determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(s.mode, SEALED_MIST);
+    // Temp climbs to 91°F (within 5°F of safety_max) — should exit to THERMAL_RELIEF
+    in = make_inputs(91.0f, 1.5f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, THERMAL_RELIEF);
+    PASS();
+}
+
+TEST(fw8_relief_latch_timeout) {
+    // After max_relief_cycles exhausted, controller latches VENTILATE.
+    // After 30 minutes (360 × 5s cycles), counter should reset.
+    auto sp = default_setpoints();
+    sp.max_relief_cycles = 3;
+    sp.vpd_high = 1.0f;
+    sp.vpd_watch_dwell_ms = 5000;
+    auto s = initial_state();
+    s.relief_cycle_count = 3;  // Already exhausted
+    auto in = make_inputs(75.0f, 1.5f);  // VPD above band, temp safe
+    // Run through the dwell period
+    for (int i = 0; i < 2; i++) determine_mode(in, sp, s, 5000);
+    // Should be latched in VENTILATE
+    ASSERT_EQ(s.mode, VENTILATE);
+    ASSERT_TRUE(s.relief_cycle_count >= 3);
+    // Run 360 more cycles (30 minutes at 5s each)
+    for (int i = 0; i < 360; i++) determine_mode(in, sp, s, 5000);
+    // Latch timer should have reset the counter
+    ASSERT_EQ(s.relief_cycle_count, (uint32_t)0);
+    // Next cycle with VPD above band should re-enter SEALED_MIST
+    determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(s.mode, SEALED_MIST);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis\n");

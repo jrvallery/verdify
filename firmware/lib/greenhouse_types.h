@@ -96,6 +96,7 @@ struct ControlState {
     uint32_t vpd_watch_timer_ms;
     uint32_t mist_stage_timer_ms;
     uint32_t relief_cycle_count;
+    uint32_t vent_latch_timer_ms;  // FW-8: tracks time in relief-exhausted VENTILATE latch
 };
 
 struct RelayOutputs {
@@ -157,6 +158,6 @@ inline ControlState initial_state() {
         .mist_stage = MIST_WATCH,
         .sealed_timer_ms = 0, .relief_timer_ms = 0,
         .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
-        .relief_cycle_count = 0
+        .relief_cycle_count = 0, .vent_latch_timer_ms = 0
     };
 }
