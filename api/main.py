@@ -233,8 +233,6 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint for external monitoring (Prometheus, uptime checks)."""
-    import subprocess
-
     checks = {}
     overall = "ok"
 
@@ -267,25 +265,11 @@ async def health():
         )
         checks["greenhouse_mode"] = mode
 
-    # Service checks (non-blocking)
-    for svc in ["verdify-ingestor", "verdify-mcp"]:
-        try:
-            result = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True, timeout=3)
-            checks[f"service_{svc.replace('verdify-', '')}"] = result.stdout.strip()
-        except Exception:
-            checks[f"service_{svc.replace('verdify-', '')}"] = "unknown"
-
-    # Container count
-    try:
-        result = subprocess.run(
-            ["docker", "compose", "-f", "/srv/verdify/docker-compose.yml", "ps", "-q"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        checks["containers_running"] = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
-    except Exception:
-        checks["containers_running"] = "unknown"
+    # Service health inferred from data freshness (API runs inside Docker — no systemctl/host access)
+    climate_age = checks.get("climate_age_seconds", 999)
+    checks["service_ingestor"] = "ok" if climate_age < 300 else "stale"
+    # MCP server health is monitored by the ingestor (planning_heartbeat), not the API.
+    # The API can't reach localhost:8000 from inside Docker (MCP binds to 127.0.0.1 on host).
 
     return {"status": overall, "checks": checks}
 
