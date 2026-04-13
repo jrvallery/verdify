@@ -1247,7 +1247,7 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
     loc = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
     s = _astral_sun(loc.observer, date=now.date(), tzinfo=ZoneInfo("America/Denver"))
     sunrise = s["sunrise"]
-    sunset_buffer = s["sunset"] + _td(hours=1)
+    sunset_buffer = s["sunset"] + _td(hours=2)  # Extended to cover evening VPD cycling
 
     if now < sunrise or now > sunset_buffer:
         return  # Night — skip deviation check entirely
@@ -1660,6 +1660,7 @@ def _compute_milestones() -> dict[str, datetime]:
     today = datetime.now(_DENVER).date()
     s = _sun(_LOCATION.observer, date=today, tzinfo=_DENVER)
     noon = s["noon"]
+    midnight = datetime.combine(today + _td(days=1), datetime.min.time(), tzinfo=_DENVER)
 
     _milestones_cache = {
         "SUNRISE": s["sunrise"],
@@ -1667,6 +1668,10 @@ def _compute_milestones() -> dict[str, datetime]:
         "TRANSITION:tree_shade": noon + _td(hours=4),
         "TRANSITION:decline": s["sunset"] - _td(hours=1),
         "SUNSET": s["sunset"],
+        # Evening + overnight (closes the 10h blind spot after SUNSET)
+        "TRANSITION:evening_settle": s["sunset"] + _td(hours=1),
+        "TRANSITION:midnight_posture": midnight,
+        "TRANSITION:pre_dawn": s["sunrise"] - _td(hours=1),
     }
 
     # Load any previously fired milestones from disk (in case of restart)
