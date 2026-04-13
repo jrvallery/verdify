@@ -341,6 +341,14 @@ inline RelayOutputs resolve_equipment(
             bool needs_both = in.temp_f > (Thigh + sp.dC2);
             if (lead_is_fan1) { out.fan1 = true; out.fan2 = needs_both; }
             else              { out.fan2 = true; out.fan1 = needs_both; }
+            // FW-9b: VPD emergency — fire fog even while venting (full battery)
+            if (in.vpd_kpa > sp.vpd_max_safe && !moisture_blocked_by_occupancy(in, sp)) {
+                bool fog_ok = !(in.rh_pct > sp.fog_rh_ceiling)
+                    && !(in.temp_f < sp.fog_min_temp)
+                    && (in.local_hour >= sp.fog_window_start)
+                    && (in.local_hour < sp.fog_window_end);
+                out.fog = fog_ok;
+            }
             break;
         }
 

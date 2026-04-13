@@ -554,6 +554,28 @@ TEST(fw8_relief_latch_timeout) {
     PASS();
 }
 
+TEST(fw9b_ventilate_fog_on_vpd_emergency) {
+    // When VPD > vpd_max_safe during VENTILATE, fog should fire (full battery)
+    auto sp = default_setpoints();
+    sp.vpd_max_safe = 3.0f;
+    sp.fog_rh_ceiling = 90.0f;
+    sp.fog_min_temp = 55.0f;
+    sp.fog_window_start = 7;
+    sp.fog_window_end = 17;
+    auto s = initial_state();
+    // 85°F, VPD 3.2 (above vpd_max_safe), 25% RH, hour 14 (in fog window)
+    auto in = make_inputs(85.0f, 3.2f, 25.0f);
+    auto out = resolve_equipment(VENTILATE, in, sp, s, true);
+    ASSERT_TRUE(out.fog);   // Fog should be ON
+    ASSERT_TRUE(out.vent);  // Vent still open (VENTILATE mode)
+    ASSERT_TRUE(out.fan1);  // Fans running
+    // VPD at 2.5 (below vpd_max_safe) — no fog
+    in = make_inputs(85.0f, 2.5f, 35.0f);
+    out = resolve_equipment(VENTILATE, in, sp, s, true);
+    ASSERT_FALSE(out.fog);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis\n");
