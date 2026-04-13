@@ -398,6 +398,46 @@ def on_log_message(msg) -> None:
 
 
 # ──────────────────────────────────────────────────────────────
+# Setpoint validation — reject boot-time defaults and implausible values
+# ──────────────────────────────────────────────────────────────
+_SETPOINT_RANGES = {
+    "safety_max": (70, 120),
+    "safety_min": (30, 60),
+    "safety_vpd_max": (1.5, 5.0),
+    "safety_vpd_min": (0.05, 1.0),
+    "temp_high": (50, 110),
+    "temp_low": (35, 90),
+    "vpd_high": (0.3, 4.0),
+    "vpd_low": (0.1, 3.0),
+}
+
+# Boot window: suppress ESP32 setpoint reports for 60s after connect
+# to prevent firmware defaults from polluting the DB
+_BOOT_WINDOW_S = 60
+
+
+def _accept_setpoint(param: str, value: float) -> bool:
+    """Return True if this setpoint value should be written to the DB."""
+    import time as _time
+
+    # Boot window: suppress ESP32-reported setpoints for first 60s
+    if shared.esp32_connected_at > 0:
+        elapsed = _time.time() - shared.esp32_connected_at
+        if elapsed < _BOOT_WINDOW_S:
+            log.debug("Boot window (%ds): suppressing %s=%.2f", int(elapsed), param, value)
+            return False
+
+    # Range validation: reject implausible values
+    if param in _SETPOINT_RANGES:
+        lo, hi = _SETPOINT_RANGES[param]
+        if value < lo or value > hi:
+            log.warning("Rejecting implausible setpoint %s=%.2f (valid range %.1f-%.1f)", param, value, lo, hi)
+            return False
+
+    return True
+
+
+# ──────────────────────────────────────────────────────────────
 # ESP32 callbacks
 # ──────────────────────────────────────────────────────────────
 def on_state_change(entity_state) -> None:
@@ -436,6 +476,8 @@ def on_state_change(entity_state) -> None:
 
         param = SETPOINT_MAP.get(obj_id)
         if param:
+            if not _accept_setpoint(param, val):
+                return
             old = state.setpoints.get(param)
             state.setpoints[param] = val
             if old != val:
@@ -488,6 +530,8 @@ def on_state_change(entity_state) -> None:
 
         param = SETPOINT_MAP.get(obj_id)
         if param:
+            if not _accept_setpoint(param, val):
+                return
             old = state.setpoints.get(param)
             state.setpoints[param] = val
             if old != val:
@@ -653,6 +697,13 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             shared.esp32["keys"] = {obj_id: key for key, obj_id in state.key_to_object_id.items()}
             log.info("ESP32 client shared: %d entity keys for direct push", len(shared.esp32["keys"]))
 
+            # Signal dispatcher to do a full re-push (clears _last_pushed cache)
+            import time as _time_mod
+
+            shared.force_setpoint_push.set()
+            shared.esp32_connected_at = _time_mod.time()
+            log.info("Force-push flag set — dispatcher will re-push all setpoints")
+
             tracked = sum(
                 1
                 for obj_id in state.key_to_object_id.values()
@@ -673,6 +724,15 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             # Subscribe to ESP32 log messages
             client.subscribe_logs(on_log_message, log_level=LogLevel.LOG_LEVEL_INFO)
             log.info("Subscribed to ESP32 logs (INFO+)")
+
+            # Immediate setpoint re-push after reconnect (don't wait for 300s cycle)
+            try:
+                from tasks import setpoint_dispatcher
+
+                await setpoint_dispatcher(pool)
+                log.info("Post-reconnect setpoint dispatch complete")
+            except Exception as e:
+                log.error(f"Post-reconnect dispatch failed: {e}")
 
             # Keepalive loop: ping every 60s via device_info()
             # Also watches for on_stop callback via connection_lost event

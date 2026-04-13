@@ -114,7 +114,7 @@ udp:
             //                  pressure_mb, temp_c, rh, lux, uv, solar_w_m2, rain_mm_min,
             //                  precip_type, lightning_dist_km, lightning_count, battery_v, interval_min]
             json::parse_json(payload, [](JsonObject root) -> bool {
-              if (!root.containsKey("obs") || root["obs"].size() == 0) return false;
+              if (root["obs"].isNull() || root["obs"].size() == 0) return false;
               JsonArray obs = root["obs"][0];
               if (obs.size() < 18) return false;
 
@@ -183,7 +183,7 @@ udp:
           else if (payload.find("\"rapid_wind\"") != std::string::npos) {
             // Rapid wind (every 3s) — just update wind speed/direction
             json::parse_json(payload, [](JsonObject root) -> bool {
-              if (!root.containsKey("ob") || root["ob"].size() < 3) return false;
+              if (root["ob"].isNull() || root["ob"].size() < 3) return false;
               JsonArray ob = root["ob"];
               id(tempest_wind_speed_mph) = ob[1].as<float>() * 2.237f;
               id(tempest_wind_dir_deg) = ob[2].as<float>();
@@ -397,7 +397,7 @@ interval:
                     // Shelly Pro EM-50 returns em1:0 and em1:1 objects
                     JsonObject ch0 = root["em1:0"];
                     JsonObject ch1 = root["em1:1"];
-                    if (ch0 && ch0.containsKey("act_power") && ch0.containsKey("voltage")) {
+                    if (ch0 && !ch0["act_power"].isNull() && !ch0["voltage"].isNull()) {
                       float p = ch0["act_power"].as<float>();
                       float v = ch0["voltage"].as<float>();
                       // Reject physically impossible values
@@ -410,7 +410,7 @@ interval:
                     } else {
                       ESP_LOGW("shelly", "ch0 missing act_power or voltage");
                     }
-                    if (ch1 && ch1.containsKey("act_power")) {
+                    if (ch1 && !ch1["act_power"].isNull()) {
                       float p = ch1["act_power"].as<float>();
                       if (p >= -1000 && p <= 10000) {
                         id(shelly_ch1_power_w) = p;

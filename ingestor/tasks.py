@@ -17,6 +17,7 @@ from datetime import timedelta as _td
 from zoneinfo import ZoneInfo
 
 import asyncpg
+import shared
 
 log = logging.getLogger("tasks")
 
@@ -751,6 +752,11 @@ _last_pushed: dict[str, float] = {}
 
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     global _last_pushed
+    # On ESP32 reconnect, clear the cache so ALL values get re-pushed
+    if shared.force_setpoint_push.is_set():
+        shared.force_setpoint_push.clear()
+        _last_pushed.clear()
+        log.info("Dispatcher: force-push — cleared _last_pushed cache (ESP32 reconnect)")
     # Parameters driven by the target band curve, not the AI planner
     BAND_DRIVEN = {
         "temp_high",
@@ -761,9 +767,6 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         "vpd_target_west",
         "vpd_target_east",
         "vpd_target_center",
-        "mister_engage_delay_s",
-        "mister_all_delay_s",
-        "mister_center_penalty",
     }
     async with pool.acquire() as conn:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
@@ -800,6 +803,20 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     continue
                 changes.append((param, val))
 
+        # Safety limits: always dispatched, planner can override within range
+        safety_defaults = {
+            "safety_max": 100.0,
+            "safety_min": 40.0,
+        }
+        for param, val in safety_defaults.items():
+            planner_val = planner_params.get(param)
+            if planner_val is not None:
+                val = float(planner_val)
+            last = _last_pushed.get(param)
+            if last is not None and abs(last - val) < 0.1:
+                continue
+            changes.append((param, val))
+
         # Mister tuning defaults: band-derived fallbacks, planner can override
         # engage/all_kpa default to band ceiling; planner may set different values
         if band_row:
@@ -807,6 +824,9 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             mister_defaults = {
                 "mister_engage_kpa": round(vpd_hi, 2),
                 "mister_all_kpa": round(vpd_hi + 0.3, 2),
+                "mister_engage_delay_s": 30,
+                "mister_all_delay_s": 60,
+                "mister_center_penalty": 0.5,
             }
             # Only set defaults if planner hasn't specified a value
             for param, val in mister_defaults.items():
@@ -838,8 +858,23 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             (STATE_DIR / "setpoint-dispatcher.log").touch()
             return
 
+        SAFETY_PARAMS = {"safety_max", "safety_min"}
+        MISTER_DEFAULTS = {
+            "mister_engage_kpa",
+            "mister_all_kpa",
+            "mister_engage_delay_s",
+            "mister_all_delay_s",
+            "mister_center_penalty",
+        }
         for param, val in changes:
-            source = "band" if param in BAND_DRIVEN else "plan"
+            if param in BAND_DRIVEN:
+                source = "band"
+            elif param in SAFETY_PARAMS and param not in planner_params:
+                source = "band"
+            elif param in MISTER_DEFAULTS and param not in planner_params:
+                source = "band"
+            else:
+                source = "plan"
             await conn.execute(
                 "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
                 param,
@@ -1750,3 +1785,34 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                     pass
             else:
                 log.info("Plan delivery verified: %d plan(s) written after %s", plan_count, key)
+
+    # ── 6. MCP server health check (every heartbeat = 60s) ──
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: urllib.request.urlopen("http://127.0.0.1:8000/mcp", timeout=5),
+        )
+        # Any response (even 405 Method Not Allowed) means the server is alive
+    except urllib.error.HTTPError:
+        pass  # Server is alive, just doesn't accept GET on /mcp — that's fine
+    except Exception as e:
+        log.error("MCP server unreachable: %s", e)
+        # Try to restart it
+        try:
+            import subprocess as _sp_mcp
+
+            _sp_mcp.Popen(
+                ["/srv/greenhouse/.venv/bin/python", "mcp/server.py"],
+                cwd="/srv/verdify",
+                stdout=open("/srv/verdify/state/mcp-server.log", "a"),
+                stderr=open("/srv/verdify/state/mcp-server.log", "a"),
+            )
+            log.warning("MCP server restarted")
+            try:
+                token = _load_token(SLACK_TOKEN_FILE)
+                _post_slack(token, SLACK_CHANNEL, ":warning: MCP server was unreachable — auto-restarted.")
+            except Exception:
+                pass
+        except Exception as restart_err:
+            log.error("MCP server restart failed: %s", restart_err)
