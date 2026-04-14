@@ -288,8 +288,8 @@ inline RelayOutputs resolve_equipment(
     const float Tlow = sp.temp_low + sp.bias_heat;
     const float Thigh = sp.temp_high + sp.bias_cool;
 
-    bool needs_heating_s1 = in.temp_f < (Tlow + sp.dH2);
-    bool needs_heating_s2 = in.temp_f < (Tlow - sp.heat_hysteresis);
+    bool needs_heating_s1 = in.temp_f < (Tlow + sp.heat_hysteresis);
+    bool needs_heating_s2 = in.temp_f < (Tlow - sp.dH2);
 
     RelayOutputs out = {false, false, false, false, false, false};
 
