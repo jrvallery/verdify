@@ -9,14 +9,17 @@
 #  - added cycle counters and fixed manual scripts
 ###############################################################################
 
+substitutions:
+  fw_version: "2026.4.15.1"
+
 esphome:
   name: greenhouse
   friendly_name: Greenhouse
   name_add_mac_suffix: false
   min_version: 2026.1.4
   includes:
-    - greenhouse/lib/greenhouse_types.h
-    - greenhouse/lib/greenhouse_logic.h
+    - lib/greenhouse_types.h
+    - lib/greenhouse_logic.h
   # Lutron LEAP TLS disabled (causes ESP32 crash — TLS heap exhaustion)
   # Grow lights now controlled via HA REST API with long-lived token
   # Cold-start safety: turn every relay OFF before the first control pass
@@ -104,6 +107,7 @@ esphome:
           if(id(east_adjacency_factor) < 0 || id(east_adjacency_factor) > 1){ id(east_adjacency_factor) = 0.3; fixes++; }
           if(fixes > 0){ ESP_LOGE("boot","Fixed %d corrupted globals", fixes); }
           else { ESP_LOGI("boot","All globals valid"); }
+          ESP_LOGI("boot", "Firmware version: %s", "${fw_version}");
 
 esp32:
   board: esp32dev

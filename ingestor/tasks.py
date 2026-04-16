@@ -660,6 +660,36 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         }
                     )
 
+        # 10. Heating staging inversion (heat2 ON without heat1)
+        staging_row = await conn.fetchrow("SELECT * FROM fn_heat_staging_inversion()")
+        if staging_row:
+            dur = staging_row["duration_s"]
+            alerts.append(
+                {
+                    "alert_type": "heat_staging_inversion",
+                    "severity": "warning",
+                    "category": "equipment",
+                    "sensor_id": "equipment.heat2",
+                    "zone": None,
+                    "message": (
+                        f"STAGING INVERSION: heat2 (gas) ON for {dur:.0f}s while heat1 (electric) OFF. "
+                        f"Temp={staging_row['temp_avg']:.1f}°F, "
+                        f"Tlow={staging_row['temp_low']:.1f}°F"
+                    ),
+                    "details": {
+                        "heat2_on_since": staging_row["heat2_on_since"].isoformat(),
+                        "duration_s": dur,
+                        "temp_avg": float(staging_row["temp_avg"]) if staging_row["temp_avg"] else None,
+                        "temp_low": float(staging_row["temp_low"]) if staging_row["temp_low"] else None,
+                        "d_heat_stage_2": float(staging_row["d_heat_stage_2"])
+                        if staging_row["d_heat_stage_2"]
+                        else None,
+                    },
+                    "metric_value": dur,
+                    "threshold_value": 60.0,
+                }
+            )
+
         # Reactive trigger marker removed in Sprint 5 P6 — deviation monitor handles replans
 
         # ── Deduplicate + insert + resolve ──

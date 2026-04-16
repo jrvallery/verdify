@@ -307,11 +307,16 @@ and set the overnight posture.
 3. **Check current conditions** — call `climate` for dew point margin and outdoor forecast.
 4. **Review overnight forecast** — call `forecast` for the next 12 hours.
 5. **Check alerts** — call `alerts`. Resolve any from today.
-6. **Set overnight posture** — use `set_tunable` for each parameter:
+6. **Write overnight plan** — use `set_plan(plan_id, hypothesis, transitions)` with 3-5 waypoints
+   anchored to evening/overnight milestones (evening_settle, midnight_posture, pre_dawn).
+   Each transition includes ALL 24 Tier 1 params. Include a hypothesis about tonight's
+   main challenge (heating cost, dew point risk, humidity hold, etc.).
+   Key overnight tuning:
    - `bias_cool` +2 to +4 if heaters expected (prevents vent oscillation)
    - `bias_heat` +1 to +2 for cold nights (<45°F forecast)
    - Dew point margin <5°F? Bias warmer, reduce sealed-vent time
    - Widen `mister_pulse_gap_s` overnight (humidity holds better when sealed)
+   OR use `set_tunable` for individual adjustments if only a few params need changing.
 7. **Post evening brief to #greenhouse** — include:
    - Today's scorecard: score, temp vs VPD compliance, stress breakdown, cost vs 7-day trend
    - What worked today: which tunable decisions improved compliance

@@ -265,6 +265,7 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     "uptime": "uptime_s",  # SensorInfo
     "probe_health": "probe_health",  # TextSensorInfo
     "reset_reason": "reset_reason",  # TextSensorInfo
+    "firmware_version": "firmware_version",  # TextSensorInfo
 }
 
 # ──────────────────────────────────────────────────────────────

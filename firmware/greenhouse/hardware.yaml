@@ -54,6 +54,14 @@ text_sensor:
       entity_category: diagnostic
 
   - platform: template
+    id: ts_fw_version
+    name: "Firmware Version"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      return {"${fw_version}"};
+
+  - platform: template
     id: gh_state
     name: "Greenhouse State"
     entity_category: diagnostic

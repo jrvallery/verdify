@@ -788,6 +788,19 @@ interval:
 
               ESP_LOGI("state","Mode=%s Tin=%.1f°F VPD=%.2f kPa", lbl, Tin, VPD);
 
+          {
+              static uint8_t heat_diag_ctr = 0;
+              if (++heat_diag_ctr >= 12) {
+                  heat_diag_ctr = 0;
+                  float S1_thr = Tlow + setpts.heat_hysteresis;
+                  float S2_thr = Tlow - dH2;
+                  ESP_LOGI("heat_diag",
+                      "S1<%.1f S2<%.1f Tin=%.1f Tlow=%.1f hyst=%.1f dH2=%.1f H1:%d H2:%d",
+                      S1_thr, S2_thr, Tin, Tlow, setpts.heat_hysteresis, dH2,
+                      (int)willHeat1, (int)willHeat2);
+              }
+          }
+
           char js[192];
           snprintf(js,sizeof(js),
               "{\"state\":\"%s\",\"Tin\":%.1f,\"VPD\":%.2f,"\

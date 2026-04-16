@@ -25,6 +25,13 @@ CONTENT_DIR = Path("/srv/verdify/verdify-site/content/plans")
 DB_CMD = "docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
 
 
+def _yaml_escape(val: str) -> str:
+    """Escape a string for safe inclusion in double-quoted YAML values."""
+    if not val:
+        return ""
+    return val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+
+
 def db_query(sql: str) -> str:
     """Run a psql query and return stripped output."""
     result = subprocess.run(f'{DB_CMD} -c "{sql}"', shell=True, capture_output=True, text=True, timeout=15)
@@ -424,11 +431,11 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
                 "",
                 "# Experiment",
                 "experiment:",
-                f'  hypothesis: "{latest_plan.get("hypothesis", "").replace(chr(34), chr(39))}"',
-                f'  test: "{latest_plan.get("experiment", "").replace(chr(34), chr(39))}"',
-                f'  expected_outcome: "{latest_plan.get("expected_outcome", "").replace(chr(34), chr(39))}"',
-                f"  outcome_score: {latest_plan.get('outcome_score', '')}",
-                f"  status: {latest_plan.get('status', 'pending')}",
+                f'  hypothesis: "{_yaml_escape(latest_plan.get("hypothesis", ""))}"',
+                f'  test: "{_yaml_escape(latest_plan.get("experiment", ""))}"',
+                f'  expected_outcome: "{_yaml_escape(latest_plan.get("expected_outcome", ""))}"',
+                f'  outcome_score: "{_yaml_escape(latest_plan.get("outcome_score", ""))}"',
+                f'  status: "{_yaml_escape(latest_plan.get("status", "pending"))}"',
             ]
         )
 
