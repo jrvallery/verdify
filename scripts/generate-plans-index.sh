@@ -23,7 +23,7 @@ ROWS=$($DB_CMD -c "
       AND pj.outcome_score IS NOT NULL
       ORDER BY pj.created_at DESC LIMIT 1), '-') AS score
   FROM daily_summary ds
-  WHERE ds.date >= (CURRENT_DATE - INTERVAL '14 days')
+  WHERE ds.date >= '2026-03-24'
   ORDER BY ds.date DESC
 ")
 
@@ -31,7 +31,7 @@ ROWS=$($DB_CMD -c "
 # Read existing header (everything before '## Recent Plans')
 HEADER=""
 if [[ -f "$INDEX" ]]; then
-  HEADER=$(sed '/^## Recent Plans$/,$d' "$INDEX")
+  HEADER=$(sed '/^## \(Recent Plans\|All Plans\)$/,$d' "$INDEX")
 fi
 
 # If no header found (new file), generate default
@@ -40,6 +40,8 @@ if [[ -z "$HEADER" ]]; then
 title: Daily Plans
 tags: [plans, greenhouse, ai]
 date: ${TODAY}
+cssclasses:
+  - hide-folder-listing
 ---
 
 # Daily Plans
@@ -59,7 +61,7 @@ fi
 {
   echo "$HEADER"
   echo ""
-  echo "## Recent Plans"
+  echo "## All Plans"
   echo ""
   echo "| Date | Plans | Temp Range | VPD Stress | Cost | Experiment | Score |"
   echo "|------|-------|------------|------------|------|------------|-------|"
