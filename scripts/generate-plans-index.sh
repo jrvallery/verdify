@@ -44,7 +44,7 @@ date: ${TODAY}
 
 # Daily Plans
 
-Every day, Iris runs 3 planning cycles (6 AM, 12 PM, 6 PM MDT) to manage greenhouse setpoints.
+Iris manages greenhouse setpoints through solar-milestone planning cycles — SUNRISE, peak stress, decline, SUNSET, and overnight transitions. Each cycle evaluates conditions, writes a hypothesis, sets waypoints, and validates the previous cycle's outcome.
 
 ---
 "
