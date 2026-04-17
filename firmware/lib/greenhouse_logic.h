@@ -203,12 +203,22 @@ inline Mode determine_mode(
             && !moisture_blocked
             && (in.temp_f < (Thigh - sp.temp_hysteresis));
 
+        // OBS-1e patch: capture pre-override mode so we can tell whether
+        // R2-3 forced a seal the planner's dwell hadn't yet sanctioned.
+        const Mode pre_r23_mode = mode;
+        state.dry_override_active = false;
+
         if (in.vpd_kpa > sp.vpd_max_safe && can_seal_for_dryness) {
             mode = SEALED_MIST;
             state.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
             state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
             state.mist_stage_timer_ms = 0;
+            // Firmware-forced seal: only count as a dry override when the
+            // transition was actually forced — if we were already SEALED_MIST
+            // via the planner-sanctioned dwell, this R2-3 branch is a no-op
+            // and not an override.
+            state.dry_override_active = (pre_r23_mode != SEALED_MIST);
         }
     }
     if (in.vpd_kpa < sp.vpd_min_safe && mode == IDLE) {
@@ -327,18 +337,11 @@ inline OverrideFlags evaluate_overrides(
     f.seal_blocked_temp =
         vpd_wants_seal && in.temp_f >= (sp.safety_max - 5.0f);
 
-    // VPD dry override: firmware sealed for VPD safety even though the
-    // planner's dwell timer hadn't matured. Detected when we're in
-    // SEALED_MIST, dwell is NOT mature, and the dry-override preconditions
-    // hold (R2-3 path in determine_mode).
-    const bool can_seal_for_dryness =
-        (mode == SEALED_MIST)
-        && !moisture_blocked
-        && (in.temp_f < (sp.temp_high + sp.bias_cool - sp.temp_hysteresis));
-    f.vpd_dry_override =
-        (in.vpd_kpa > sp.vpd_max_safe)
-        && can_seal_for_dryness
-        && !vpd_wants_seal;
+    // VPD dry override: read the flag determine_mode() sets in its R2-3
+    // path. Cannot be reconstructed post-hoc because R2-3 matures the
+    // dwell timer in the same cycle it fires, so `!vpd_wants_seal` is
+    // false by the time evaluate_overrides() sees state.
+    f.vpd_dry_override = state.dry_override_active;
 
     (void)HV;  // reserved for future hysteresis-sensitive gates
     return f;

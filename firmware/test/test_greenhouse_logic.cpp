@@ -682,24 +682,54 @@ TEST(obs1e_seal_blocked_temp_quiet_when_cool) {
     PASS();
 }
 
-TEST(obs1e_vpd_dry_override_fires) {
+TEST(obs1e_vpd_dry_override_fires_when_r23_forces_seal) {
+    // OBS-1e patch: the override is set by determine_mode()'s R2-3 path.
+    // Start in IDLE with zero dwell — planner would never seal yet —
+    // but VPD climbs above vpd_max_safe. R2-3 forces SEALED_MIST and
+    // sets dry_override_active. evaluate_overrides reads the flag.
     auto sp = default_setpoints();
     auto s = initial_state();
-    // dwell NOT mature — planner never asked — but vpd > vpd_max_safe
     s.vpd_watch_timer_ms = 0;
     auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
-    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);           // R2-3 forced the seal
+    ASSERT_TRUE(s.dry_override_active);  // flag set during determine_mode
+    auto f = evaluate_overrides(in, sp, s, m);
     ASSERT_TRUE(f.vpd_dry_override);
     PASS();
 }
 
-TEST(obs1e_vpd_dry_override_quiet_when_dwell_mature) {
+TEST(obs1e_vpd_dry_override_quiet_when_planner_already_sealed) {
+    // If we're already in SEALED_MIST via the planner's dwell, R2-3's
+    // preconditions still hold but the transition isn't a forced override
+    // — state.dry_override_active stays false because pre_r23_mode was
+    // already SEALED_MIST.
     auto sp = default_setpoints();
     auto s = initial_state();
-    s.vpd_watch_timer_ms = 60000;  // dwell mature — this is planner-sanctioned seal
+    s.vpd_watch_timer_ms = 60000;    // dwell mature
+    s.mode_prev = SEALED_MIST;       // already sealed last cycle
     auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
-    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_FALSE(s.dry_override_active);
+    auto f = evaluate_overrides(in, sp, s, m);
     ASSERT_FALSE(f.vpd_dry_override);
+    PASS();
+}
+
+TEST(obs1e_vpd_dry_override_clears_on_next_cycle_when_conditions_pass) {
+    // Once VPD drops back below vpd_max_safe, dry_override_active must
+    // reset to false so a stale flag doesn't linger.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 0;
+    auto in1 = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    determine_mode(in1, sp, s, 5000);
+    ASSERT_TRUE(s.dry_override_active);
+    // Next cycle: VPD in-band, no R2-3 trigger
+    auto in2 = make_inputs(72.0f, 0.9f);
+    determine_mode(in2, sp, s, 5000);
+    ASSERT_FALSE(s.dry_override_active);
     PASS();
 }
 

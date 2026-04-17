@@ -40,6 +40,10 @@ test-replay: ## Run historical replay simulation (export + simulate)
 	bash scripts/export-replay-data.sh 10
 	cd firmware && g++ -std=c++17 -I lib -o test/replay_harness test/replay_harness.cpp && ./test/replay_harness test/data/replay_data.csv
 
+test-replay-overrides: ## Validate evaluate_overrides() against full history + synthetic self-test (OBS-1e)
+	bash scripts/export-replay-overrides.sh
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp && ./test/replay_overrides test/data/replay_overrides.csv
+
 test-v: ## Run tests with verbose output
 	$(PYTEST) tests/ -v --tb=long
 

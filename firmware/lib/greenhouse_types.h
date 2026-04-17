@@ -97,6 +97,11 @@ struct ControlState {
     uint32_t mist_stage_timer_ms;
     uint32_t relief_cycle_count;
     uint32_t vent_latch_timer_ms;  // FW-8: tracks time in relief-exhausted VENTILATE latch
+    // OBS-1e (Sprint 16 patch): set by determine_mode() R2-3 dry-override path
+    // on cycles where the firmware forces a SEAL the planner's dwell hadn't
+    // yet sanctioned. Read by evaluate_overrides() — cannot be reconstructed
+    // post-hoc because R2-3 mutates vpd_watch_timer_ms in the same cycle.
+    bool dry_override_active;
 };
 
 struct RelayOutputs {
@@ -173,6 +178,7 @@ inline ControlState initial_state() {
         .mist_stage = MIST_WATCH,
         .sealed_timer_ms = 0, .relief_timer_ms = 0,
         .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
-        .relief_cycle_count = 0, .vent_latch_timer_ms = 0
+        .relief_cycle_count = 0, .vent_latch_timer_ms = 0,
+        .dry_override_active = false
     };
 }
