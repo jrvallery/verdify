@@ -79,7 +79,7 @@ Left: hourly state transition rate — high transition rates indicate the contro
 
 | File | Lines | Content |
 |------|-------|---------|
-| `greenhouse-v2.yaml` | 380 | Top-level: WiFi, SNTP, MQTT, buttons |
+| `greenhouse.yaml` | 380 | Top-level: WiFi, SNTP, MQTT, buttons |
 | `hardware.yaml` | 292 | I²C, UART, Modbus, relay definitions |
 | `sensors.yaml` | 1,202 | All sensors, derived metrics, DLI accumulator |
 | `globals.yaml` | 584 | State variables, setpoints, counters |

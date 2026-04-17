@@ -30,7 +30,7 @@ interval:
 
           // Enums (Mode) and structs (SensorInputs, Setpoints,
           // ControlState, RelayOutputs) defined in greenhouse_logic.h
-          // — included via esphome.includes in greenhouse-v2.yaml
+          // — included via esphome.includes in greenhouse.yaml
 
           /**************** 1 — time bookkeeping *********************************/
           static uint32_t last_ms = millis();

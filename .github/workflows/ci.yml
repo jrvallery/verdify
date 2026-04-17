@@ -33,6 +33,9 @@ jobs:
       - name: Install ESPHome
         run: pip install esphome
       - name: Validate firmware config
-        run: cd firmware && esphome config greenhouse-v2.yaml
+        run: |
+          cp firmware/secrets.example.yaml firmware/secrets.yaml
+          cd firmware
+          esphome config greenhouse.yaml
         # Note: full compile requires ESP-IDF toolchain (~1.5GB)
         # Config validation catches YAML errors and missing references

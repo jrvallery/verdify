@@ -1,5 +1,5 @@
 ###############################################################################
-# greenhouse-v2.yaml — Refactored (2025-07-20)
+# greenhouse.yaml — ESPHome main config
 #
 # Top-level configuration for the greenhouse ESP32.  This file includes
 # hardware, sensors, tunables and control logic from separate files.

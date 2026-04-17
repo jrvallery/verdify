@@ -337,7 +337,7 @@ The `/setpoints` endpoint computes values in this order (later overrides earlier
 
 /srv/greenhouse/                       # ESPHome toolchain
   esphome/
-    greenhouse-v2.yaml                 # Main firmware config
+    greenhouse.yaml                    # Main firmware config
     greenhouse/                        # Sub-configs (controls, sensors, globals, tunables, hardware)
     secrets.yaml                       # WiFi, API keys, MQTT creds
     .esphome/                          # Build cache
