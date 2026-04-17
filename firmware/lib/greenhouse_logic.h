@@ -276,6 +276,75 @@ inline Mode determine_mode(
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// evaluate_overrides() — Pure function. OBS-1e (Sprint 16).
+//
+// Inspects the just-resolved mode + state + inputs and flags each
+// firmware-side decision that blocks or supersedes planner intent.
+// Every flag is "desire-triggered" — only fires when the planner
+// would have wanted the blocked action, not every cycle the
+// condition technically holds. Evaluator is pure: no state mutation.
+// ═══════════════════════════════════════════════════════════════════
+inline OverrideFlags evaluate_overrides(
+    const SensorInputs& in,
+    const Setpoints& sp,
+    const ControlState& state,
+    Mode mode
+) noexcept {
+    OverrideFlags f{};
+    if (!sensors_plausible(in)) return f;
+
+    const float HV = std::min(sp.vpd_hysteresis, sp.vpd_high * 0.5f);
+    const bool vpd_above_band = in.vpd_kpa > sp.vpd_high;
+    const bool vpd_wants_seal =
+        vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
+    const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
+
+    // Occupancy: fired when a seal is active OR the dwell has matured and
+    // misting WOULD have started — but occupancy is blocking moisture.
+    f.occupancy_blocks_moisture =
+        moisture_blocked && (mode == SEALED_MIST || vpd_wants_seal);
+
+    // Fog gates — only meaningful while in MIST_S2 and VPD has climbed far
+    // enough that the firmware would escalate to MIST_FOG. Any one of the
+    // three gates blocks that transition.
+    const bool fog_wanted =
+        (mode == SEALED_MIST)
+        && (state.mist_stage == MIST_S2)
+        && (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa);
+    f.fog_gate_rh     = fog_wanted && (in.rh_pct  > sp.fog_rh_ceiling);
+    f.fog_gate_temp   = fog_wanted && (in.temp_f  < sp.fog_min_temp);
+    f.fog_gate_window = fog_wanted
+        && ((in.local_hour <  sp.fog_window_start)
+         || (in.local_hour >= sp.fog_window_end));
+
+    // Relief-cycle breaker: firmware forces VENTILATE instead of the seal
+    // the planner's dwell was setting up.
+    f.relief_cycle_breaker =
+        vpd_wants_seal && state.relief_cycle_count >= sp.max_relief_cycles;
+
+    // Seal blocked by temp: within 5°F of safety_max means the firmware
+    // refuses to close the vents for VPD misting.
+    f.seal_blocked_temp =
+        vpd_wants_seal && in.temp_f >= (sp.safety_max - 5.0f);
+
+    // VPD dry override: firmware sealed for VPD safety even though the
+    // planner's dwell timer hadn't matured. Detected when we're in
+    // SEALED_MIST, dwell is NOT mature, and the dry-override preconditions
+    // hold (R2-3 path in determine_mode).
+    const bool can_seal_for_dryness =
+        (mode == SEALED_MIST)
+        && !moisture_blocked
+        && (in.temp_f < (sp.temp_high + sp.bias_cool - sp.temp_hysteresis));
+    f.vpd_dry_override =
+        (in.vpd_kpa > sp.vpd_max_safe)
+        && can_seal_for_dryness
+        && !vpd_wants_seal;
+
+    (void)HV;  // reserved for future hysteresis-sensitive gates
+    return f;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // resolve_equipment() — Pure function. No side effects.
 // ═══════════════════════════════════════════════════════════════════
 inline RelayOutputs resolve_equipment(

@@ -108,6 +108,21 @@ struct RelayOutputs {
     bool vent;
 };
 
+// ── OBS-1e: firmware silent-override audit (Sprint 16) ──
+// Each flag captures a specific firmware-side decision that negates or
+// blocks planner intent without going through a planner-visible channel.
+// Evaluated after determine_mode() by evaluate_overrides(); published to
+// ingestor as a comma-separated string, routed to override_events table.
+struct OverrideFlags {
+    bool occupancy_blocks_moisture;  // occupancy inhibit active while mist was wanted
+    bool fog_gate_rh;                // fog wanted but in.rh_pct > fog_rh_ceiling
+    bool fog_gate_temp;              // fog wanted but in.temp_f < fog_min_temp
+    bool fog_gate_window;            // fog wanted but outside fog_window_start/end
+    bool relief_cycle_breaker;       // seal wanted but relief_cycle_count maxed → forced VENTILATE
+    bool seal_blocked_temp;          // seal wanted but within 5°F of safety_max
+    bool vpd_dry_override;           // firmware sealed for VPD safety without planner dwell
+};
+
 // ── Saturating addition (prevents uint32_t overflow at 49.7 days) ──
 inline uint32_t sat_add(uint32_t a, uint32_t b) noexcept {
     return (a > UINT32_MAX - b) ? UINT32_MAX : a + b;

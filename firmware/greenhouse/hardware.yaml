@@ -67,6 +67,17 @@ text_sensor:
     entity_category: diagnostic
     update_interval: 5s
 
+  # OBS-1e (Sprint 16): Firmware silent-override audit. Published by
+  # controls.yaml after every determine_mode() cycle. Value is a
+  # comma-separated list of currently-active override flags from
+  # evaluate_overrides() (e.g. "occupancy,fog_rh" or "none"). Ingestor
+  # diffs transitions and writes one row per start to override_events.
+  - platform: template
+    id: gh_overrides
+    name: "Active Overrides"
+    entity_category: diagnostic
+    update_interval: 5s
+
   - platform: template
     id: ts_lead_fan
     name: "Lead Fan"

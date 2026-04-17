@@ -148,6 +148,12 @@ STATE_MAP: dict[str, str] = {
     "last_state_transition": "last_transition",
     "mister_state": "mister_state",
     "mister_selected_zone": "mister_zone",
+    # OBS-1e (Sprint 16): firmware silent-override audit.
+    # Value is a comma-separated list of active override flags from
+    # evaluate_overrides() (e.g. "occupancy_blocks_moisture,fog_gate_rh"
+    # or "none"). Ingestor also diffs transitions and writes one row per
+    # start event to the override_events table.
+    "active_overrides": "overrides_active",
 }
 
 # ──────────────────────────────────────────────────────────────

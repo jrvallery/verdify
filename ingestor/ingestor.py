@@ -136,6 +136,14 @@ class State:
         # Pending state transitions to write
         self.pending_states: list[tuple[str, str]] = []
 
+        # OBS-1e (Sprint 16): firmware override event audit.
+        # Each tuple is (override_type, mode_str) — written per start event
+        # to override_events. Populated in on_state_change when the
+        # active_overrides text_sensor transitions to include new flags.
+        self.pending_override_events: list[tuple[str, str | None]] = []
+        # Last-seen active override set (for diff on next transition)
+        self.last_override_set: set[str] = set()
+
         # Flag: daily snapshot taken today?
         self._daily_snapshot_date: str | None = None
 
@@ -144,6 +152,13 @@ class State:
 
 
 state = State()
+
+
+def _parse_override_set(val: str) -> set[str]:
+    """OBS-1e: parse "none" / "a,b,c" payload from active_overrides text_sensor."""
+    if not val or val == "none":
+        return set()
+    return {t.strip() for t in val.split(",") if t.strip() and t.strip() != "none"}
 
 
 # ──────────────────────────────────────────────────────────────
@@ -225,6 +240,26 @@ async def write_state_transitions(pool: asyncpg.Pool, ts: datetime) -> None:
             [(ts, entity, val) for entity, val in transitions],
         )
     log.debug(f"system_state: {len(transitions)} transitions written")
+
+
+async def write_override_events(pool: asyncpg.Pool, ts: datetime) -> None:
+    """OBS-1e (Sprint 16): flush pending firmware override start events.
+
+    Writes one row per newly-started override to override_events so the
+    planner can correlate compliance misses with firmware decisions she
+    cannot see any other way. "End" events are not written — the
+    active_overrides system_state transitions carry that info.
+    """
+    if not state.pending_override_events:
+        return
+    events = state.pending_override_events.copy()
+    state.pending_override_events.clear()
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            "INSERT INTO override_events (ts, override_type, mode) VALUES ($1, $2, $3)",
+            [(ts, otype, mode) for otype, mode in events],
+        )
+    log.info(f"override_events: {len(events)} start events written")
 
 
 async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
@@ -522,6 +557,17 @@ def on_state_change(entity_state) -> None:
             if old != val:
                 state.pending_states.append((entity, val))
                 log.info(f"state: {entity} → {val}")
+                # OBS-1e (Sprint 16): active_overrides is a comma-separated
+                # list of firmware flags. Diff against last-seen set and
+                # enqueue one override_events row per newly-started flag.
+                if entity == "overrides_active":
+                    current = _parse_override_set(val)
+                    started = current - state.last_override_set
+                    if started:
+                        mode_str = state.system.get("greenhouse_state")
+                        for otype in sorted(started):
+                            state.pending_override_events.append((otype, mode_str))
+                    state.last_override_set = current
             return
 
     elif etype == "number":
@@ -599,6 +645,13 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                 await write_state_transitions(pool, ts)
             except Exception as e:
                 log.error(f"system_state write error: {e}")
+
+        # OBS-1e override events (Sprint 16) — flush immediately
+        if state.pending_override_events:
+            try:
+                await write_override_events(pool, ts)
+            except Exception as e:
+                log.error(f"override_events write error: {e}")
 
         # Setpoint changes (flush immediately)
         if state.pending_setpoints:

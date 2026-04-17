@@ -576,9 +576,151 @@ TEST(fw9b_ventilate_fog_on_vpd_emergency) {
     PASS();
 }
 
+// ═══════════════════════════════════════════════════════════════
+// OBS-1e — evaluate_overrides() — Sprint 16 observability
+// One test per silent override. Each test asserts BOTH that the
+// flag fires when the override is active AND that it stays clear
+// when the override's "desire trigger" is not met (zero false positives).
+// ═══════════════════════════════════════════════════════════════
+
+TEST(obs1e_occupancy_blocks_moisture_fires_in_seal) {
+    auto sp = default_setpoints(); sp.occupancy_inhibit = true;
+    auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, 1.5f); in.occupied = true;
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_TRUE(f.occupancy_blocks_moisture);
+    PASS();
+}
+
+TEST(obs1e_occupancy_quiet_when_nothing_wanted) {
+    auto sp = default_setpoints(); sp.occupancy_inhibit = true;
+    auto s = initial_state();
+    auto in = make_inputs(72.0f, 0.9f); in.occupied = true;  // in-band, nobody wants mist
+    auto f = evaluate_overrides(in, sp, s, IDLE);
+    ASSERT_FALSE(f.occupancy_blocks_moisture);
+    PASS();
+}
+
+TEST(obs1e_fog_gate_rh_fires) {
+    auto sp = default_setpoints();
+    auto s = initial_state(); s.mist_stage = MIST_S2; s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, sp.vpd_high + sp.fog_escalation_kpa + 0.1f, 95.0f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_TRUE(f.fog_gate_rh);
+    ASSERT_FALSE(f.fog_gate_temp);
+    ASSERT_FALSE(f.fog_gate_window);
+    PASS();
+}
+
+TEST(obs1e_fog_gate_temp_fires) {
+    auto sp = default_setpoints();
+    auto s = initial_state(); s.mist_stage = MIST_S2; s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(sp.fog_min_temp - 2.0f, sp.vpd_high + sp.fog_escalation_kpa + 0.1f, 50.0f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_TRUE(f.fog_gate_temp);
+    ASSERT_FALSE(f.fog_gate_rh);
+    PASS();
+}
+
+TEST(obs1e_fog_gate_window_fires) {
+    auto sp = default_setpoints();
+    auto s = initial_state(); s.mist_stage = MIST_S2; s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, sp.vpd_high + sp.fog_escalation_kpa + 0.1f, 50.0f);
+    in.local_hour = sp.fog_window_end;  // one past close
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_TRUE(f.fog_gate_window);
+    PASS();
+}
+
+TEST(obs1e_fog_gate_quiet_when_not_in_s2) {
+    auto sp = default_setpoints();
+    auto s = initial_state(); s.mist_stage = MIST_S1;  // not S2
+    auto in = make_inputs(72.0f, sp.vpd_high + sp.fog_escalation_kpa + 0.1f, 95.0f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_FALSE(f.fog_gate_rh);
+    PASS();
+}
+
+TEST(obs1e_relief_cycle_breaker_fires) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    s.relief_cycle_count = sp.max_relief_cycles;  // at the ceiling
+    auto in = make_inputs(72.0f, 1.5f);
+    auto f = evaluate_overrides(in, sp, s, VENTILATE);
+    ASSERT_TRUE(f.relief_cycle_breaker);
+    PASS();
+}
+
+TEST(obs1e_relief_cycle_breaker_quiet_below_ceiling) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    s.relief_cycle_count = 1;  // plenty of headroom
+    auto in = make_inputs(72.0f, 1.5f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_FALSE(f.relief_cycle_breaker);
+    PASS();
+}
+
+TEST(obs1e_seal_blocked_temp_fires) {
+    auto sp = default_setpoints();
+    auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
+    // within 5°F of safety_max (default 95°F) — planner wants seal, firmware won't
+    auto in = make_inputs(sp.safety_max - 3.0f, 1.5f);
+    auto f = evaluate_overrides(in, sp, s, VENTILATE);
+    ASSERT_TRUE(f.seal_blocked_temp);
+    PASS();
+}
+
+TEST(obs1e_seal_blocked_temp_quiet_when_cool) {
+    auto sp = default_setpoints();
+    auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, 1.5f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_FALSE(f.seal_blocked_temp);
+    PASS();
+}
+
+TEST(obs1e_vpd_dry_override_fires) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    // dwell NOT mature — planner never asked — but vpd > vpd_max_safe
+    s.vpd_watch_timer_ms = 0;
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_TRUE(f.vpd_dry_override);
+    PASS();
+}
+
+TEST(obs1e_vpd_dry_override_quiet_when_dwell_mature) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;  // dwell mature — this is planner-sanctioned seal
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+    ASSERT_FALSE(f.vpd_dry_override);
+    PASS();
+}
+
+TEST(obs1e_all_quiet_on_idle_in_band) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(72.0f, 0.9f);
+    auto f = evaluate_overrides(in, sp, s, IDLE);
+    ASSERT_FALSE(f.occupancy_blocks_moisture);
+    ASSERT_FALSE(f.fog_gate_rh);
+    ASSERT_FALSE(f.fog_gate_temp);
+    ASSERT_FALSE(f.fog_gate_window);
+    ASSERT_FALSE(f.relief_cycle_breaker);
+    ASSERT_FALSE(f.seal_blocked_temp);
+    ASSERT_FALSE(f.vpd_dry_override);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
-    printf("  Greenhouse Logic Tests — 11-fix review synthesis\n");
+    printf("  Greenhouse Logic Tests — 11-fix review synthesis + OBS-1e\n");
     printf("  Same code as ESP32 firmware\n");
     printf("═══════════════════════════════════════════════════════\n\n");
 

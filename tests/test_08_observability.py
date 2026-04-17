@@ -70,6 +70,61 @@ class TestDispatcherWiring:
         )
 
 
+class TestOverrideEventsWiring:
+    """OBS-1e (Sprint 16): firmware override event emission end-to-end wiring."""
+
+    TYPES_PATH = "/srv/verdify/firmware/lib/greenhouse_types.h"
+    LOGIC_PATH = "/srv/verdify/firmware/lib/greenhouse_logic.h"
+    HARDWARE_PATH = "/srv/verdify/firmware/greenhouse/hardware.yaml"
+    CONTROLS_PATH = "/srv/verdify/firmware/greenhouse/controls.yaml"
+    ENTITY_MAP_PATH = "/srv/verdify/ingestor/entity_map.py"
+    INGESTOR_PATH = "/srv/verdify/ingestor/ingestor.py"
+
+    @staticmethod
+    def _read(path: str) -> str:
+        with open(path) as f:
+            return f.read()
+
+    def test_override_flags_struct_has_seven_fields(self):
+        body = self._read(self.TYPES_PATH)
+        assert "struct OverrideFlags" in body, "OverrideFlags struct missing"
+        required = [
+            "occupancy_blocks_moisture",
+            "fog_gate_rh",
+            "fog_gate_temp",
+            "fog_gate_window",
+            "relief_cycle_breaker",
+            "seal_blocked_temp",
+            "vpd_dry_override",
+        ]
+        for field in required:
+            assert field in body, f"OverrideFlags missing field: {field}"
+
+    def test_evaluate_overrides_function_exists(self):
+        body = self._read(self.LOGIC_PATH)
+        assert "evaluate_overrides(" in body, "evaluate_overrides() pure function must be defined in greenhouse_logic.h"
+
+    def test_gh_overrides_text_sensor_declared(self):
+        body = self._read(self.HARDWARE_PATH)
+        assert "gh_overrides" in body, "gh_overrides text_sensor missing from hardware.yaml"
+        assert "Active Overrides" in body, "gh_overrides name must be 'Active Overrides'"
+
+    def test_controls_publishes_override_state(self):
+        body = self._read(self.CONTROLS_PATH)
+        assert "evaluate_overrides(" in body, "controls.yaml must call evaluate_overrides() each cycle"
+        assert "id(gh_overrides).publish_state(" in body, "controls.yaml must publish to gh_overrides text_sensor"
+
+    def test_entity_map_routes_active_overrides(self):
+        body = self._read(self.ENTITY_MAP_PATH)
+        assert '"active_overrides"' in body, 'STATE_MAP must include "active_overrides" entity'
+
+    def test_ingestor_writes_override_events(self):
+        body = self._read(self.INGESTOR_PATH)
+        assert "INSERT INTO override_events" in body, "ingestor must INSERT rows into override_events on override start"
+        assert "_parse_override_set" in body, "ingestor needs a parser for the comma-separated override payload"
+        assert "pending_override_events" in body, "ingestor State must track pending override events for flush"
+
+
 class TestSetpointsFailLoud:
     """API /setpoints must fail-loud on NULL band (Tier 1 #3)."""
 

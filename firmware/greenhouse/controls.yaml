@@ -659,6 +659,26 @@ interval:
           }
           id(gh_state).publish_state(lbl);
 
+          /*** OBS-1e — Silent-override audit (Sprint 16) ***/
+          {
+            OverrideFlags of = evaluate_overrides(sensor_in, setpts, ctl_state, mode);
+            char obuf[96]; obuf[0] = '\0'; size_t n = 0;
+            auto add = [&](const char* tag){
+              if(n > 0 && n + 1 < sizeof(obuf)) obuf[n++] = ',';
+              size_t len = strlen(tag);
+              if(n + len < sizeof(obuf)){ memcpy(obuf + n, tag, len); n += len; }
+            };
+            if(of.occupancy_blocks_moisture) add("occupancy_blocks_moisture");
+            if(of.fog_gate_rh)               add("fog_gate_rh");
+            if(of.fog_gate_temp)             add("fog_gate_temp");
+            if(of.fog_gate_window)           add("fog_gate_window");
+            if(of.relief_cycle_breaker)      add("relief_cycle_breaker");
+            if(of.seal_blocked_temp)         add("seal_blocked_temp");
+            if(of.vpd_dry_override)          add("vpd_dry_override");
+            obuf[n] = '\0';
+            id(gh_overrides).publish_state(n > 0 ? obuf : "none");
+          }
+
           /*** A1 — State transition logging ***/
           {
             static Mode prev_log_mode = IDLE;
