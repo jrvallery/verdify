@@ -809,13 +809,27 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         changes = []
 
         # Band-driven params: planner can tighten within band, clamped to edges
+        clamps_to_log: list[tuple[str, float, float, float, float, str]] = []
         if band_row:
             for param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):
                 band_lo = float(band_row["temp_low" if param.startswith("temp") else "vpd_low"])
                 band_hi = float(band_row["temp_high" if param.startswith("temp") else "vpd_high"])
                 planner_val = planner_params.get(param)
                 if planner_val is not None:
-                    val = max(band_lo, min(band_hi, float(planner_val)))
+                    planner_f = float(planner_val)
+                    val = max(band_lo, min(band_hi, planner_f))
+                    # Tier 1 #2: audit clamp when planner request was modified
+                    if abs(val - planner_f) > 1e-6:
+                        clamps_to_log.append(
+                            (
+                                param,
+                                planner_f,
+                                val,
+                                band_lo,
+                                band_hi,
+                                "band_lo" if planner_f < band_lo else "band_hi",
+                            )
+                        )
                 else:
                     val = float(band_row[param])
                 val = round(val, 1)
@@ -912,6 +926,24 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source,
             )
             _last_pushed[param] = val
+        # Tier 1 #2: persist clamp audit
+        for param, requested, applied, b_lo, b_hi, reason in clamps_to_log:
+            await conn.execute(
+                "INSERT INTO setpoint_clamps (parameter, requested, applied, band_lo, band_hi, reason) "
+                "VALUES ($1, $2, $3, $4, $5, $6)",
+                param,
+                requested,
+                applied,
+                b_lo,
+                b_hi,
+                reason,
+            )
+        if clamps_to_log:
+            log.info(
+                "Dispatcher: clamped %d planner value(s) to band (%s)",
+                len(clamps_to_log),
+                ", ".join(f"{p}={req}->{app}" for p, req, app, *_ in clamps_to_log),
+            )
         log.info(
             "Dispatcher: pushed %d setpoint changes (%d band, %d plan)",
             len(changes),
@@ -920,24 +952,55 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         )
 
     # Direct ESP32 push via shared ingestor connection (non-blocking optimization)
-    try:
-        from ingestor import push_to_esp32
+    # Tier 1 #4: retry on failure, escalate to alert_log after exhausted attempts.
+    from ingestor import push_to_esp32
 
-        esp32_changes = []
-        for param, val in changes:
-            if param.startswith("sw_"):
-                eid = SWITCH_TO_ENTITY.get(param)
-                if eid:
-                    esp32_changes.append((eid, val, "switch"))
-            else:
-                eid = PARAM_TO_ENTITY.get(param)
-                if eid:
-                    esp32_changes.append((eid, val, "number"))
-        if esp32_changes:
-            pushed = await push_to_esp32(esp32_changes)
-            log.info("Dispatcher: direct-pushed %d/%d to ESP32", pushed, len(esp32_changes))
-    except Exception as e:
-        log.warning("ESP32 direct push failed: %s", e)
+    esp32_changes = []
+    for param, val in changes:
+        if param.startswith("sw_"):
+            eid = SWITCH_TO_ENTITY.get(param)
+            if eid:
+                esp32_changes.append((eid, val, "switch"))
+        else:
+            eid = PARAM_TO_ENTITY.get(param)
+            if eid:
+                esp32_changes.append((eid, val, "number"))
+
+    if esp32_changes:
+        last_err: Exception | None = None
+        for attempt in (1, 2, 3):
+            try:
+                pushed = await push_to_esp32(esp32_changes)
+                log.info(
+                    "Dispatcher: direct-pushed %d/%d to ESP32 (attempt %d)",
+                    pushed,
+                    len(esp32_changes),
+                    attempt,
+                )
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                log.warning("ESP32 direct push failed (attempt %d/3): %s", attempt, e)
+                if attempt < 3:
+                    await asyncio.sleep(0.5 * attempt)
+        if last_err is not None:
+            async with pool.acquire() as conn:
+                existing = await conn.fetchval(
+                    "SELECT id FROM alert_log WHERE alert_type = 'esp32_push_failed' AND disposition = 'open' LIMIT 1"
+                )
+                if existing is None:
+                    await conn.execute(
+                        "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
+                        "VALUES ('esp32_push_failed', 'warning', 'system', $1, $2, 'dispatcher')",
+                        f"ESP32 direct push failed after 3 attempts: {last_err}",
+                        json.dumps(
+                            {
+                                "error": str(last_err),
+                                "change_count": len(esp32_changes),
+                            }
+                        ),
+                    )
 
     (STATE_DIR / "setpoint-dispatcher.log").touch()
 

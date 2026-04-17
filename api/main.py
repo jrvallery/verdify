@@ -142,6 +142,29 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         # For band-driven params, compute from crop science + sun angle
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
+        # Tier 1 #3: fail loud if band computation returned NULL.
+        # Without band, ESP32 receives no temp/VPD band params and silently
+        # runs whatever it cached last, which can be hours stale. Better to
+        # 503 and let ESP32 retry in 5 min than return a partial response.
+        if band_row is None or zone_row is None:
+            existing = await conn.fetchval(
+                "SELECT id FROM alert_log WHERE alert_type = 'band_fn_null' AND disposition = 'open' LIMIT 1"
+            )
+            if existing is None:
+                await conn.execute(
+                    "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
+                    "VALUES ('band_fn_null', 'critical', 'system', $1, $2, 'api')",
+                    "fn_band_setpoints or fn_zone_vpd_targets returned NULL — ESP32 cannot refresh band setpoints",
+                    '{"band_row_null": '
+                    + ("true" if band_row is None else "false")
+                    + ', "zone_row_null": '
+                    + ("true" if zone_row is None else "false")
+                    + "}",
+                )
+            raise HTTPException(
+                status_code=503,
+                detail="band setpoint computation unavailable — check fn_band_setpoints + crop catalog",
+            )
         plan_rows = await conn.fetch("SELECT parameter, value FROM v_active_plan")
         params = {r["parameter"]: r["value"] for r in rows}
         # Planner overrides for all params (band params will be clamped below)
