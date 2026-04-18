@@ -70,6 +70,53 @@ class TestDispatcherWiring:
         )
 
 
+class TestProbeStalenessWiring:
+    """FW-10 (Sprint 17): active_probe_count column + ingestor routing."""
+
+    SENSORS_PATH = "/srv/verdify/firmware/greenhouse/sensors.yaml"
+    ENTITY_MAP_PATH = "/srv/verdify/ingestor/entity_map.py"
+    INGESTOR_PATH = "/srv/verdify/ingestor/ingestor.py"
+
+    @staticmethod
+    def _read(path: str) -> str:
+        with open(path) as f:
+            return f.read()
+
+    def test_migration_081_applied(self):
+        from conftest import db_query
+
+        val = db_query(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='diagnostics' AND column_name='active_probe_count'"
+        )
+        assert val == "active_probe_count", "migration 081 did not apply — active_probe_count column missing"
+
+    def test_averaging_lambdas_check_probe_staleness(self):
+        body = self._read(self.SENSORS_PATH)
+        # All three averages must now gate on the per-probe last_*_ms
+        # timestamps to avoid stale-cached-value contamination.
+        assert (
+            "last_north_ms" in body and "last_south_ms" in body and "last_east_ms" in body and "last_west_ms" in body
+        ), "averaging lambdas must reference the per-probe last_*_ms timestamps"
+        # Count how many averaging contexts the staleness threshold appears in — expect >= 4 (3 averages + active_probe_count sensor)
+        count = body.count("STALE = 300000")
+        assert count >= 4, f"expected >= 4 stale-guard constants in sensors.yaml, found {count}"
+
+    def test_active_probe_count_sensor_declared(self):
+        body = self._read(self.SENSORS_PATH)
+        assert "id: active_probe_count" in body, "active_probe_count template sensor missing from sensors.yaml"
+
+    def test_entity_map_routes_active_probe_count(self):
+        body = self._read(self.ENTITY_MAP_PATH)
+        assert '"active_probe_count": "active_probe_count"' in body, (
+            "DIAGNOSTIC_MAP must route active_probe_count to the diagnostics column"
+        )
+
+    def test_ingestor_writes_active_probe_count(self):
+        body = self._read(self.INGESTOR_PATH)
+        assert "active_probe_count" in body, "ingestor diagnostics INSERT must include active_probe_count"
+
+
 class TestOverrideEventsWiring:
     """OBS-1e (Sprint 16): firmware override event emission end-to-end wiring."""
 

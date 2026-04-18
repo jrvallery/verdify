@@ -283,8 +283,8 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
         return
     async with pool.acquire() as conn:
         await conn.execute(
-            """INSERT INTO diagnostics (ts, wifi_rssi, heap_bytes, uptime_s, probe_health, reset_reason, firmware_version)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)""",
+            """INSERT INTO diagnostics (ts, wifi_rssi, heap_bytes, uptime_s, probe_health, reset_reason, firmware_version, active_probe_count)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
             ts,
             d.get("wifi_rssi"),
             d.get("heap_bytes"),
@@ -292,6 +292,7 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
             d.get("probe_health"),
             d.get("reset_reason"),
             d.get("firmware_version"),
+            int(d["active_probe_count"]) if d.get("active_probe_count") is not None else None,
         )
     log.debug("diagnostics row written")
 

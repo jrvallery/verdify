@@ -101,6 +101,24 @@ else
     done <<< "$MODBUS_ROWS"
 fi
 
+# ── 3a. ACTIVE PROBE COUNT (FW-10, Sprint 17) ──────────────────────
+# A zone probe gone stale (>5 min Modbus timeout) is excluded from the
+# avg_temp/rh/vpd aggregates. If count < 4 the planner's view of the
+# greenhouse is partial. Warn, don't fail — intermittent stalls happen
+# but persistent < 4 is worth investigating.
+section "Active probe count (zone aggregation health)"
+
+PROBE_COUNT=$($DB "SELECT active_probe_count FROM diagnostics WHERE active_probe_count IS NOT NULL AND ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null | tr -d ' ')
+if [[ -z "$PROBE_COUNT" ]]; then
+    warn "No active_probe_count reading in last 5 min (firmware may predate FW-10)"
+elif [[ "$PROBE_COUNT" -eq 4 ]]; then
+    pass "4/4 zone probes active"
+elif [[ "$PROBE_COUNT" -ge 2 ]]; then
+    warn "Only $PROBE_COUNT/4 zone probes active — aggregates are a partial view"
+else
+    fail "Only $PROBE_COUNT/4 zone probes active — aggregates untrustworthy"
+fi
+
 # ── 3. ESP32 DIAGNOSTICS ───────────────────────────────────────────
 # After a firmware deploy we expect uptime to be small (ESP32 just
 # rebooted) and reset_reason NOT to be a Task WDT. Absence of diagnostics

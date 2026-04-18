@@ -63,13 +63,33 @@ firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
-firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep
+firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
+	@mkdir -p firmware/artifacts
 	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 	cd /srv/greenhouse/esphome && $(ESPHOME) upload --device 192.168.10.111 greenhouse.yaml
 	@echo ""
 	@echo "Waiting 60s for ESP32 reboot + ingestor reconnect + first diagnostics cycle..."
 	@sleep 60
-	$(MAKE) sensor-health SINCE='5 minutes'
+	# FW-15 (Sprint 17): sensor-health decides whether this deploy is accepted.
+	# Pass → promote new binary to last-good (rollback target for next deploy).
+	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
+	@if $(MAKE) sensor-health SINCE='5 minutes'; then \
+		cp /srv/greenhouse/esphome/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin firmware/artifacts/last-good.ota.bin ; \
+		echo "✓ Deploy accepted. Promoted new binary to firmware/artifacts/last-good.ota.bin (rollback target for next deploy)." ; \
+	else \
+		echo "" ; \
+		echo "▓▓▓  SENSOR-HEALTH FAILED POST-OTA  —  initiating auto-rollback  ▓▓▓" ; \
+		bash scripts/firmware-rollback.sh firmware/artifacts/last-good.ota.bin ; \
+		echo "" ; \
+		echo "Waiting 60s for ESP32 to reboot onto rolled-back firmware..." ; \
+		sleep 60 ; \
+		echo "Re-running sensor-health against rolled-back firmware:" ; \
+		$(MAKE) sensor-health SINCE='5 minutes' ; \
+		exit 1 ; \
+	fi
+
+firmware-rollback: ## Manually flash the saved last-good.ota.bin back onto the ESP32
+	bash scripts/firmware-rollback.sh firmware/artifacts/last-good.ota.bin
 
 sensor-health: ## Run sensor health sweep (layer 3 of Firmware Change Protocol)
 	SINCE='$(or $(SINCE),5 minutes)' bash scripts/sensor-health-sweep.sh

@@ -272,6 +272,11 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     "probe_health": "probe_health",  # TextSensorInfo
     "reset_reason": "reset_reason",  # TextSensorInfo
     "firmware_version": "firmware_version",  # TextSensorInfo
+    # FW-10 (Sprint 17): how many zone probes (north/south/east/west) are
+    # currently contributing to the avg_temp/rh/vpd aggregates. Stale probes
+    # (>5 min since last reading) are excluded. Planner distrusts aggregates
+    # when count < 4.
+    "active_probe_count": "active_probe_count",  # SensorInfo, 0-4
 }
 
 # ──────────────────────────────────────────────────────────────
