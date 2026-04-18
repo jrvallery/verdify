@@ -160,14 +160,26 @@ TEST(fix3_ventilate_exit_hysteresis) {
 }
 
 TEST(fix3_heat_hysteresis) {
+    // IN-12 (Sprint 19): fixed after commit 2b61ee6 swapped the inverted
+    // dH2 / heat_hysteresis thresholds. The prior assertion used
+    // (Tlow - heat_hysteresis) as the heat2 threshold; the current code
+    // uses (Tlow - dH2). dH2 defaults to 5, so heat2 threshold is 53°F
+    // at temp_low=58, not 57°F.
     auto sp = default_setpoints(); sp.temp_low = 58; sp.heat_hysteresis = 1.0;
-    // Heat2 (gas) needs temp < Tlow - heat_hysteresis = 57°F
+    // s1 (electric) threshold: Tlow + heat_hysteresis = 59°F
+    // s2 (gas)      threshold: Tlow - dH2             = 53°F
+    // 57.5°F → s1 only
     auto out = equip(IDLE, 57.5, 0.9, sp);
-    ASSERT_TRUE(out.heat1);   // electric yes (57.5 < 63)
-    ASSERT_FALSE(out.heat2);  // gas no (57.5 > 57)
+    ASSERT_TRUE(out.heat1);   // 57.5 < 59  (electric on)
+    ASSERT_FALSE(out.heat2);  // 57.5 > 53  (gas off)
+    // 56.5°F still s1 only (previously asserted gas-on, wrong)
     auto out2 = equip(IDLE, 56.5, 0.9, sp);
-    ASSERT_TRUE(out2.heat1);  // electric yes
-    ASSERT_TRUE(out2.heat2);  // gas yes (56.5 < 57)
+    ASSERT_TRUE(out2.heat1);
+    ASSERT_FALSE(out2.heat2);
+    // 52°F triggers s2 too — coverage for the gas-stage threshold
+    auto out3 = equip(IDLE, 52.0, 0.9, sp);
+    ASSERT_TRUE(out3.heat1);  // 52 < 59
+    ASSERT_TRUE(out3.heat2);  // 52 < 53
     PASS();
 }
 

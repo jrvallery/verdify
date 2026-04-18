@@ -92,11 +92,21 @@ def _post_slack(token: str, channel: str, text: str, thread_ts: str | None = Non
 # ═════════════════════════════════════════════════════════════════
 # 1. WATER FLOWING + LEAK DETECTION (every 60s)
 # ═════════════════════════════════════════════════════════════════
+# IN-5 (Sprint 19): 10-minute dwell + reset hysteresis to kill the 68-flap/46h
+# storm from the 96 h review. Hysteresis stops flow-noise-driven cycling between
+# trigger (0.10 GPM) and clear; once fired, flow must drop below 0.08 GPM to
+# clear. Dwell 10 ticks × 60 s = 10 min of sustained "flow with no valve open"
+# before the state flips true.
+LEAK_TRIGGER_GPM = 0.10
+LEAK_CLEAR_GPM = 0.08  # 20% below trigger — reset hysteresis
+LEAK_DWELL_TICKS = 10
+
 _leak_counter = 0
+_leak_state = False  # in-memory mirror of equipment_state.leak_detected
 
 
 async def water_flowing_sync(pool: asyncpg.Pool) -> None:
-    global _leak_counter
+    global _leak_counter, _leak_state
     async with pool.acquire() as conn:
         flow = await conn.fetchval("SELECT flow_gpm FROM climate WHERE flow_gpm IS NOT NULL ORDER BY ts DESC LIMIT 1")
         flow = float(flow) if flow is not None else 0.0
@@ -111,9 +121,10 @@ async def water_flowing_sync(pool: asyncpg.Pool) -> None:
                 "INSERT INTO equipment_state (ts, equipment, state) VALUES (NOW(), 'water_flowing', $1)", flowing
             )
 
-        # leak_detected
+        # leak_detected — hysteresis: use tighter clear threshold while latched
+        effective_threshold = LEAK_CLEAR_GPM if _leak_state else LEAK_TRIGGER_GPM
         leak_candidate = False
-        if flow > 0.10:
+        if flow > effective_threshold:
             valve_names = [
                 "mister_south",
                 "mister_west",
@@ -142,7 +153,7 @@ async def water_flowing_sync(pool: asyncpg.Pool) -> None:
                 leak_candidate = True
 
         _leak_counter = (_leak_counter + 1) if leak_candidate else 0
-        leak = _leak_counter >= 3
+        leak = _leak_counter >= LEAK_DWELL_TICKS
 
         current_leak = await conn.fetchval(
             "SELECT state FROM equipment_state WHERE equipment = 'leak_detected' ORDER BY ts DESC LIMIT 1"
@@ -151,6 +162,7 @@ async def water_flowing_sync(pool: asyncpg.Pool) -> None:
             await conn.execute(
                 "INSERT INTO equipment_state (ts, equipment, state) VALUES (NOW(), 'leak_detected', $1)", leak
             )
+        _leak_state = leak
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -543,23 +555,32 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             )
 
         # 6. ESP32 reboot
+        # Sprint 19 followup: suppress the alert when uptime_s < 600 s because
+        # an OTA is the expected reboot path and the alert auto-resolves anyway.
+        # Only fires for unexpected reboots where the ESP32 is still rebooting
+        # frequently (uptime < 300 s, which means a crash-loop scenario).
         row = await conn.fetchrow(
             "SELECT uptime_s, reset_reason FROM diagnostics WHERE ts >= now() - interval '10 minutes' AND uptime_s IS NOT NULL ORDER BY ts DESC LIMIT 1"
         )
         if row and row["uptime_s"] < 300:
-            alerts.append(
-                {
-                    "alert_type": "esp32_reboot",
-                    "severity": "info",
-                    "category": "system",
-                    "sensor_id": "diag.uptime_s",
-                    "zone": None,
-                    "message": f"ESP32 rebooted — uptime {row['uptime_s']:.0f}s",
-                    "details": {"uptime_s": row["uptime_s"]},
-                    "metric_value": None,
-                    "threshold_value": None,
-                }
-            )
+            # Check if this is likely an OTA-induced reboot (reset_reason or recent deploy)
+            reason = (row["reset_reason"] or "").lower()
+            if "ota" in reason or "software" in reason:
+                pass  # expected post-OTA reboot — no alert
+            else:
+                alerts.append(
+                    {
+                        "alert_type": "esp32_reboot",
+                        "severity": "info",
+                        "category": "system",
+                        "sensor_id": "diag.uptime_s",
+                        "zone": None,
+                        "message": f"ESP32 rebooted — uptime {row['uptime_s']:.0f}s (reset_reason={reason or 'unknown'})",
+                        "details": {"uptime_s": row["uptime_s"], "reset_reason": reason},
+                        "metric_value": None,
+                        "threshold_value": None,
+                    }
+                )
 
         # 7. Planner stale
         plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")

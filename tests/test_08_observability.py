@@ -8,8 +8,11 @@ change" gate per the fleet DoD.
 """
 
 import subprocess
+import sys
 
 from conftest import db_query
+
+sys.path.insert(0, "/srv/verdify/ingestor")
 
 
 class TestSchema:
@@ -272,6 +275,184 @@ class TestOverrideEventsWiring:
         assert "pending_override_events" in body, "ingestor State must track pending override events for flush"
 
 
+class TestEntityMapCoverage:
+    """TE-1 (Sprint 19): every dispatcher-emitted param must have an ESP32 route.
+
+    Would've caught silent drops — if the dispatcher adds a tunable that has no
+    PARAM_TO_ENTITY entry, the value never reaches the ESP32 and no error fires.
+    """
+
+    # Every non-switch param the dispatcher emits from static code paths. The
+    # planner-driven tactical knobs come from v_active_plan and are too dynamic
+    # to fully enumerate here — but ANY new static addition should extend this
+    # set AND be cross-checked against PARAM_TO_ENTITY.
+    STATIC_PARAMS = frozenset(
+        {
+            # Band-driven outer envelope
+            "temp_low",
+            "temp_high",
+            "vpd_low",
+            "vpd_high",
+            # Per-zone VPD (from crop band)
+            "vpd_target_south",
+            "vpd_target_west",
+            "vpd_target_east",
+            "vpd_target_center",
+            # Safety rails
+            "safety_min",
+            "safety_max",
+            # Mister defaults
+            "mister_engage_kpa",
+            "mister_all_kpa",
+            "mister_engage_delay_s",
+            "mister_all_delay_s",
+            "mister_center_penalty",
+        }
+    )
+
+    def test_every_static_param_has_entity_mapping(self):
+        from entity_map import PARAM_TO_ENTITY
+
+        missing = sorted(p for p in self.STATIC_PARAMS if p not in PARAM_TO_ENTITY)
+        assert not missing, (
+            f"Dispatcher emits these params but PARAM_TO_ENTITY has no route: {missing}. "
+            "ESP32 would silently drop them."
+        )
+
+    def test_dispatcher_still_emits_the_static_set(self):
+        """If the dispatcher renames/removes a param, force re-review of this list."""
+        with open("/srv/verdify/ingestor/tasks.py") as f:
+            body = f.read()
+        stale = sorted(p for p in self.STATIC_PARAMS if f'"{p}"' not in body)
+        assert not stale, (
+            f"TE-1 claims these are dispatched but they're not in tasks.py: {stale}. "
+            "Either the dispatcher dropped them (silent drop!) or this test list is stale."
+        )
+
+    def test_switches_all_routed(self):
+        """Every sw_* param in SETPOINT_MAP must land in SWITCH_TO_ENTITY."""
+        from entity_map import SETPOINT_MAP, SWITCH_TO_ENTITY
+
+        sw_params = {v for v in SETPOINT_MAP.values() if v.startswith("sw_")}
+        missing = sorted(p for p in sw_params if p not in SWITCH_TO_ENTITY)
+        assert not missing, f"sw_* params missing from SWITCH_TO_ENTITY: {missing}"
+
+    def test_setpoint_map_has_no_duplicate_params(self):
+        """Two entity object_ids mapping to same DB param = one silently overwrites the other."""
+        from entity_map import SETPOINT_MAP
+
+        values = list(SETPOINT_MAP.values())
+        dupes = sorted({v for v in values if values.count(v) > 1})
+        assert not dupes, f"Duplicate param names in SETPOINT_MAP (silent-overwrite risk): {dupes}"
+
+
+class TestPlannerToDispatcherE2E:
+    """TE-2 (Sprint 19): seed a setpoint_plan row → run dispatcher → assert a
+    setpoint_changes row lands with source='plan' and the correct value.
+
+    Exercises the full v_active_plan → setpoint_dispatcher → DB path.
+    Mocks push_to_esp32 so the test doesn't drive real hardware.
+    """
+
+    TEST_PARAM = "mister_vpd_weight"
+    TEST_VALUE = 0.423  # Arbitrary, unlikely to match the live planner value
+    TEST_PLAN_ID = "te2-smoke-test"
+
+    def _cleanup(self):
+        for sql in (
+            f"DELETE FROM setpoint_plan WHERE plan_id = '{self.TEST_PLAN_ID}'",
+            # Remove any setpoint_changes row created by the test
+            f"DELETE FROM setpoint_changes WHERE parameter = '{self.TEST_PARAM}' "
+            f"AND abs(value - {self.TEST_VALUE}) < 1e-6 AND ts > now() - interval '5 min'",
+        ):
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "verdify-timescaledb",
+                    "psql",
+                    "-U",
+                    "verdify",
+                    "-d",
+                    "verdify",
+                    "-c",
+                    sql,
+                ],
+                check=False,
+                capture_output=True,
+            )
+
+    def test_plan_row_becomes_setpoint_change_with_plan_source(self):
+        import asyncio
+
+        import asyncpg
+        import tasks as tasks_mod
+
+        import ingestor as ing_mod
+        from ingestor import State  # noqa: F401  (ensure ingestor module importable)
+
+        # Intercept ESP32 push so the test doesn't drive real hardware
+        async def _fake_push(changes):
+            return len(changes)
+
+        original_push = getattr(ing_mod, "push_to_esp32", None)
+        ing_mod.push_to_esp32 = _fake_push
+
+        # Clear the dispatcher's in-memory dedup for our test param
+        tasks_mod._last_pushed.pop(self.TEST_PARAM, None)
+
+        # Build DSN from the ingestor .env so the test uses real creds
+        env = {}
+        with open("/srv/verdify/ingestor/.env") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                env[k] = v
+        dsn = f"postgresql://{env['DB_USER']}:{env['DB_PASSWORD']}@localhost:{env['DB_PORT']}/{env['DB_NAME']}"
+
+        async def run():
+            pool = await asyncpg.create_pool(dsn, min_size=1, max_size=2)
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "INSERT INTO setpoint_plan "
+                        "(ts, parameter, value, plan_id, source, reason, is_active) "
+                        "VALUES (now(), $1, $2, $3, 'iris', 'TE-2 smoke test', true)",
+                        self.TEST_PARAM,
+                        self.TEST_VALUE,
+                        self.TEST_PLAN_ID,
+                    )
+
+                await tasks_mod.setpoint_dispatcher(pool)
+
+                async with pool.acquire() as conn:
+                    row = await conn.fetchrow(
+                        "SELECT value, source FROM setpoint_changes "
+                        "WHERE parameter = $1 AND ts > now() - interval '1 minute' "
+                        "ORDER BY ts DESC LIMIT 1",
+                        self.TEST_PARAM,
+                    )
+                return row
+            finally:
+                await pool.close()
+
+        try:
+            row = asyncio.run(run())
+            assert row is not None, f"No setpoint_changes row landed for {self.TEST_PARAM}"
+            assert abs(row["value"] - self.TEST_VALUE) < 1e-6, (
+                f"setpoint_changes.value mismatch: got {row['value']}, expected {self.TEST_VALUE}"
+            )
+            assert row["source"] == "plan", (
+                f"setpoint_changes.source must be 'plan' for planner-driven param, got {row['source']!r}"
+            )
+        finally:
+            if original_push is not None:
+                ing_mod.push_to_esp32 = original_push
+            self._cleanup()
+
+
 class TestSetpointsFailLoud:
     """API /setpoints must fail-loud on NULL band (Tier 1 #3)."""
 
@@ -306,3 +487,68 @@ class TestSetpointsFailLoud:
         assert status == 200, (
             f"/setpoints returned {status} under normal operation — Tier 1 #3 should only 503 when band_row IS NULL"
         )
+
+    def test_null_band_row_raises_503(self):
+        """TE-3 (Sprint 19): direct-invoke the route handler with a mocked pool
+        that returns band_row=None. Must raise HTTPException(503) and insert a
+        band_fn_null alert_log row. Complements the structural test above by
+        proving the runtime path actually fires."""
+        import asyncio
+
+        sys.path.insert(0, "/srv/verdify/api")
+        import main as api_mod
+        from fastapi import HTTPException
+
+        alerts_inserted: list[tuple] = []
+
+        class FakeConn:
+            async def fetch(self, *_a, **_kw):
+                return []
+
+            async def fetchrow(self, sql, *_a, **_kw):
+                # fn_band_setpoints + fn_zone_vpd_targets both return None
+                if "fn_band_setpoints" in sql or "fn_zone_vpd_targets" in sql:
+                    return None
+                return None
+
+            async def fetchval(self, *_a, **_kw):
+                return None  # No existing open band_fn_null alert
+
+            async def execute(self, sql, *args):
+                if "INSERT INTO alert_log" in sql:
+                    alerts_inserted.append((sql, args))
+
+        class FakeAcquire:
+            async def __aenter__(self):
+                return FakeConn()
+
+            async def __aexit__(self, *_exc):
+                return False
+
+        class FakePool:
+            def acquire(self):
+                return FakeAcquire()
+
+        original_pool = api_mod.pool
+        api_mod.pool = FakePool()
+        try:
+            raised: list[HTTPException] = []
+
+            async def run():
+                try:
+                    await api_mod.get_setpoints()
+                except HTTPException as e:
+                    raised.append(e)
+
+            asyncio.run(run())
+
+            assert raised, "get_setpoints() should have raised HTTPException when band_row is NULL"
+            assert raised[0].status_code == 503, (
+                f"expected HTTP 503, got {raised[0].status_code} (detail={raised[0].detail!r})"
+            )
+            assert alerts_inserted, "/setpoints must insert a band_fn_null alert_log row on NULL band"
+            assert any("'band_fn_null'" in sql for sql, _ in alerts_inserted), (
+                "alert_log insert must use alert_type='band_fn_null'"
+            )
+        finally:
+            api_mod.pool = original_pool

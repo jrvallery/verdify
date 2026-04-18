@@ -423,6 +423,38 @@ _PROMPT_BUILDERS = {
 # ── Context gathering ────────────────────────────────────────────
 
 
+def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None) -> None:
+    """IN-10 (Sprint 19): route gather-plan-context.sh failures into alert_log so
+    the 18 known errors stop disappearing silently. Uses docker exec psql to
+    avoid introducing a sync DB driver into this sync module."""
+    try:
+        details = json.dumps({"reason": reason, "stderr": stderr[:500], "exit_code": exit_code})
+        message = f"gather-plan-context.sh failed: {reason}"
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-i",
+                "verdify-timescaledb",
+                "psql",
+                "-U",
+                "verdify",
+                "-d",
+                "verdify",
+                "-c",
+                "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
+                f"VALUES ('plan_context_failed', 'warning', 'system', '{message.replace(chr(39), chr(39) * 2)}', "
+                f"'{details.replace(chr(39), chr(39) * 2)}'::jsonb, 'iris_planner')",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as e:  # never let observability failures crash the planner
+        log.warning("failed to record plan_context_failed alert: %s", e)
+
+
 def gather_context() -> str:
     """Run gather-plan-context.sh and return its output."""
     try:
@@ -434,10 +466,12 @@ def gather_context() -> str:
         )
         if result.returncode != 0:
             log.error("gather-plan-context.sh failed: %s", result.stderr[:200])
+            _record_plan_context_failure("nonzero_exit", result.stderr, result.returncode)
             return f"(context gathering failed: {result.stderr[:200]})"
         return result.stdout
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         log.error("gather-plan-context.sh timed out (60s)")
+        _record_plan_context_failure("timeout", str(e), None)
         return "(context gathering timed out)"
 
 
