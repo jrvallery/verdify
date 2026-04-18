@@ -290,10 +290,16 @@ async def tempest_sync(pool: asyncpg.Pool) -> None:
 # 5. HA SENSOR SYNC — hydro, lights, switches, occupancy (every 300s)
 # ═════════════════════════════════════════════════════════════════
 _HYDRO_MAP = {
-    "sensor.greenhouse_hydroponic_ec": ("hydro_ec_us_cm", None),
+    # Read from HA template sensors that apply empirical scaling corrections
+    # for the YINMIK meter's non-standard Tuya DP encoding (pH × 400, TDS × ½,
+    # EC × 0.565). Corrections are defined in HA's
+    # /config/packages/greenhouse/hydroponic_calibration.yaml — see the
+    # haos agent if values drift or scaling needs adjustment. Temp + ORP +
+    # battery DPs are unaffected and still read raw.
+    "sensor.greenhouse_hydroponic_ec_corrected": ("hydro_ec_us_cm", None),
     "sensor.greenhouse_hydroponic_orp": ("hydro_orp_mv", None),
-    "sensor.greenhouse_hydroponic_ph": ("hydro_ph", None),
-    "sensor.greenhouse_hydroponic_tds": ("hydro_tds_ppm", None),
+    "sensor.greenhouse_hydroponic_ph_corrected": ("hydro_ph", None),
+    "sensor.greenhouse_hydroponic_tds_corrected": ("hydro_tds_ppm", None),
     "sensor.greenhouse_hydroponic_water_temp": ("hydro_water_temp_f", lambda v: v * 9.0 / 5.0 + 32.0),
     "sensor.greenhouse_hydroponic_yinmik_battery": ("hydro_battery_pct", None),
 }
