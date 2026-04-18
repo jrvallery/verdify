@@ -33,8 +33,16 @@ test: ## Run full smoke test suite against live stack
 test-fast: ## Run tests excluding slow planner tests
 	$(PYTEST) tests/ -k "not Planner and not Context"
 
-test-firmware: ## Run native C++ logic tests (same code as ESP32)
+test-firmware: ## Run native C++ logic tests + replay against golden CSV (same code as ESP32)
 	cd firmware && g++ -std=c++17 -I lib -o test/test_greenhouse test/test_greenhouse_logic.cpp && ./test/test_greenhouse
+	# OBS-1e (Sprint 16) — replay validation against 8 months of real telemetry.
+	# Required gate per CLAUDE.md Firmware Change Protocol: unit tests alone
+	# cannot catch structural flag regressions (e.g. the shipped-and-caught
+	# vpd_dry_override dead code in commit 82b18ad → patched in caa2cea).
+	test -f firmware/test/data/replay_overrides.csv \
+	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp
+	./firmware/test/replay_overrides firmware/test/data/replay_overrides.csv | tail -30
 
 test-replay: ## Run historical replay simulation (export + simulate)
 	bash scripts/export-replay-data.sh 10

@@ -288,6 +288,7 @@ int main(int argc, char* argv[]) {
     // condition with contrived inputs so the full evaluate_overrides() path is
     // exercised and we can prove the flags aren't dead code.
     printf("\nSynthetic self-test (contrived inputs to force each flag):\n");
+    int self_test_failures = 0;
     struct Probe {
         const char* name;
         SensorInputs in;
@@ -307,12 +308,16 @@ int main(int argc, char* argv[]) {
         p.mode = IDLE;
         return p;
     };
+    auto report = [&](const char* name, bool pass) {
+        printf("  %-28s %s\n", name, pass ? "✓" : "✗ BUG");
+        if (!pass) self_test_failures++;
+    };
     // occupancy_blocks_moisture
     {
         auto p = mk(); p.sp.occupancy_inhibit = true; p.in.occupied = true;
         p.st.vpd_watch_timer_ms = 60000; p.mode = SEALED_MIST;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        printf("  occupancy_blocks_moisture  %s\n", f.occupancy_blocks_moisture ? "✓" : "✗ BUG");
+        report("occupancy_blocks_moisture", f.occupancy_blocks_moisture);
     }
     // fog_gate_rh
     {
@@ -320,7 +325,7 @@ int main(int argc, char* argv[]) {
         p.in.vpd_kpa = p.sp.vpd_high + p.sp.fog_escalation_kpa + 0.1f;
         p.in.rh_pct = 95.0f; p.mode = SEALED_MIST;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        printf("  fog_gate_rh                %s\n", f.fog_gate_rh ? "✓" : "✗ BUG");
+        report("fog_gate_rh", f.fog_gate_rh);
     }
     // fog_gate_temp
     {
@@ -328,7 +333,7 @@ int main(int argc, char* argv[]) {
         p.in.vpd_kpa = p.sp.vpd_high + p.sp.fog_escalation_kpa + 0.1f;
         p.in.temp_f = p.sp.fog_min_temp - 2.0f; p.mode = SEALED_MIST;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        printf("  fog_gate_temp              %s\n", f.fog_gate_temp ? "✓" : "✗ BUG");
+        report("fog_gate_temp", f.fog_gate_temp);
     }
     // fog_gate_window
     {
@@ -336,21 +341,21 @@ int main(int argc, char* argv[]) {
         p.in.vpd_kpa = p.sp.vpd_high + p.sp.fog_escalation_kpa + 0.1f;
         p.in.local_hour = p.sp.fog_window_end; p.mode = SEALED_MIST;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        printf("  fog_gate_window            %s\n", f.fog_gate_window ? "✓" : "✗ BUG");
+        report("fog_gate_window", f.fog_gate_window);
     }
     // relief_cycle_breaker
     {
         auto p = mk(); p.st.vpd_watch_timer_ms = 60000;
         p.st.relief_cycle_count = p.sp.max_relief_cycles; p.mode = VENTILATE;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        printf("  relief_cycle_breaker       %s\n", f.relief_cycle_breaker ? "✓" : "✗ BUG");
+        report("relief_cycle_breaker", f.relief_cycle_breaker);
     }
     // seal_blocked_temp
     {
         auto p = mk(); p.st.vpd_watch_timer_ms = 60000;
         p.in.temp_f = p.sp.safety_max - 3.0f; p.mode = VENTILATE;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        printf("  seal_blocked_temp          %s\n", f.seal_blocked_temp ? "✓" : "✗ BUG");
+        report("seal_blocked_temp", f.seal_blocked_temp);
     }
     // vpd_dry_override — must exercise determine_mode to trigger R2-3
     {
@@ -358,13 +363,21 @@ int main(int argc, char* argv[]) {
         p.in.vpd_kpa = p.sp.vpd_max_safe + 0.2f;
         Mode m = determine_mode(p.in, p.sp, p.st, 5000);
         auto f = evaluate_overrides(p.in, p.sp, p.st, m);
-        printf("  vpd_dry_override           %s (mode=%s, r23_triggered=%s)\n",
+        printf("  %-28s %s (mode=%s, r23_triggered=%s)\n",
+               "vpd_dry_override",
                f.vpd_dry_override ? "✓" : "✗ BUG",
                MODE_NAMES[m], p.st.dry_override_active ? "yes" : "no");
+        if (!f.vpd_dry_override) self_test_failures++;
     }
 
     printf("\n═══════════════════════════════════════════════════════════════\n");
+    if (self_test_failures > 0) {
+        printf("  REPLAY FAILED: %d self-test probe(s) did not fire\n", self_test_failures);
+    }
+    if (stats.sensor_fault_fires > 0) {
+        printf("  REPLAY FAILED: %ld flag(s) fired while mode=SENSOR_FAULT\n", stats.sensor_fault_fires);
+    }
+    printf("═══════════════════════════════════════════════════════════════\n");
 
-    // Exit nonzero if critical invariants fail
-    return stats.sensor_fault_fires > 0 ? 1 : 0;
+    return (self_test_failures > 0 || stats.sensor_fault_fires > 0) ? 1 : 0;
 }

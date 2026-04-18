@@ -1,3 +1,6 @@
 test_greenhouse
 replay_harness
+replay_overrides
 data/*.csv
+# Golden fixtures (tracked) — see Makefile test-firmware target
+!data/replay_overrides.csv.gz
