@@ -277,6 +277,12 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     # (>5 min since last reading) are excluded. Planner distrusts aggregates
     # when count < 4.
     "active_probe_count": "active_probe_count",  # SensorInfo, 0-4
+    # OBS-3 (Sprint 18): firmware ControlState breaker counters, exposed so
+    # the planner can see how close firmware is to forcing a VENTILATE
+    # latch (relief_cycle_count) and how long that latch has been active
+    # (vent_latch_timer_s). See migration 082.
+    "relief_cycle_count": "relief_cycle_count",  # SensorInfo, 0-max_relief_cycles
+    "vent_latch_timer_s": "vent_latch_timer_s",  # SensorInfo, 0-1800 s
 }
 
 # ──────────────────────────────────────────────────────────────

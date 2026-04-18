@@ -650,6 +650,31 @@ sensor:
       if(ok(id(last_east_ms)))  n++;
       return (float)n;
 
+  # OBS-3 (Sprint 18): firmware control-state exposure for planner feedback.
+  # ControlState.relief_cycle_count and vent_latch_timer_ms are firmware-
+  # internal breaker state — when they're nonzero the firmware is
+  # silently refusing to seal (max_relief_cycles hit) or latched in
+  # VENTILATE (post-relief timeout). The planner needs to see this to
+  # know her seal requests are being rejected; see Sprint 16's OBS-1e
+  # for the "silent overrides invisible to the planner" origin story.
+  #
+  # These are lambda-less push sensors: controls.yaml main interval lambda
+  # calls publish_state() on them at the end of each determine_mode()
+  # cycle. Unit for vent_latch is seconds (ms in firmware state divided
+  # by 1000 at publish time, for human readability in Grafana + MCP).
+  - platform: template
+    id: ctl_relief_cycle_count
+    name: "Relief Cycle Count"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+
+  - platform: template
+    id: ctl_vent_latch_timer_s
+    name: "Vent Latch Timer (s)"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+
   # Absolute humidity inside
   - platform: template
     id: absolute_humidity

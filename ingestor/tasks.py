@@ -786,6 +786,84 @@ from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
 _last_pushed: dict[str, float] = {}
 
 
+# FW-3 (Sprint 18): physics sanity invariants. Planner values outside
+# these bounds are clamped before dispatch and logged to setpoint_clamps
+# with reason='invariant_violation'. Catches physically-impossible or
+# dangerous values (e.g. fog_window_start=25, max_relief_cycles=50) that
+# would otherwise be silently written to setpoint_changes and confuse the
+# firmware or waste water budget.
+#
+# Format: param → (min, max). None means no bound on that side.
+_PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
+    # Time-of-day windows (hour of day)
+    "fog_window_start": (0, 23),
+    "fog_window_end": (1, 24),
+    "gl_sunrise_hour": (0, 23),
+    "gl_sunset_hour": (1, 24),
+    # Integer counters
+    "max_relief_cycles": (1, 10),
+    "mister_engage_delay_s": (5, 300),
+    "mister_all_delay_s": (10, 600),
+    "vpd_watch_dwell_s": (10, 600),
+    # Resource budgets
+    "mister_water_budget_gal": (100, 5000),
+    # Temperature bounds (°F)
+    "fog_min_temp_f": (32, 90),
+    "fog_min_temp": (32, 90),
+    "safety_min": (30, 60),
+    "safety_max": (80, 120),
+    # Percentages
+    "fog_rh_ceiling_pct": (50, 100),
+    "fog_rh_ceiling": (50, 100),
+    # VPD (kPa) safety rails
+    "safety_vpd_min": (0.1, 1.0),
+    "safety_vpd_max": (1.5, 5.0),
+    "vpd_max_safe": (1.5, 5.0),
+    "vpd_min_safe": (0.1, 1.0),
+    # Hysteresis (kPa)
+    "vpd_hysteresis": (0.05, 1.0),
+    # Biases (°F)
+    "bias_cool": (-5, 5),
+    "bias_heat": (-5, 5),
+}
+
+
+def _validate_physics(param: str, val: float) -> tuple[float, str | None]:
+    """FW-3 (Sprint 18): clamp val to physical bounds if invariant violated.
+
+    Returns (clamped_val, reason). reason is None when no clamp applied.
+    Only clamps for parameters with invariants defined in _PHYSICS_INVARIANTS.
+    Unknown params pass through unchanged (the band / dispatcher layers
+    handle those).
+    """
+    bounds = _PHYSICS_INVARIANTS.get(param)
+    if bounds is None:
+        return val, None
+    lo, hi = bounds
+    if lo is not None and val < lo:
+        return float(lo), f"invariant_violation:below_{lo}"
+    if hi is not None and val > hi:
+        return float(hi), f"invariant_violation:above_{hi}"
+    return val, None
+
+
+def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: float = 1e-3) -> bool:
+    """DI-1 (Sprint 18): proportional dead-band for dispatcher.
+
+    Return True if `val` is within `rel` (default 1%) of the previously-pushed
+    value, relative to the magnitude of `val`. An `abs_floor` protects against
+    setpoints at or near zero where any absolute threshold would be arbitrary.
+
+    Replaces the previous absolute 0.1/0.05/0.02/0.01 thresholds that were
+    scale-inappropriate — 0.05 on a 0.8 kPa VPD setpoint was 6% (too coarse),
+    while the same 0.05 on a 75°F temp setpoint was 0.07% (fine). 1% relative
+    is the right choice across the whole setpoint range.
+    """
+    if last is None:
+        return False
+    return abs(last - val) / max(abs(val), abs_floor) < rel
+
+
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     global _last_pushed
     # On ESP32 reconnect, clear the cache so ALL values get re-pushed
@@ -810,12 +888,28 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
 
         planned = await conn.fetch("SELECT parameter, value, ts, plan_id, reason FROM v_active_plan")
-        planner_params = {r["parameter"]: r["value"] for r in (planned or [])}
+        raw_planner_params = {r["parameter"]: r["value"] for r in (planned or [])}
 
+        # FW-3 (Sprint 18): enforce physics invariants BEFORE any downstream
+        # use. Clamped values replace the planner's originals; violations
+        # get logged alongside band-clamps in setpoint_clamps for audit.
         changes = []
+        clamps_to_log: list[tuple[str, float, float, float, float, str]] = []
+        planner_params: dict[str, float] = {}
+        for param, raw_val in raw_planner_params.items():
+            clean_val, violation = _validate_physics(param, float(raw_val))
+            if violation is not None:
+                clamps_to_log.append((param, float(raw_val), clean_val, 0.0, 0.0, violation))
+                log.warning(
+                    "FW-3 invariant: %s=%s clamped to %s (%s)",
+                    param,
+                    raw_val,
+                    clean_val,
+                    violation,
+                )
+            planner_params[param] = clean_val
 
         # Band-driven params: planner can tighten within band, clamped to edges
-        clamps_to_log: list[tuple[str, float, float, float, float, str]] = []
         if band_row:
             for param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):
                 band_lo = float(band_row["temp_low" if param.startswith("temp") else "vpd_low"])
@@ -839,8 +933,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 else:
                     val = float(band_row[param])
                 val = round(val, 1)
-                last = _last_pushed.get(param)
-                if last is not None and abs(last - val) < 0.1:
+                if _should_skip(_last_pushed.get(param), val):
                     continue
                 changes.append((param, val))
 
@@ -848,8 +941,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         if zone_row:
             for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):
                 val = round(float(zone_row[param]), 2)
-                last = _last_pushed.get(param)
-                if last is not None and abs(last - val) < 0.02:
+                if _should_skip(_last_pushed.get(param), val):
                     continue
                 changes.append((param, val))
 
@@ -862,8 +954,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             planner_val = planner_params.get(param)
             if planner_val is not None:
                 val = float(planner_val)
-            last = _last_pushed.get(param)
-            if last is not None and abs(last - val) < 0.1:
+            if _should_skip(_last_pushed.get(param), val):
                 continue
             changes.append((param, val))
 
@@ -882,8 +973,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             for param, val in mister_defaults.items():
                 if param in planner_params:
                     continue  # Planner owns this — don't override
-                last = _last_pushed.get(param)
-                if last is not None and abs(last - val) < 0.01:
+                if _should_skip(_last_pushed.get(param), val):
                     continue
                 changes.append((param, val))
 
@@ -900,7 +990,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     continue
                 changes.append((param, 1.0 if planned_bool else 0.0))
             else:
-                if last is not None and abs(last - planned_val) < 0.05:
+                if _should_skip(last, planned_val):
                     continue
                 changes.append((param, planned_val))
 
@@ -1385,7 +1475,18 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
             "solar_w_m2": ("solar_w_m2", "solar_w_m2"),
         }
 
-        deviations = []
+        # PL-5 (Sprint 18): σ-gate. Log every threshold-exceeding deviation
+        # so history remains complete, but only trigger a replan when the
+        # deviation magnitude is at least 1.5σ above typical recent history.
+        # Benign oscillations around typical values no longer thrash the
+        # planner. The 96h review showed 23 replans / 96 h — most were
+        # single-σ wobbles the planner couldn't actually respond to faster
+        # than the env was changing.
+        SIGMA_MULTIPLIER = 1.5
+        SIGMA_HISTORY_DAYS = 7
+
+        logged = []
+        triggering = []
         for t in thresholds:
             obs_col, fc_col = param_map.get(t["parameter"], (None, None))
             if not obs_col:
@@ -1395,22 +1496,44 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
             if observed is None or forecasted is None:
                 continue
             delta = abs(float(observed) - float(forecasted))
-            if delta > t["threshold"]:
-                deviations.append(
-                    {
-                        "parameter": t["parameter"],
-                        "observed": round(float(observed), 1),
-                        "forecasted": round(float(forecasted), 1),
-                        "delta": round(delta, 1),
-                        "threshold": t["threshold"],
-                    }
-                )
+            if delta <= t["threshold"]:
+                continue
+            dev = {
+                "parameter": t["parameter"],
+                "observed": round(float(observed), 1),
+                "forecasted": round(float(forecasted), 1),
+                "delta": round(delta, 1),
+                "threshold": t["threshold"],
+            }
+            logged.append(dev)
 
-        if not deviations:
+            stats = await conn.fetchrow(
+                f"""
+                SELECT AVG(delta) AS mean, COALESCE(STDDEV(delta), 0.0) AS stddev
+                FROM forecast_deviation_log
+                WHERE parameter = $1 AND ts > now() - interval '{SIGMA_HISTORY_DAYS} days'
+                """,
+                t["parameter"],
+            )
+            if stats and stats["mean"] is not None:
+                sigma_gate = float(stats["mean"]) + SIGMA_MULTIPLIER * float(stats["stddev"])
+                if delta < sigma_gate:
+                    log.info(
+                        "PL-5 σ-gate: %s delta=%.1f below %.1f (mean + %sσ of 7d history) — logging but not triggering replan",
+                        t["parameter"],
+                        delta,
+                        sigma_gate,
+                        SIGMA_MULTIPLIER,
+                    )
+                    continue
+            triggering.append(dev)
+
+        if not logged:
             return
 
-        # Log deviations to DB (only when we're actually going to trigger)
-        for d in deviations:
+        # Always persist every threshold-exceeding deviation so historical
+        # stats stay representative.
+        for d in logged:
             await conn.execute(
                 "INSERT INTO forecast_deviation_log (parameter, observed, forecasted, delta, threshold) VALUES ($1,$2,$3,$4,$5)",
                 d["parameter"],
@@ -1420,12 +1543,15 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
                 d["threshold"],
             )
 
+        if not triggering:
+            return
+
     # Write trigger file and update cooldown
     _last_deviation_trigger_ts = _t.time()
     trigger = {
         "ts": datetime.now(UTC).isoformat(),
-        "deviations": deviations,
-        "reason": f"Forecast deviation: {', '.join(d['parameter'] for d in deviations)}",
+        "deviations": triggering,
+        "reason": f"Forecast deviation: {', '.join(d['parameter'] for d in triggering)}",
     }
     trigger_file.write_text(json.dumps(trigger, indent=2))
     log.warning("Replan triggered: %s", trigger["reason"])

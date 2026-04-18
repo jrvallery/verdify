@@ -70,6 +70,106 @@ class TestDispatcherWiring:
         )
 
 
+class TestSprint18Wiring:
+    """Sprint 18: deterministic dispatch — DI-1, PL-5, FW-2, FW-3, OBS-3."""
+
+    TASKS_PATH = "/srv/verdify/ingestor/tasks.py"
+    SENSORS_PATH = "/srv/verdify/firmware/greenhouse/sensors.yaml"
+    CONTROLS_PATH = "/srv/verdify/firmware/greenhouse/controls.yaml"
+    ENTITY_MAP_PATH = "/srv/verdify/ingestor/entity_map.py"
+    INGESTOR_PATH = "/srv/verdify/ingestor/ingestor.py"
+
+    @staticmethod
+    def _read(path: str) -> str:
+        with open(path) as f:
+            return f.read()
+
+    # ── DI-1: proportional dead-bands ──
+    def test_di1_proportional_dead_band_helper_defined(self):
+        body = self._read(self.TASKS_PATH)
+        assert "_should_skip" in body, "DI-1 _should_skip() helper must be defined in tasks.py"
+        assert "abs(last - val) / max(abs(val), abs_floor)" in body, (
+            "DI-1 helper must compute a relative dead-band (abs(delta)/max(|val|, floor))"
+        )
+
+    def test_di1_absolute_dead_bands_removed(self):
+        body = self._read(self.TASKS_PATH)
+        # None of the old magic numbers should survive as standalone dead-band checks.
+        for stale in ["abs(last - val) < 0.1", "abs(last - val) < 0.05", "abs(last - val) < 0.02"]:
+            assert stale not in body, f"DI-1 left behind an old absolute dead-band check: {stale}"
+
+    # ── PL-5: replan dampening ──
+    def test_pl5_sigma_gate_present(self):
+        body = self._read(self.TASKS_PATH)
+        assert "SIGMA_MULTIPLIER" in body, "PL-5 σ-gate constant must be defined"
+        assert "SIGMA_HISTORY_DAYS" in body, "PL-5 σ-history window constant must be defined"
+        assert "STDDEV(delta)" in body, "PL-5 must compute STDDEV over forecast_deviation_log"
+
+    # ── FW-2: oscillation views ──
+    def test_fw2_view_v_daily_oscillation(self):
+        from conftest import db_query
+
+        val = db_query("SELECT to_regclass('v_daily_oscillation')::text")
+        assert val == "v_daily_oscillation", "FW-2: v_daily_oscillation view missing"
+
+    def test_fw2_view_summary(self):
+        from conftest import db_query
+
+        val = db_query("SELECT to_regclass('v_daily_oscillation_summary')::text")
+        assert val == "v_daily_oscillation_summary", "FW-2: v_daily_oscillation_summary view missing"
+
+    # ── FW-3: physics invariants ──
+    def test_fw3_invariants_table_defined(self):
+        body = self._read(self.TASKS_PATH)
+        assert "_PHYSICS_INVARIANTS" in body, "FW-3 invariants table must be defined"
+        assert '"max_relief_cycles"' in body, "FW-3 must cover max_relief_cycles bounds"
+        assert '"fog_window_start"' in body, "FW-3 must cover fog_window_start bounds"
+        assert '"mister_water_budget_gal"' in body, "FW-3 must cover mister_water_budget_gal bounds"
+
+    def test_fw3_validator_invoked_in_dispatcher(self):
+        body = self._read(self.TASKS_PATH)
+        assert "_validate_physics" in body, "FW-3 _validate_physics() helper must exist"
+        assert "invariant_violation" in body, "FW-3 must tag violations with invariant_violation prefix"
+
+    # ── OBS-3: relief-cycle state to DB ──
+    def test_obs3_migration_082_applied(self):
+        from conftest import db_query
+
+        cols = db_query(
+            "SELECT string_agg(column_name, ',' ORDER BY column_name) "
+            "FROM information_schema.columns "
+            "WHERE table_name='diagnostics' AND column_name IN ('relief_cycle_count', 'vent_latch_timer_s')"
+        )
+        assert cols == "relief_cycle_count,vent_latch_timer_s", (
+            f"OBS-3 migration 082 did not apply cleanly (got: {cols!r})"
+        )
+
+    def test_obs3_sensors_declared(self):
+        body = self._read(self.SENSORS_PATH)
+        assert "id: ctl_relief_cycle_count" in body, "OBS-3: ctl_relief_cycle_count sensor missing"
+        assert "id: ctl_vent_latch_timer_s" in body, "OBS-3: ctl_vent_latch_timer_s sensor missing"
+
+    def test_obs3_controls_publishes_state(self):
+        body = self._read(self.CONTROLS_PATH)
+        assert "id(ctl_relief_cycle_count).publish_state(" in body, (
+            "OBS-3: controls.yaml must publish relief_cycle_count every cycle"
+        )
+        assert "id(ctl_vent_latch_timer_s).publish_state(" in body, (
+            "OBS-3: controls.yaml must publish vent_latch_timer_s every cycle"
+        )
+
+    def test_obs3_entity_map_routes(self):
+        body = self._read(self.ENTITY_MAP_PATH)
+        assert '"relief_cycle_count": "relief_cycle_count"' in body
+        assert '"vent_latch_timer_s": "vent_latch_timer_s"' in body
+
+    def test_obs3_ingestor_writes_columns(self):
+        body = self._read(self.INGESTOR_PATH)
+        assert "relief_cycle_count" in body and "vent_latch_timer_s" in body, (
+            "OBS-3: ingestor INSERT must cover new columns"
+        )
+
+
 class TestProbeStalenessWiring:
     """FW-10 (Sprint 17): active_probe_count column + ingestor routing."""
 

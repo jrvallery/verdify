@@ -679,6 +679,10 @@ interval:
             id(gh_overrides).publish_state(n > 0 ? obuf : "none");
           }
 
+          /*** OBS-3 — Relief-cycle state exposure (Sprint 18) ***/
+          id(ctl_relief_cycle_count).publish_state((float)ctl_state.relief_cycle_count);
+          id(ctl_vent_latch_timer_s).publish_state((float)(ctl_state.vent_latch_timer_ms / 1000));
+
           /*** A1 — State transition logging ***/
           {
             static Mode prev_log_mode = IDLE;
