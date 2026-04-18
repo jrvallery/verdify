@@ -70,7 +70,7 @@ The greenhouse has three utility streams:
 
 - **electricity** for fans, fog, grow lights, controller hardware, and pumps
 - **natural gas** for the Lennox furnace
-- **water** for misting, irrigation, hydroponics, and humidity control
+- **water** for misting, irrigation, [hydroponics](/greenhouse/hydroponics/), and humidity control
 That means Verdify is balancing at least three things at once:
 
 - plant stress

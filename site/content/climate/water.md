@@ -16,7 +16,7 @@ aliases:
 
 ![Night rain on the patio, water management extends from irrigation inside to drainage outside](/static/photos/exterior-night-rain-reflections.jpg)
 Water is doing two jobs in this greenhouse.
-It feeds crops through wall drips and hydro infrastructure, and it protects plant health indirectly by pushing back against Colorado's dry air through misting and fog. That makes irrigation a climate-control story, an operations story, and eventually a crop-performance story.
+It feeds crops through wall drips and the [hydroponic NFT system](/greenhouse/hydroponics/), and it protects plant health indirectly by pushing back against Colorado's dry air through misting and fog. That makes irrigation a climate-control story, an operations story, and eventually a crop-performance story.
 This page is the canonical water-systems page for the site.
 
 <div class="grafana-controls" data-ranges="7d,30d,60d,90d,1y"></div>
