@@ -60,9 +60,16 @@ test-v: ## Run tests with verbose output
 firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
 	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 
-firmware-deploy: ## Compile + OTA deploy to ESP32
+firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep
 	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 	cd /srv/greenhouse/esphome && $(ESPHOME) upload --device 192.168.10.111 greenhouse.yaml
+	@echo ""
+	@echo "Waiting 60s for ESP32 reboot + ingestor reconnect + first diagnostics cycle..."
+	@sleep 60
+	$(MAKE) sensor-health SINCE='5 minutes'
+
+sensor-health: ## Run sensor health sweep (layer 3 of Firmware Change Protocol)
+	SINCE='$(or $(SINCE),5 minutes)' bash scripts/sensor-health-sweep.sh
 
 # ── Planner (event-driven via Iris agent) ────────────────────────────
 
