@@ -1,0 +1,33 @@
+// Syncthing ignore patterns for the verdify code repo (/mnt/iris/verdify/).
+// Applies if Jason adds this folder to Syncthing → Mac.
+//
+// Critical: NEVER sync .git/ — two working copies via Syncthing corrupts
+// git history. Same rule as the verdify-vault/.stignore. Let the Mac and
+// VM each pull/push to jrvallery/verdify independently.
+.git
+.git/
+
+// State + reports are local-disk-only via a symlink back to
+// /var/local/verdify/; Syncthing would follow the symlink and try to
+// sync the local data, which breaks the local-for-availability intent.
+state
+reports
+
+// Build outputs + caches (regenerable, large, platform-specific)
+verdify-site/public
+verdify-site/node_modules
+verdify-site/.quartz-cache
+firmware/test/test_greenhouse
+firmware/test/replay_overrides
+firmware/test/replay_harness
+firmware/test/data/replay_overrides.csv    // 18 MB raw; .csv.gz IS synced
+**/.esphome
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+
+// Syncthing conflict noise
+.sync-conflict-*
+.DS_Store
+@eaDir

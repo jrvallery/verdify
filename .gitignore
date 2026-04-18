@@ -19,8 +19,12 @@ site/public/
 firmware/*.bin
 firmware/*.elf
 
-# Runtime state
+# Runtime state — local filesystem (write-heavy, service-critical)
+# Both directory and symlink forms are ignored because /srv/verdify/state
+# and /srv/verdify/reports became symlinks to /var/local/verdify/ on
+# 2026-04-18 to keep services available during NFS stalls.
 state/
+state
 logs/
 *.log
 
@@ -41,4 +45,5 @@ site/public
 # OS
 .DS_Store
 reports/
+reports
 firmware/test/replay_overrides
