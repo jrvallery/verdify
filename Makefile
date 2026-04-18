@@ -60,6 +60,9 @@ test-v: ## Run tests with verbose output
 firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
 	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 
+site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
+	bash scripts/rebuild-site.sh
+
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep
 	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 	cd /srv/greenhouse/esphome && $(ESPHOME) upload --device 192.168.10.111 greenhouse.yaml
