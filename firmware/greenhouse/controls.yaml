@@ -392,6 +392,18 @@ interval:
             float avg_vpd   = VPD;
             bool humidity_demand = (mode == SEALED_MIST);
 
+            // Defensive: zero the engage-delay timers on SEALED_MIST rising edge.
+            // The mister_blocked branch intentionally preserves them (fast
+            // re-engage when block clears), so a SEALED→IDLE bounce inside the
+            // 60s idle holdoff could otherwise carry stale accumulation into
+            // the next seal cycle and fire mister_state=1 immediately.
+            static bool was_sealed = false;
+            if(humidity_demand && !was_sealed){
+              id(humid_s1_duration_ms) = 0;
+              id(humid_s2_duration_ms) = 0;
+            }
+            was_sealed = humidity_demand;
+
             // Misters only run in SEALED_MIST mode.
             // Misters run in ANY humidity state including with vent open —
             // they spray directionally at surfaces, providing local evaporative cooling.

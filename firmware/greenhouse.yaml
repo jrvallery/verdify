@@ -252,8 +252,6 @@ time:
               id(cnt_heat2_today) = 0;
               id(cnt_fog_today)   = 0;
               id(cnt_vent_today)  = 0;
-              id(dh_cycles_today) = 0;
-              id(dh_safety_today)= 0;
               id(mister_water_today) = 0.0f;
               id(runtime_mister_south_ms) = 0;
               id(runtime_mister_west_ms) = 0;

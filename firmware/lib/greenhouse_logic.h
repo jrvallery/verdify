@@ -38,6 +38,10 @@ inline bool sensors_plausible(const SensorInputs& in) noexcept {
 
 // ── Occupancy blocks ALL moisture injection (fog + misters) ──
 // When occupied, do not seal for misting and do not fire fog.
+// Note: the caller (controls.yaml) already computes sp.occupancy_inhibit as
+// (enabled && occupied). Anding `in.occupied` again here is intentional: it
+// keeps the header standalone-correct for tests that set sp.occupancy_inhibit
+// directly without a paired occupied flag.
 inline bool moisture_blocked_by_occupancy(const SensorInputs& in, const Setpoints& sp) noexcept {
     return sp.occupancy_inhibit && in.occupied;
 }

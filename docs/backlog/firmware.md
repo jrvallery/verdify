@@ -1,31 +1,39 @@
 # Backlog: `firmware`
 
-Owned by the [`firmware`](../agents/firmware.md) agent.
+Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-local (resets under the agent-org split — see `CLAUDE.md`).
 
 ## In flight
 
-None.
+- **`firmware/sprint-1-housekeeping`** — drift fixes + dead-code cleanup + doc sync. No shipped control-logic change. See the sprint-1 commit for details.
 
-## Next up (candidates)
+## Next up — `firmware/sprint-2-observability`
 
-- [ ] **Cloud-fallback setpoints** (Sprint 10 B10.6 from legacy SaaS backlog) — firmware OTA: add cloud URL as secondary setpoint source. Coordinate with `saas` agent.
-- [ ] **Direct MQTT to cloud** (Sprint 10 B10.7) — firmware OTA: publish to `mqtt.verdify.ai` directly. Coordinate with `saas` agent.
-- [ ] **Cloud-only test window** (Sprint 10 B10.8) — 24 h test: disable local ingestor, verify ESP32 runs from cloud. Requires coordinator + `saas` + `ingestor` coordination.
+Covers the findings from the 2026-04-18 audit that live outside firmware scope. Each item is a focused handoff PR filed into the owning agent's scope, labeled `requested-by: firmware`:
+
+- [ ] **Coordinator — EquipmentId schema reconciliation.** `verdify_schemas/telemetry.py:160-187` declares 7 IDs firmware never emits (`dehum`, `safety_dehum`, `occupancy`, `door_open`, `gl1`, `gl2`, `grow_light`) and misses ~16 that `ingestor/entity_map.py:94-137` routes to `equipment_state`. Add a drift guard in `verdify_schemas/tests/test_drift_guards.py` that asserts `EquipmentId` ⊇ the set emitted by entity_map.
+- [ ] **Coordinator — override flag enum guard.** Add a drift guard that compares `OverrideEvent.override_type` against the 7 flag names in `firmware/lib/greenhouse_types.h` (`OverrideFlags` struct). Today the schema accepts any string; a silent rename would corrupt `override_events`.
+- [ ] **Coordinator + genai — `sw_mister_closes_vent` routing.** Firmware handles the key in `controls.yaml`, but it's not in `verdify_schemas/tunables.py` ALL_TUNABLES or `entity_map.py` SETPOINT_MAP. Decide: add to schema or drop the firmware handler.
+- [ ] **Ingestor — alert monitor coverage for OBS-3.** `scripts/alert-monitor.py` does not watch `diagnostics.relief_cycle_count > 0` (breaker latched) or `diagnostics.vent_latch_timer_s > 1200` (vent stuck in latched VENTILATE). Add both, plus firmware version staleness vs. an expected pin.
+- [ ] **Ingestor — override events smoke test.** Add `test_override_events_written` to `tests/test_05_ingestor.py` to verify `gh_overrides` diff → `override_events` write.
+- [ ] **Genai — MCP `set_tunable()` validator.** Today MCP can push any key; if it's not in the firmware handler's accept list, it silently no-ops. Add a pre-push validation.
+- [ ] **Saas — real-time setpoint push.** `controls.yaml` references an aioesphomeapi push path that doesn't exist. Either implement or drop the comment.
+
+## Candidates (operational, co-owned with `saas`)
+
+- [ ] **Cloud-fallback setpoints** (was Sprint 10 B10.6) — firmware OTA: add cloud URL as secondary setpoint source.
+- [ ] **Direct MQTT to cloud** (was Sprint 10 B10.7) — firmware OTA: publish to `mqtt.verdify.ai` directly.
+- [ ] **Cloud-only test window** (was Sprint 10 B10.8) — 24 h test: disable local ingestor, verify ESP32 runs from cloud.
 
 ## Ideas (not yet committed)
 
-- Revisit the 7-mode state machine's midnight transition — historical data showed edge-case behavior near 00:00 (see `docs/VPD-PRIMARY-ARCHITECTURE.md`).
-- Expand replay corpus to include the last 30 days automatically.
-- Add per-relay cycle-count audit in firmware (complement to ingestor-side counting).
-
-## Recent history
-
-- Sprint 17: Sensor fault resilience, per-probe staleness exclusion, OTA auto-rollback, tracked systemd units.
-- Sprint 16: OBS-1e — silent override event emission (override_events table).
-- Sprint 15: ESP32 reboot resilience, firmware hardening.
+- Revisit the 7-mode state machine's midnight transition — historical data showed edge-case behavior near 00:00.
+- Expand replay corpus to include the last 30 days automatically (complement to the fixed 8-month `replay_overrides.csv.gz`).
+- Per-relay cycle-count audit in firmware (complement to ingestor-side counting).
+- Mister zone rotation review: does `mister_vpd_weight` starve low-VPD zones under sustained stress?
 
 ## Gates / reminders
 
-- Replay against 8 months of telemetry is a **permanent gate** for structural firmware changes.
-- `make firmware-check` must pass before commit.
-- Any new override flag must also land in `verdify_schemas.telemetry.OverrideEvent` and firmware `greenhouse_types.h` — coordinate with coordinator.
+- Replay against 8 months of telemetry (`make test-firmware`) is a **permanent gate** for structural firmware changes.
+- `make firmware-check` (ESPHome compile) must pass before commit; `make check` runs the full chain.
+- Any new override flag must land in `verdify_schemas/telemetry.OverrideEvent` and `firmware/lib/greenhouse_types.h` (`OverrideFlags` struct) — coordinate with coordinator first.
+- Any relay / switch rename touches `entity_map.py` — coordinate with ingestor.
