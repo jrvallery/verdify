@@ -1,5 +1,143 @@
 # Schema Relationships
 
+<!-- BEGIN AUTO-ERD -->
+
+*Auto-generated from `information_schema.referential_constraints` by 
+`scripts/generate-erd.py`. Do not hand-edit. 61 FK(s) found.*
+
+```mermaid
+erDiagram
+    crop_catalog ||--o{ crop_target_profiles : "crop_catalog_id"
+    crop_catalog ||--o{ crops : "crop_catalog_id"
+    crops ||--o{ crop_events : "crop_id"
+    crops ||--o{ harvests : "crop_id"
+    crops ||--o{ lab_results : "crop_id"
+    crops ||--o{ nutrient_recipes : "crop_id"
+    crops ||--o{ observations : "crop_id"
+    crops ||--o{ treatments : "crop_id"
+    daily_checklist_template ||--o{ daily_checklist_log : "template_id"
+    equipment ||--o{ switches : "equipment_id"
+    equipment ||--o{ water_systems : "equipment_id"
+    equipment_assets ||--o{ maintenance_log : "equipment"
+    forecast_action_rules ||--o{ forecast_action_log : "rule_id"
+    greenhouses ||--o{ alert_log : "greenhouse_id"
+    greenhouses ||--o{ camera_zone_map : "greenhouse_id"
+    greenhouses ||--o{ crop_events : "greenhouse_id"
+    greenhouses ||--o{ crops : "greenhouse_id"
+    greenhouses ||--o{ daily_summary : "greenhouse_id"
+    greenhouses ||--o{ equipment : "greenhouse_id"
+    greenhouses ||--o{ equipment_state : "greenhouse_id"
+    greenhouses ||--o{ forecast_action_log : "greenhouse_id"
+    greenhouses ||--o{ forecast_deviation_log : "greenhouse_id"
+    greenhouses ||--o{ greenhouse_sensor_config : "greenhouse_id"
+    greenhouses ||--o{ image_observations : "greenhouse_id"
+    greenhouses ||--o{ model_predictions : "greenhouse_id"
+    greenhouses ||--o{ observations : "greenhouse_id"
+    greenhouses ||--o{ plan_journal : "greenhouse_id"
+    greenhouses ||--o{ planner_lessons : "greenhouse_id"
+    greenhouses ||--o{ positions : "greenhouse_id"
+    greenhouses ||--o{ pressure_groups : "greenhouse_id"
+    greenhouses ||--o{ sensors : "greenhouse_id"
+    greenhouses ||--o{ setpoint_changes : "greenhouse_id"
+    greenhouses ||--o{ setpoint_plan : "greenhouse_id"
+    greenhouses ||--o{ setpoint_snapshot : "greenhouse_id"
+    greenhouses ||--o{ shelves : "greenhouse_id"
+    greenhouses ||--o{ soil_moisture_targets : "greenhouse_id"
+    greenhouses ||--o{ switches : "greenhouse_id"
+    greenhouses ||--o{ system_state : "greenhouse_id"
+    greenhouses ||--o{ water_systems : "greenhouse_id"
+    greenhouses ||--o{ weather_forecast : "greenhouse_id"
+    greenhouses ||--o{ zones : "greenhouse_id"
+    image_observations ||--o{ observations : "image_observation_id"
+    irrigation_schedule ||--o{ irrigation_log : "schedule_id"
+    observations ||--o{ treatments : "observation_id"
+    planner_lessons }o--|| planner_lessons : "superseded_by (self-ref)"
+    positions ||--o{ crop_events : "position_id"
+    positions ||--o{ crops : "position_id"
+    positions ||--o{ harvests : "position_id"
+    positions ||--o{ observations : "position_id"
+    positions ||--o{ sensors : "position_id"
+    positions ||--o{ treatments : "position_id"
+    pressure_groups ||--o{ water_systems : "pressure_group_id"
+    shelves ||--o{ positions : "shelf_id"
+    zones ||--o{ alert_log : "zone_id"
+    zones ||--o{ crops : "zone_id"
+    zones ||--o{ equipment : "zone_id"
+    zones ||--o{ image_observations : "zone_id"
+    zones ||--o{ observations : "zone_id"
+    zones ||--o{ sensors : "zone_id"
+    zones ||--o{ shelves : "zone_id"
+    zones ||--o{ water_systems : "zone_id"
+```
+
+### Full FK inventory
+
+| Parent | Parent col | Child | Child col |
+|---|---|---|---|
+| `crop_catalog` | `id` | `crop_target_profiles` | `crop_catalog_id` |
+| `crop_catalog` | `id` | `crops` | `crop_catalog_id` |
+| `crops` | `id` | `crop_events` | `crop_id` |
+| `crops` | `id` | `harvests` | `crop_id` |
+| `crops` | `id` | `lab_results` | `crop_id` |
+| `crops` | `id` | `nutrient_recipes` | `crop_id` |
+| `crops` | `id` | `observations` | `crop_id` |
+| `crops` | `id` | `treatments` | `crop_id` |
+| `daily_checklist_template` | `id` | `daily_checklist_log` | `template_id` |
+| `equipment` | `id` | `switches` | `equipment_id` |
+| `equipment` | `id` | `water_systems` | `equipment_id` |
+| `equipment_assets` | `equipment` | `maintenance_log` | `equipment` |
+| `forecast_action_rules` | `id` | `forecast_action_log` | `rule_id` |
+| `greenhouses` | `id` | `alert_log` | `greenhouse_id` |
+| `greenhouses` | `id` | `camera_zone_map` | `greenhouse_id` |
+| `greenhouses` | `id` | `crop_events` | `greenhouse_id` |
+| `greenhouses` | `id` | `crops` | `greenhouse_id` |
+| `greenhouses` | `id` | `daily_summary` | `greenhouse_id` |
+| `greenhouses` | `id` | `equipment` | `greenhouse_id` |
+| `greenhouses` | `id` | `equipment_state` | `greenhouse_id` |
+| `greenhouses` | `id` | `forecast_action_log` | `greenhouse_id` |
+| `greenhouses` | `id` | `forecast_deviation_log` | `greenhouse_id` |
+| `greenhouses` | `id` | `greenhouse_sensor_config` | `greenhouse_id` |
+| `greenhouses` | `id` | `image_observations` | `greenhouse_id` |
+| `greenhouses` | `id` | `model_predictions` | `greenhouse_id` |
+| `greenhouses` | `id` | `observations` | `greenhouse_id` |
+| `greenhouses` | `id` | `plan_journal` | `greenhouse_id` |
+| `greenhouses` | `id` | `planner_lessons` | `greenhouse_id` |
+| `greenhouses` | `id` | `positions` | `greenhouse_id` |
+| `greenhouses` | `id` | `pressure_groups` | `greenhouse_id` |
+| `greenhouses` | `id` | `sensors` | `greenhouse_id` |
+| `greenhouses` | `id` | `setpoint_changes` | `greenhouse_id` |
+| `greenhouses` | `id` | `setpoint_plan` | `greenhouse_id` |
+| `greenhouses` | `id` | `setpoint_snapshot` | `greenhouse_id` |
+| `greenhouses` | `id` | `shelves` | `greenhouse_id` |
+| `greenhouses` | `id` | `soil_moisture_targets` | `greenhouse_id` |
+| `greenhouses` | `id` | `switches` | `greenhouse_id` |
+| `greenhouses` | `id` | `system_state` | `greenhouse_id` |
+| `greenhouses` | `id` | `water_systems` | `greenhouse_id` |
+| `greenhouses` | `id` | `weather_forecast` | `greenhouse_id` |
+| `greenhouses` | `id` | `zones` | `greenhouse_id` |
+| `image_observations` | `id` | `observations` | `image_observation_id` |
+| `irrigation_schedule` | `id` | `irrigation_log` | `schedule_id` |
+| `observations` | `id` | `treatments` | `observation_id` |
+| `planner_lessons` | `id` | `planner_lessons` | `superseded_by` |
+| `positions` | `id` | `crop_events` | `position_id` |
+| `positions` | `id` | `crops` | `position_id` |
+| `positions` | `id` | `harvests` | `position_id` |
+| `positions` | `id` | `observations` | `position_id` |
+| `positions` | `id` | `sensors` | `position_id` |
+| `positions` | `id` | `treatments` | `position_id` |
+| `pressure_groups` | `id` | `water_systems` | `pressure_group_id` |
+| `shelves` | `id` | `positions` | `shelf_id` |
+| `zones` | `id` | `alert_log` | `zone_id` |
+| `zones` | `id` | `crops` | `zone_id` |
+| `zones` | `id` | `equipment` | `zone_id` |
+| `zones` | `id` | `image_observations` | `zone_id` |
+| `zones` | `id` | `observations` | `zone_id` |
+| `zones` | `id` | `sensors` | `zone_id` |
+| `zones` | `id` | `shelves` | `zone_id` |
+| `zones` | `id` | `water_systems` | `zone_id` |
+
+<!-- END AUTO-ERD -->
+
 Pydantic models in `verdify_schemas/` are intentionally standalone — no cross-imports between models, no `ForeignKey` fields, no nested model-refs beyond what one row needs on its own. The relationships below are **documented**, not enforced at the schema level.
 
 ## Why document, don't enforce

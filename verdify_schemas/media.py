@@ -5,14 +5,26 @@ Each row ties a camera capture to:
 - A pgvector embedding (3072-dim from gemini-embedding-2)
 - Processing metadata (model, tokens, latency)
 
-The embedding is declared as `list[float]` for portability; consumers that
-want vector-search operations talk to pgvector directly. Sprint 23+ will add
-a proper pgvector-aware shape and similarity helpers.
+`embedding` is dimension-locked: any list whose length isn't `EMBEDDING_DIM`
+(3072) gets rejected at the Pydantic boundary. Catches the class of bug
+where the embedding model is swapped (e.g. to a 768-dim variant) but the
+DB column still expects 3072 — currently that crashes inside asyncpg with
+a cryptic vector-mismatch error; with this guard it fails at construction
+with a clear message.
 """
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+# pgvector column dimension — gemini-embedding-2 emits 3072.
+# If you migrate to a different model, update this AND the DB column type
+# (`ALTER TABLE image_observations ALTER COLUMN embedding TYPE vector(N)`).
+EMBEDDING_DIM = 3072
+
+Embedding = Annotated[list[float], Field(min_length=EMBEDDING_DIM, max_length=EMBEDDING_DIM)]
 
 
 class ImageObservation(BaseModel):
@@ -33,7 +45,5 @@ class ImageObservation(BaseModel):
     processing_ms: int | None = Field(default=None, ge=0)
     tokens_used: int | None = Field(default=None, ge=0)
     confidence: float | None = Field(default=None, ge=0, le=1)
-    # pgvector column — declared as permissive list[float]; length 3072 in practice.
-    # Full vector-typed shape + pg-side operators: Sprint 23 pgvector support.
-    embedding: list[float] | None = None
+    embedding: Embedding | None = None
     greenhouse_id: str = "vallery"

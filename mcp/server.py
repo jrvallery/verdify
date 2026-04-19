@@ -26,17 +26,27 @@ from verdify_schemas import (  # noqa: E402
     ALL_TUNABLES,
     AlertAckPayload,
     AlertResolvePayload,
+    ClimateSnapshot,
     CropCreate,
     CropUpdate,
+    EquipmentStateRow,
     EventCreate,
+    ForecastSummaryRow,
     HarvestCreate,
     LessonCreate,
+    LessonSummary,
     LessonUpdate,
     LessonValidate,
     ObservationCreate,
     Plan,
     PlanEvaluation,
     PlanHypothesisStructured,
+    PlanRunResponse,
+    PlanStatusJournal,
+    PlanStatusResponse,
+    PlanStatusWaypoint,
+    ScorecardResponse,
+    SetpointSummary,
     TreatmentCreate,
 )
 
@@ -108,7 +118,11 @@ async def climate() -> str:
         mode = await conn.fetchval(
             "SELECT value FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1"
         )
-        return _json({**dict(row), "mode": mode})
+        # Sprint 23+: validate-on-emit through ClimateSnapshot. Schema drift
+        # in the SELECT (e.g. a renamed column) fails here, not silently in
+        # Iris's downstream parse.
+        snap = ClimateSnapshot.model_validate({**dict(row), "mode": mode})
+        return snap.model_dump_json()
     finally:
         await conn.close()
 
@@ -127,7 +141,8 @@ async def scorecard(target_date: str = "") -> str:
         else:
             d = await conn.fetchval("SELECT (now() AT TIME ZONE 'America/Denver')::date")
         rows = await conn.fetch("SELECT * FROM fn_planner_scorecard($1::date)", d)
-        return _json({r["metric"]: r["value"] for r in rows})
+        sc = ScorecardResponse.model_validate({r["metric"]: r["value"] for r in rows})
+        return sc.model_dump_json()
     finally:
         await conn.close()
 
@@ -145,7 +160,8 @@ async def equipment_state() -> str:
                 'mister_south','mister_west','mister_center')
             ORDER BY equipment
         """)
-        return _json([dict(r) for r in rows])
+        validated = [EquipmentStateRow.model_validate(dict(r)).model_dump(mode="json") for r in rows]
+        return json.dumps(validated)
     finally:
         await conn.close()
 
@@ -171,7 +187,8 @@ async def forecast(hours: int = 72) -> str:
             ORDER BY ts
             LIMIT {hours}
         """)
-        return _json([dict(r) for r in rows])
+        validated = [ForecastSummaryRow.model_validate(dict(r)).model_dump(mode="json") for r in rows]
+        return json.dumps(validated)
     finally:
         await conn.close()
 
@@ -206,7 +223,8 @@ async def get_setpoints() -> str:
                 'enthalpy_open','enthalpy_close'
             ) ORDER BY parameter
         """)
-        return _json([dict(r) for r in rows])
+        validated = [SetpointSummary.model_validate(dict(r)).model_dump(mode="json") for r in rows]
+        return json.dumps(validated)
     finally:
         await conn.close()
 
@@ -289,9 +307,10 @@ async def plan_run(mode: str = "normal") -> str:
 
         context = gather_context()
         ok = send_to_iris("SUNRISE", "Ad-hoc planning cycle (triggered via MCP)", context=context)
-        return json.dumps({"ok": ok, "note": "SUNRISE event sent to Iris planner. Check #greenhouse for the brief."})
+        resp = PlanRunResponse(ok=ok, note="SUNRISE event sent to Iris planner. Check #greenhouse for the brief.")
+        return resp.model_dump_json(exclude_none=True)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return PlanRunResponse(ok=False, error=str(e)).model_dump_json(exclude_none=True)
 
 
 @mcp.tool()
@@ -310,9 +329,11 @@ async def plan_status() -> str:
             FROM setpoint_plan WHERE is_active = true AND ts > now()
             GROUP BY ts ORDER BY ts LIMIT 15
         """)
-        return json.dumps(
-            {"plan": dict(journal) if journal else None, "future_waypoints": [dict(w) for w in waypoints]}, default=str
+        resp = PlanStatusResponse(
+            plan=PlanStatusJournal.model_validate(dict(journal)) if journal else None,
+            future_waypoints=[PlanStatusWaypoint.model_validate(dict(w)) for w in waypoints],
         )
+        return resp.model_dump_json(exclude_none=True)
     finally:
         await conn.close()
 
@@ -329,7 +350,8 @@ async def lessons() -> str:
                      times_validated DESC
             LIMIT 10
         """)
-        return _json([dict(r) for r in rows])
+        validated = [LessonSummary.model_validate(dict(r)).model_dump(mode="json") for r in rows]
+        return json.dumps(validated)
     finally:
         await conn.close()
 

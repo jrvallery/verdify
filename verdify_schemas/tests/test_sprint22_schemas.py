@@ -269,6 +269,46 @@ class TestImageObservation:
                 confidence=1.5,
             )
 
+    def test_accepts_correct_embedding_dim(self):
+        from verdify_schemas import EMBEDDING_DIM
+
+        img = ImageObservation(
+            ts=NOW,
+            camera="x",
+            zone="x",
+            image_path="/mnt/iris/x.jpg",
+            embedding=[0.0] * EMBEDDING_DIM,
+        )
+        assert len(img.embedding) == EMBEDDING_DIM
+
+    def test_rejects_short_embedding(self):
+        from verdify_schemas import EMBEDDING_DIM
+
+        with pytest.raises(ValidationError, match="too_long|too_short|at most|at least"):
+            ImageObservation(
+                ts=NOW,
+                camera="x",
+                zone="x",
+                image_path="/mnt/iris/x.jpg",
+                embedding=[0.0] * (EMBEDDING_DIM - 1),
+            )
+
+    def test_rejects_long_embedding(self):
+        from verdify_schemas import EMBEDDING_DIM
+
+        with pytest.raises(ValidationError, match="too_long|too_short|at most|at least"):
+            ImageObservation(
+                ts=NOW,
+                camera="x",
+                zone="x",
+                image_path="/mnt/iris/x.jpg",
+                embedding=[0.0] * (EMBEDDING_DIM + 1),
+            )
+
+    def test_embedding_optional(self):
+        img = ImageObservation(ts=NOW, camera="x", zone="x", image_path="/mnt/iris/x.jpg")
+        assert img.embedding is None
+
 
 class TestSensorRegistry:
     def test_valid(self):
