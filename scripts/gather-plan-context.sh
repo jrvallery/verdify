@@ -18,6 +18,10 @@ HA_URL="http://192.168.30.107:8123"
 echo "=== GREENHOUSE PLANNING CONTEXT ==="
 echo "Greenhouse: $GREENHOUSE_ID"
 echo "Generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ($(date '+%Y-%m-%d %H:%M %Z'))"
+echo "Before trusting any individual section, check CONTEXT COMPLETENESS at the"
+echo "end of this document — it reports which external dependencies were"
+echo "reachable. Empty or stale sections may mean a dependency was down, not"
+echo "that the greenhouse state is quiet."
 echo ""
 
 # ── 1. CORE PLANNING VIEW (7 JSON columns in one query) ───────────
@@ -612,6 +616,86 @@ WHERE ts > now() - interval '24 hours'
 ORDER BY ts DESC LIMIT 2;
 " 2>/dev/null
 echo "Crop health observations are informational. Note declining scores in your conditions_summary, but do not change tuning strategy based on visual observations alone — they may indicate nutrient, light, or root-zone issues outside this planner's control surface."
+echo ""
+
+# ── 31. CONTEXT COMPLETENESS SUMMARY (G10) ─────────────────────
+# Tests each external dependency this script relies on and reports pass/fail
+# with a one-line explanation of what degrades when that dep is down. If any
+# dep is red, mention it in your Slack brief — otherwise Jason can't tell
+# the difference between "quiet greenhouse" and "missing telemetry".
+echo "=== CONTEXT COMPLETENESS ==="
+_ok=0
+_fail=0
+_check() {
+  local name="$1"
+  local status="$2"
+  local impact="$3"
+  if [ "$status" = "ok" ]; then
+    printf '  ✓ %-32s  %s\n' "$name" "$impact"
+    _ok=$((_ok + 1))
+  else
+    printf '  ✗ %-32s  %s\n' "$name" "$impact"
+    _fail=$((_fail + 1))
+  fi
+}
+
+# DB: docker container reachable + basic query
+if docker exec verdify-timescaledb psql -U verdify -d verdify -t -A -c "SELECT 1" >/dev/null 2>&1; then
+  _check "timescaledb reachable" ok "all DB-backed sections above are current"
+else
+  _check "timescaledb reachable" fail "every DB section above returned '(unavailable)' or an empty row; DO NOT plan from this data"
+fi
+
+# Climate freshness: latest climate row within 10 minutes
+climate_age_s=$($DB -c "SELECT EXTRACT(epoch FROM now() - max(ts))::int FROM climate;" 2>/dev/null | tr -d ' ')
+if [ -n "${climate_age_s:-}" ] && [ "${climate_age_s:-99999}" -lt 600 ]; then
+  _check "climate telemetry fresh" ok "indoor sensors reporting within the last ${climate_age_s}s"
+else
+  _check "climate telemetry fresh" fail "last climate row is ${climate_age_s:-unknown}s old; ESP32 may be offline — flag in brief"
+fi
+
+# Scorecard function: non-zero rows for yesterday (data rolled up)
+sc_rows=$($DB -c "SELECT count(*) FROM fn_planner_scorecard(CURRENT_DATE - 1);" 2>/dev/null | tr -d ' ')
+if [ -n "${sc_rows:-}" ] && [ "${sc_rows:-0}" -ge 20 ]; then
+  _check "yesterday scorecard rolled up" ok "${sc_rows} metrics available — previous_plan_validation can be computed"
+else
+  _check "yesterday scorecard rolled up" fail "only ${sc_rows:-0} metrics (need ~25); daily_summary snapshot may have failed overnight"
+fi
+
+# Weather forecast: a row for a time in the next 24h
+fc_rows=$($DB -c "SELECT count(*) FROM weather_forecast WHERE ts BETWEEN now() AND now() + interval '24 hours';" 2>/dev/null | tr -d ' ')
+if [ -n "${fc_rows:-}" ] && [ "${fc_rows:-0}" -gt 0 ]; then
+  _check "weather forecast present" ok "${fc_rows} forecast hours in the next 24h"
+else
+  _check "weather forecast present" fail "no forecast for the next 24h — forecast-sync.py may not have run; posture decisions fall back to current-conditions only"
+fi
+
+# HA token readable (irrigation schedule + tunable readback sections)
+if [ -n "${HA_TOKEN}" ]; then
+  _check "HA token loaded" ok "sections 19 (tunable constraints) + HA sync queries above are current"
+else
+  _check "HA token loaded" fail "HA queries in sections 19+ returned empty; tunable min/max constraints unknown — stay inside ranges in your _PLANNER_KNOWLEDGE block"
+fi
+
+# Governing plan resolvable (section 15)
+if [ -n "${GOVERNING_PLAN}" ]; then
+  _check "governing plan identified" ok "${GOVERNING_PLAN} — previous_plan_validation has a target"
+else
+  _check "governing plan identified" fail "no governing plan for yesterday; previous_plan_validation must use null plan_id"
+fi
+
+# Validate-plan-coverage helper (section 28)
+if [ -x /srv/verdify/scripts/validate-plan-coverage.sh ]; then
+  _check "validate-plan-coverage.sh present" ok "section 28 coverage report is reliable"
+else
+  _check "validate-plan-coverage.sh present" fail "plan-coverage section above silently skipped"
+fi
+
+echo ""
+echo "summary: ${_ok} ok / ${_fail} failing (of $((_ok + _fail)) checks)"
+if [ "${_fail}" -gt 0 ]; then
+  echo "⚠ DEGRADED CONTEXT — mention the failing dependencies in your Slack brief so Jason can restore them."
+fi
 echo ""
 
 echo "=== END PLANNING CONTEXT ==="
