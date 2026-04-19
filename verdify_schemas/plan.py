@@ -1,0 +1,181 @@
+"""Plan, PlanTransition, PlanHypothesisStructured, PlanEvaluation.
+
+Maps 1:1 onto the MCP `set_plan` / `plan_evaluate` tool contracts and the
+`setpoint_plan` + `plan_journal` DB tables. Validation happens at the MCP
+boundary so malformed planner output fails loud instead of partial-writing
+to the database.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Annotated, Literal
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .tunables import ALL_TUNABLES, NUMERIC_TUNABLES, SWITCH_TUNABLES, TunableParameter
+
+PLAN_ID_PATTERN = re.compile(r"^iris-\d{8}-\d{4}$")
+PlanSource = Literal["iris", "manual", "recovery"]
+
+
+class PlanTransition(BaseModel):
+    """One waypoint of a plan — a set of parameter changes at a specific ts."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    ts: AwareDatetime
+    params: dict[str, float] = Field(..., min_length=1)
+    reason: str | None = Field(default=None, max_length=500)
+    confirmed_at: AwareDatetime | None = None
+
+    @field_validator("params", mode="after")
+    @classmethod
+    def _validate_param_keys(cls, v: dict[str, float]) -> dict[str, float]:
+        unknown = sorted(k for k in v if k not in ALL_TUNABLES)
+        if unknown:
+            raise ValueError(
+                f"Unknown tunable parameter(s): {unknown}. "
+                f"Every key must appear in verdify_schemas.tunables.ALL_TUNABLES."
+            )
+        # Switches: coerce to 0.0 / 1.0 (tolerate True/False already cast to float)
+        for k, val in v.items():
+            if k in SWITCH_TUNABLES and val not in (0.0, 1.0):
+                raise ValueError(f"Switch parameter {k!r} must be 0.0 or 1.0 (got {val!r})")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_physics(self) -> PlanTransition:
+        p = self.params
+        if "temp_low" in p and "temp_high" in p and p["temp_low"] >= p["temp_high"]:
+            raise ValueError(
+                f"temp_low ({p['temp_low']}) must be < temp_high ({p['temp_high']})",
+            )
+        if "vpd_low" in p and "vpd_high" in p and p["vpd_low"] >= p["vpd_high"]:
+            raise ValueError(
+                f"vpd_low ({p['vpd_low']}) must be < vpd_high ({p['vpd_high']})",
+            )
+        if "safety_min" in p and "safety_max" in p and p["safety_min"] >= p["safety_max"]:
+            raise ValueError(
+                f"safety_min ({p['safety_min']}) must be < safety_max ({p['safety_max']})",
+            )
+        if "mister_engage_kpa" in p and "mister_all_kpa" in p and p["mister_engage_kpa"] > p["mister_all_kpa"]:
+            raise ValueError(
+                f"mister_engage_kpa ({p['mister_engage_kpa']}) must be <= mister_all_kpa ({p['mister_all_kpa']})",
+            )
+        return self
+
+
+PlanId = Annotated[str, Field(pattern=PLAN_ID_PATTERN.pattern)]
+
+
+class Plan(BaseModel):
+    """Full plan envelope as emitted by Iris via `set_plan` MCP tool."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    plan_id: PlanId
+    hypothesis: str = Field(..., min_length=1, max_length=20000)
+    experiment: str | None = Field(default=None, max_length=20000)
+    expected_outcome: str | None = Field(default=None, max_length=20000)
+    transitions: list[PlanTransition] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_transitions_ordered(self) -> Plan:
+        # Enforce strict monotonic ts so the dispatcher's "latest-applicable"
+        # semantics are deterministic. Duplicates mean two waypoints at the
+        # same ts disagree — ambiguous, reject.
+        prev: AwareDatetime | None = None
+        for t in self.transitions:
+            if prev is not None and t.ts <= prev:
+                raise ValueError(
+                    f"Plan transitions must be strictly ts-ascending (got {t.ts} after {prev})",
+                )
+            prev = t.ts
+        return self
+
+
+# ── Structured hypothesis (Phase 5) ────────────────────────────────
+
+
+class Conditions(BaseModel):
+    """Planner's snapshot of forecast / current state driving the plan."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outdoor_temp_peak_f: float = Field(..., ge=-40, le=140)
+    outdoor_rh_min_pct: float = Field(..., ge=0, le=100)
+    solar_peak_w_m2: float = Field(..., ge=0, le=1500)
+    cloud_cover_avg_pct: float = Field(..., ge=0, le=100)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class StressWindow(BaseModel):
+    """A time range the planner expects to push the greenhouse near a band edge."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["heat", "cold", "vpd_high", "vpd_low"]
+    start: AwareDatetime
+    end: AwareDatetime
+    severity: Literal["low", "medium", "high"]
+    mitigation: str = Field(..., min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _validate_range(self) -> StressWindow:
+        if self.end <= self.start:
+            raise ValueError(f"StressWindow end ({self.end}) must be after start ({self.start})")
+        return self
+
+
+class ParamRationale(BaseModel):
+    """Why a specific parameter was tuned, anchored to forecast evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parameter: TunableParameter
+    old_value: float | None = None
+    new_value: float
+    forecast_anchor: str = Field(..., min_length=1, max_length=200)
+    expected_effect: str = Field(..., min_length=1, max_length=500)
+
+
+class PlanHypothesisStructured(BaseModel):
+    """The typed, JSONB-stored companion to plan_journal.hypothesis prose."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conditions: Conditions
+    stress_windows: list[StressWindow] = Field(default_factory=list)
+    rationale: list[ParamRationale] = Field(..., min_length=1)
+
+    @field_validator("rationale", mode="after")
+    @classmethod
+    def _validate_rationale_params(cls, v: list[ParamRationale]) -> list[ParamRationale]:
+        # Ensure numeric-only constraint — rationales should not be written
+        # for pure switch params (those are binary toggles with obvious semantics).
+        for r in v:
+            if r.parameter in SWITCH_TUNABLES:
+                # Allow, but require 0.0 or 1.0 values
+                if r.new_value not in (0.0, 1.0):
+                    raise ValueError(
+                        f"Switch param {r.parameter!r} rationale must have new_value 0.0 or 1.0",
+                    )
+            elif r.parameter not in NUMERIC_TUNABLES:
+                raise ValueError(f"ParamRationale references unknown tunable: {r.parameter!r}")
+        return v
+
+
+# ── Plan evaluation (later — next-plan runs this after the outcome settles) ──
+
+
+class PlanEvaluation(BaseModel):
+    """Retrospective evaluation of a plan — written into plan_journal by the
+    next planner cycle or by the PL-1 backfill script."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    plan_id: PlanId
+    outcome_score: int = Field(..., ge=1, le=10)
+    actual_outcome: str = Field(..., min_length=1, max_length=20000)
+    lesson_extracted: str | None = Field(default=None, max_length=20000)

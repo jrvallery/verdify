@@ -275,6 +275,81 @@ class TestOverrideEventsWiring:
         assert "pending_override_events" in body, "ingestor State must track pending override events for flush"
 
 
+class TestSetpointConfirmation:
+    """FW-4 + FB-1 (Sprint 20): setpoint_changes.confirmed_at wiring."""
+
+    def test_migration_084_applied(self):
+        val = db_query(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='setpoint_changes' AND column_name='confirmed_at'"
+        )
+        assert val == "confirmed_at", "migration 084 did not apply — setpoint_changes.confirmed_at missing"
+
+    def test_plan_journal_structured_column(self):
+        val = db_query(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='plan_journal' AND column_name='hypothesis_structured'"
+        )
+        assert val == "hypothesis_structured", (
+            "migration 084 did not apply — plan_journal.hypothesis_structured missing"
+        )
+
+    def test_confirmations_happening_in_real_time(self):
+        """After ingestor restart + a full cfg_snapshot cycle (~60s), recent
+        setpoint_changes rows for readbackable params should be confirmed."""
+        confirmed = int(
+            db_query(
+                "SELECT count(*) FROM setpoint_changes "
+                "WHERE confirmed_at IS NOT NULL AND ts > now() - interval '30 minutes'"
+            )
+            or "0"
+        )
+        assert confirmed > 0, (
+            "No setpoint_changes rows confirmed in the last 30 min. "
+            "Is the ingestor writing confirmed_at? Is setpoint_snapshot cycle running?"
+        )
+
+    def test_confirmation_monitor_task_wired(self):
+        import subprocess
+
+        # tasks.py registers setpoint_confirmation_monitor
+        result = subprocess.run(
+            ["grep", "-c", "setpoint_confirmation_monitor", "/srv/verdify/ingestor/tasks.py"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert int(result.stdout.strip() or "0") >= 1, "tasks.py missing setpoint_confirmation_monitor function"
+        result2 = subprocess.run(
+            ["grep", "-c", "setpoint_confirmation", "/srv/verdify/ingestor/ingestor.py"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert int(result2.stdout.strip() or "0") >= 1, (
+            "ingestor.py must register setpoint_confirmation_monitor in TASKS list"
+        )
+
+
+class TestForecastPageGeneration:
+    """Phase 7 (Sprint 20): forecast website page exists + non-empty."""
+
+    PAGE_PATH = "/mnt/iris/verdify-vault/website/forecast/index.md"
+
+    def test_forecast_page_exists(self):
+        import os
+
+        assert os.path.isfile(self.PAGE_PATH), (
+            f"forecast page missing at {self.PAGE_PATH} — run generate-forecast-page.py"
+        )
+
+    def test_forecast_page_has_sections(self):
+        with open(self.PAGE_PATH) as f:
+            body = f.read()
+        for section in ("# Forecast", "## Hourly — next 72 h", "## Days 4\u20137 outlook"):
+            assert section in body, f"forecast page missing section: {section!r}"
+
+
 class TestEntityMapCoverage:
     """TE-1 (Sprint 19): every dispatcher-emitted param must have an ESP32 route.
 

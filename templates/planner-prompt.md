@@ -183,6 +183,54 @@ VALUES (
 );"
 ```
 
+### 4e. (NEW, Sprint 20) Optional structured hypothesis
+
+When you call the `set_plan` MCP tool, you may embed a fenced ```json block
+at the end of `hypothesis` describing the plan's reasoning in structured
+form. The tool validates it against `PlanHypothesisStructured` and writes
+the JSON into `plan_journal.hypothesis_structured`. The website's daily
+plan renderer will then produce a richer per-section breakdown — conditions
+table, stress-windows timeline, per-parameter rationale — instead of a
+prose dump. If you omit the block, or emit invalid JSON, the plan still
+lands (backward compatible).
+
+Schema (minimum fields):
+````markdown
+```json
+{
+  "conditions": {
+    "outdoor_temp_peak_f": 80.0,
+    "outdoor_rh_min_pct": 10.0,
+    "solar_peak_w_m2": 900.0,
+    "cloud_cover_avg_pct": 20.0,
+    "notes": "clear day, dry advection from west"
+  },
+  "stress_windows": [
+    {
+      "kind": "vpd_high",
+      "start": "2026-04-19T15:00:00-06:00",
+      "end": "2026-04-19T17:00:00-06:00",
+      "severity": "high",
+      "mitigation": "mister pulse on=60 gap=15, fog fires at 1.6 kPa"
+    }
+  ],
+  "rationale": [
+    {
+      "parameter": "mister_engage_kpa",
+      "old_value": 1.6,
+      "new_value": 1.3,
+      "forecast_anchor": "Sunday 3PM 4% RH outdoor",
+      "expected_effect": "earlier misting keeps west zone VPD < 2.0"
+    }
+  ]
+}
+```
+````
+
+`kind` is one of `heat`, `cold`, `vpd_high`, `vpd_low`. `severity` is one of
+`low`, `medium`, `high`. Every `parameter` in `rationale` must be a real
+tunable in `verdify_schemas.ALL_TUNABLES`.
+
 ---
 
 ## Step 5: Publish Daily Plan Document

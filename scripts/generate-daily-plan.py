@@ -88,7 +88,8 @@ def get_plans_for_date(d: date) -> list[dict]:
                conditions_summary, hypothesis, experiment, expected_outcome,
                actual_outcome, outcome_score, lesson_extracted,
                array_to_string(params_changed, ','),
-               CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END
+               CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END,
+               COALESCE(hypothesis_structured::text, '')
         FROM plan_journal
         WHERE plan_id LIKE 'iris-{date_str}%'
           AND plan_id NOT LIKE 'iris-reactive%'
@@ -96,7 +97,7 @@ def get_plans_for_date(d: date) -> list[dict]:
     """)
     plans = []
     for row in rows:
-        if len(row) >= 11:
+        if len(row) >= 12:
             plans.append(
                 {
                     "plan_id": row[0].strip(),
@@ -110,6 +111,7 @@ def get_plans_for_date(d: date) -> list[dict]:
                     "lesson_extracted": row[8].strip(),
                     "params_changed": row[9].strip(),
                     "status": row[10].strip(),
+                    "hypothesis_structured": row[11].strip(),
                 }
             )
     return plans
@@ -281,6 +283,58 @@ PARAM_SHORT = {
     "mister_pulse_gap_s": "gap",
     "mister_vpd_weight": "wt",
 }
+
+
+def _render_structured_hypothesis(s: dict) -> list[str]:
+    """Render PlanHypothesisStructured JSON into a Conditions / Stress Windows /
+    Rationale markdown block. Silent no-op if a section is missing."""
+    lines: list[str] = []
+    conds = s.get("conditions") or {}
+    if conds:
+        lines.append("")
+        lines.append("**Conditions (structured)**")
+        lines.append("")
+        lines.append("| Outdoor peak °F | RH min % | Solar peak W/m² | Avg cloud % |")
+        lines.append("|---|---|---|---|")
+        lines.append(
+            f"| {conds.get('outdoor_temp_peak_f', '?')} "
+            f"| {conds.get('outdoor_rh_min_pct', '?')} "
+            f"| {conds.get('solar_peak_w_m2', '?')} "
+            f"| {conds.get('cloud_cover_avg_pct', '?')} |"
+        )
+        if conds.get("notes"):
+            lines.append("")
+            lines.append(f"> {conds['notes']}")
+    sw = s.get("stress_windows") or []
+    if sw:
+        lines.append("")
+        lines.append("**Expected stress windows**")
+        lines.append("")
+        lines.append("| Kind | Severity | Start | End | Mitigation |")
+        lines.append("|---|---|---|---|---|")
+        for w in sw:
+            lines.append(
+                f"| {w.get('kind', '?')} | {w.get('severity', '?')} "
+                f"| {w.get('start', '?')} | {w.get('end', '?')} "
+                f"| {w.get('mitigation', '')} |"
+            )
+    rat = s.get("rationale") or []
+    if rat:
+        lines.append("")
+        lines.append("**Parameter rationale**")
+        lines.append("")
+        lines.append("| Parameter | Old → New | Forecast anchor | Expected effect |")
+        lines.append("|---|---|---|---|")
+        for r_ in rat:
+            old = r_.get("old_value")
+            new = r_.get("new_value")
+            change = f"{old} → {new}" if old is not None else f"{new}"
+            lines.append(
+                f"| `{r_.get('parameter', '?')}` | {change} "
+                f"| {r_.get('forecast_anchor', '')} | {r_.get('expected_effect', '')} |"
+            )
+    lines.append("")
+    return lines
 
 
 def format_waypoints_table(waypoints: list[dict]) -> str:
@@ -574,6 +628,21 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     if expected:
         lines.append(f"**Expected outcome:** {expected}")
     lines.append("")
+
+    # Sprint 20 Phase 5: structured hypothesis block (typed conditions /
+    # stress windows / per-parameter rationale) — rendered when the planner
+    # emitted the JSON block via the set_plan MCP tool. Legacy rows where
+    # hypothesis_structured IS NULL just render the prose above and skip this.
+    structured_raw = plan.get("hypothesis_structured", "")
+    if structured_raw:
+        try:
+            structured = json.loads(structured_raw)
+        except (json.JSONDecodeError, TypeError):
+            structured = None
+        # Only render if it's a dict with the expected shape; tolerate legacy
+        # rows that may have non-object JSON (scalars, arrays).
+        if isinstance(structured, dict):
+            lines.extend(_render_structured_hypothesis(structured))
 
     # --- Setpoints: waypoints for THIS plan_id only ---
     if waypoints:

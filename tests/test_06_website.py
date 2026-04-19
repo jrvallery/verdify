@@ -27,6 +27,19 @@ class TestWebsite:
         status = curl_get("https://127.0.0.1/plans/", "verdify.ai")
         assert status in (200, 301, 302), f"Plans page returned {status}"
 
+    def test_forecast_page(self):
+        """Sprint 20 Phase 7: auto-generated forecast page at /forecast/."""
+        status = curl_get("https://127.0.0.1/forecast/", "verdify.ai")
+        assert status in (200, 301, 302), f"Forecast page returned {status}"
+
+    def test_todays_plan_page_served(self):
+        """Sprint 20 Phase 6: today's plan markdown should be served (auto-publish)."""
+        from datetime import datetime
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        status = curl_get(f"https://127.0.0.1/plans/{today}", "verdify.ai")
+        assert status in (200, 301, 302), f"Today's plan page ({today}) returned {status}"
+
     def test_static_assets(self):
         """CSS/JS must load."""
         status = curl_get("https://127.0.0.1/static/styles.css", "verdify.ai")

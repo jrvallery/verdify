@@ -1,0 +1,12 @@
+[Unit]
+Description=Regenerate forecast manifestation page from weather_forecast (Sprint 20 Phase 7)
+After=verdify-timescaledb.service
+
+[Service]
+Type=oneshot
+Environment=TZ=America/Denver
+ExecStart=/srv/greenhouse/.venv/bin/python /srv/verdify/scripts/generate-forecast-page.py
+StandardOutput=append:/var/local/verdify/state/forecast-page.log
+StandardError=append:/var/local/verdify/state/forecast-page.log
+User=jason
+Nice=10

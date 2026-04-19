@@ -11,12 +11,23 @@ Transport: streamable-http on port 8400
 
 import json
 import os
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
 import asyncpg
+from pydantic import ValidationError
 
 from mcp.server.fastmcp import FastMCP
+
+# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
+sys.path.insert(0, "/mnt/iris/verdify")
+from verdify_schemas import (  # noqa: E402
+    ALL_TUNABLES,
+    Plan,
+    PlanEvaluation,
+    PlanHypothesisStructured,
+)
 
 # ── Config ──
 # Read DB password from .env
@@ -222,6 +233,9 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
         "mister_engage_delay_s",
         "mister_all_delay_s",
     }
+    # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
+    if parameter not in ALL_TUNABLES:
+        return json.dumps({"error": f"'{parameter}' is not a known tunable — not in verdify_schemas.ALL_TUNABLES"})
     if parameter not in TIER1:
         return json.dumps({"error": f"'{parameter}' is not a Tier 1 tunable", "allowed": sorted(TIER1)})
 
@@ -344,64 +358,109 @@ async def set_plan(
     The dispatcher executes these on schedule — the greenhouse follows the plan even if the planner goes offline.
 
     plan_id: unique ID like 'iris-YYYYMMDD-HHMM'
-    hypothesis: what you expect this plan to achieve
+    hypothesis: what you expect this plan to achieve — may optionally include a
+        fenced ```json block matching PlanHypothesisStructured (conditions +
+        stress_windows + rationale). If present, it's validated and stored in
+        plan_journal.hypothesis_structured for structured downstream rendering.
     transitions: JSON array of objects: [{"ts": "ISO8601-with-TZ", "params": {"param": value, ...}, "reason": "..."}]
     experiment: optional one-line experiment description
     expected_outcome: optional measurable prediction"""
+    # Sprint 20: validate the whole envelope through Plan schema before any DB writes.
+    # This rejects unknown tunables, inverted temp/VPD bands, non-monotonic transitions,
+    # bad plan_id format, timezone-naive timestamps, etc. — at the MCP boundary, so
+    # partial plans never land in setpoint_plan.
     try:
-        waypoints = json.loads(transitions)
+        waypoints_raw = json.loads(transitions)
     except json.JSONDecodeError as e:
         return json.dumps({"error": f"Invalid JSON in transitions: {e}"})
 
-    if not waypoints or not isinstance(waypoints, list):
-        return json.dumps({"error": "transitions must be a non-empty JSON array"})
+    try:
+        plan = Plan.model_validate(
+            {
+                "plan_id": plan_id,
+                "hypothesis": hypothesis,
+                "experiment": experiment or None,
+                "expected_outcome": expected_outcome or None,
+                "transitions": waypoints_raw,
+            }
+        )
+    except ValidationError as e:
+        return json.dumps({"error": "Plan validation failed", "details": json.loads(e.json())})
+
+    # Sprint 20 Phase 5: try to extract a PlanHypothesisStructured JSON block
+    # from the hypothesis prose. Fence convention: ```json …``` anywhere in
+    # the text. Failure to find or validate is silent — the prose still lands.
+    structured_payload: str | None = None
+    structured_warning: str | None = None
+    import re as _re
+
+    m = _re.search(r"```json\s*(\{.*?\})\s*```", hypothesis, _re.DOTALL)
+    if m:
+        try:
+            structured = PlanHypothesisStructured.model_validate_json(m.group(1))
+            structured_payload = structured.model_dump_json()
+        except ValidationError as e:
+            structured_warning = f"structured hypothesis block present but invalid: {e.errors()[:3]}"
 
     conn = await _db()
     try:
         # Deactivate existing future waypoints
         await conn.execute("UPDATE setpoint_plan SET is_active = false WHERE ts > now() AND is_active = true")
 
-        # Write new waypoints
+        # Write new waypoints (everything pre-validated — no further per-row guards needed)
         rows_written = 0
-        for wp in waypoints:
-            ts_str = wp.get("ts")
-            params = wp.get("params", {})
-            reason = wp.get("reason", "")
-            if not ts_str or not params:
-                continue
-            # Parse ISO timestamp string to datetime for asyncpg
-            ts = datetime.fromisoformat(ts_str)
-            for param, value in params.items():
+        for wp in plan.transitions:
+            for param, value in wp.params.items():
                 await conn.execute(
                     """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
                        VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
-                    ts,
+                    wp.ts,
                     param,
                     float(value),
-                    plan_id,
-                    reason,
+                    plan.plan_id,
+                    wp.reason or "",
                 )
                 rows_written += 1
 
-        # Write journal entry
+        # Write journal entry — structured JSONB column populated only if
+        # the PlanHypothesisStructured block was present AND valid.
         await conn.execute(
-            """INSERT INTO plan_journal (plan_id, created_at, hypothesis, experiment, expected_outcome, greenhouse_id)
-               VALUES ($1, now(), $2, $3, $4, 'vallery')""",
-            plan_id,
-            hypothesis,
-            experiment or None,
-            expected_outcome or None,
+            """INSERT INTO plan_journal
+                 (plan_id, created_at, hypothesis, experiment, expected_outcome,
+                  hypothesis_structured, greenhouse_id)
+               VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery')""",
+            plan.plan_id,
+            plan.hypothesis,
+            plan.experiment,
+            plan.expected_outcome,
+            structured_payload,
         )
 
-        return json.dumps(
-            {
-                "ok": True,
-                "plan_id": plan_id,
-                "transitions": len(waypoints),
-                "rows_written": rows_written,
-                "note": "Dispatcher will execute waypoints on schedule. Old future waypoints deactivated.",
-            }
-        )
+        # Sprint 20 Phase 6: drop a trigger file so verdify-plan-publish.path
+        # fires and regenerates the daily plan page. Local-SSD location so
+        # inotify actually works (NFS path units don't fire reliably).
+        try:
+            from datetime import UTC
+            from datetime import datetime as _dt
+
+            trigger_path = Path("/var/local/verdify/state/plan-publish-trigger")
+            trigger_path.parent.mkdir(parents=True, exist_ok=True)
+            trigger_path.write_text(f"{plan.plan_id}\n{_dt.now(UTC).isoformat()}\n")
+        except Exception as e:  # never block plan persistence on trigger failures
+            log_msg = f"plan-publish trigger write failed (non-fatal): {e}"
+            print(log_msg)
+
+        result = {
+            "ok": True,
+            "plan_id": plan.plan_id,
+            "transitions": len(plan.transitions),
+            "rows_written": rows_written,
+            "structured_hypothesis": structured_payload is not None,
+            "note": "Dispatcher will execute waypoints on schedule. Old future waypoints deactivated.",
+        }
+        if structured_warning:
+            result["structured_warning"] = structured_warning
+        return json.dumps(result)
     finally:
         await conn.close()
 
@@ -415,25 +474,34 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
     outcome_score: 1-10 score for how well the plan achieved its hypothesis
     actual_outcome: what actually happened (stress hours, compliance, key observations)
     lesson_extracted: new lesson learned, or empty if none"""
-    if not 1 <= outcome_score <= 10:
-        return json.dumps({"error": "outcome_score must be 1-10"})
+    try:
+        ev = PlanEvaluation.model_validate(
+            {
+                "plan_id": plan_id,
+                "outcome_score": outcome_score,
+                "actual_outcome": actual_outcome,
+                "lesson_extracted": lesson_extracted or None,
+            }
+        )
+    except ValidationError as e:
+        return json.dumps({"error": "PlanEvaluation validation failed", "details": json.loads(e.json())})
 
     conn = await _db()
     try:
-        existing = await conn.fetchrow("SELECT plan_id FROM plan_journal WHERE plan_id = $1", plan_id)
+        existing = await conn.fetchrow("SELECT plan_id FROM plan_journal WHERE plan_id = $1", ev.plan_id)
         if not existing:
-            return json.dumps({"error": f"Plan '{plan_id}' not found in plan_journal"})
+            return json.dumps({"error": f"Plan '{ev.plan_id}' not found in plan_journal"})
 
         await conn.execute(
             """UPDATE plan_journal SET
                 outcome_score = $2, actual_outcome = $3, lesson_extracted = $4, validated_at = now()
                WHERE plan_id = $1""",
-            plan_id,
-            outcome_score,
-            actual_outcome,
-            lesson_extracted or None,
+            ev.plan_id,
+            ev.outcome_score,
+            ev.actual_outcome,
+            ev.lesson_extracted,
         )
-        return json.dumps({"ok": True, "plan_id": plan_id, "outcome_score": outcome_score})
+        return json.dumps({"ok": True, "plan_id": ev.plan_id, "outcome_score": ev.outcome_score})
     finally:
         await conn.close()
 

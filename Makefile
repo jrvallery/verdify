@@ -15,11 +15,11 @@ help: ## Show this help
 # ── Quality ─────────────────────────────────────────────────────────
 
 lint: ## Run ruff linter on all Python files
-	$(RUFF) check ingestor/ api/ scripts/*.py tests/
+	$(RUFF) check ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
 
 format: ## Auto-format Python files with ruff
-	$(RUFF) format ingestor/ api/ scripts/*.py tests/
-	$(RUFF) check --fix ingestor/ api/ scripts/*.py tests/
+	$(RUFF) format ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
+	$(RUFF) check --fix ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
 
 check: lint test test-firmware firmware-check ## Run all checks (lint + test + native firmware tests + firmware compile)
 	@echo ""

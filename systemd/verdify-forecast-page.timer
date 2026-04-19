@@ -1,0 +1,12 @@
+[Unit]
+Description=Verdify forecast page — regenerate every 30 minutes
+After=verdify-timescaledb.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+AccuracySec=30s
+Unit=verdify-forecast-page.service
+
+[Install]
+WantedBy=timers.target

@@ -52,6 +52,7 @@ from tasks import (
     ha_sensor_sync,
     matview_refresh,
     planning_heartbeat,
+    setpoint_confirmation_monitor,
     setpoint_dispatcher,
     shelly_sync,
     tempest_sync,
@@ -628,12 +629,33 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                 log.error(f"diagnostics write error: {e}")
 
             # Setpoint snapshot: write ESP32 configured values (cfg_* readback)
+            # FW-4 (Sprint 20): same pass also closes the confirmation loop —
+            # any setpoint_changes row whose value matches the cfg readback
+            # within the 1% dispatcher dead-band gets confirmed_at = now().
+            # Rows that never match stay NULL; the setpoint_confirmation_monitor
+            # task in tasks.py (FB-1) alerts after 5 min.
             if state.cfg_readback:
                 try:
                     async with pool.acquire() as conn:
                         await conn.executemany(
                             "INSERT INTO setpoint_snapshot (ts, parameter, value) VALUES ($1, $2, $3)",
                             [(ts, param, val) for param, val in state.cfg_readback.items()],
+                        )
+                        # FW-4 confirmation loop — one UPDATE per readback param
+                        # (tiny batch; no worse than the INSERT above).
+                        # Dead-band: abs(sc.value - cfg_val) / max(|cfg_val|, 1e-3) < 0.01
+                        # — same math as ingestor.tasks._should_skip.
+                        await conn.executemany(
+                            """
+                            UPDATE setpoint_changes
+                               SET confirmed_at = now()
+                             WHERE parameter = $1
+                               AND confirmed_at IS NULL
+                               AND ts > now() - interval '30 minutes'
+                               AND abs(value - $2::double precision)
+                                     / greatest(abs($2::double precision), 1e-3) < 0.01
+                            """,
+                            [(param, val) for param, val in state.cfg_readback.items()],
                         )
                 except Exception as e:
                     log.error(f"setpoint_snapshot write error: {e}")
@@ -842,6 +864,7 @@ async def task_loop(pool: asyncpg.Pool) -> None:
         ("alert_monitor", 300, alert_monitor),
         # reactive_planner removed in Sprint 5 P6 — replaced by forecast deviation monitor
         ("setpoint_dispatch", 300, setpoint_dispatcher),
+        ("setpoint_confirmation", 300, setpoint_confirmation_monitor),
         ("forecast_sync", 3600, forecast_sync),
         ("forecast_actions", 900, forecast_action_engine),
         ("deviation_check", 900, forecast_deviation_check),

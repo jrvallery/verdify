@@ -1,0 +1,14 @@
+[Unit]
+Description=Publish today's daily plan markdown (Sprint 20 Phase 6)
+After=verdify-timescaledb.service
+
+[Service]
+Type=oneshot
+# Use MDT date semantics — plan_id timestamps are in America/Denver, so the
+# plan page we publish is "today in Denver" not "today in UTC".
+Environment=TZ=America/Denver
+ExecStart=/bin/bash -c 'python3 /srv/verdify/scripts/generate-daily-plan.py --date "$(date +%%Y-%%m-%%d)"'
+StandardOutput=append:/var/local/verdify/state/plan-publish.log
+StandardError=append:/var/local/verdify/state/plan-publish.log
+User=jason
+Nice=10

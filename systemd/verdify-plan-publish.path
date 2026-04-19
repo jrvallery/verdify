@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for new plan trigger and publish daily plan markdown
+After=verdify-ingestor.service
+
+[Path]
+PathModified=/var/local/verdify/state/plan-publish-trigger
+Unit=verdify-plan-publish.service
+
+[Install]
+WantedBy=multi-user.target

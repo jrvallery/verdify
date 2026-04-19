@@ -2067,3 +2067,115 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 pass
         except Exception as restart_err:
             log.error("MCP server restart failed: %s", restart_err)
+
+
+# ═════════════════════════════════════════════════════════════════
+# 16. SETPOINT CONFIRMATION MONITOR (FB-1, Sprint 20 — every 300s)
+#
+# Closes Milestone A4 feedback loop: every push the dispatcher makes must
+# be confirmed by the ESP32's cfg_* readback within 5 minutes, or we open
+# a `setpoint_unconfirmed` alert. Confirmation itself happens in
+# ingestor.py's setpoint_snapshot pass — this task just fires alerts for
+# the rows that stayed NULL.
+#
+# Only checks params that have a cfg_* readback route (CFG_READBACK_MAP
+# values). Params without readback are not monitored — their confirmation
+# remains perpetually NULL by design. The 52-param readback gap is
+# tracked as a Sprint 21 firmware follow-up.
+# ═════════════════════════════════════════════════════════════════
+from entity_map import CFG_READBACK_MAP  # noqa: E402
+
+_READBACKABLE_PARAMS: list[str] = sorted(set(CFG_READBACK_MAP.values()))
+
+
+async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
+    """FB-1: alert on setpoint_changes rows that never confirmed.
+
+    Severity:
+      - warning: 5 min < age < 15 min
+      - critical: age >= 15 min (escalation)
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT parameter,
+                   value,
+                   ts,
+                   EXTRACT(EPOCH FROM (now() - ts))::int AS age_s
+              FROM setpoint_changes
+             WHERE confirmed_at IS NULL
+               AND ts < now() - interval '5 minutes'
+               AND ts > now() - interval '1 hour'
+               AND parameter = ANY($1::text[])
+             ORDER BY ts DESC
+            """,
+            _READBACKABLE_PARAMS,
+        )
+        if not rows:
+            return
+
+        for r in rows:
+            age_s = int(r["age_s"])
+            severity = "critical" if age_s >= 900 else "warning"
+
+            # last cfg readback for that param (best-effort context)
+            snap = await conn.fetchrow(
+                "SELECT value, ts FROM setpoint_snapshot WHERE parameter=$1 ORDER BY ts DESC LIMIT 1",
+                r["parameter"],
+            )
+            last_cfg = float(snap["value"]) if snap and snap["value"] is not None else None
+
+            # Skip duplicate alerts: one open alert per (parameter, ts) pair.
+            existing = await conn.fetchval(
+                "SELECT id FROM alert_log "
+                "WHERE alert_type='setpoint_unconfirmed' "
+                "  AND disposition='open' "
+                "  AND sensor_id=$1",
+                f"setpoint.{r['parameter']}",
+            )
+            if existing is not None:
+                # Already alerted — escalate severity only if crossed the 15-min threshold
+                if severity == "critical":
+                    await conn.execute(
+                        "UPDATE alert_log SET severity='critical', message=$2, details=$3 WHERE id=$1",
+                        existing,
+                        (
+                            f"Setpoint unconfirmed >15 min: {r['parameter']}={float(r['value']):.3f} "
+                            f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
+                            f"{last_cfg if last_cfg is not None else '(none)'}"
+                        ),
+                        json.dumps(
+                            {
+                                "parameter": r["parameter"],
+                                "requested_value": float(r["value"]),
+                                "last_cfg_readback": last_cfg,
+                                "age_s": age_s,
+                                "pushed_at": r["ts"].isoformat(),
+                            }
+                        ),
+                    )
+                continue
+
+            await conn.execute(
+                "INSERT INTO alert_log "
+                "(alert_type, severity, category, sensor_id, message, details, source) "
+                "VALUES ('setpoint_unconfirmed', $1, 'system', $2, $3, $4::jsonb, 'ingestor')",
+                severity,
+                f"setpoint.{r['parameter']}",
+                (
+                    f"Setpoint unconfirmed >5 min: {r['parameter']}={float(r['value']):.3f} "
+                    f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
+                    f"{last_cfg if last_cfg is not None else '(none)'}"
+                ),
+                json.dumps(
+                    {
+                        "parameter": r["parameter"],
+                        "requested_value": float(r["value"]),
+                        "last_cfg_readback": last_cfg,
+                        "age_s": age_s,
+                        "pushed_at": r["ts"].isoformat(),
+                    }
+                ),
+            )
+
+        log.info("Setpoint confirmation monitor: %d unconfirmed row(s)", len(rows))
