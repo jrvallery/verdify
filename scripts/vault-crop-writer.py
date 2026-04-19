@@ -18,6 +18,9 @@ from pathlib import Path
 
 import asyncpg
 
+sys.path.insert(0, "/mnt/iris/verdify")
+from verdify_schemas import CropVaultFrontmatter  # noqa: E402
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [vault-crop] %(levelname)s %(message)s",
@@ -91,19 +94,33 @@ async def write_crop(conn, crop_id: int) -> bool:
     # Build markdown
     lines = []
 
-    # Frontmatter
-    lines.append("---")
-    lines.append(f"name: {name}")
-    if variety:
-        lines.append(f"variety: {variety}")
-    lines.append(f"position: {position}")
-    lines.append(f"zone: {zone}")
-    lines.append(f"stage: {stage}")
-    lines.append(f"planted_date: {fmt_date(planted)}")
+    # Sprint 22 follow-up: frontmatter validated through CropVaultFrontmatter
+    # so field-type drift fails at the boundary instead of silently shipping
+    # broken YAML to Obsidian. Output is still emitted manually to preserve
+    # byte-stable order (name, variety, position, zone, stage, planted_date,
+    # tags) that Obsidian dataview queries were originally authored against.
     tags = ["crop", zone] if zone else ["crop"]
     if "hydro" in position.lower():
         tags.append("hydro")
-    lines.append(f"tags: [{', '.join(tags)}]")
+    fm = CropVaultFrontmatter(
+        name=name,
+        variety=variety or None,
+        position=position,
+        zone=zone,
+        stage=stage,
+        planted_date=planted,
+        tags=tags,
+    )
+
+    lines.append("---")
+    lines.append(f"name: {fm.name}")
+    if fm.variety:
+        lines.append(f"variety: {fm.variety}")
+    lines.append(f"position: {fm.position}")
+    lines.append(f"zone: {fm.zone}")
+    lines.append(f"stage: {fm.stage}")
+    lines.append(f"planted_date: {fm.planted_date}")
+    lines.append(f"tags: [{', '.join(fm.tags)}]")
     lines.append("---")
     lines.append("")
 
