@@ -30,6 +30,7 @@ from verdify_schemas import (
     EnergySample,
     EquipmentStateEvent,
     HAEntityState,
+    OpenMeteoForecastResponse,
     SystemStateRow,
 )
 
@@ -701,7 +702,9 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     {
                         "alert_type": "safety_invalid",
                         "severity": "critical",
-                        "category": "safety",
+                        # "system" per AlertCategory literal; semantic
+                        # "safety" subtype is Sprint 25's discriminated union.
+                        "category": "system",
                         "sensor_id": f"setpoint.{param}",
                         "zone": None,
                         "message": f"CRITICAL: {param}={val} is invalid — state machine safety compromised",
@@ -893,20 +896,17 @@ _last_pushed: dict[str, float] = {}
 
 # FW-3 (Sprint 18): physics sanity invariants. Planner values outside
 # these bounds are clamped before dispatch and logged to setpoint_clamps
-# with reason='invariant_violation'. Catches physically-impossible or
-# dangerous values (e.g. fog_window_start=25, max_relief_cycles=50) that
-# would otherwise be silently written to setpoint_changes and confuse the
-# firmware or waste water budget.
+# with reason='invariant_violation'. Every key must be a canonical
+# ALL_TUNABLES entry — see test_physics_invariants_are_canonical.
 #
 # Format: param → (min, max). None means no bound on that side.
 _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
     # Time-of-day windows (hour of day)
-    "fog_window_start": (0, 23),
-    "fog_window_end": (1, 24),
+    "fog_time_window_start": (0, 23),
+    "fog_time_window_end": (1, 24),
     "gl_sunrise_hour": (0, 23),
     "gl_sunset_hour": (1, 24),
-    # Integer counters
-    "max_relief_cycles": (1, 10),
+    # Integer counters (seconds)
     "mister_engage_delay_s": (5, 300),
     "mister_all_delay_s": (10, 600),
     "vpd_watch_dwell_s": (10, 600),
@@ -914,17 +914,13 @@ _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
     "mister_water_budget_gal": (100, 5000),
     # Temperature bounds (°F)
     "fog_min_temp_f": (32, 90),
-    "fog_min_temp": (32, 90),
     "safety_min": (30, 60),
     "safety_max": (80, 120),
     # Percentages
     "fog_rh_ceiling_pct": (50, 100),
-    "fog_rh_ceiling": (50, 100),
     # VPD (kPa) safety rails
     "safety_vpd_min": (0.1, 1.0),
     "safety_vpd_max": (1.5, 5.0),
-    "vpd_max_safe": (1.5, 5.0),
-    "vpd_min_safe": (0.1, 1.0),
     # Hysteresis (kPa)
     "vpd_hysteresis": (0.05, 1.0),
     # Biases (°F)
@@ -1229,51 +1225,66 @@ _FORECAST_URL = (
 
 
 def _fetch_forecast() -> list[dict] | None:
+    """Fetch 16-day hourly forecast from Open-Meteo. Validated via
+    OpenMeteoForecastResponse — parallel-array length mismatch fails loud
+    instead of silently index-truncating like the old hand-zipped loop."""
     req = urllib.request.Request(_FORECAST_URL, headers={"User-Agent": "verdify-ingestor/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        hourly = data.get("hourly", {})
-        times = hourly.get("time", [])
-        if not times:
-            return None
-        n = len(times)
-        rows = []
-        for i in range(n):
-            rows.append(
-                {
-                    "ts": times[i],
-                    "temp_f": hourly.get("temperature_2m", [None] * n)[i],
-                    "rh_pct": hourly.get("relative_humidity_2m", [None] * n)[i],
-                    "dew_point_f": hourly.get("dew_point_2m", [None] * n)[i],
-                    "feels_like_f": hourly.get("apparent_temperature", [None] * n)[i],
-                    "vpd_kpa": hourly.get("vapour_pressure_deficit", [None] * n)[i],
-                    "precip_prob_pct": hourly.get("precipitation_probability", [None] * n)[i],
-                    "precip_in": hourly.get("precipitation", [None] * n)[i],
-                    "rain_in": hourly.get("rain", [None] * n)[i],
-                    "snow_in": hourly.get("snowfall", [None] * n)[i],
-                    "weather_code": hourly.get("weather_code", [None] * n)[i],
-                    "cloud_cover_pct": hourly.get("cloud_cover", [None] * n)[i],
-                    "cloud_cover_low_pct": hourly.get("cloud_cover_low", [None] * n)[i],
-                    "cloud_cover_high_pct": hourly.get("cloud_cover_high", [None] * n)[i],
-                    "wind_speed_mph": hourly.get("wind_speed_10m", [None] * n)[i],
-                    "wind_dir_deg": hourly.get("wind_direction_10m", [None] * n)[i],
-                    "wind_gust_mph": hourly.get("wind_gusts_10m", [None] * n)[i],
-                    "solar_w_m2": hourly.get("shortwave_radiation", [None] * n)[i],
-                    "direct_radiation_w_m2": hourly.get("direct_radiation", [None] * n)[i],
-                    "diffuse_radiation_w_m2": hourly.get("diffuse_radiation", [None] * n)[i],
-                    "uv_index": hourly.get("uv_index", [None] * n)[i],
-                    "sunshine_duration_s": hourly.get("sunshine_duration", [None] * n)[i],
-                    "surface_pressure_hpa": hourly.get("surface_pressure", [None] * n)[i],
-                    "et0_mm": hourly.get("et0_fao_evapotranspiration", [None] * n)[i],
-                    "soil_temp_f": hourly.get("soil_temperature_0cm", [None] * n)[i],
-                    "visibility_m": hourly.get("visibility", [None] * n)[i],
-                }
-            )
-        return rows
+            raw = json.loads(resp.read())
     except Exception as e:
         log.warning("Forecast fetch failed: %s", e)
         return None
+
+    try:
+        response = OpenMeteoForecastResponse.model_validate(raw)
+    except ValidationError as e:
+        log.warning("Open-Meteo response failed schema validation: %s", e)
+        return None
+
+    hourly = response.hourly
+    times = hourly.time
+    if not times:
+        return None
+    n = len(times)
+
+    def col(name: str) -> list:
+        arr = getattr(hourly, name, None)
+        return arr if arr is not None else [None] * n
+
+    rows = []
+    for i in range(n):
+        rows.append(
+            {
+                "ts": times[i],
+                "temp_f": col("temperature_2m")[i],
+                "rh_pct": col("relative_humidity_2m")[i],
+                "dew_point_f": col("dew_point_2m")[i],
+                "feels_like_f": col("apparent_temperature")[i],
+                "vpd_kpa": col("vapour_pressure_deficit")[i],
+                "precip_prob_pct": col("precipitation_probability")[i],
+                "precip_in": col("precipitation")[i],
+                "rain_in": col("rain")[i],
+                "snow_in": col("snowfall")[i],
+                "weather_code": col("weather_code")[i],
+                "cloud_cover_pct": col("cloud_cover")[i],
+                "cloud_cover_low_pct": col("cloud_cover_low")[i],
+                "cloud_cover_high_pct": col("cloud_cover_high")[i],
+                "wind_speed_mph": col("wind_speed_10m")[i],
+                "wind_dir_deg": col("wind_direction_10m")[i],
+                "wind_gust_mph": col("wind_gusts_10m")[i],
+                "solar_w_m2": col("shortwave_radiation")[i],
+                "direct_radiation_w_m2": col("direct_radiation")[i],
+                "diffuse_radiation_w_m2": col("diffuse_radiation")[i],
+                "uv_index": col("uv_index")[i],
+                "sunshine_duration_s": col("sunshine_duration")[i],
+                "surface_pressure_hpa": col("surface_pressure")[i],
+                "et0_mm": col("et0_fao_evapotranspiration")[i],
+                "soil_temp_f": col("soil_temperature_0cm")[i],
+                "visibility_m": col("visibility")[i],
+            }
+        )
+    return rows
 
 
 async def forecast_sync(pool: asyncpg.Pool) -> None:
@@ -1677,7 +1688,18 @@ _DS_WATTAGES = {
 
 
 async def daily_summary_live(pool: asyncpg.Pool) -> None:
-    """Update daily_summary for today with live running aggregates."""
+    """Update daily_summary for today with live running aggregates.
+
+    Two-writer contract (paired with ingestor.py::write_daily_summary):
+      - `write_daily_summary` owns the midnight UPSERT of raw ESP32 accumulators.
+      - This function owns the 30-min UPDATE of derived aggregates:
+        climate min/max/avg, stress_hours_*, compliance_pct (temp/vpd/both),
+        min_dp_margin_f, dp_risk_hours, kwh_estimated, therms_estimated,
+        cost_electric/gas/water/total. It also rewrites cycles/runtimes
+        computed from equipment_state transitions — which overrides the
+        midnight ESP32-accumulator values for the current day (intentional:
+        equipment-state-derived is the higher-fidelity source).
+    """
     async with pool.acquire() as conn:
         today = await conn.fetchval("SELECT (now() AT TIME ZONE 'America/Denver')::date")
 
