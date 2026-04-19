@@ -256,6 +256,7 @@ time:
               id(runtime_mister_south_ms) = 0;
               id(runtime_mister_west_ms) = 0;
               id(runtime_mister_center_ms) = 0;
+              id(cnt_mister_fairness_overrides_today) = 0;
           - logger.log: "Daily cycle counters reset (midnight)"
 
 # ───────────────────── BINARY SENSORS ─────────────────────

@@ -437,6 +437,31 @@ globals:
     restore_value: no
     initial_value: '0'
 
+  # ─── Per-zone last-fire timestamps (ms, sprint-2 fairness watchdog) ───
+  # Stamped by turn_on_zone() in controls.yaml. select_overdue_zone() reads
+  # these to steer misting to stressed zones the scoring formula would
+  # otherwise under-serve. `0` means "never fired since boot" — handled
+  # naturally by `now_ms - 0 == now_ms` which only exceeds the 10 min
+  # fairness window after 10 min of uptime.
+  - id: last_fire_south_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_fire_west_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_fire_center_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Daily counter of fairness-watchdog overrides (reset at midnight).
+  - id: cnt_mister_fairness_overrides_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+
   # ─── Irrigation state machine ───
   - id: irrig_state
     type: int

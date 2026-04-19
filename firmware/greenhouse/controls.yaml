@@ -504,9 +504,10 @@ interval:
                 id(south_wall_mister).turn_off();
                 id(west_wall_mister).turn_off();
                 id(center_mister).turn_off();
-                if(zone == 1) id(south_wall_mister).turn_on();
-                else if(zone == 2) id(west_wall_mister).turn_on();
-                else if(zone == 3) id(center_mister).turn_on();
+                // Stamp last-fire ms for the fairness watchdog (sprint-2).
+                if(zone == 1)      { id(south_wall_mister).turn_on(); id(last_fire_south_ms)  = now_ms; }
+                else if(zone == 2) { id(west_wall_mister).turn_on();  id(last_fire_west_ms)   = now_ms; }
+                else if(zone == 3) { id(center_mister).turn_on();     id(last_fire_center_ms) = now_ms; }
                 id(mister_pulse_zone) = zone;
                 id(mister_selected_zone) = zone;
               };
@@ -520,8 +521,47 @@ interval:
 
               const char* zone_names[] = {"none", "south", "west", "center"};
 
+              // Fairness watchdog (sprint-2): if a stressed zone hasn't fired in
+              // FAIRNESS_WINDOW_MS, it bypasses the stress-scoring contest. Motivated
+              // by the 90-day audit showing west stressed 36% of time but firing only
+              // 13% of mister cycles — center's use of avg_vpd as a stress proxy
+              // correlates it with south, and east adjacency boosts south+center when
+              // east is stressed; west gets neither boost. Guarantees no stressed
+              // zone waits longer than 10 min without a pulse. Ties → most overdue.
+              auto select_overdue_zone = [&]() -> int {
+                const uint32_t FAIRNESS_WINDOW_MS = 600000UL;  // 10 min
+                int candidate = 0;
+                uint32_t candidate_age = 0;
+                auto check = [&](int z, float vpd, float target, uint32_t last_fire) {
+                  if(isnan(vpd) || target <= 0.0f) return;
+                  if(vpd <= target) return;  // zone not stressed
+                  uint32_t age = now_ms - last_fire;  // last_fire==0 ⇒ age == uptime
+                  if(age > FAIRNESS_WINDOW_MS && age > candidate_age) {
+                    candidate = z;
+                    candidate_age = age;
+                  }
+                };
+                check(1, south_vpd, id(vpd_target_south),  id(last_fire_south_ms));
+                check(2, west_vpd,  id(vpd_target_west),   id(last_fire_west_ms));
+                check(3, avg_vpd,   id(vpd_target_center), id(last_fire_center_ms));
+                return candidate;
+              };
+
+              // Pulse-zone selector: watchdog first, stress scoring second.
+              // Caller must have already decided "fire a pulse now"; this only
+              // answers "which zone." Increments fairness counter when watchdog wins.
+              auto select_zone_for_pulse = [&]() -> int {
+                int overdue = select_overdue_zone();
+                if(overdue > 0) {
+                  id(cnt_mister_fairness_overrides_today) += 1;
+                  ESP_LOGI("mister","FAIRNESS: zone=%s overdue — overriding scoring",
+                           zone_names[overdue]);
+                  return overdue;
+                }
+                return select_most_stressed_zone();
+              };
+
               // --- S1 ENGAGE: misters start when any zone is stressed OR global threshold exceeded ---
-              int pre_zone = select_most_stressed_zone();
               bool global_stressed = (avg_vpd > VPDhi);
 
               if(id(mister_state) == 0
@@ -529,7 +569,8 @@ interval:
                  && id(humid_s1_duration_ms) >= MISTER_ENGAGE_DELAY_MS
                  && (any_zone_stressed || global_stressed)){
 
-                int zone = pre_zone > 0 ? pre_zone : 1;  // Use pre-computed zone, fallback south
+                int zone = select_zone_for_pulse();
+                if(zone == 0) zone = 1;  // Fallback south if no zone stressed
                 if(zone > 0) {  // Engage
                   id(mister_state) = 1;  // S1 = single zone pulse
                   id(mister_vpd_at_start) = avg_vpd;  // Track effectiveness
@@ -548,7 +589,7 @@ interval:
                    && avg_vpd > id(mister_all_kpa)){
                   id(mister_state) = 2;  // S2 = all zones rotating
                   id(mister_rotation_index) = 0;
-                  int zone = select_most_stressed_zone();
+                  int zone = select_zone_for_pulse();
                   turn_on_zone(zone);
                   uint32_t weighted_ms = PULSE_ON_MS;
                   float svpd = isnan(south_vpd) ? 0.0f : south_vpd;
@@ -573,7 +614,7 @@ interval:
                 ESP_LOGI("mister","S2→S1: VPD=%.2f", avg_vpd);
                 id(mister_state) = 1;
                 id(humid_s2_duration_ms) = 0;
-                int zone = select_most_stressed_zone();
+                int zone = select_zone_for_pulse();
                 turn_on_zone(zone);
                 id(mister_pulse_timer_ms) = PULSE_ON_MS;
               }
@@ -615,7 +656,7 @@ interval:
                     // === GAP → NEXT PULSE ===
                     if(id(mister_state) == 1){
                       // S1: re-read VPD, pulse most stressed zone
-                      int zone = select_most_stressed_zone();
+                      int zone = select_zone_for_pulse();
                       if(zone == 0) zone = 1;  // Fallback
                       id(mister_vpd_at_start) = avg_vpd;  // Track effectiveness
                       turn_on_zone(zone);
@@ -625,7 +666,7 @@ interval:
 
                     }else if(id(mister_state) == 2){
                       // S2: pick the most stressed zone each pulse (not round-robin)
-                      int zone = select_most_stressed_zone();
+                      int zone = select_zone_for_pulse();
                       if(zone == 0) zone = 1;  // Fallback to south if all zones in-band
                       id(mister_vpd_at_start) = avg_vpd;  // Track effectiveness
                       turn_on_zone(zone);

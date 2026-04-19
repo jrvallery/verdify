@@ -4,11 +4,15 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 ## In flight
 
-- **`firmware/sprint-1-housekeeping`** — drift fixes + dead-code cleanup + doc sync. No shipped control-logic change. See the sprint-1 commit for details.
+- **`firmware/sprint-2-zone-fairness`** — mister zone-rotation fairness watchdog. 90-day audit showed west stressed 36% of time but firing only 13% of mister cycles (53% of its >5min stress episodes never served). Adds a 10-min last-fire watchdog that overrides the stress-scoring formula when any zone has been stressed without firing. Counter `mister_fairness_overrides_today` exposed for post-deploy validation. See the sprint-2 commit message for full data + mechanism analysis.
 
-## Next up — `firmware/sprint-2-observability`
+## Recently landed
 
-Covers the findings from the 2026-04-18 audit that live outside firmware scope. Each item is a focused handoff PR filed into the owning agent's scope, labeled `requested-by: firmware`:
+- **`firmware/sprint-1-housekeeping`** — drift fixes + dead-code cleanup + doc sync. No shipped control-logic change.
+
+## Coordination queue (handoffs to other agents)
+
+Findings from the 2026-04-18 audit that live outside firmware scope. Each is a focused handoff PR filed into the owning agent's scope, labeled `requested-by: firmware`:
 
 - [ ] **Coordinator — EquipmentId schema reconciliation.** `verdify_schemas/telemetry.py:160-187` declares 7 IDs firmware never emits (`dehum`, `safety_dehum`, `occupancy`, `door_open`, `gl1`, `gl2`, `grow_light`) and misses ~16 that `ingestor/entity_map.py:94-137` routes to `equipment_state`. Add a drift guard in `verdify_schemas/tests/test_drift_guards.py` that asserts `EquipmentId` ⊇ the set emitted by entity_map.
 - [ ] **Coordinator — override flag enum guard.** Add a drift guard that compares `OverrideEvent.override_type` against the 7 flag names in `firmware/lib/greenhouse_types.h` (`OverrideFlags` struct). Today the schema accepts any string; a silent rename would corrupt `override_events`.

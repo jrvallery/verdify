@@ -1326,6 +1326,20 @@ sensor:
     update_interval: 30s
     lambda: "return id(runtime_mister_center_ms) / 3600000.0;"
 
+  # Sprint-2: fairness watchdog override counter. Increments each time
+  # select_overdue_zone() chose a zone because it had been stressed for
+  # ≥10 min without firing. Reset at midnight. Expect 0–5/day if the
+  # starvation pattern observed in the 90-day audit is real; 0 if the
+  # scoring formula is already fair in practice.
+  - platform: template
+    id: mister_fairness_overrides_today
+    name: "Mister Fairness Overrides (today)"
+    entity_category: diagnostic
+    state_class: total
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_mister_fairness_overrides_today);"
+
   - platform: template
     id: cfg_mister_engage_kpa
     name: "Cfg Mister Engage (kPa)"
