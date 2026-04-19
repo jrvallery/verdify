@@ -16,6 +16,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from config import OPENCLAW_SESSION_KEY, OPENCLAW_TOKEN, OPENCLAW_URL
@@ -24,6 +25,20 @@ log = logging.getLogger("iris_planner")
 
 DENVER = ZoneInfo("America/Denver")
 GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
+
+# Iris reads this at runtime from her agent-host filesystem. The canonical
+# version-controlled source is `docs/planner/greenhouse-playbook.md` in the
+# verdify repo; the agent-host path must be kept in sync. A missing playbook
+# means Iris silently loses detailed tuning guidance — so we check at send
+# time and (a) log critical, (b) flag the outgoing prompt so Iris knows to
+# degrade gracefully instead of referencing a file she can't open.
+PLANNER_PLAYBOOK_PATH = Path("/mnt/jason/agents/iris/skills/greenhouse-planner.md")
+if not PLANNER_PLAYBOOK_PATH.exists():  # pragma: no cover — host-path check
+    log.warning(
+        "Planner playbook missing at %s. Iris will not have detailed tuning "
+        "guidance at runtime. Restore from docs/planner/greenhouse-playbook.md.",
+        PLANNER_PLAYBOOK_PATH,
+    )
 
 # ── Standing directives (prepended to every planning prompt) ─────
 
@@ -66,6 +81,8 @@ HOW the ESP32 controller responds to conditions. You do not control relays direc
 
 **Full operational playbook:** Read `skills/greenhouse-planner.md` for detailed workflows,
 stress diagnostics, crop management patterns, lesson management, and anti-patterns.
+(Canonical source is `docs/planner/greenhouse-playbook.md` in the verdify repo.
+The skills/ copy is an agent-host mirror kept in sync by deploy.)
 
 **Planning cycle:** READ (scorecard + climate + forecast) → DIAGNOSE (which compliance axis
 is the bottleneck, which stress type dominates) → DECIDE (apply lessons, then forecast) →
@@ -501,6 +518,24 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> boo
         return False
 
     message = builder(context, label)
+
+    # If Iris's agent-host playbook is missing, prepend a warning so she
+    # knows detailed tuning guidance isn't available this cycle and flags
+    # it in her Slack brief. The canonical in-repo copy is pointed at so
+    # the operator can restore it. Without this check the degradation is
+    # silent — Iris would reference skills/greenhouse-planner.md in her
+    # reasoning but be unable to open it.
+    if not PLANNER_PLAYBOOK_PATH.exists():
+        log.critical("Sending planning event with missing playbook: %s", PLANNER_PLAYBOOK_PATH)
+        message = (
+            "## ⚠ DEGRADED MODE — Planner playbook missing\n\n"
+            f"`{PLANNER_PLAYBOOK_PATH}` is not readable at this cycle. Do NOT\n"
+            "reference `skills/greenhouse-planner.md` in your reasoning. Operate\n"
+            "from the embedded _PLANNER_KNOWLEDGE block in this prompt only, and\n"
+            "mention the degradation in your Slack brief so Jason can restore it\n"
+            "from `docs/planner/greenhouse-playbook.md` in the verdify repo.\n\n"
+            "---\n\n"
+        ) + message
 
     # SUNRISE/SUNSET/DEVIATION are high-priority — process immediately.
     # FORECAST/TRANSITION can wait for the next heartbeat.
