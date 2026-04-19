@@ -67,6 +67,40 @@ class TestTunableEnumShape:
         )
 
 
+class TestPhysicsInvariants:
+    """Sprint 24: `_PHYSICS_INVARIANTS` drift guard. Every key the dispatcher
+    clamps must be a canonical ALL_TUNABLES entry; non-canonical names would
+    fail SetpointChange validation upstream and never reach the invariant
+    check, making those entries dead defense. Catches the Sprint 18→23 drift
+    (fog_window_start vs fog_time_window_start, vpd_max_safe, etc.) at CI time.
+    """
+
+    def test_physics_invariants_are_canonical(self):
+        import pathlib
+
+        here = pathlib.Path(__file__).resolve()
+        repo_root = here.parent.parent.parent
+        ingestor_path = str(repo_root / "ingestor")
+
+        # Worktree-safe: prefer THIS repo's ingestor module. Unlike entity_map
+        # (which stays in lockstep across worktrees), _PHYSICS_INVARIANTS can
+        # differ per branch during a sprint, so we must import from the same
+        # commit as this test file. Force-reorder sys.path + clear cached import.
+        if ingestor_path in sys.path:
+            sys.path.remove(ingestor_path)
+        sys.path.insert(0, ingestor_path)
+        sys.modules.pop("tasks", None)
+
+        from tasks import _PHYSICS_INVARIANTS
+
+        invariant_keys = set(_PHYSICS_INVARIANTS.keys())
+        non_canonical = sorted(invariant_keys - set(ALL_TUNABLES))
+        assert not non_canonical, (
+            f"_PHYSICS_INVARIANTS has non-canonical keys: {non_canonical}. "
+            "Rename to match ALL_TUNABLES or remove. Dead keys are silently dead defense."
+        )
+
+
 class TestTunableParameterValidator:
     def test_accepts_known_numeric(self):
         adapter = TypeAdapter(TunableParameter)

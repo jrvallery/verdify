@@ -79,6 +79,7 @@ from verdify_schemas import (
     DailySummaryRow,
     Diagnostics,
     EquipmentStateEvent,
+    ESP32LogRow,
     OverrideEvent,
     SetpointChange,
     SetpointSnapshot,
@@ -354,24 +355,31 @@ async def write_override_events(pool: asyncpg.Pool, ts: datetime) -> None:
 
 
 async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
-    """Flush pending setpoint change events."""
+    """Flush pending setpoint change events.
+
+    These rows originate from the ESP32 reporting a configured-value change
+    (firmware local override, manual HA switch toggle, etc.) — not from the
+    dispatcher's own pushes (those write directly in tasks.py::setpoint_dispatcher
+    with source='plan' | 'band'). Tagged source='esp32' to preserve provenance
+    per SetpointSource literal in verdify_schemas/setpoint.py.
+    """
     if not state.pending_setpoints:
         return
     changes = state.pending_setpoints.copy()
     state.pending_setpoints.clear()
-    validated: list[tuple[datetime, str, float]] = []
+    validated: list[tuple[datetime, str, float, str]] = []
     for param, val in changes:
         try:
-            SetpointChange(ts=ts, parameter=param, value=val, greenhouse_id=GREENHOUSE_ID)
+            SetpointChange(ts=ts, parameter=param, value=val, source="esp32", greenhouse_id=GREENHOUSE_ID)
         except ValidationError as e:
             log.error(f"setpoint_changes skipped (validation failed: {e}): param={param} value={val}")
             continue
-        validated.append((ts, param, val))
+        validated.append((ts, param, val, "esp32"))
     if not validated:
         return
     async with pool.acquire() as conn:
         await conn.executemany(
-            "INSERT INTO setpoint_changes (ts, parameter, value) VALUES ($1, $2, $3)",
+            "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES ($1, $2, $3, $4)",
             validated,
         )
     log.debug(f"setpoint_changes: {len(validated)} changes written")
@@ -409,7 +417,18 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
 
 
 async def write_daily_summary(pool: asyncpg.Pool) -> None:
-    """Snapshot daily accumulator values. Called at 00:05 each day."""
+    """Snapshot daily accumulator values. Called at 00:05 each day.
+
+    Two-writer contract for daily_summary (see tasks.py::daily_summary_live):
+      - This function owns the midnight UPSERT of raw accumulators from the
+        ESP32's cycle/runtime/water counters: cycles_*, runtime_*_min,
+        runtime_mister_*_h, water_used_gal, mister_water_gal, dli_final.
+      - `daily_summary_live` refreshes every 30 min with the live-computed
+        climate rollups + stress_hours_* + compliance_pct + cost_* + dp_risk_*
+        and also rewrites runtimes/cycles from equipment_state transitions.
+    Column ownership overlaps on cycles/runtimes; `daily_summary_live`'s values
+    win for the current day because it runs after this snapshot.
+    """
     today = datetime.now(UTC).date()
     today_str = str(today)
     if state._daily_snapshot_date == today_str:
@@ -513,18 +532,31 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
     state.pending_logs.clear()
     ts = datetime.now(UTC)
 
+    # Validate each row through ESP32LogRow before the INSERT. Schema enforces
+    # message min_length=1 — empty-after-ANSI-strip payloads get dropped here
+    # instead of landing in the DB as blank rows.
+    validated: list[tuple[datetime, str, str | None, str]] = []
+    for lvl, tag, msg in logs:
+        try:
+            ESP32LogRow(ts=ts, level=lvl, tag=tag, message=msg)
+        except ValidationError:
+            continue
+        validated.append((ts, lvl, tag, msg))
+    if not validated:
+        return
+
     # Write to DB
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO esp32_logs (ts, level, tag, message) VALUES ($1, $2, $3, $4)",
-            [(ts, lvl, tag, msg) for lvl, tag, msg in logs],
+            validated,
         )
 
     # Push to Loki (best-effort, don't block on failure)
     try:
         loki_lines = []
         ts_ns = str(int(ts.timestamp() * 1e9))
-        for lvl, tag, msg in logs:
+        for _ts, lvl, tag, msg in validated:
             loki_lines.append([ts_ns, f"[{lvl}] [{tag or 'esp32'}] {msg}"])
         payload = json.dumps(
             {
@@ -542,7 +574,7 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
     except Exception:
         pass  # Don't fail ingestor if Loki is down
 
-    log.debug(f"esp32_logs: {len(logs)} messages written")
+    log.debug(f"esp32_logs: {len(validated)} messages written")
 
 
 def on_log_message(msg) -> None:
