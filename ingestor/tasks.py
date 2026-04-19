@@ -10,14 +10,28 @@ Replaces 10 cron jobs with a single in-process task scheduler.
 import asyncio
 import json
 import logging
+import sys
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from datetime import timedelta as _td
 from zoneinfo import ZoneInfo
 
+# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
+sys.path.insert(0, "/mnt/iris/verdify")
+
 import asyncpg
 import shared
+from pydantic import ValidationError
+
+from verdify_schemas import (
+    AlertEnvelope,
+    ClimateRow,
+    EnergySample,
+    EquipmentStateEvent,
+    HAEntityState,
+    SystemStateRow,
+)
 
 log = logging.getLogger("tasks")
 
@@ -33,6 +47,22 @@ from config import (
 from config import (
     load_token as _load_token,
 )
+
+
+def _ha_state(states: dict[str, dict], eid: str) -> HAEntityState | None:
+    """Validate a raw HA /api/states/{eid} payload into an HAEntityState.
+
+    Returns None if the entity isn't in the batch or the payload fails schema
+    validation (so callers can short-circuit rather than crashing the sync).
+    """
+    raw = states.get(eid)
+    if not raw:
+        return None
+    try:
+        return HAEntityState.model_validate(raw)
+    except ValidationError as e:
+        log.warning("HA entity %s failed schema validation: %s", eid, e)
+        return None
 
 
 def _parse_float(s) -> float | None:
@@ -198,25 +228,39 @@ async def shelly_sync(pool: asyncpg.Pool) -> None:
 
     vals = {}
     for eid, (col, conv) in _SHELLY_ENTITIES.items():
-        if eid in states:
-            v = _parse_float(states[eid].get("state", ""))
-            if v is not None:
-                vals[col] = conv(v) if conv else v
+        ha = _ha_state(states, eid)
+        if ha is None:
+            continue
+        v = ha.as_float()
+        if v is not None:
+            vals[col] = conv(v) if conv else v
     if not vals:
         return
 
+    ts = datetime.now(UTC)
     watts_total = vals.get("ch0_power_w", 0) + vals.get("ch1_power_w", 0)
     kwh_total = vals.get("ch0_energy_kwh") or 0
-
+    try:
+        sample = EnergySample(
+            ts=ts,
+            watts_total=watts_total,
+            watts_heat=vals.get("ch1_power_w", 0),
+            watts_fans=0,
+            watts_other=vals.get("ch0_power_w", 0),
+            kwh_today=kwh_total,
+        )
+    except ValidationError as e:
+        log.error("Shelly sample failed schema validation: %s", e)
+        return
     async with pool.acquire() as conn:
         await conn.execute(
             "INSERT INTO energy (ts, watts_total, watts_heat, watts_fans, watts_other, kwh_today) VALUES ($1,$2,$3,$4,$5,$6)",
-            datetime.now(UTC),
-            watts_total,
-            vals.get("ch1_power_w", 0),
-            0,
-            vals.get("ch0_power_w", 0),
-            kwh_total,
+            sample.ts,
+            sample.watts_total,
+            sample.watts_heat,
+            sample.watts_fans,
+            sample.watts_other,
+            sample.kwh_today,
         )
     log.debug("Shelly: %dW (ch0=%d ch1=%d)", watts_total, vals.get("ch0_power_w", 0), vals.get("ch1_power_w", 0))
 
@@ -258,11 +302,22 @@ async def tempest_sync(pool: asyncpg.Pool) -> None:
     now = datetime.now(UTC)
     outdoor_cols = {}
     for eid, (col, conv) in _TEMPEST_MAP.items():
-        if eid in states:
-            val = _parse_float(states[eid].get("state", ""))
-            if val is not None:
-                outdoor_cols[col] = conv(val) if conv else val
+        ha = _ha_state(states, eid)
+        if ha is None:
+            continue
+        val = ha.as_float()
+        if val is not None:
+            outdoor_cols[col] = conv(val) if conv else val
     if not outdoor_cols:
+        return
+
+    # Validate ranges on the outdoor columns before any DB write. ClimateRow
+    # tolerates missing/extra columns (extra="ignore") and just enforces the
+    # ge/le bounds on what it knows.
+    try:
+        ClimateRow.model_validate({"ts": now, **outdoor_cols})
+    except ValidationError as e:
+        log.error("Tempest outdoor_cols failed schema validation: %s", e)
         return
 
     async with pool.acquire() as conn:
@@ -354,10 +409,18 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
         # Hydro → climate
         hydro_cols = {}
         for eid, (col, conv) in _HYDRO_MAP.items():
-            if eid in states:
-                val = _parse_float(states[eid].get("state", ""))
-                if val is not None:
-                    hydro_cols[col] = conv(val) if conv else val
+            ha = _ha_state(states, eid)
+            if ha is None:
+                continue
+            val = ha.as_float()
+            if val is not None:
+                hydro_cols[col] = conv(val) if conv else val
+        if hydro_cols:
+            try:
+                ClimateRow.model_validate({"ts": now, **hydro_cols})
+            except ValidationError as e:
+                log.error("Hydro cols failed schema validation: %s", e)
+                hydro_cols = {}
         if hydro_cols:
             latest = await conn.fetchval(
                 "SELECT ts FROM climate WHERE ts > now() - interval '5 minutes' AND temp_avg IS NOT NULL ORDER BY ts DESC LIMIT 1"
@@ -372,39 +435,55 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
 
         # Grow lights → equipment_state (on-change)
         for eid, equip in _LIGHT_ENTITIES.items():
-            if eid in states:
-                is_on = states[eid].get("state", "") == "on"
-                if new_state.get(eid) != is_on:
-                    await conn.execute(
-                        "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)", now, equip, is_on
-                    )
-                    log.info("Light: %s → %s", equip, "ON" if is_on else "OFF")
-                new_state[eid] = is_on
+            ha = _ha_state(states, eid)
+            if ha is None:
+                continue
+            is_on = ha.state == "on"
+            if new_state.get(eid) != is_on:
+                try:
+                    EquipmentStateEvent(ts=now, equipment=equip, state=is_on)
+                except ValidationError as e:
+                    log.error("Light event skipped (validation failed: %s)", e)
+                    continue
+                await conn.execute(
+                    "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)", now, equip, is_on
+                )
+                log.info("Light: %s → %s", equip, "ON" if is_on else "OFF")
+            new_state[eid] = is_on
 
         # Config switches → equipment_state (on-change)
         for eid, equip in _HA_SWITCHES.items():
-            if eid in states:
-                is_on = states[eid].get("state", "") == "on"
-                key = f"switch_{equip}"
-                if new_state.get(key) != is_on:
-                    await conn.execute(
-                        "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)", now, equip, is_on
-                    )
-                new_state[key] = is_on
+            ha = _ha_state(states, eid)
+            if ha is None:
+                continue
+            is_on = ha.state == "on"
+            key = f"switch_{equip}"
+            if new_state.get(key) != is_on:
+                try:
+                    EquipmentStateEvent(ts=now, equipment=equip, state=is_on)
+                except ValidationError as e:
+                    log.error("Switch event skipped (validation failed: %s)", e)
+                    continue
+                await conn.execute(
+                    "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)", now, equip, is_on
+                )
+            new_state[key] = is_on
 
         # Occupancy → system_state (on-change)
         for eid, entity in _OCCUPANCY_ENTITIES.items():
-            if eid in states:
-                raw = states[eid].get("state", "")
-                if raw in ("unavailable", "unknown"):
+            ha = _ha_state(states, eid)
+            if ha is None or not ha.is_available:
+                continue
+            val = "occupied" if ha.state == "on" else "empty"
+            key = f"occupancy_{entity}"
+            if new_state.get(key) != val:
+                try:
+                    SystemStateRow(ts=now, entity=entity, value=val)
+                except ValidationError as e:
+                    log.error("Occupancy transition skipped (validation failed: %s)", e)
                     continue
-                val = "occupied" if raw == "on" else "empty"
-                key = f"occupancy_{entity}"
-                if new_state.get(key) != val:
-                    await conn.execute(
-                        "INSERT INTO system_state (ts, entity, value) VALUES ($1, $2, $3)", now, entity, val
-                    )
-                new_state[key] = val
+                await conn.execute("INSERT INTO system_state (ts, entity, value) VALUES ($1, $2, $3)", now, entity, val)
+            new_state[key] = val
 
     _ha_prev_state = new_state
     _HA_STATE_FILE.write_text(json.dumps(new_state))
@@ -732,7 +811,12 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             key = (a["alert_type"], a["sensor_id"])
             if key in open_keys:
                 continue
-            should_slack = a["alert_type"] not in ("sensor_offline", "esp32_reboot")
+            try:
+                env = AlertEnvelope.model_validate(a)
+            except ValidationError as e:
+                log.error("alert skipped (envelope validation failed: %s): %r", e, a)
+                continue
+            should_slack = env.alert_type not in ("sensor_offline", "esp32_reboot")
             slack_ts = None
             if should_slack:
                 if slack_token is None:
@@ -746,25 +830,25 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         "warning": "\U0001f7e1",
                         "warn": "\U0001f7e1",
                         "info": "\u2139\ufe0f",
-                    }.get(a["severity"], "")
+                    }.get(env.severity, "")
                     slack_ts = _post_slack(
                         slack_token,
                         SLACK_CHANNEL,
-                        f"{emoji} *[{a['severity'].upper()}]* `{a['alert_type']}` — {a['message']}",
+                        f"{emoji} *[{env.severity.upper()}]* `{env.alert_type}` — {env.message}",
                     )
 
             await conn.execute(
                 "INSERT INTO alert_log (alert_type, severity, category, sensor_id, zone, message, details, source, slack_ts, metric_value, threshold_value) VALUES ($1,$2,$3,$4,$5,$6,$7,'system',$8,$9,$10)",
-                a["alert_type"],
-                a["severity"],
-                a["category"],
-                a["sensor_id"],
-                a["zone"],
-                a["message"],
-                json.dumps(a["details"]) if a.get("details") else None,
+                env.alert_type,
+                env.severity,
+                env.category,
+                env.sensor_id,
+                env.zone,
+                env.message,
+                json.dumps(env.details) if env.details else None,
                 slack_ts,
-                a.get("metric_value"),
-                a.get("threshold_value"),
+                env.metric_value,
+                env.threshold_value,
             )
             new_count += 1
 

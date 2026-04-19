@@ -15,10 +15,14 @@ import json
 import logging
 import math
 import os
+import sys
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
+sys.path.insert(0, "/mnt/iris/verdify")
 
 import asyncpg
 import paho.mqtt.client as paho_mqtt
@@ -42,6 +46,7 @@ from entity_map import (
     SETPOINT_MAP,
     STATE_MAP,
 )
+from pydantic import ValidationError
 from tasks import (
     alert_monitor,
     daily_summary_live,
@@ -57,6 +62,17 @@ from tasks import (
     shelly_sync,
     tempest_sync,
     water_flowing_sync,
+)
+
+from verdify_schemas import (
+    ClimateRow,
+    DailySummaryRow,
+    Diagnostics,
+    EquipmentStateEvent,
+    OverrideEvent,
+    SetpointChange,
+    SetpointSnapshot,
+    SystemStateRow,
 )
 
 # ──────────────────────────────────────────────────────────────
@@ -200,9 +216,17 @@ async def write_climate(pool: asyncpg.Pool, ts: datetime) -> None:
     # Step 4: Clear fresh buffer
     state.climate.clear()
 
-    # Step 5: Write merged row
+    # Step 5: Validate + write merged row
     cols = list(merged.keys())
     if not cols:
+        return
+    # Validate ranges on every known column (rh∈[0,100], vpd∈[0,20], etc.).
+    # extra="ignore" means novel column names pass through to the INSERT —
+    # the DB will surface those (column doesn't exist) if the entity map is wrong.
+    try:
+        ClimateRow.model_validate({"ts": ts, "greenhouse_id": GREENHOUSE_ID, **merged})
+    except ValidationError as e:
+        log.error(f"climate row failed schema validation: {e}")
         return
     cols_sql = ", ".join(["ts"] + cols)
     placeholders = ", ".join([f"${i + 1}" for i in range(len(cols) + 1)])
@@ -221,12 +245,22 @@ async def write_equipment_events(pool: asyncpg.Pool, ts: datetime) -> None:
         return
     events = state.pending_equipment.copy()
     state.pending_equipment.clear()
+    validated: list[tuple[datetime, str, bool]] = []
+    for equip, s in events:
+        try:
+            EquipmentStateEvent(ts=ts, equipment=equip, state=s, greenhouse_id=GREENHOUSE_ID)
+        except ValidationError as e:
+            log.error(f"equipment_state skipped (validation failed: {e}): equip={equip} state={s}")
+            continue
+        validated.append((ts, equip, s))
+    if not validated:
+        return
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
-            [(ts, equip, s) for equip, s in events],
+            validated,
         )
-    log.debug(f"equipment_state: {len(events)} events written")
+    log.debug(f"equipment_state: {len(validated)} events written")
 
 
 async def write_state_transitions(pool: asyncpg.Pool, ts: datetime) -> None:
@@ -235,12 +269,22 @@ async def write_state_transitions(pool: asyncpg.Pool, ts: datetime) -> None:
         return
     transitions = state.pending_states.copy()
     state.pending_states.clear()
+    validated: list[tuple[datetime, str, str]] = []
+    for entity, val in transitions:
+        try:
+            SystemStateRow(ts=ts, entity=entity, value=val, greenhouse_id=GREENHOUSE_ID)
+        except ValidationError as e:
+            log.error(f"system_state skipped (validation failed: {e}): entity={entity} value={val!r}")
+            continue
+        validated.append((ts, entity, val))
+    if not validated:
+        return
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO system_state (ts, entity, value) VALUES ($1, $2, $3)",
-            [(ts, entity, val) for entity, val in transitions],
+            validated,
         )
-    log.debug(f"system_state: {len(transitions)} transitions written")
+    log.debug(f"system_state: {len(validated)} transitions written")
 
 
 async def write_override_events(pool: asyncpg.Pool, ts: datetime) -> None:
@@ -255,12 +299,22 @@ async def write_override_events(pool: asyncpg.Pool, ts: datetime) -> None:
         return
     events = state.pending_override_events.copy()
     state.pending_override_events.clear()
+    validated: list[tuple[datetime, str, str | None]] = []
+    for otype, mode in events:
+        try:
+            OverrideEvent(ts=ts, override_type=otype, mode=mode, greenhouse_id=GREENHOUSE_ID)
+        except ValidationError as e:
+            log.error(f"override_events skipped (validation failed: {e}): type={otype} mode={mode}")
+            continue
+        validated.append((ts, otype, mode))
+    if not validated:
+        return
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO override_events (ts, override_type, mode) VALUES ($1, $2, $3)",
-            [(ts, otype, mode) for otype, mode in events],
+            validated,
         )
-    log.info(f"override_events: {len(events)} start events written")
+    log.info(f"override_events: {len(validated)} start events written")
 
 
 async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
@@ -269,18 +323,33 @@ async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
         return
     changes = state.pending_setpoints.copy()
     state.pending_setpoints.clear()
+    validated: list[tuple[datetime, str, float]] = []
+    for param, val in changes:
+        try:
+            SetpointChange(ts=ts, parameter=param, value=val, greenhouse_id=GREENHOUSE_ID)
+        except ValidationError as e:
+            log.error(f"setpoint_changes skipped (validation failed: {e}): param={param} value={val}")
+            continue
+        validated.append((ts, param, val))
+    if not validated:
+        return
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO setpoint_changes (ts, parameter, value) VALUES ($1, $2, $3)",
-            [(ts, param, val) for param, val in changes],
+            validated,
         )
-    log.debug(f"setpoint_changes: {len(changes)} changes written")
+    log.debug(f"setpoint_changes: {len(validated)} changes written")
 
 
 async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
     """Write a diagnostics row."""
     d = state.diagnostics
     if not d:
+        return
+    try:
+        diag = Diagnostics.model_validate({"ts": ts, "greenhouse_id": GREENHOUSE_ID, **d})
+    except ValidationError as e:
+        log.error(f"diagnostics row failed schema validation: {e}")
         return
     async with pool.acquire() as conn:
         await conn.execute(
@@ -290,15 +359,15 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
                )
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
             ts,
-            d.get("wifi_rssi"),
-            d.get("heap_bytes"),
-            d.get("uptime_s"),
-            d.get("probe_health"),
-            d.get("reset_reason"),
-            d.get("firmware_version"),
-            int(d["active_probe_count"]) if d.get("active_probe_count") is not None else None,
-            int(d["relief_cycle_count"]) if d.get("relief_cycle_count") is not None else None,
-            int(d["vent_latch_timer_s"]) if d.get("vent_latch_timer_s") is not None else None,
+            diag.wifi_rssi,
+            diag.heap_bytes,
+            diag.uptime_s,
+            diag.probe_health,
+            diag.reset_reason,
+            diag.firmware_version,
+            diag.active_probe_count,
+            diag.relief_cycle_count,
+            diag.vent_latch_timer_s,
         )
     log.debug("diagnostics row written")
 
@@ -318,6 +387,24 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
     water_total = state.climate.get("water_total_gal")
     mister_water = state.climate.get("mister_water_today")
     dli = state.climate.get("dli_today")
+
+    # Validate the accumulated daily row through DailySummaryRow (range +
+    # non-negative stress-hour invariants). The schema has extra="ignore" so
+    # unrelated keys in state.daily (climate rollups computed elsewhere) are
+    # dropped; out-of-range cycles/runtimes raise.
+    try:
+        DailySummaryRow.model_validate(
+            {
+                "date": today,
+                **d,
+                "water_used_gal": water_total,
+                "mister_water_gal": mister_water,
+                "dli_final": dli,
+            }
+        )
+    except ValidationError as e:
+        log.error(f"daily_summary row failed schema validation: {e}")
+        return
 
     async with pool.acquire() as conn:
         await conn.execute(
@@ -636,10 +723,18 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
             # task in tasks.py (FB-1) alerts after 5 min.
             if state.cfg_readback:
                 try:
+                    snapshot_rows: list[tuple[datetime, str, float]] = []
+                    for param, val in state.cfg_readback.items():
+                        try:
+                            SetpointSnapshot(ts=ts, parameter=param, value=val, greenhouse_id=GREENHOUSE_ID)
+                        except ValidationError as e:
+                            log.error(f"setpoint_snapshot skipped (validation failed: {e}): param={param} value={val}")
+                            continue
+                        snapshot_rows.append((ts, param, val))
                     async with pool.acquire() as conn:
                         await conn.executemany(
                             "INSERT INTO setpoint_snapshot (ts, parameter, value) VALUES ($1, $2, $3)",
-                            [(ts, param, val) for param, val in state.cfg_readback.items()],
+                            snapshot_rows,
                         )
                         # FW-4 confirmation loop — one UPDATE per readback param
                         # (tiny batch; no worse than the INSERT above).

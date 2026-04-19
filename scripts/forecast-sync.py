@@ -16,12 +16,19 @@ Usage:
 import asyncio
 import json
 import logging
+import sys
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
+# verdify_schemas lives at /mnt/iris/verdify/verdify_schemas
+sys.path.insert(0, "/mnt/iris/verdify")
+
 import asyncpg
+from pydantic import ValidationError
+
+from verdify_schemas import OpenMeteoForecastResponse
 
 LATITUDE = 40.1672
 LONGITUDE = -105.1019
@@ -70,42 +77,54 @@ def fetch_forecast() -> list[dict] | None:
     req = urllib.request.Request(FORECAST_URL, headers={"User-Agent": "verdify-forecast-sync/2.0"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        hourly = data.get("hourly", {})
-        times = hourly.get("time", [])
+            raw = json.loads(resp.read())
+        # Validate the full envelope: parallel-array length check catches
+        # upstream drift before the zip-by-index below silently truncates.
+        try:
+            response = OpenMeteoForecastResponse.model_validate(raw)
+        except ValidationError as e:
+            log.warning("Open-Meteo response failed schema validation: %s", e)
+            return None
+        hourly = response.hourly
+        times = hourly.time
         if not times:
             return None
         n = len(times)
+
+        def col(name: str) -> list:
+            arr = getattr(hourly, name, None)
+            return arr if arr is not None else [None] * n
+
         rows = []
         for i in range(n):
             rows.append(
                 {
                     "ts": times[i],
-                    "temp_f": hourly.get("temperature_2m", [None] * n)[i],
-                    "rh_pct": hourly.get("relative_humidity_2m", [None] * n)[i],
-                    "dew_point_f": hourly.get("dew_point_2m", [None] * n)[i],
-                    "feels_like_f": hourly.get("apparent_temperature", [None] * n)[i],
-                    "vpd_kpa": hourly.get("vapour_pressure_deficit", [None] * n)[i],
-                    "precip_prob_pct": hourly.get("precipitation_probability", [None] * n)[i],
-                    "precip_in": hourly.get("precipitation", [None] * n)[i],
-                    "rain_in": hourly.get("rain", [None] * n)[i],
-                    "snow_in": hourly.get("snowfall", [None] * n)[i],
-                    "weather_code": hourly.get("weather_code", [None] * n)[i],
-                    "cloud_cover_pct": hourly.get("cloud_cover", [None] * n)[i],
-                    "cloud_cover_low_pct": hourly.get("cloud_cover_low", [None] * n)[i],
-                    "cloud_cover_high_pct": hourly.get("cloud_cover_high", [None] * n)[i],
-                    "wind_speed_mph": hourly.get("wind_speed_10m", [None] * n)[i],
-                    "wind_dir_deg": hourly.get("wind_direction_10m", [None] * n)[i],
-                    "wind_gust_mph": hourly.get("wind_gusts_10m", [None] * n)[i],
-                    "solar_w_m2": hourly.get("shortwave_radiation", [None] * n)[i],
-                    "direct_radiation_w_m2": hourly.get("direct_radiation", [None] * n)[i],
-                    "diffuse_radiation_w_m2": hourly.get("diffuse_radiation", [None] * n)[i],
-                    "uv_index": hourly.get("uv_index", [None] * n)[i],
-                    "sunshine_duration_s": hourly.get("sunshine_duration", [None] * n)[i],
-                    "surface_pressure_hpa": hourly.get("surface_pressure", [None] * n)[i],
-                    "et0_mm": hourly.get("et0_fao_evapotranspiration", [None] * n)[i],
-                    "soil_temp_f": hourly.get("soil_temperature_0cm", [None] * n)[i],
-                    "visibility_m": hourly.get("visibility", [None] * n)[i],
+                    "temp_f": col("temperature_2m")[i],
+                    "rh_pct": col("relative_humidity_2m")[i],
+                    "dew_point_f": col("dew_point_2m")[i],
+                    "feels_like_f": col("apparent_temperature")[i],
+                    "vpd_kpa": col("vapour_pressure_deficit")[i],
+                    "precip_prob_pct": col("precipitation_probability")[i],
+                    "precip_in": col("precipitation")[i],
+                    "rain_in": col("rain")[i],
+                    "snow_in": col("snowfall")[i],
+                    "weather_code": col("weather_code")[i],
+                    "cloud_cover_pct": col("cloud_cover")[i],
+                    "cloud_cover_low_pct": col("cloud_cover_low")[i],
+                    "cloud_cover_high_pct": col("cloud_cover_high")[i],
+                    "wind_speed_mph": col("wind_speed_10m")[i],
+                    "wind_dir_deg": col("wind_direction_10m")[i],
+                    "wind_gust_mph": col("wind_gusts_10m")[i],
+                    "solar_w_m2": col("shortwave_radiation")[i],
+                    "direct_radiation_w_m2": col("direct_radiation")[i],
+                    "diffuse_radiation_w_m2": col("diffuse_radiation")[i],
+                    "uv_index": col("uv_index")[i],
+                    "sunshine_duration_s": col("sunshine_duration")[i],
+                    "surface_pressure_hpa": col("surface_pressure")[i],
+                    "et0_mm": col("et0_fao_evapotranspiration")[i],
+                    "soil_temp_f": col("soil_temperature_0cm")[i],
+                    "visibility_m": col("visibility")[i],
                 }
             )
         return rows

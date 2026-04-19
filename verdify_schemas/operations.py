@@ -60,6 +60,54 @@ class Harvest(BaseModel):
     notes: str | None = None
 
 
+# ── Input envelopes for MCP tool boundary ─────────────────────────────────
+
+
+class HarvestCreate(BaseModel):
+    """MCP observations(record_harvest) data payload.
+
+    Column names mirror the live `harvests` table exactly — `unit_price` (not
+    `unit_price_usd`) and `operator` (not `harvested_by`). The table does not
+    have a `greenhouse_id` column, so the envelope rejects one.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    weight_kg: float | None = Field(default=None, ge=0)
+    unit_count: int | None = Field(default=None, ge=0)
+    quality_grade: str | None = Field(default=None, max_length=50)
+    zone: str | None = Field(default=None, max_length=100)
+    destination: str | None = Field(default=None, max_length=200)
+    unit_price: float | None = Field(default=None, ge=0)
+    revenue: float | None = Field(default=None, ge=0)
+    operator: str | None = Field(default=None, max_length=100)
+    notes: str | None = None
+
+
+class TreatmentCreate(BaseModel):
+    """MCP observations(record_treatment) data payload.
+
+    Column names mirror the live `treatments` table — `applicator` (not
+    `applied_by`). No `greenhouse_id` column exists.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    product: str = Field(..., min_length=1, max_length=200)
+    active_ingredient: str | None = Field(default=None, max_length=200)
+    concentration: float | None = Field(default=None, ge=0)
+    rate: float | None = Field(default=None, ge=0)
+    rate_unit: str | None = Field(default=None, max_length=50)
+    method: str | None = Field(default=None, max_length=100)
+    zone: str | None = Field(default=None, max_length=100)
+    target_pest: str | None = Field(default=None, max_length=200)
+    phi_days: int | None = Field(default=None, ge=0)
+    rei_hours: int | None = Field(default=None, ge=0)
+    applicator: str | None = Field(default=None, max_length=100)
+    observation_id: int | None = Field(default=None, ge=1)
+    notes: str | None = None
+
+
 class IrrigationLog(BaseModel):
     """irrigation_log table row — one row per irrigation event."""
 

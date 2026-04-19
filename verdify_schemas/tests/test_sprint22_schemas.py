@@ -20,13 +20,16 @@ from verdify_schemas import (
     ForecastActionLog,
     ForecastActionRule,
     Harvest,
+    HarvestCreate,
     ImageObservation,
     IrrigationLog,
     IrrigationSchedule,
     LabResult,
     MaintenanceLog,
+    ObservationAction,
     SensorRegistry,
     Treatment,
+    TreatmentCreate,
     UtilityCost,
 )
 
@@ -55,6 +58,69 @@ class TestHarvest:
     def test_rejects_negative_weight(self):
         with pytest.raises(ValidationError):
             Harvest(weight_kg=-1.0)
+
+
+class TestHarvestCreate:
+    def test_valid(self):
+        h = HarvestCreate(weight_kg=1.2, unit_count=12, quality_grade="A", operator="jason")
+        assert h.operator == "jason"
+
+    def test_rejects_negative_weight(self):
+        with pytest.raises(ValidationError):
+            HarvestCreate(weight_kg=-0.1)
+
+    def test_rejects_legacy_field_unit_price_usd(self):
+        # The live DB column is unit_price; prior MCP code sent unit_price_usd
+        # and silently failed at INSERT time. Envelope now rejects it upfront.
+        with pytest.raises(ValidationError):
+            HarvestCreate(unit_price_usd=3.50)
+
+    def test_rejects_legacy_field_harvested_by(self):
+        # DB column is `operator`; old MCP sent `harvested_by`.
+        with pytest.raises(ValidationError):
+            HarvestCreate(harvested_by="jason")
+
+    def test_rejects_greenhouse_id(self):
+        # harvests table has no greenhouse_id column yet.
+        with pytest.raises(ValidationError):
+            HarvestCreate(greenhouse_id="vallery")
+
+
+class TestTreatmentCreate:
+    def test_valid(self):
+        t = TreatmentCreate(product="neem oil", rate=5.0, rate_unit="ml/L", applicator="jason")
+        assert t.applicator == "jason"
+
+    def test_rejects_empty_product(self):
+        with pytest.raises(ValidationError):
+            TreatmentCreate(product="")
+
+    def test_rejects_legacy_field_applied_by(self):
+        # DB column is `applicator`; old MCP sent `applied_by`.
+        with pytest.raises(ValidationError):
+            TreatmentCreate(product="neem", applied_by="jason")
+
+    def test_rejects_greenhouse_id(self):
+        with pytest.raises(ValidationError):
+            TreatmentCreate(product="neem", greenhouse_id="vallery")
+
+
+class TestObservationActionEnvelope:
+    def test_record_harvest(self):
+        a = ObservationAction(
+            action="record_harvest",
+            crop_id=3,
+            data=HarvestCreate(weight_kg=0.8, quality_grade="A", operator="jason"),
+        )
+        assert isinstance(a.data, HarvestCreate)
+
+    def test_record_treatment(self):
+        a = ObservationAction(
+            action="record_treatment",
+            crop_id=3,
+            data=TreatmentCreate(product="neem oil", rate=5.0, rate_unit="ml/L"),
+        )
+        assert isinstance(a.data, TreatmentCreate)
 
 
 class TestIrrigationLog:

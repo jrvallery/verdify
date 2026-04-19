@@ -16,8 +16,9 @@ from datetime import date, datetime
 from pathlib import Path
 
 import asyncpg
-from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
+
+from mcp.server.fastmcp import FastMCP
 
 # verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
 sys.path.insert(0, "/mnt/iris/verdify")
@@ -28,6 +29,7 @@ from verdify_schemas import (  # noqa: E402
     CropCreate,
     CropUpdate,
     EventCreate,
+    HarvestCreate,
     LessonCreate,
     LessonUpdate,
     LessonValidate,
@@ -35,6 +37,7 @@ from verdify_schemas import (  # noqa: E402
     Plan,
     PlanEvaluation,
     PlanHypothesisStructured,
+    TreatmentCreate,
 )
 
 # ── Config ──
@@ -689,7 +692,15 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
     """Record and query crop observations, events, harvests, and treatments.
     Actions: list_observations, record_observation, list_events, record_event,
              record_harvest, list_harvests, record_treatment, list_treatments.
-    data: JSON with fields appropriate to the action."""
+    data: JSON with fields appropriate to the action. Envelopes:
+      record_observation -> ObservationCreate (obs_type, notes, severity, ...)
+      record_event       -> EventCreate (event_type, old_stage, new_stage, ...)
+      record_harvest     -> HarvestCreate (weight_kg, unit_count, quality_grade,
+                            zone, destination, unit_price, revenue, operator, notes)
+      record_treatment   -> TreatmentCreate (product, active_ingredient,
+                            concentration, rate, rate_unit, method, zone,
+                            target_pest, phi_days, rei_hours, applicator,
+                            observation_id, notes)"""
     d = json.loads(data) if data else {}
     conn = await _db()
     try:
@@ -761,17 +772,25 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
             return _json(dict(row))
 
         elif action == "record_harvest" and crop_id:
+            try:
+                hv = HarvestCreate.model_validate({**d, "operator": d.get("operator") or "Iris"})
+            except ValidationError as e:
+                return json.dumps({"error": "HarvestCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO harvests (crop_id, weight_kg, unit_count, quality_grade, unit_price_usd, notes, harvested_by, greenhouse_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, 'vallery') RETURNING *""",
+                INSERT INTO harvests (crop_id, weight_kg, unit_count, quality_grade, zone, destination,
+                                      unit_price, revenue, operator, notes)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *""",
                 crop_id,
-                d.get("weight_kg"),
-                d.get("unit_count"),
-                d.get("quality_grade"),
-                d.get("unit_price_usd"),
-                d.get("notes"),
-                d.get("harvested_by", "Iris"),
+                hv.weight_kg,
+                hv.unit_count,
+                hv.quality_grade,
+                hv.zone,
+                hv.destination,
+                hv.unit_price,
+                hv.revenue,
+                hv.operator,
+                hv.notes,
             )
             return _json(dict(row))
 
@@ -786,22 +805,30 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
             return _json([dict(r) for r in rows])
 
         elif action == "record_treatment" and crop_id:
+            try:
+                tr = TreatmentCreate.model_validate({**d, "applicator": d.get("applicator") or "Iris"})
+            except ValidationError as e:
+                return json.dumps({"error": "TreatmentCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO treatments (crop_id, product, rate, rate_unit, method, zone, target_pest,
-                                        phi_days, rei_hours, applied_by, notes, greenhouse_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'vallery') RETURNING *""",
+                INSERT INTO treatments (crop_id, product, active_ingredient, concentration, rate, rate_unit,
+                                        method, zone, target_pest, phi_days, rei_hours, applicator,
+                                        observation_id, notes)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *""",
                 crop_id,
-                d.get("product"),
-                d.get("rate"),
-                d.get("rate_unit"),
-                d.get("method"),
-                d.get("zone"),
-                d.get("target_pest"),
-                d.get("phi_days"),
-                d.get("rei_hours"),
-                d.get("applied_by", "Iris"),
-                d.get("notes"),
+                tr.product,
+                tr.active_ingredient,
+                tr.concentration,
+                tr.rate,
+                tr.rate_unit,
+                tr.method,
+                tr.zone,
+                tr.target_pest,
+                tr.phi_days,
+                tr.rei_hours,
+                tr.applicator,
+                tr.observation_id,
+                tr.notes,
             )
             return _json(dict(row))
 

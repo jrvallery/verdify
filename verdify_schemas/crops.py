@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from .operations import HarvestCreate, TreatmentCreate
+
 CropStage = Literal["seed", "germination", "seedling", "vegetative", "flowering", "fruiting", "harvest", "cleared"]
 CropEventType = Literal[
     "planted",
@@ -204,15 +206,19 @@ class CropAction(BaseModel):
 ObservationActionKind = Literal[
     "record_observation",
     "record_event",
+    "record_harvest",
+    "list_harvests",
+    "record_treatment",
+    "list_treatments",
     "list",
 ]
 
 
 class ObservationAction(BaseModel):
-    """MCP `observations` tool input — ObservationCreate / EventCreate payloads."""
+    """MCP `observations` tool input — accepts any of the record_* payloads."""
 
     model_config = ConfigDict(extra="forbid")
 
     action: ObservationActionKind
     crop_id: int | None = None
-    data: ObservationCreate | EventCreate | None = None
+    data: ObservationCreate | EventCreate | HarvestCreate | TreatmentCreate | None = None

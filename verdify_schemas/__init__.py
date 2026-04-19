@@ -63,11 +63,13 @@ from .media import ImageObservation
 from .operations import (
     ConsumablesLog,
     Harvest,
+    HarvestCreate,
     IrrigationLog,
     IrrigationSchedule,
     LabResult,
     MaintenanceLog,
     Treatment,
+    TreatmentCreate,
 )
 from .plan import (
     Conditions,
@@ -174,6 +176,7 @@ __all__ = [
     "ForecastVaultFrontmatter",
     "HAEntityState",
     "Harvest",
+    "HarvestCreate",
     "HealthTrendPoint",
     "ImageObservation",
     "IrrigationLog",
@@ -217,6 +220,7 @@ __all__ = [
     "StressWindow",
     "SystemStateRow",
     "Treatment",
+    "TreatmentCreate",
     "TunableParameter",
     "UtilityCategory",
     "UtilityCost",

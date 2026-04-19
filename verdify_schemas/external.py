@@ -52,6 +52,7 @@ class OpenMeteoHourly(BaseModel):
     et0_fao_evapotranspiration: list[float | None] | None = None
     soil_temperature_0cm: list[float | None] | None = None
     visibility: list[float | None] | None = None
+    vapour_pressure_deficit: list[float | None] | None = None
 
     @model_validator(mode="after")
     def _validate_parallel_lengths(self) -> OpenMeteoHourly:
