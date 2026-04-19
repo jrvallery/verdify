@@ -28,7 +28,6 @@ from .api import (
     ZoneListItem,
     ZoneObservation,
 )
-from .crop_profiles import CropTargetProfile
 from .catalog import (
     CropCatalogCreate,
     CropCatalogEntry,
@@ -39,6 +38,7 @@ from .catalog import (
     CropSeason,
     CropStageTarget,
 )
+from .crop_profiles import CropTargetProfile
 from .crops import (
     Crop,
     CropAction,

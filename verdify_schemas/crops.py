@@ -15,8 +15,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from .operations import HarvestCreate, TreatmentCreate
 from .catalog import CropCatalogId
+from .operations import HarvestCreate, TreatmentCreate
 from .topology import PositionId, ZoneId
 
 CropStage = Literal["seed", "germination", "seedling", "vegetative", "flowering", "fruiting", "harvest", "cleared"]
