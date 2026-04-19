@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+from decimal import Decimal
+
 import pytest
 from pydantic import ValidationError
 
@@ -32,10 +36,125 @@ class TestClimateSnapshot:
 
 
 class TestScorecard:
-    def test_open_dict(self):
-        # Permissive — variable metric set per day
-        s = ScorecardResponse.model_validate({"planner_score": 72, "compliance_pct": 88, "anything_new": 1})
-        assert s.model_dump()["planner_score"] == 72
+    FULL_METRICS = {
+        "planner_score": Decimal("72.5"),
+        "compliance_pct": Decimal("88.0"),
+        "temp_compliance_pct": Decimal("92.0"),
+        "vpd_compliance_pct": Decimal("85.0"),
+        "total_stress_h": Decimal("2.8"),
+        "heat_stress_h": Decimal("0.0"),
+        "cold_stress_h": Decimal("1.2"),
+        "vpd_high_stress_h": Decimal("1.6"),
+        "vpd_low_stress_h": Decimal("0.0"),
+        "kwh": Decimal("22.3"),
+        "therms": Decimal("3.1"),
+        "water_gal": Decimal("280"),
+        "mister_water_gal": Decimal("195"),
+        "cost_electric": Decimal("2.48"),
+        "cost_gas": Decimal("2.57"),
+        "cost_water": Decimal("1.36"),
+        "cost_total": Decimal("6.41"),
+        "dp_margin_min_f": Decimal("7.2"),
+        "dp_risk_hours": Decimal("0.0"),
+        "7d_avg_score": Decimal("68.3"),
+        "7d_avg_compliance": Decimal("81.2"),
+        "7d_avg_cost": Decimal("5.84"),
+        "7d_avg_kwh": Decimal("21.0"),
+        "7d_avg_therms": Decimal("2.9"),
+        "7d_avg_water_gal": Decimal("265"),
+    }
+
+    def test_full_day_roundtrip(self):
+        """All 25 metrics present — Decimal inputs coerce to float; by-alias wire format preserved."""
+        rows = [{"metric": m, "value": v} for m, v in self.FULL_METRICS.items()]
+        s = ScorecardResponse.from_metric_rows(rows)
+        assert s.planner_score == 72.5
+        assert s.cost_total == 6.41
+        # Alias field read via Python identifier
+        assert s.avg_score_7d == 68.3
+        # Wire format preserves the `7d_*` keys
+        dumped = s.model_dump(by_alias=True)
+        assert dumped["7d_avg_score"] == 68.3
+        assert "avg_score_7d" not in dumped
+
+    def test_partial_day_missing_fields_are_none(self):
+        """Incomplete days emit fewer rows — missing metrics map to None, not error."""
+        rows = [("planner_score", Decimal("60")), ("compliance_pct", Decimal("75"))]
+        s = ScorecardResponse.from_metric_rows(rows)
+        assert s.planner_score == 60.0
+        assert s.cost_total is None
+        assert s.avg_score_7d is None
+
+    def test_sentinel_strings_become_none(self):
+        """'n/a' and 'perfect' are DB-side sentinels for 'no data' — schema normalizes to None."""
+        rows = [
+            ("planner_score", None),
+            ("dp_margin_min_f", "n/a"),
+            ("cost_electric", "perfect"),
+        ]
+        s = ScorecardResponse.from_metric_rows(rows)
+        assert s.planner_score is None
+        assert s.dp_margin_min_f is None
+        assert s.cost_electric is None
+
+    def test_unknown_metric_rejected(self):
+        """DB function growing a new metric must surface at the boundary."""
+        with pytest.raises(ValidationError):
+            ScorecardResponse.from_metric_rows([("totally_new_kpi", 42)])
+
+    def test_metric_names_exposes_25(self):
+        assert len(ScorecardResponse.metric_names()) == 25
+        assert "planner_score" in ScorecardResponse.metric_names()
+        assert "7d_avg_score" in ScorecardResponse.metric_names()
+
+
+# ── Drift guard: live fn_planner_scorecard() metric names must be a subset of
+#    ScorecardResponse.metric_names(). Skips if no DB is reachable. ─────
+def _docker_available() -> bool:
+    r = subprocess.run(["docker", "ps"], capture_output=True, text=True, check=False)
+    return r.returncode == 0
+
+
+def _ci_postgres_reachable() -> bool:
+    return bool(os.environ.get("POSTGRES_HOST"))
+
+
+@pytest.mark.skipif(
+    not (_ci_postgres_reachable() or _docker_available()),
+    reason="no DB backend available",
+)
+def test_scorecard_metric_names_match_live_function():
+    """Every metric fn_planner_scorecard() emits must be modelled in
+    ScorecardResponse. A new DB-side metric without a schema field is
+    the exact drift case this test is here to catch."""
+    sql = "SELECT DISTINCT metric FROM fn_planner_scorecard()"
+    if _ci_postgres_reachable():
+        env = os.environ.copy()
+        env.setdefault("PGHOST", env.get("POSTGRES_HOST", "localhost"))
+        env.setdefault("PGPORT", env.get("POSTGRES_PORT", "5432"))
+        env.setdefault("PGUSER", env.get("POSTGRES_USER", "verdify"))
+        env.setdefault("PGPASSWORD", env.get("POSTGRES_PASSWORD", "verdify"))
+        env.setdefault("PGDATABASE", env.get("POSTGRES_DB", "verdify"))
+        r = subprocess.run(
+            ["psql", "-t", "-A", "-c", sql], capture_output=True, text=True, timeout=15, check=True, env=env
+        )
+    else:
+        r = subprocess.run(
+            ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-c", sql],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+    live = {ln.strip() for ln in r.stdout.splitlines() if ln.strip()}
+    if not live:
+        pytest.skip("fn_planner_scorecard() returned 0 rows for today (not enough data)")
+    modeled = ScorecardResponse.metric_names()
+    unmodeled = sorted(live - modeled)
+    assert not unmodeled, (
+        f"fn_planner_scorecard() emits metric(s) ScorecardResponse doesn't model: {unmodeled}. "
+        f"Add field(s) to verdify_schemas/mcp_responses.py:ScorecardResponse."
+    )
 
 
 class TestEquipmentStateRow:

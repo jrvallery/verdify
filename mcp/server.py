@@ -16,8 +16,9 @@ from datetime import date, datetime
 from pathlib import Path
 
 import asyncpg
-from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
+
+from mcp.server.fastmcp import FastMCP
 
 # verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
 sys.path.insert(0, "/mnt/iris/verdify")
@@ -132,7 +133,11 @@ async def scorecard(target_date: str = "") -> str:
     Includes: planner_score, compliance_pct (both in band), temp_compliance_pct,
     vpd_compliance_pct, stress hours (heat/cold/vpd_high/vpd_low), utility usage
     (kwh, therms, water_gal, mister_water_gal), costs (electric/gas/water/total),
-    dew point safety, and 7-day averages. Pass date as YYYY-MM-DD or omit for today."""
+    dew point safety, and 7-day averages. Pass date as YYYY-MM-DD or omit for today.
+
+    Response is validated through verdify_schemas.ScorecardResponse — partial
+    days emit a subset of metrics as null. DB drift (new metric) surfaces as a
+    validation error with the raw values preserved so Iris can still read the card."""
     conn = await _db()
     try:
         if target_date:
@@ -140,8 +145,17 @@ async def scorecard(target_date: str = "") -> str:
         else:
             d = await conn.fetchval("SELECT (now() AT TIME ZONE 'America/Denver')::date")
         rows = await conn.fetch("SELECT * FROM fn_planner_scorecard($1::date)", d)
-        sc = ScorecardResponse.model_validate({r["metric"]: r["value"] for r in rows})
-        return sc.model_dump_json()
+        try:
+            sc = ScorecardResponse.from_metric_rows(rows)
+        except ValidationError as e:
+            return _json(
+                {
+                    "error": "ScorecardResponse validation failed — DB may have new metrics",
+                    "details": json.loads(e.json()),
+                    "raw": {r["metric"]: (float(r["value"]) if r["value"] is not None else None) for r in rows},
+                }
+            )
+        return sc.model_dump_json(by_alias=True)
     finally:
         await conn.close()
 
