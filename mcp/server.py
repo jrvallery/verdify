@@ -24,6 +24,15 @@ from mcp.server.fastmcp import FastMCP
 sys.path.insert(0, "/mnt/iris/verdify")
 from verdify_schemas import (  # noqa: E402
     ALL_TUNABLES,
+    AlertAckPayload,
+    AlertResolvePayload,
+    CropCreate,
+    CropUpdate,
+    EventCreate,
+    LessonCreate,
+    LessonUpdate,
+    LessonValidate,
+    ObservationCreate,
     Plan,
     PlanEvaluation,
     PlanHypothesisStructured,
@@ -624,48 +633,46 @@ async def crops(action: str, crop_id: int = 0, data: str = "") -> str:
             )
 
         elif action == "create":
+            try:
+                payload = CropCreate.model_validate(d)
+            except ValidationError as e:
+                return json.dumps({"error": "CropCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
                 INSERT INTO crops (name, variety, zone, position, planted_date, expected_harvest, stage,
-                                   count, notes, greenhouse_id)
-                VALUES ($1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, 'vallery') RETURNING *""",
-                d.get("name"),
-                d.get("variety"),
-                d.get("zone"),
-                d.get("position"),
-                d.get("planted_date"),
-                d.get("expected_harvest"),
-                d.get("stage", "seedling"),
-                d.get("count", 1),
-                d.get("notes"),
+                                   count, notes, seed_lot_id, supplier, base_temp_f,
+                                   target_dli, target_vpd_low, target_vpd_high, greenhouse_id)
+                VALUES ($1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, $10, $11, $12,
+                        $13, $14, $15, 'vallery') RETURNING *""",
+                payload.name,
+                payload.variety,
+                payload.zone,
+                payload.position,
+                payload.planted_date,
+                payload.expected_harvest,
+                payload.stage,
+                payload.count,
+                payload.notes,
+                payload.seed_lot_id,
+                payload.supplier,
+                payload.base_temp_f,
+                payload.target_dli,
+                payload.target_vpd_low,
+                payload.target_vpd_high,
             )
             return _json(dict(row))
 
         elif action == "update" and crop_id:
-            sets = []
-            vals = [crop_id]
-            i = 2
-            for col in (
-                "name",
-                "variety",
-                "zone",
-                "position",
-                "stage",
-                "expected_harvest",
-                "count",
-                "notes",
-                "target_vpd_low",
-                "target_vpd_high",
-                "target_dli",
-                "base_temp_f",
-            ):
-                if col in d:
-                    sets.append(f"{col} = ${i}")
-                    vals.append(d[col])
-                    i += 1
-            if not sets:
+            try:
+                patch = CropUpdate.model_validate(d)
+            except ValidationError as e:
+                return json.dumps({"error": "CropUpdate validation failed", "details": json.loads(e.json())})
+            set_fields = patch.model_dump(exclude_unset=True)
+            if not set_fields:
                 return json.dumps({"error": "No fields to update"})
+            sets = [f"{k} = ${i}" for i, k in enumerate(set_fields, start=2)]
             sets.append("updated_at = now()")
+            vals = [crop_id, *set_fields.values()]
             row = await conn.fetchrow(f"UPDATE crops SET {', '.join(sets)} WHERE id = $1 RETURNING *", *vals)
             return _json(dict(row)) if row else json.dumps({"error": "Crop not found"})
 
@@ -701,18 +708,27 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
             crop = await conn.fetchrow("SELECT zone, position FROM crops WHERE id = $1", crop_id)
             if not crop:
                 return json.dumps({"error": f"Crop {crop_id} not found"})
+            try:
+                obs = ObservationCreate.model_validate({**d, "observer": d.get("observer") or "Iris"})
+            except ValidationError as e:
+                return json.dumps({"error": "ObservationCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO observations (crop_id, zone, position, obs_type, notes, severity, observer, health_score, source)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'iris') RETURNING *""",
+                INSERT INTO observations (crop_id, zone, position, obs_type, notes, severity,
+                                          observer, health_score, species, count, affected_pct, photo_path, source)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'iris') RETURNING *""",
                 crop_id,
-                crop["zone"],
-                crop["position"],
-                d.get("obs_type", "health_check"),
-                d.get("notes"),
-                d.get("severity"),
-                d.get("observer", "Iris"),
-                d.get("health_score"),
+                obs.zone or crop["zone"],
+                obs.position or crop["position"],
+                obs.obs_type,
+                obs.notes,
+                obs.severity,
+                obs.observer,
+                obs.health_score,
+                obs.species,
+                obs.count,
+                obs.affected_pct,
+                obs.photo_path,
             )
             return _json(dict(row))
 
@@ -727,17 +743,21 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
             return _json([dict(r) for r in rows])
 
         elif action == "record_event" and crop_id:
+            try:
+                ev = EventCreate.model_validate({**d, "operator": d.get("operator") or "Iris"})
+            except ValidationError as e:
+                return json.dumps({"error": "EventCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
                 INSERT INTO crop_events (crop_id, event_type, old_stage, new_stage, count, operator, source, notes)
                 VALUES ($1, $2, $3, $4, $5, $6, 'iris', $7) RETURNING *""",
                 crop_id,
-                d.get("event_type"),
-                d.get("old_stage"),
-                d.get("new_stage"),
-                d.get("count"),
-                d.get("operator", "Iris"),
-                d.get("notes"),
+                ev.event_type,
+                ev.old_stage,
+                ev.new_stage,
+                ev.count,
+                ev.operator,
+                ev.notes,
             )
             return _json(dict(row))
 
@@ -836,17 +856,34 @@ async def alerts(action: str = "list", alert_id: int = 0, data: str = "") -> str
             return _json([dict(r) for r in rows])
 
         elif action == "acknowledge" and alert_id:
+            try:
+                ack = AlertAckPayload.model_validate({"acknowledged_by": d.get("acknowledged_by") or "iris"})
+            except ValidationError as e:
+                return json.dumps({"error": "AlertAckPayload validation failed", "details": json.loads(e.json())})
             await conn.execute(
-                "UPDATE alert_log SET acknowledged_at = now(), acknowledged_by = 'iris', disposition = 'acknowledged' WHERE id = $1",
+                "UPDATE alert_log SET acknowledged_at = now(), acknowledged_by = $2, "
+                "disposition = 'acknowledged' WHERE id = $1",
                 alert_id,
+                ack.acknowledged_by,
             )
             return json.dumps({"ok": True, "alert_id": alert_id, "action": "acknowledged"})
 
         elif action == "resolve" and alert_id:
+            try:
+                res = AlertResolvePayload.model_validate(
+                    {
+                        "resolved_by": d.get("resolved_by") or "iris",
+                        "resolution": d.get("resolution") or "Resolved by Iris",
+                    }
+                )
+            except ValidationError as e:
+                return json.dumps({"error": "AlertResolvePayload validation failed", "details": json.loads(e.json())})
             await conn.execute(
-                "UPDATE alert_log SET resolved_at = now(), resolved_by = 'iris', resolution = $2, disposition = 'resolved' WHERE id = $1",
+                "UPDATE alert_log SET resolved_at = now(), resolved_by = $2, "
+                "resolution = $3, disposition = 'resolved' WHERE id = $1",
                 alert_id,
-                d.get("resolution", "Resolved by Iris"),
+                res.resolved_by,
+                res.resolution,
             )
             return json.dumps({"ok": True, "alert_id": alert_id, "action": "resolved"})
 
@@ -872,28 +909,31 @@ async def lessons_manage(action: str, lesson_id: int = 0, data: str = "") -> str
     conn = await _db()
     try:
         if action == "create":
+            try:
+                payload = LessonCreate.model_validate(d)
+            except ValidationError as e:
+                return json.dumps({"error": "LessonCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
                 INSERT INTO planner_lessons (category, condition, lesson, confidence, times_validated, is_active, greenhouse_id)
                 VALUES ($1, $2, $3, $4, 1, true, 'vallery') RETURNING *""",
-                d.get("category"),
-                d.get("condition"),
-                d.get("lesson"),
-                d.get("confidence", "low"),
+                payload.category,
+                payload.condition,
+                payload.lesson,
+                payload.confidence,
             )
             return _json(dict(row))
 
         elif action == "update" and lesson_id:
-            sets = []
-            vals = [lesson_id]
-            i = 2
-            for col in ("category", "condition", "lesson", "confidence"):
-                if col in d:
-                    sets.append(f"{col} = ${i}")
-                    vals.append(d[col])
-                    i += 1
-            if not sets:
+            try:
+                patch = LessonUpdate.model_validate(d)
+            except ValidationError as e:
+                return json.dumps({"error": "LessonUpdate validation failed", "details": json.loads(e.json())})
+            set_fields = patch.model_dump(exclude_unset=True)
+            if not set_fields:
                 return json.dumps({"error": "No fields to update"})
+            sets = [f"{k} = ${i}" for i, k in enumerate(set_fields, start=2)]
+            vals = [lesson_id, *set_fields.values()]
             row = await conn.fetchrow(f"UPDATE planner_lessons SET {', '.join(sets)} WHERE id = $1 RETURNING *", *vals)
             return _json(dict(row)) if row else json.dumps({"error": "Lesson not found"})
 
@@ -902,12 +942,16 @@ async def lessons_manage(action: str, lesson_id: int = 0, data: str = "") -> str
             return json.dumps({"ok": True, "lesson_id": lesson_id, "action": "deactivated"})
 
         elif action == "validate" and lesson_id:
-            new_conf = d.get("confidence")
-            if new_conf:
+            try:
+                val = LessonValidate.model_validate(d) if d else LessonValidate()
+            except ValidationError as e:
+                return json.dumps({"error": "LessonValidate validation failed", "details": json.loads(e.json())})
+            if val.confidence:
                 await conn.execute(
-                    "UPDATE planner_lessons SET times_validated = times_validated + 1, last_validated = now(), confidence = $2 WHERE id = $1",
+                    "UPDATE planner_lessons SET times_validated = times_validated + 1, "
+                    "last_validated = now(), confidence = $2 WHERE id = $1",
                     lesson_id,
-                    new_conf,
+                    val.confidence,
                 )
             else:
                 await conn.execute(

@@ -139,6 +139,13 @@ services:
       DB_NAME: verdify
       DB_USER: verdify
       DB_PASS: ${POSTGRES_PASSWORD}
+    volumes:
+      # Sprint 21: shared Pydantic schema package — mounted read-only so
+      # `from verdify_schemas import ...` works without duplicating code into
+      # the image. The sys.path.insert('/mnt/iris/verdify') in main.py is a
+      # host-side dev convenience; in-container the package resolves via this
+      # mount at /app/verdify_schemas.
+      - ./verdify_schemas:/app/verdify_schemas:ro
     networks:
       - verdify-proxy
       - verdify-internal

@@ -179,3 +179,32 @@ class PlanEvaluation(BaseModel):
     outcome_score: int = Field(..., ge=1, le=10)
     actual_outcome: str = Field(..., min_length=1, max_length=20000)
     lesson_extracted: str | None = Field(default=None, max_length=20000)
+
+
+# ── Full plan_journal row shape (persisted, read-only for consumers) ──────
+
+
+class PlanJournalRow(BaseModel):
+    """plan_journal table row — full persisted shape.
+
+    Used by website renderers (generate-daily-plan.py) and the planner's
+    reflection step to read prior plans. Created via set_plan, updated via
+    plan_evaluate. `hypothesis_structured` is the PlanHypothesisStructured
+    JSONB companion added in Sprint 20 migration 084.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    plan_id: PlanId
+    created_at: AwareDatetime | None = None
+    conditions_summary: str | None = None
+    hypothesis: str | None = None
+    experiment: str | None = None
+    expected_outcome: str | None = None
+    params_changed: list[str] | None = None
+    actual_outcome: str | None = None
+    outcome_score: int | None = Field(default=None, ge=1, le=10)
+    lesson_extracted: str | None = None
+    validated_at: AwareDatetime | None = None
+    hypothesis_structured: PlanHypothesisStructured | None = None
+    greenhouse_id: str = "vallery"

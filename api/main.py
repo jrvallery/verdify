@@ -9,12 +9,19 @@ Usage:
 """
 
 import os
+import sys
 from contextlib import asynccontextmanager
-from datetime import date
 
 import asyncpg
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+
+# verdify_schemas is mounted at /app/verdify_schemas inside the container
+# (see docker-compose.yml api.volumes). For host-side dev runs, /mnt/iris/verdify
+# contains the package; Python auto-discovers either path.
+for _p in ("/app", "/mnt/iris/verdify"):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+from verdify_schemas import CropCreate, CropUpdate, EventCreate, ObservationCreate  # noqa: E402
 
 # ── DB Connection ──
 
@@ -50,56 +57,10 @@ app = FastAPI(
 )
 
 # ── Models ──
-
-
-class CropCreate(BaseModel):
-    name: str
-    variety: str | None = None
-    position: str
-    zone: str
-    planted_date: date
-    expected_harvest: date | None = None
-    stage: str = "seed"
-    count: int | None = None
-    seed_lot_id: str | None = None
-    supplier: str | None = None
-    base_temp_f: float = 50.0
-    target_dli: float | None = None
-    target_vpd_low: float | None = None
-    target_vpd_high: float | None = None
-    notes: str | None = None
-
-
-class CropUpdate(BaseModel):
-    name: str | None = None
-    variety: str | None = None
-    position: str | None = None
-    zone: str | None = None
-    stage: str | None = None
-    expected_harvest: date | None = None
-    count: int | None = None
-    target_dli: float | None = None
-    target_vpd_low: float | None = None
-    target_vpd_high: float | None = None
-    notes: str | None = None
-
-
-class ObservationCreate(BaseModel):
-    obs_type: str = "health_check"
-    notes: str | None = None
-    severity: int | None = None
-    observer: str | None = None
-    health_score: float | None = Field(None, ge=0, le=1)
-
-
-class EventCreate(BaseModel):
-    event_type: str
-    old_stage: str | None = None
-    new_stage: str | None = None
-    count: int | None = None
-    operator: str | None = None
-    notes: str | None = None
-
+#
+# Sprint 21: request-body models moved to /mnt/iris/verdify/verdify_schemas/crops.py.
+# Any change to fields or validation rules lives there now; every caller
+# (API, MCP crops tool, vault-crop-writer, planner) shares the same shape.
 
 DEFAULT_GREENHOUSE = "vallery"
 

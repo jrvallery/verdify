@@ -1,0 +1,137 @@
+# verdify_schemas
+
+Shared Pydantic v2 models. The database is the source of truth; this package
+is the typed contract every other layer uses when it reads from, writes to,
+or passes data alongside the DB.
+
+## Why this exists
+
+Before Sprint 20/21 the project had ~40 ad-hoc data shapes drifting across
+layers:
+
+- Ingestor INSERTs built dicts by hand; a typo in a column name landed
+  silently as `None` in the row.
+- MCP tools took free-form JSON strings and parsed them with `.get()`; the
+  planner could omit required fields and the tool wrote partial rows.
+- `api/main.py` had 4 local Pydantic models; none of them were shared with
+  the MCP server or the ingestor.
+- Vault markdown writers built frontmatter as anonymous dicts; a misspelled
+  key meant a broken Obsidian dataview query three days later.
+- Open-Meteo's 27 parallel hourly arrays were zipped by index with no length
+  check.
+
+One schema package ends all of that. Every shape lives here; every layer
+validates at its boundary; drift is caught by CI.
+
+## What's inside
+
+| File | Purpose | Layers that use it |
+|---|---|---|
+| `tunables.py` | Canonical set of dispatcher-emitted parameters + `TunableParameter` validator | mcp `set_plan` / `set_tunable`, ingestor dispatcher, schema tests |
+| `plan.py` | `Plan`, `PlanTransition`, `PlanHypothesisStructured`, `PlanEvaluation`, `PlanJournalRow` | mcp `set_plan` / `plan_evaluate`, `generate-daily-plan.py`, backfill script |
+| `setpoint.py` | `SetpointChange`, `SetpointPlanRow`, `SetpointSnapshot`, `SetpointClamp` | ingestor confirmation loop, dispatcher audit, website renderers |
+| `telemetry.py` | `ClimateRow`, `Diagnostics`, `EquipmentStateEvent`, `EnergySample`, `SystemStateRow`, `OverrideEvent` | ingestor write paths, MCP `query` tool consumers |
+| `alerts.py` | `AlertLogRow`, `AlertEnvelope`, `AlertAction` | `alert_monitor` task, MCP `alerts` tool |
+| `crops.py` | `Crop`, `CropCreate`, `CropUpdate`, `CropEvent`, `Observation`, `ObservationCreate`, `EventCreate` + action envelopes | `api/main.py`, MCP `crops` / `observations` tools, `vault-crop-writer.py` |
+| `lessons.py` | `PlannerLesson`, `LessonCreate`, `LessonUpdate`, `LessonValidate`, `LessonAction` | MCP `lessons_manage` tool, `generate-lessons-page.py` |
+| `daily.py` | `DailySummaryRow` (61 fields) | `daily-summary-snapshot.py`, `vault-daily-writer.py`, `generate-daily-plan.py` |
+| `forecast.py` | `ForecastHour` | `forecast-sync.py`, `generate-forecast-page.py` |
+| `views.py` | `PlannerPerformance`, `PlanAccuracy`, `DewPointRiskRow`, `WaterBudgetRow`, `DailyOscillation`, `DailyOscillationSummary`, `OverrideActivity24h`, `ClampActivity24h` | website renderers, MCP `scorecard` tool |
+| `vault.py` | `DailyVaultFrontmatter`, `DailyPlanVaultFrontmatter`, `CropVaultFrontmatter`, `ForecastVaultFrontmatter`, `LessonsVaultFrontmatter` | every script that writes markdown into the Obsidian vault |
+| `external.py` | `OpenMeteoHourly`, `OpenMeteoForecastResponse`, `HAEntityState` | `forecast-sync.py`, Shelly/Tempest/HA sync tasks |
+
+## Principles
+
+1. **Names match DB columns exactly.** A schema field is valid iff it also
+   appears in `information_schema.columns` for its table. `test_drift_guards.py`
+   enforces this against the live DB.
+2. **Enums replace magic strings.** `SetpointSource`, `AlertSeverity`,
+   `CropStage`, `LessonConfidence`, etc. — any magic string the codebase
+   used more than once is now a `Literal[...]`.
+3. **Validators enforce physics invariants.** `vpd_low < vpd_high`,
+   `temp_low < temp_high`, `0 <= rh_pct <= 100`, `outcome_score in [1, 10]`.
+   The same invariants as the ingestor's `_PHYSICS_INVARIANTS`, but at the
+   schema level — so a bad plan fails at the MCP boundary, not after it's
+   partially written to `setpoint_plan`.
+4. **`extra="ignore"` on DB-row models; `extra="forbid"` on input envelopes.**
+   DB-row schemas tolerate new columns (additive migrations are the common
+   case). Input envelopes (CropCreate, LessonCreate, etc.) reject unknown
+   fields — if the planner sends a typo'd key we want to hear about it.
+
+## Adding a new schema
+
+1. Add the model to the appropriate file (or create a new one if it's a new
+   domain). One class, one docstring, one example in a unit test.
+2. Re-export from `verdify_schemas/__init__.py` (`__all__` + the `from`
+   import at the top).
+3. Add a unit test in `verdify_schemas/tests/`:
+   - Happy path
+   - At least one rejection case (bad enum value, out-of-range number,
+     missing required field)
+4. If the new model mirrors a DB table, add it to the `DB_BACKED` list in
+   `test_drift_guards.py` and confirm the drift guard passes.
+5. Re-run `make test` (covers `tests/` + `verdify_schemas/tests/`).
+
+## Integration patterns
+
+### Validate input at the MCP boundary
+
+```python
+from verdify_schemas import Plan
+from pydantic import ValidationError
+
+try:
+    plan = Plan.model_validate_json(raw_transitions)
+except ValidationError as e:
+    return json.dumps({"error": "Plan validation failed", "details": json.loads(e.json())})
+# plan is now typed; every transition has a valid TunableParameter, etc.
+```
+
+### Validate rows at ingestor write boundary
+
+```python
+from verdify_schemas import ClimateRow
+
+row = ClimateRow.model_validate({"ts": ts, "temp_avg": t, "rh_avg": rh, ...})
+# .model_dump(mode='python') hands the dict to asyncpg; out-of-range
+# values get caught before they reach the hypertable.
+```
+
+### Drive a website renderer
+
+```python
+from verdify_schemas import DailyVaultFrontmatter
+
+fm = DailyVaultFrontmatter(date=date.today(), temp_avg=t, ...)
+yaml_block = yaml.safe_dump(fm.model_dump(mode="json", exclude_none=True))
+```
+
+### Audit a view projection
+
+```python
+from verdify_schemas import PlannerPerformance
+
+rows = db_query_json("SELECT * FROM v_planner_performance WHERE date = %s", today)
+perf = PlannerPerformance.model_validate(rows[0])
+# perf.planner_score is a typed Decimal; if the view drops a column the
+# renderer fails here, not silently mid-page.
+```
+
+## Testing
+
+- `pytest verdify_schemas/tests/` — unit tests for every model
+- Drift guards run against live Postgres via `docker exec`; skip if
+  `docker` isn't available (CI runners)
+- Full suite: `make test` covers both `tests/` (integration) and
+  `verdify_schemas/tests/` (unit + drift)
+
+## Migration history
+
+- **Sprint 20** established the pattern with 8 models (Plan, PlanTransition,
+  PlanEvaluation, SetpointChange, DailySummaryRow, ForecastHour,
+  TunableParameter, PlanHypothesisStructured) around the planner feedback
+  loop.
+- **Sprint 21** extended coverage to every DB table the ingestor writes to,
+  every view the renderers read, every MCP tool that accepts JSON, every
+  vault markdown writer, and every external API. ~30 new models; 140+
+  unit tests; 18 drift guards.

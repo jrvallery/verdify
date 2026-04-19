@@ -46,7 +46,7 @@ class TestSetpointChange:
                 ts=datetime(2026, 4, 18, tzinfo=UTC),
                 parameter="temp_low",
                 value=55.0,
-                source="iris",  # not in SetpointSource literal
+                source="totally_fake",  # not in SetpointSource literal
             )
 
 
