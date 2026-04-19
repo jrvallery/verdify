@@ -93,13 +93,15 @@ F8 (staleness window in `write_climate`) investigated and dismissed as correct.
 - Web: consumes `/health/writes`
 - Genai: correlation ID propagates through `set_plan`/`set_tunable` MCP tools
 
-## Open decisions (block Sprint 24 kickoff)
+## Decisions resolved 2026-04-18
 
-1. **F1 fix shape:** recommend `"system"` (cheap, in-scope). Widening `AlertCategory` to include `"safety"` waits for Sprint 25 discriminated union.
-2. **Branch B1 (`iris-dev/sprint-22-pydantic-rollout`):** 2 unmerged commits on "topology as first-class entities" — appears abandoned alternate Sprint 23. Recommend archiving as `archive/topology-sprint-23-draft`. Blocks nothing in Sprint 24 but avoids confusion.
-3. **Branch B2 (`backend-dev`):** 491-file experimental FastAPI/SQLModel rewrite with Copilot scaffolding. Recommend archiving as `archive/backend-dev-experiment`.
-4. **F2 consolidation direction:** Option A (delete script, validate inline) recommended over Option B (script-as-library).
-5. **Sprint 26 ordering:** recommend AFTER Sprint 25. Bundling split with alert migration would be a 1000+ line diff; doing 25 on the monolith keeps each sprint reviewable.
+All five blockers for Sprint 24 cleared.
+
+1. **F1 fix shape:** ship `"category": "system"` in Sprint 24. Semantic tightening deferred to Sprint 25's discriminated union where `safety_invalid` gets its own subtype.
+2. **Branch B1 (`iris-dev/sprint-22-pydantic-rollout`):** archive as `archive/topology-sprint-23-draft`. Coordinator-owned action (cross-agent-visible branch rename).
+3. **Branch B2 (`backend-dev`):** archive as `archive/backend-dev-experiment`. Coordinator-owned action.
+4. **F2 consolidation:** Option A — delete `scripts/forecast-sync.py` and `systemd/verdify-forecast.service`, move `OpenMeteoForecastResponse.model_validate` into `ingestor/tasks.py::forecast_sync`. Ships in Sprint 24.
+5. **Sprint 26 ordering:** AFTER Sprint 25. Alert migration lands on the existing monolith, split is a separate pure-refactor sprint.
 
 ## Candidate / Sprint 28+ (not yet committed)
 
