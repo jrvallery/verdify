@@ -16,9 +16,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 import asyncpg
-from pydantic import ValidationError
-
 from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
 
 # verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
 sys.path.insert(0, "/mnt/iris/verdify")
