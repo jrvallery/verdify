@@ -59,6 +59,9 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "fan_burst_min",
         "vent_bypass_min",
         "fog_burst_min",
+        # Firmware-internal, readback-only (no SETPOINT_MAP route) — present
+        # in entity_map.CFG_READBACK_MAP so SetpointSnapshot writes validate.
+        "fallback_window_s",
         # Economiser
         "enthalpy_open",
         "enthalpy_close",

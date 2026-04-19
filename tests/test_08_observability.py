@@ -125,8 +125,12 @@ class TestSprint18Wiring:
     def test_fw3_invariants_table_defined(self):
         body = self._read(self.TASKS_PATH)
         assert "_PHYSICS_INVARIANTS" in body, "FW-3 invariants table must be defined"
-        assert '"max_relief_cycles"' in body, "FW-3 must cover max_relief_cycles bounds"
-        assert '"fog_window_start"' in body, "FW-3 must cover fog_window_start bounds"
+        # Sprint 24 renamed keys to canonical ALL_TUNABLES names and removed
+        # non-tunable entries (max_relief_cycles, vpd_max_safe, etc.). Assert
+        # representatives from each remaining category: fog window, safety
+        # rail, resource budget.
+        assert '"fog_time_window_start"' in body, "FW-3 must cover fog_time_window_start bounds"
+        assert '"safety_vpd_max"' in body, "FW-3 must cover safety_vpd_max bounds"
         assert '"mister_water_budget_gal"' in body, "FW-3 must cover mister_water_budget_gal bounds"
 
     def test_fw3_validator_invoked_in_dispatcher(self):
