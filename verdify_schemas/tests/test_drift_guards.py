@@ -156,3 +156,30 @@ def test_schema_fields_subset_of_db_columns(model_class, table_name):
         f"{missing_in_db}. Either the schema is stale (field renamed/removed in DB) "
         f"or a migration is missing."
     )
+
+
+# Columns we require to propagate *into* the schema whenever the DB has them.
+# Multi-tenant correctness: if a table is tenant-scoped in the DB, the model
+# must know about it. Without this guard, renderers and queries silently miss
+# the greenhouse_id filter and data bleeds across tenants.
+TENANCY_CRITICAL_COLUMNS = ("greenhouse_id",)
+
+
+@pytest.mark.parametrize("model_class,table_name", DB_BACKED)
+def test_tenancy_critical_columns_declared_by_schema(model_class, table_name):
+    """If the DB table has a tenancy-critical column, the schema must declare it.
+
+    One-way drift (schema → DB) is already guarded by
+    test_schema_fields_subset_of_db_columns. This is the other direction: the
+    DB has greenhouse_id; the schema must too. Prevents silent tenant bleed.
+    """
+    db_cols = _table_columns(table_name)
+    if not db_cols:
+        pytest.skip(f"table {table_name!r} not found (migration pending?)")
+    schema_fields = set(model_class.model_fields.keys())
+    missing_in_schema = [c for c in TENANCY_CRITICAL_COLUMNS if c in db_cols and c not in schema_fields]
+    assert not missing_in_schema, (
+        f"{model_class.__name__} is missing tenancy-critical field(s) that exist "
+        f"on the {table_name!r} table: {missing_in_schema}. Declare them on the "
+        f"model so renderers and queries can filter by tenant."
+    )

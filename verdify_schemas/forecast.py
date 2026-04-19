@@ -14,6 +14,7 @@ class ForecastHour(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     ts: AwareDatetime
+    greenhouse_id: str = "vallery"
     fetched_at: AwareDatetime
 
     # Temperature + humidity

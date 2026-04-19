@@ -25,6 +25,7 @@ class Treatment(BaseModel):
 
     id: int | None = None
     ts: AwareDatetime | None = None
+    greenhouse_id: str = "vallery"
     product: str = Field(..., min_length=1)
     active_ingredient: str | None = None
     concentration: float | None = Field(default=None, ge=0)
@@ -48,6 +49,7 @@ class Harvest(BaseModel):
 
     id: int | None = None
     ts: AwareDatetime | None = None
+    greenhouse_id: str = "vallery"
     crop_id: int | None = None
     weight_kg: float | None = Field(default=None, ge=0)
     unit_count: int | None = Field(default=None, ge=0)
@@ -67,8 +69,8 @@ class HarvestCreate(BaseModel):
     """MCP observations(record_harvest) data payload.
 
     Column names mirror the live `harvests` table exactly — `unit_price` (not
-    `unit_price_usd`) and `operator` (not `harvested_by`). The table does not
-    have a `greenhouse_id` column, so the envelope rejects one.
+    `unit_price_usd`) and `operator` (not `harvested_by`). Tenant context
+    (`greenhouse_id`) is supplied by the MCP caller, not by the envelope.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -88,7 +90,8 @@ class TreatmentCreate(BaseModel):
     """MCP observations(record_treatment) data payload.
 
     Column names mirror the live `treatments` table — `applicator` (not
-    `applied_by`). No `greenhouse_id` column exists.
+    `applied_by`). Tenant context (`greenhouse_id`) is supplied by the MCP
+    caller, not by the envelope.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -115,6 +118,7 @@ class IrrigationLog(BaseModel):
 
     id: int | None = None
     ts: AwareDatetime
+    greenhouse_id: str = "vallery"
     zone: str = Field(..., min_length=1)
     schedule_id: int | None = None
     scheduled_time: TimeType | None = None
@@ -132,6 +136,7 @@ class IrrigationSchedule(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: int | None = None
+    greenhouse_id: str = "vallery"
     zone: str = Field(..., min_length=1)
     start_time: TimeType
     duration_s: int = Field(..., ge=0)
@@ -149,6 +154,7 @@ class LabResult(BaseModel):
 
     id: int | None = None
     ts: AwareDatetime | None = None
+    greenhouse_id: str = "vallery"
     sample_type: str = Field(..., min_length=1)
     zone: str | None = None
     crop_id: int | None = None
@@ -178,6 +184,7 @@ class MaintenanceLog(BaseModel):
 
     id: int | None = None
     ts: AwareDatetime | None = None
+    greenhouse_id: str = "vallery"
     equipment: str | None = None
     service_type: str | None = None
     description: str | None = None
@@ -193,6 +200,7 @@ class ConsumablesLog(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: int | None = None
+    greenhouse_id: str = "vallery"
     purchased_date: DateType
     category: str = Field(..., min_length=1)
     item_name: str = Field(..., min_length=1)

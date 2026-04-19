@@ -16,6 +16,7 @@ class DailySummaryRow(BaseModel):
     model_config = ConfigDict(extra="ignore")  # Tolerate new columns without breaking old readers
 
     date: DateType
+    greenhouse_id: str = "vallery"
     captured_at: AwareDatetime | None = None
     notes: str | None = None
 
