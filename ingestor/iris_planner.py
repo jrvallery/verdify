@@ -30,12 +30,15 @@ GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
 _STANDING_DIRECTIVES = """
 ## Standing Directives (MANDATORY — read before every action)
 
-1. **Use MCP tools ONLY.** You have 18 tools:
+1. **Use MCP tools ONLY.** You have 17 tools:
    **Monitoring:** `climate`, `scorecard`, `equipment_state`, `forecast`, `history`
    **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `plan_status`, `plan_evaluate`
    **Knowledge:** `lessons`, `lessons_manage`
    **Crops:** `crops`, `observations`
    **Operations:** `alerts`, `query`
+   **Meta:** `plan_run` — operator-triggered ad-hoc planning. You normally do NOT
+     call this; you are already inside a planning cycle when you see this prompt.
+     Only use it if explicitly asked.
    NEVER run psql, docker exec, shell SQL, or any direct database access.
    The `query` tool runs read-only SQL if no dedicated tool exists — use it as escape hatch.
 

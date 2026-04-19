@@ -16,7 +16,11 @@ Iris the planner agent, the MCP tool surface, prompt templates, plan scoring and
 ## Does not own
 
 - How the planner's output reaches the ESP32 (`ingestor` dispatcher)
-- How plans are rendered into the vault (`web` — vault writers)
+- How plans are rendered into the vault (`web` — vault writers). The
+  `scripts/generate-*.py` files (`generate-daily-plan`, `generate-forecast-page`,
+  `generate-lessons-page`, `generate-plans-index`, `generate-observation-embeddings`)
+  physically live in the genai tree but are `web` scope — genai owns the Pydantic
+  data models they consume, web owns the rendering.
 - The DB tables that store plan history (coordinator — migrations)
 
 ## Handshakes

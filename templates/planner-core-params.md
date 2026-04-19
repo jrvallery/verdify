@@ -1,42 +1,49 @@
 # Planner Core Parameters — Mandatory Emission List
 
-## Required Parameters (MUST emit in every plan)
+## The canonical list
 
-These 10 parameters MUST have a waypoint in EVERY scheduled plan, even if the value is unchanged from the previous plan. This ensures:
-1. **Chart continuity** — homepage and dashboard setpoint lines extend through the full forecast window
-2. **Clean supersession** — the DB trigger deactivates older plans' waypoints when a new plan writes the same parameter. If you skip a param, the old plan's value stays "active" indefinitely.
-3. **Audit trail** — every plan explicitly documents what ALL key setpoints are, not just what changed
+Every planner transition must emit **all 24 Tier 1 tunables**. The authoritative
+list lives in two places that are kept in sync:
 
-| # | Parameter | Unit | Typical Range | Why Mandatory |
-|---|-----------|------|---------------|---------------|
-| 1 | `temp_high` | °F | 78-85 | Homepage "Target Max" line. Controls COOL_S1 trigger. |
-| 2 | `temp_low` | °F | 55-62 | Homepage "Target Min" line. Controls HEAT_S1 trigger. |
-| 3 | `vpd_high` | kPa | 1.4-2.2 | Homepage "VPD Target" line. HUMID_S1 = vpd_high + hysteresis. |
-| 4 | `vpd_hysteresis` | kPa | 0.2-0.5 | Determines mister engage point (vpd_high + this). |
-| 5 | `d_cool_stage_2` | °F | 2-5 | COOL_S2 threshold = temp_high + this. Controls dual-fan staging. |
-| 6 | `mister_engage_kpa` | kPa | 1.2-1.8 | Primary misting threshold. Critical for VPD control. |
-| 7 | `mister_all_kpa` | kPa | 1.4-2.2 | HUMID_S2 all-zone threshold. |
-| 8 | `mister_pulse_on_s` | s | 30-90 | Mister pulse duration. Changes between day/night. |
-| 9 | `mister_pulse_gap_s` | s | 20-60 | Gap between mister pulses. Key tuning parameter. |
-| 10 | `mister_vpd_weight` | - | 1.0-3.0 | Zone rotation VPD weighting. |
+1. `ingestor/iris_planner.py` — the `_PLANNER_KNOWLEDGE` block enumerates all
+   24 in the "24 Tier 1 Tunables" table Iris reads on every event.
+2. `scripts/validate-plan-coverage.sh` — the `CORE=` variable (line 8) is the
+   executable spec. CI and `gather-plan-context.sh` section 28 invoke it to
+   assert each transition carries the full set.
 
-## How to Emit
+If those two disagree, the shell script wins.
 
-Even when keeping the same value:
-```sql
-INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason) VALUES
-  ('2026-03-30 06:00:00-06', 'temp_low', 58, 'iris-20260330-0600', 'iris', 'Holding steady'),
-  ('2026-03-30 06:00:00-06', 'temp_high', 82, 'iris-20260330-0600', 'iris', 'Holding steady'),
-  ...;
-```
+## Why emit the full set every transition
 
-## What Happens If You Skip
+1. **Clean supersession.** The DB trigger deactivates older plans' waypoints
+   when a new plan writes the same parameter at a future ts. If you skip a
+   Tier 1 param, the previous plan's value stays "active" for it indefinitely.
+2. **Chart continuity.** Dashboards and the daily plan page trace setpoint
+   lines across the forecast window; gaps show up as stale.
+3. **Audit trail.** Every plan explicitly documents all 24 tuning levers,
+   not just what changed.
 
-- The parameter's active waypoint stays from an OLDER plan
-- v_active_plan returns a stale plan_id for that param
-- Charts show the old plan's line, not the current plan
-- The ESP32 Controller Health dashboard's oscillation heatmap lights up
+## Tier 2 — do NOT emit
 
-## Context Section
+The following are **band-driven**, computed every 5 minutes from
+`fn_band_setpoints()` against active crop profiles. The planner cannot set
+them; the ingestor dispatcher (`ingestor/tasks.py` `BAND_DRIVEN` set) silently
+drops them if they appear in a plan:
 
-`gather-plan-context.sh` section 20b shows CURRENT ACTIVE SETPOINTS for all 12 core parameters. Copy any you're not changing.
+- `temp_high`, `temp_low`
+- `vpd_high`, `vpd_low`
+- `vpd_target_south`, `vpd_target_west`, `vpd_target_east`, `vpd_target_center`
+- `mister_engage_delay_s`, `mister_all_delay_s`
+- `safety_min`, `safety_max`, `safety_vpd_min`, `safety_vpd_max`
+
+To shift thermal or VPD band edges, tune `bias_heat` / `bias_cool` and
+`vpd_hysteresis` (all Tier 1). Emitting a Tier 2 param is a silent no-op —
+not an error, but not an effect either.
+
+## Historical note
+
+Earlier revisions of this doc listed 10 "mandatory" params that included
+`temp_high`/`temp_low`/`vpd_high`/`vpd_low`. That was wrong: those four
+were already Tier 2 at the time the list was written. The doc was
+rewritten 2026-04-18 after an audit caught the contradiction against
+`ingestor/tasks.py` dispatch logic.
