@@ -1,16 +1,12 @@
-# Verdify Backlog — SaaS-Aligned Roadmap
+# Backlog: `saas`
 
-**Last Updated:** 2026-04-07
+Owned by the [`saas`](../agents/saas.md) agent. Cloud migration, multi-tenancy, React app.
 
-**Principle:** Every task should move us toward the SaaS vision OR keep the greenhouse running. Nothing should create SaaS-hostile debt. When choosing between two ways to build something, pick the way that works for multi-tenant.
+**Last content update:** 2026-04-07 (moved into agent-scoped backlog 2026-04-18).
 
----
+**Principle:** Every task moves toward multi-tenant SaaS OR keeps the greenhouse running. Nothing creates SaaS-hostile debt. When choosing between two ways to build something, pick the way that works for multi-tenant.
 
-## The Two Tracks
-
-**Track A: Keep the greenhouse operational.** The plants don't care about architecture. This track is about reliability, planner quality, and crop outcomes. It runs continuously.
-
-**Track B: Build toward SaaS.** Refactor, abstract, and migrate in small steps that don't break Track A. Each step should leave the system working exactly as before from the greenhouse's perspective, but with one more component ready for multi-tenant.
+**Track A** (operational reliability, planner quality, crop outcomes) lives across the other agents' backlogs. This doc is Track B.
 
 ---
 

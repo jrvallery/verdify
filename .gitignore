@@ -48,3 +48,6 @@ reports/
 reports
 firmware/test/replay_overrides
 firmware/artifacts/
+
+# Claude Code local settings — per-worktree, never committed
+.claude/settings.local.json
