@@ -289,6 +289,56 @@ FROM daily_summary WHERE date = CURRENT_DATE - 1;
 # Dispatched changes removed — planner does not verify dispatch.
 echo ""
 
+# ── 15c. STRUCTURED HYPOTHESIS (G7: close the predict-vs-deliver loop) ─
+# hypothesis_structured is a JSONB column written by set_plan when Iris
+# includes a ```json``` block in her hypothesis. Until G7 it was write-only —
+# stored but never surfaced back. Injecting it here lets Iris grade her own
+# structured predictions (conditions, stress_windows, param rationales)
+# against the MOST RECENT COMPLETE PLAN EVALUATION block above.
+echo "--- STRUCTURED HYPOTHESIS (yesterday's typed predictions, compare to eval block above) ---"
+HAS_STRUCTURED=$($DB -c "SELECT CASE WHEN hypothesis_structured IS NULL THEN 'no' ELSE 'yes' END FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}';" 2>/dev/null | tr -d ' ')
+if [ "${HAS_STRUCTURED}" = "yes" ]; then
+  # predicted_vs_actual: extract the scalar conditions from the structured
+  # hypothesis and line them up with daily_summary + climate actuals.
+  # Columns used (verified 2026-04-19 against live DB):
+  #   daily_summary.outdoor_temp_max, rh_min (indoor — best proxy we have)
+  #   climate.solar_irradiance_w_m2 (MAX for yesterday)
+  # cloud_cover actuals don't have a first-class column; we leave n/a.
+  echo "predicted_vs_actual (from hypothesis_structured.conditions):"
+  $DB -c "
+  SELECT metric, predicted, COALESCE(actual, 'n/a') AS actual FROM (
+    SELECT 'outdoor_temp_peak_f' AS metric, 1 AS ord,
+      (hypothesis_structured->'conditions'->>'outdoor_temp_peak_f')::text AS predicted,
+      (SELECT round(outdoor_temp_max::numeric, 1)::text FROM daily_summary WHERE date = CURRENT_DATE - 1) AS actual
+    FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}'
+    UNION ALL SELECT 'outdoor_rh_min_pct (indoor proxy)', 2,
+      (hypothesis_structured->'conditions'->>'outdoor_rh_min_pct')::text,
+      (SELECT round(rh_min::numeric, 0)::text FROM daily_summary WHERE date = CURRENT_DATE - 1)
+    FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}'
+    UNION ALL SELECT 'solar_peak_w_m2', 3,
+      (hypothesis_structured->'conditions'->>'solar_peak_w_m2')::text,
+      (SELECT round(MAX(solar_irradiance_w_m2)::numeric, 0)::text FROM climate
+        WHERE (ts AT TIME ZONE 'America/Denver')::date = CURRENT_DATE - 1)
+    FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}'
+    UNION ALL SELECT 'cloud_cover_avg_pct', 4,
+      (hypothesis_structured->'conditions'->>'cloud_cover_avg_pct')::text,
+      NULL
+    FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}'
+  ) t ORDER BY ord;
+  " 2>/dev/null
+  # Full structured hypothesis, pretty-printed, so Iris can grade stress_windows
+  # + rationale (which aren't extractable into a flat table).
+  echo ""
+  echo "full structured hypothesis (stress_windows + rationale — grade each against actual stress hours + scorecard above):"
+  $DB -c "SELECT jsonb_pretty(hypothesis_structured) FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}';" 2>/dev/null
+  echo ""
+  echo "Grade each stress_window: did its predicted kind/severity match the actual stress_hours column for that type?"
+  echo "Grade each rationale: did new_value produce the expected_effect? If not, note it in your previous_plan_validation."
+else
+  echo "(no structured hypothesis for governing plan — legacy prose-only plan. Grade from the free-text hypothesis in section 15.)"
+fi
+echo ""
+
 # ── 16. WATER USAGE TREND ─────────────────────────────────────────
 echo "--- WATER (7 days) ---"
 $DB -c "

@@ -262,6 +262,45 @@ Gas heating is 3.9x cheaper per BTU than electric.
 - Zone VPD null: fall back to avg VPD. Don't hallucinate zone priorities from nulls.
 - Setpoint values = 0 after reboot: corrupt flash. Dispatcher auto-corrects within 5 min.
 - Solar = 0 at night: normal. Not a sensor failure.
+
+### Structured hypothesis (required on SUNRISE plans)
+
+When you call `set_plan()`, the `hypothesis` field should include a fenced
+```json``` block following the `PlanHypothesisStructured` shape. `set_plan()`
+extracts and validates it, stores it in `plan_journal.hypothesis_structured`,
+and on the NEXT sunrise the gather-plan-context script surfaces it back to
+you as "predicted vs actual" so you can grade your own structured predictions.
+
+Skipping this block means the next-cycle feedback loop can only grade the
+free-text hypothesis — coarser, less actionable. Always include it on
+SUNRISE plans. Optional on TRANSITION adjustments.
+
+Minimal valid block (all three sections required):
+```json
+{
+  "conditions": {
+    "outdoor_temp_peak_f": 82.0,
+    "outdoor_rh_min_pct": 12.0,
+    "solar_peak_w_m2": 900,
+    "cloud_cover_avg_pct": 15,
+    "notes": "hot dry spring day, clear skies"
+  },
+  "stress_windows": [
+    {"kind": "vpd_high", "start": "2026-04-19T10:00:00-06:00",
+     "end": "2026-04-19T16:00:00-06:00", "severity": "high",
+     "mitigation": "fog_escalation_kpa 0.25, mister_pulse_gap_s 20"}
+  ],
+  "rationale": [
+    {"parameter": "fog_escalation_kpa", "old_value": 0.4, "new_value": 0.25,
+     "forecast_anchor": "RH < 15% from 10:00-16:00",
+     "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0"}
+  ]
+}
+```
+
+`stress_windows` can be empty on mild days. `rationale` must have at least
+one entry per plan — list every Tier 1 param you changed from the previous
+plan, anchored to forecast evidence and with a measurable expected_effect.
 """
 
 # ── Event prompt templates ────────────────────────────────────────
