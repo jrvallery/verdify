@@ -42,6 +42,15 @@ class TestTunableEnumShape:
         - /srv/verdify/ingestor (Iris VM; compat symlink to /mnt/iris/verdify)
         - <repo-root>/ingestor (CI checkout path)
         - /mnt/iris/verdify/ingestor (NFS path)
+
+        Bidirectional assertions:
+        - Every SETPOINT_MAP value must be in ALL_TUNABLES (dispatcher can't
+          route a param the schema doesn't know).
+        - Every ALL_TUNABLES entry must be either dispatched (SETPOINT_MAP) or
+          readback-only (CFG_READBACK_MAP). Firmware-internal readback-only
+          tunables (e.g. fallback_window_s) need a home in ALL_TUNABLES so
+          SetpointSnapshot validates; they have no SETPOINT_MAP route by
+          design and are allowed here.
         """
         import pathlib
 
@@ -50,20 +59,22 @@ class TestTunableEnumShape:
         for p in ("/srv/verdify/ingestor", str(repo_root / "ingestor"), "/mnt/iris/verdify/ingestor"):
             if p not in sys.path:
                 sys.path.insert(0, p)
-        from entity_map import SETPOINT_MAP
+        from entity_map import CFG_READBACK_MAP, SETPOINT_MAP
 
         em_tunables = set(SETPOINT_MAP.values())
+        readback_tunables = set(CFG_READBACK_MAP.values())
+        routed_tunables = em_tunables | readback_tunables
         schema_tunables = set(ALL_TUNABLES)
 
         missing_in_schema = sorted(em_tunables - schema_tunables)
-        missing_in_em = sorted(schema_tunables - em_tunables)
+        unrouted_in_schema = sorted(schema_tunables - routed_tunables)
 
         assert not missing_in_schema, (
             f"entity_map has tunables the schema doesn't know: {missing_in_schema}. Add to verdify_schemas/tunables.py."
         )
-        assert not missing_in_em, (
-            f"schema has tunables entity_map doesn't route: {missing_in_em}. "
-            "Remove from schema or add to entity_map.SETPOINT_MAP."
+        assert not unrouted_in_schema, (
+            f"schema has tunables neither SETPOINT_MAP nor CFG_READBACK_MAP routes: {unrouted_in_schema}. "
+            "Remove from schema or add to one of the entity_map maps."
         )
 
 
