@@ -312,6 +312,8 @@ DAILY_ACCUM_MAP: dict[str, str] = {
     # Drip runtimes
     "wall_drips_runtime__today_": "runtime_drip_wall_h",
     "center_drips_runtime__today_": "runtime_drip_center_h",
+    # Firmware sprint-2 fairness watchdog counter (resets at midnight)
+    "mister_fairness_overrides__today_": "mister_fairness_overrides_today",
 }
 
 # ──────────────────────────────────────────────────────────────

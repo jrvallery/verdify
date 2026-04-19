@@ -461,6 +461,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
         log.error(f"daily_summary row failed schema validation: {e}")
         return
 
+    fairness = d.get("mister_fairness_overrides_today")
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO daily_summary (
@@ -470,11 +471,12 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
                 runtime_fan1_min, runtime_fan2_min, runtime_heat1_min, runtime_heat2_min,
                 runtime_fog_min, runtime_vent_min,
                 runtime_mister_south_h, runtime_mister_west_h, runtime_mister_center_h,
-                water_used_gal, mister_water_gal, dli_final
+                water_used_gal, mister_water_gal, dli_final,
+                mister_fairness_overrides_today
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9,
                 $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21
+                $19, $20, $21, $22
             ) ON CONFLICT (date) DO UPDATE SET
                 cycles_fan1 = EXCLUDED.cycles_fan1,
                 cycles_fan2 = EXCLUDED.cycles_fan2,
@@ -496,6 +498,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
                 water_used_gal = EXCLUDED.water_used_gal,
                 mister_water_gal = EXCLUDED.mister_water_gal,
                 dli_final = EXCLUDED.dli_final,
+                mister_fairness_overrides_today = EXCLUDED.mister_fairness_overrides_today,
                 captured_at = NOW()
             """,
             today,
@@ -519,6 +522,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
             water_total,
             mister_water,
             dli,
+            int(fairness) if fairness is not None else None,
         )
     state._daily_snapshot_date = today_str
     log.info(f"daily_summary written for {today}")
@@ -613,6 +617,39 @@ _SETPOINT_RANGES = {
 # to prevent firmware defaults from polluting the DB
 _BOOT_WINDOW_S = 60
 
+# F10 (Sprint 24-alignment): firmware emits mister_state + mister_selected_zone
+# as numeric template sensors (state_class=measurement), not text. Map the int
+# codes to human-readable names before routing to system_state so Grafana
+# and the planner see "S1"/"south" not "1". Unknown codes fall through as
+# "unknown(N)" so drift is visible.
+# Source: firmware/greenhouse/controls.yaml (state machine) + greenhouse_types.h
+# (MistStage enum).
+_MISTER_STATE_NAMES = {
+    0: "WATCH",
+    1: "S1",
+    2: "S2",
+    3: "FOG",
+}
+_MISTER_ZONE_NAMES = {
+    0: "none",
+    1: "south",
+    2: "west",
+    3: "center",
+}
+_NUMERIC_STATE_DECODERS = {
+    "mister_state": _MISTER_STATE_NAMES,
+    "mister_zone": _MISTER_ZONE_NAMES,
+}
+
+
+def _decode_numeric_state(entity_name: str, val: float) -> str:
+    """F10: translate a numeric state-machine code to a human label."""
+    decoder = _NUMERIC_STATE_DECODERS.get(entity_name)
+    if decoder is None:
+        return str(val)
+    code = int(val)
+    return decoder.get(code, f"unknown({code})")
+
 
 def _accept_setpoint(param: str, value: float) -> bool:
     """Return True if this setpoint value should be written to the DB."""
@@ -680,6 +717,21 @@ def on_state_change(entity_state) -> None:
             state.setpoints[param] = val
             if old != val:
                 state.pending_setpoints.append((param, val))
+            return
+
+        # F10: numeric state-machine template sensors (mister_state,
+        # mister_selected_zone) route to system_state as decoded strings.
+        # These are diagnostic signals the planner uses to correlate VPD
+        # outcomes with which zone was firing; without this route they
+        # go stale in v_sensor_staleness within minutes.
+        entity = STATE_MAP.get(obj_id)
+        if entity:
+            decoded = _decode_numeric_state(entity, val)
+            old = state.system.get(entity)
+            state.system[entity] = decoded
+            if old != decoded:
+                state.pending_states.append((entity, decoded))
+                log.info(f"state: {entity} → {decoded}")
             return
 
     elif etype == "binary":
