@@ -36,13 +36,13 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 | G3 | Ship typed projection for `fn_planner_scorecard()` — 25 explicit fields; validate in MCP `scorecard` tool response. Landed as `ScorecardResponse` upgrade in `verdify_schemas/mcp_responses.py` | Schema + MCP | unblocks `web` scorecard endpoint | M | **done** (6df34a6) |
 | G4 | Vendor `skills/greenhouse-planner.md` into the repo (`docs/planner/greenhouse-playbook.md`); add a startup assertion in `iris_planner.py` that the file exists | Code + docs | — | S | **done** (b309a5c) |
 | G4b | Deploy-time sync of the agent-host copy from the in-repo canonical (currently manual; needs a Makefile target or systemd path unit). Host file still says "18 MCP tools" — drops to "17" once the sync lands | Cleanup | — | XS | pending |
-| G5 | Delete dead templates (`planner-prompt.j2`, `planner-prompt.md`), keep or relocate `planner-reference.md`, prune `config/ai.yaml` `templates:` + `schedules.planner` stanzas to match live code | Cleanup | — | S | pending |
-| G5b | Either add `make planner-dry` target to Makefile or drop it from `docs/agents/genai.md` gate list (doc cites it but target doesn't exist) | Cleanup | — | XS | pending |
+| G5 | Delete dead templates (`planner-prompt.j2`, `planner-prompt.md`), keep or relocate `planner-reference.md`, prune `config/ai.yaml` `templates:` + `schedules.planner` stanzas to match live code | Cleanup | — | S | **done** (0a6b20a) |
+| G5b | Either add `make planner-dry` target to Makefile or drop it from `docs/agents/genai.md` gate list (doc cites it but target doesn't exist) | Cleanup | — | XS | **done** (8737dd3) |
 | G6 | Split planner prompt into immutable rubric (cacheable) + per-cycle context (non-cacheable). Measure cache-hit rate after | Prompt refactor | cost | L | pending |
-| G7 | Close the hypothesis loop: inject prior plan's `hypothesis_structured` + `actual_outcome` into the next SUNRISE prompt as a "what did yesterday predict vs deliver" block | Prompt + MCP read path | — | M | pending |
+| G7 | Close the hypothesis loop: inject prior plan's `hypothesis_structured` + `actual_outcome` into the next SUNRISE prompt as a "what did yesterday predict vs deliver" block | Prompt + MCP read path | — | M | **done** (d6de832) |
 | G8 | Lessons state machine: `LessonState` literal (`proposed`/`validated`/`superseded`/`retired`), transition guards, `lessons_manage` `supersede(old_id, new_id)` action | Schema + MCP | — | M | pending |
 | G9 | Multi-model eval: shadow Gemini 2.5 Pro call on N% of cycles; store both plans + outcome; publish weekly comparison page | Infra + prompt | coordinator sign-off | L | pending |
-| G10 | Harden `scripts/gather-plan-context.sh`: aggregate per-section exit codes, emit a "context completeness" header Iris can read and flag | Script | — | M | pending |
+| G10 | Harden `scripts/gather-plan-context.sh`: aggregate per-section exit codes, emit a "context completeness" header Iris can read and flag | Script | — | M | **done** (58ade59) |
 | G11 | Rename `scripts/smoke-sprint20.py` → `smoke-feedback-loop.py`; adopt purpose-named smoke scripts going forward | Cleanup | — | XS | pending |
 | G12 | Either populate or drop `plan_journal.conditions_summary` (propose migration to coordinator) | Coordinator handshake | — | S | pending |
 | G13 | Scorecard "why did we fail": when `planner_score < 80`, compute top-2 contributing stress windows + include in next plan context | Prompt + MCP | unblocked by G3 | M | pending |
