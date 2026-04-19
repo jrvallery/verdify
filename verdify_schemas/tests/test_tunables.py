@@ -36,8 +36,20 @@ class TestTunableEnumShape:
         assert not bad, f"Numeric tunables must NOT start with 'sw_': {bad}"
 
     def test_tunable_set_matches_entity_map(self):
-        """Drift guard: adding a tunable to entity_map but not here = silent drop."""
-        sys.path.insert(0, "/srv/verdify/ingestor")
+        """Drift guard: adding a tunable to entity_map but not here = silent drop.
+
+        Resolves entity_map from multiple likely locations:
+        - /srv/verdify/ingestor (Iris VM; compat symlink to /mnt/iris/verdify)
+        - <repo-root>/ingestor (CI checkout path)
+        - /mnt/iris/verdify/ingestor (NFS path)
+        """
+        import pathlib
+
+        here = pathlib.Path(__file__).resolve()
+        repo_root = here.parent.parent.parent  # verdify_schemas/tests/file → repo root
+        for p in ("/srv/verdify/ingestor", str(repo_root / "ingestor"), "/mnt/iris/verdify/ingestor"):
+            if p not in sys.path:
+                sys.path.insert(0, p)
         from entity_map import SETPOINT_MAP
 
         em_tunables = set(SETPOINT_MAP.values())
