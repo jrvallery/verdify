@@ -36,13 +36,11 @@ models:
     purpose: "Observation semantic similarity search"
 
 # ── Prompts & Templates ─────────────────────────────────────────
-# All templates live in /srv/verdify/templates/
+# All templates live in /srv/verdify/templates/.
+# Planner prompts are fully embedded in ingestor/iris_planner.py — the
+# legacy Jinja templates (planner-prompt.j2, planner-prompt.md) were
+# removed 2026-04-19 along with the cron-based planner.py they served.
 templates:
-  planner:
-    prompt: planner-prompt.j2
-    core_params: planner-core-params.md
-    static_context: ${STATE_DIR:-/srv/verdify/state}/planner-static-context.md
-
   vision:
     prompt: vision-analysis.j2
 
@@ -51,12 +49,10 @@ templates:
 
 # ── Schedules ────────────────────────────────────────────────────
 # Cron expressions (MDT). Managed via crontab, documented here.
+# NOTE: the legacy cron-based `planner` schedule was removed 2026-04-11;
+# planning is now event-driven via ingestor/iris_planner.py →
+# OpenClaw /hooks/agent. Keep schedules: only for tasks still run by cron.
 schedules:
-  planner:
-    cron: "0 6,12,18 * * *"
-    script: scripts/planner.py
-    description: "Claude Opus 4.6 72h planning cycle"
-
   vision:
     cron: "0 12,16,20,0 * * *"
     script: scripts/frigate-snapshot.py
