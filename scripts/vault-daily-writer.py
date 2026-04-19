@@ -16,6 +16,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import asyncpg
+import yaml
+
+sys.path.insert(0, "/mnt/iris/verdify")
+from verdify_schemas import DailyVaultFrontmatter  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,17 +71,35 @@ def render_markdown(row: dict) -> str:
 
     lines = []
 
-    # Frontmatter
+    # Sprint 22: frontmatter now built through DailyVaultFrontmatter — typos
+    # and out-of-range values fail loud here, not silently in Obsidian.
+    def _round(val, digits=1):
+        if val is None:
+            return None
+        try:
+            return round(float(val), digits)
+        except (TypeError, ValueError):
+            return None
+
+    cost_total = row.get("cost_total")
+    fm = DailyVaultFrontmatter(
+        date=d,
+        tags=["daily", "greenhouse"],
+        temp_avg=_round(row.get("temp_avg")),
+        vpd_avg=_round(row.get("vpd_avg"), 2),
+        dli=_round(row.get("dli_final")),
+        cost_total=f"${float(cost_total):.2f}" if cost_total is not None else None,
+        water_gal=int(row["water_used_gal"]) if row.get("water_used_gal") is not None else None,
+        stress_vpd_h=_round(row.get("stress_hours_vpd_high")),
+        stress_heat_h=_round(row.get("stress_hours_heat")),
+    )
+    yaml_block = yaml.safe_dump(
+        fm.model_dump(mode="json", exclude_none=True),
+        sort_keys=False,
+        default_flow_style=None,
+    )
     lines.append("---")
-    lines.append(f"date: {d}")
-    lines.append("tags: [daily, greenhouse]")
-    lines.append(f"temp_avg: {fmt(row.get('temp_avg'))}")
-    lines.append(f"vpd_avg: {fmt(row.get('vpd_avg'), decimals=2)}")
-    lines.append(f"dli: {fmt(row.get('dli_final'))}")
-    lines.append(f"cost_total: {fmt(row.get('cost_total'), '$', 2)}")
-    lines.append(f"water_gal: {fmt(row.get('water_used_gal'), decimals=0)}")
-    lines.append(f"stress_vpd_h: {fmt(row.get('stress_hours_vpd_high'))}")
-    lines.append(f"stress_heat_h: {fmt(row.get('stress_hours_heat'))}")
+    lines.append(yaml_block.rstrip())
     lines.append("---")
     lines.append("")
 

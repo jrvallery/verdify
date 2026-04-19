@@ -19,7 +19,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, "/mnt/iris/verdify")
-from verdify_schemas import ForecastHour  # noqa: E402
+import yaml  # noqa: E402
+
+from verdify_schemas import ForecastHour, ForecastVaultFrontmatter  # noqa: E402
 
 OUT_PATH = Path("/mnt/iris/verdify-vault/website/forecast/index.md")
 
@@ -150,12 +152,20 @@ def _recent_deviations() -> list[list[str]]:
 
 def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations: list) -> str:
     denver_now = datetime.now(UTC).astimezone()
+    # Sprint 22: frontmatter validated through ForecastVaultFrontmatter.
+    fm = ForecastVaultFrontmatter(
+        date=denver_now.date(),
+        tags=["forecast", "auto-generated"],
+        last_updated=denver_now.isoformat(timespec="seconds"),
+    )
+    yaml_block = yaml.safe_dump(
+        fm.model_dump(mode="json", exclude_none=True),
+        sort_keys=False,
+        default_flow_style=None,
+    )
     lines = [
         "---",
-        "title: Forecast",
-        f"date: {denver_now.date().isoformat()}",
-        "tags: [forecast, auto-generated]",
-        f"last_updated: {denver_now.isoformat(timespec='seconds')}",
+        yaml_block.rstrip(),
         "---",
         "",
         "# Forecast",

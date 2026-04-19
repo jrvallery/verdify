@@ -18,9 +18,66 @@ jobs:
       - name: Install ruff
         run: pip install ruff
       - name: Ruff lint
-        run: ruff check ingestor/ api/ scripts/*.py tests/
+        run: ruff check ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
       - name: Ruff format check
-        run: ruff format --check ingestor/ api/ scripts/*.py tests/
+        run: ruff format --check ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
+
+  schemas:
+    name: Pydantic Schemas + Drift Guards
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: verdify
+          POSTGRES_PASSWORD: verdify
+          POSTGRES_DB: verdify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verdify -d verdify"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: verdify
+      POSTGRES_PASSWORD: verdify
+      POSTGRES_DB: verdify
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: verdify
+      PGPASSWORD: verdify
+      PGDATABASE: verdify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install system deps (psql client + postgres extensions)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Install Python deps
+        run: pip install pydantic>=2.8 pytest pyyaml
+      - name: Apply migrations (and schema.sql if present)
+        run: |
+          # Prefer schema.sql (full schema snapshot) over replaying every migration.
+          # Falls back to applying every migration in filename order.
+          if [ -f db/schema.sql ]; then
+            # schema.sql may reference TimescaleDB functions; ignore non-fatal errors
+            psql -v ON_ERROR_STOP=0 -f db/schema.sql > /tmp/schema.log 2>&1 || true
+            tail -50 /tmp/schema.log
+          fi
+          for f in $(ls db/migrations/*.sql 2>/dev/null | sort); do
+            echo "Applying $f"
+            psql -v ON_ERROR_STOP=0 -f "$f" > /tmp/mig.log 2>&1 || true
+          done
+      - name: Schema unit tests
+        run: pytest verdify_schemas/tests/ -v --ignore=verdify_schemas/tests/test_drift_guards.py --ignore=verdify_schemas/tests/test_vault_writers.py --ignore=verdify_schemas/tests/test_views.py
+      - name: Drift guards (against CI Postgres)
+        run: pytest verdify_schemas/tests/test_drift_guards.py -v
 
   firmware:
     name: Firmware Compile Check

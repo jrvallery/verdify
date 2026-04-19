@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env /srv/greenhouse/.venv/bin/python3
 """
 generate-daily-plan.py — Generate or update daily plan documents for verdify.ai
 
@@ -18,8 +18,14 @@ Output: /srv/verdify/verdify-site/content/plans/YYYY-MM-DD.md
 import argparse
 import json
 import subprocess
+import sys
 from datetime import date, datetime
 from pathlib import Path
+
+import yaml
+
+sys.path.insert(0, "/mnt/iris/verdify")
+from verdify_schemas import DailyPlanVaultFrontmatter  # noqa: E402
 
 CONTENT_DIR = Path("/srv/verdify/verdify-site/content/plans")
 DB_CMD = "docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
@@ -393,15 +399,27 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _num(val, digits: int = 1):
+    """Parse a maybe-string-maybe-number value; return None if empty/unparseable."""
+    if val is None or val == "":
+        return None
+    try:
+        f = float(val)
+        return round(f, digits) if digits > 0 else int(round(f))
+    except (TypeError, ValueError):
+        return None
+
+
 def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: dict) -> str:
-    """Generate YAML frontmatter for the daily plan."""
+    """Sprint 22: builds frontmatter via DailyPlanVaultFrontmatter schema.
+    yaml.safe_dump emits the block; a schema validation error means the
+    renderer gave us a malformed value (not our concern to hide with a
+    broken YAML line to Obsidian)."""
     title = d.strftime("%B %d, %Y")
 
     latest_plan = plans[-1] if plans else {}
     latest_cycle = classify_cycle(latest_plan.get("plan_id", "")) if latest_plan else "none"
 
-    # Core setpoint values (from active setpoints at that date)
-    sp = {}
     core_params = [
         "temp_high",
         "temp_low",
@@ -414,84 +432,84 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
         "mister_pulse_gap_s",
         "mister_vpd_weight",
     ]
-    for p in core_params:
-        sp[p] = setpoints.get(p, "")
 
-    lines = [
-        "---",
-        f'title: "{title}"',
-        f"date: {d}",
-        "tags: [daily-plan]",
-        "type: plan",
-        "",
-        f"latest_cycle: {latest_cycle}",
-        f"latest_plan_id: {latest_plan.get('plan_id', 'none')}",
-        f"plan_count: {len(plans)}",
-        "",
-        "# Climate summary",
-        "climate:",
-        f"  temp_min_f: {r(summary.get('temp_min'))}",
-        f"  temp_max_f: {r(summary.get('temp_max'))}",
-        f"  temp_avg_f: {r(summary.get('temp_avg'))}",
-        f"  vpd_min_kpa: {r(summary.get('vpd_min'), 2)}",
-        f"  vpd_max_kpa: {r(summary.get('vpd_max'), 2)}",
-        f"  vpd_avg_kpa: {r(summary.get('vpd_avg'), 2)}",
-        f"  rh_min_pct: {r(summary.get('rh_min'))}",
-        f"  rh_max_pct: {r(summary.get('rh_max'))}",
-        f"  dli_sensor_mol: {r(summary.get('dli_final'))}",
-        "",
-        "# Stress hours",
-        "stress:",
-        f"  heat_hours: {r(summary.get('stress_hours_heat'))}",
-        f"  vpd_high_hours: {r(summary.get('stress_hours_vpd_high'))}",
-        f"  cold_hours: {r(summary.get('stress_hours_cold'))}",
-        f"  vpd_low_hours: {r(summary.get('stress_hours_vpd_low'))}",
-        "",
-        "# Economics",
-        "cost:",
-        f"  electric: {r(summary.get('cost_electric'), 2)}",
-        f"  gas: {r(summary.get('cost_gas'), 2)}",
-        f"  water: {r(summary.get('cost_water'), 3)}",
-        f"  total: {r(summary.get('cost_total'), 2)}",
-        "",
-        "# Water",
-        "water:",
-        f"  total_gal: {r(summary.get('water_used_gal'), 0)}",
-        f"  mister_gal: {r(summary.get('mister_water_gal'), 0)}",
-        "",
-        "# Equipment runtimes (minutes unless noted)",
-        "equipment:",
-        f"  fan1_min: {r(summary.get('runtime_fan1_min'), 0)}",
-        f"  fan2_min: {r(summary.get('runtime_fan2_min'), 0)}",
-        f"  fog_min: {r(summary.get('runtime_fog_min'), 0)}",
-        f"  heat1_min: {r(summary.get('runtime_heat1_min'), 0)}",
-        f"  heat2_min: {r(summary.get('runtime_heat2_min'), 0)}",
-        f"  vent_min: {r(summary.get('runtime_vent_min'), 0)}",
-        f"  grow_light_min: {r(summary.get('runtime_grow_light_min'), 0)}",
-        f"  mister_south_h: {r(summary.get('runtime_mister_south_h'), 2)}",
-        f"  mister_west_h: {r(summary.get('runtime_mister_west_h'), 2)}",
-        f"  mister_center_h: {r(summary.get('runtime_mister_center_h'), 2)}",
-        "",
-        "# Active setpoints (end of day / latest cycle)",
-        "setpoints:",
-    ]
+    climate = {
+        "temp_min_f": _num(summary.get("temp_min")),
+        "temp_max_f": _num(summary.get("temp_max")),
+        "temp_avg_f": _num(summary.get("temp_avg")),
+        "vpd_min_kpa": _num(summary.get("vpd_min"), 2),
+        "vpd_max_kpa": _num(summary.get("vpd_max"), 2),
+        "vpd_avg_kpa": _num(summary.get("vpd_avg"), 2),
+        "rh_min_pct": _num(summary.get("rh_min")),
+        "rh_max_pct": _num(summary.get("rh_max")),
+        "dli_sensor_mol": _num(summary.get("dli_final")),
+    }
+    stress = {
+        "heat_hours": _num(summary.get("stress_hours_heat")),
+        "vpd_high_hours": _num(summary.get("stress_hours_vpd_high")),
+        "cold_hours": _num(summary.get("stress_hours_cold")),
+        "vpd_low_hours": _num(summary.get("stress_hours_vpd_low")),
+    }
+    cost = {
+        "electric": _num(summary.get("cost_electric"), 2),
+        "gas": _num(summary.get("cost_gas"), 2),
+        "water": _num(summary.get("cost_water"), 3),
+        "total": _num(summary.get("cost_total"), 2),
+    }
+    water = {
+        "total_gal": _num(summary.get("water_used_gal"), 0),
+        "mister_gal": _num(summary.get("mister_water_gal"), 0),
+    }
+    equipment = {
+        "fan1_min": _num(summary.get("runtime_fan1_min"), 0),
+        "fan2_min": _num(summary.get("runtime_fan2_min"), 0),
+        "fog_min": _num(summary.get("runtime_fog_min"), 0),
+        "heat1_min": _num(summary.get("runtime_heat1_min"), 0),
+        "heat2_min": _num(summary.get("runtime_heat2_min"), 0),
+        "vent_min": _num(summary.get("runtime_vent_min"), 0),
+        "grow_light_min": _num(summary.get("runtime_grow_light_min"), 0),
+        "mister_south_h": _num(summary.get("runtime_mister_south_h"), 2),
+        "mister_west_h": _num(summary.get("runtime_mister_west_h"), 2),
+        "mister_center_h": _num(summary.get("runtime_mister_center_h"), 2),
+    }
+    setpoints_block: dict = {}
     for p in core_params:
-        lines.append(f"  {p}: {sp.get(p, '')}")
+        v = setpoints.get(p, "")
+        setpoints_block[p] = _num(v, 3) if v not in ("", None) else None
 
-    # Experiment from latest plan
+    experiment = None
     if latest_plan:
-        lines.extend(
-            [
-                "",
-                "# Experiment",
-                "experiment:",
-                f'  hypothesis: "{_yaml_escape(latest_plan.get("hypothesis", ""))}"',
-                f'  test: "{_yaml_escape(latest_plan.get("experiment", ""))}"',
-                f'  expected_outcome: "{_yaml_escape(latest_plan.get("expected_outcome", ""))}"',
-                f'  outcome_score: "{_yaml_escape(latest_plan.get("outcome_score", ""))}"',
-                f'  status: "{_yaml_escape(latest_plan.get("status", "pending"))}"',
-            ]
-        )
+        experiment = {
+            "hypothesis": latest_plan.get("hypothesis", ""),
+            "test": latest_plan.get("experiment", ""),
+            "expected_outcome": latest_plan.get("expected_outcome", ""),
+            "outcome_score": latest_plan.get("outcome_score", ""),
+            "status": latest_plan.get("status", "pending"),
+        }
+
+    fm = DailyPlanVaultFrontmatter(
+        title=title,
+        date=d,
+        tags=["daily-plan"],
+        type="plan",
+        latest_cycle=latest_cycle,
+        latest_plan_id=latest_plan.get("plan_id", "none"),
+        plan_count=len(plans),
+        climate=climate,
+        stress=stress,
+        cost=cost,
+        water=water,
+        equipment=equipment,
+        setpoints=setpoints_block,
+        experiment=experiment,
+    )
+    yaml_block = yaml.safe_dump(
+        fm.model_dump(mode="json", exclude_none=False),
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+    lines = ["---", yaml_block.rstrip(), "---", ""]
 
     lines.append("---")
     return "\n".join(lines)

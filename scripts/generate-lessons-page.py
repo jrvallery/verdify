@@ -10,6 +10,11 @@ import subprocess
 import sys
 from datetime import date
 
+import yaml
+
+sys.path.insert(0, "/mnt/iris/verdify")
+from verdify_schemas import LessonsVaultFrontmatter  # noqa: E402
+
 DB_CONTAINER = "verdify-timescaledb"
 DB_USER = "verdify"
 DB_NAME = "verdify"
@@ -134,14 +139,18 @@ def generate_page() -> str:
 
     parts = []
 
-    # Frontmatter
+    # Sprint 22: frontmatter validated through LessonsVaultFrontmatter
+    fm = LessonsVaultFrontmatter(
+        date=date.today(),
+        tags=["greenhouse", "planning", "lessons"],
+    )
+    yaml_block = yaml.safe_dump(
+        fm.model_dump(mode="json", exclude_none=True),
+        sort_keys=False,
+        default_flow_style=None,
+    )
     parts.append("---")
-    parts.append("title: Lessons Learned")
-    parts.append("tags:")
-    parts.append("  - greenhouse")
-    parts.append("  - planning")
-    parts.append("  - lessons")
-    parts.append(f"date: {today}")
+    parts.append(yaml_block.rstrip())
     parts.append("---")
     parts.append("")
 

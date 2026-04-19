@@ -21,7 +21,20 @@ from fastapi import FastAPI, HTTPException
 for _p in ("/app", "/mnt/iris/verdify"):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-from verdify_schemas import CropCreate, CropUpdate, EventCreate, ObservationCreate  # noqa: E402
+from verdify_schemas import (  # noqa: E402
+    APIStatus,
+    CropCreate,
+    CropDetail,
+    CropHealthSummaryItem,
+    CropListItem,
+    CropUpdate,
+    EventCreate,
+    HealthTrendPoint,
+    ObservationCreate,
+    ObservationWithCrop,
+    ZoneDetail,
+    ZoneListItem,
+)
 
 # ── DB Connection ──
 
@@ -283,8 +296,8 @@ async def get_greenhouse(greenhouse_id: str):
 # ── Crops (greenhouse-scoped + legacy aliases) ──
 
 
-@app.get("/api/v1/greenhouses/{greenhouse_id}/crops")
-@app.get("/api/v1/crops")  # Legacy alias (defaults to vallery)
+@app.get("/api/v1/greenhouses/{greenhouse_id}/crops", response_model=list[CropListItem])
+@app.get("/api/v1/crops", response_model=list[CropListItem])  # Legacy alias (defaults to vallery)
 async def list_crops(
     greenhouse_id: str = DEFAULT_GREENHOUSE,
     zone: str | None = None,
@@ -309,7 +322,7 @@ async def list_crops(
     return [dict(r) for r in rows]
 
 
-@app.get("/api/v1/crops/{crop_id}")
+@app.get("/api/v1/crops/{crop_id}", response_model=CropDetail)
 async def get_crop(crop_id: int):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM crops WHERE id = $1", crop_id)
@@ -478,7 +491,7 @@ async def create_observation(crop_id: int, obs: ObservationCreate):
     return dict(row)
 
 
-@app.get("/api/v1/observations/recent")
+@app.get("/api/v1/observations/recent", response_model=list[ObservationWithCrop])
 async def recent_observations(limit: int = 20):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -539,7 +552,7 @@ async def create_event(crop_id: int, event: EventCreate):
 # ── Health ──
 
 
-@app.get("/api/v1/crops/{crop_id}/health")
+@app.get("/api/v1/crops/{crop_id}/health", response_model=list[HealthTrendPoint])
 async def crop_health(crop_id: int, days: int = 30):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -555,8 +568,8 @@ async def crop_health(crop_id: int, days: int = 30):
     return [dict(r) for r in rows]
 
 
-@app.get("/api/v1/greenhouses/{greenhouse_id}/health")
-@app.get("/api/v1/health/summary")
+@app.get("/api/v1/greenhouses/{greenhouse_id}/health", response_model=list[CropHealthSummaryItem])
+@app.get("/api/v1/health/summary", response_model=list[CropHealthSummaryItem])
 async def health_summary(greenhouse_id: str = DEFAULT_GREENHOUSE):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -579,7 +592,7 @@ async def health_summary(greenhouse_id: str = DEFAULT_GREENHOUSE):
 # ── Zones ──
 
 
-@app.get("/api/v1/zones")
+@app.get("/api/v1/zones", response_model=list[ZoneListItem])
 async def list_zones():
     async with pool.acquire() as conn:
         zones = await conn.fetch("""
@@ -592,7 +605,7 @@ async def list_zones():
     return [dict(z) for z in zones]
 
 
-@app.get("/api/v1/zones/{zone}")
+@app.get("/api/v1/zones/{zone}", response_model=ZoneDetail)
 async def get_zone(zone: str):
     async with pool.acquire() as conn:
         crops = await conn.fetch("SELECT * FROM crops WHERE zone = $1 AND is_active ORDER BY position", zone)
@@ -619,7 +632,7 @@ async def get_zone(zone: str):
 # ── System ──
 
 
-@app.get("/api/v1/status")
+@app.get("/api/v1/status", response_model=APIStatus)
 async def status():
     async with pool.acquire() as conn:
         crop_count = await conn.fetchval("SELECT COUNT(*) FROM crops WHERE is_active")

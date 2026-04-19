@@ -61,8 +61,8 @@ class DailyPlanVaultFrontmatter(VaultFrontmatter):
     """/website/plans/YYYY-MM-DD.md — generate-daily-plan.py output.
 
     Combines daily_summary + plan_journal + active setpoints into one page.
-    The nested sub-dicts (climate, stress, cost, water, equipment) are
-    Obsidian-dataview-friendly scalar blocks — no deep nesting.
+    The nested sub-dicts (climate, stress, cost, water, equipment, setpoints,
+    experiment) are Obsidian-dataview-friendly scalar blocks — no deep nesting.
     """
 
     title: str = Field(..., min_length=1)
@@ -73,14 +73,16 @@ class DailyPlanVaultFrontmatter(VaultFrontmatter):
     latest_plan_id: str | None = None
     plan_count: int | None = Field(default=None, ge=0)
 
-    # Sub-blocks — free-form dicts of scalar KPIs. Keeping these as dict[str, float|int|None]
-    # lets the renderer dump whatever daily_summary produces without a second-layer model
-    # that also has to stay in sync with the DB.
+    # Sub-blocks — free-form dicts of scalar KPIs. Keeping these as dict
+    # lets the renderer dump whatever daily_summary produces without a
+    # second-layer model that also has to stay in sync with the DB.
     climate: dict = Field(default_factory=dict)
     stress: dict = Field(default_factory=dict)
     cost: dict = Field(default_factory=dict)
     water: dict = Field(default_factory=dict)
     equipment: dict = Field(default_factory=dict)
+    setpoints: dict = Field(default_factory=dict)
+    experiment: dict | None = None
 
 
 class ForecastVaultFrontmatter(VaultFrontmatter):

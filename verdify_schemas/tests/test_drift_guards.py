@@ -16,21 +16,40 @@ Runs against live Docker Postgres. If `docker` isn't available, these skip
 
 from __future__ import annotations
 
+import os
 import subprocess
 
 import pytest
 
 from verdify_schemas.alerts import AlertLogRow
+from verdify_schemas.crop_profiles import CropTargetProfile
 from verdify_schemas.crops import Crop, CropEvent, Observation
 from verdify_schemas.daily import DailySummaryRow
 from verdify_schemas.forecast import ForecastHour
+from verdify_schemas.forecast_ops import ForecastActionLog, ForecastActionRule
 from verdify_schemas.lessons import PlannerLesson
+from verdify_schemas.media import ImageObservation
+from verdify_schemas.operations import (
+    ConsumablesLog,
+    Harvest,
+    IrrigationLog,
+    IrrigationSchedule,
+    LabResult,
+    MaintenanceLog,
+    Treatment,
+)
 from verdify_schemas.plan import PlanJournalRow
 from verdify_schemas.setpoint import (
     SetpointChange,
     SetpointClamp,
     SetpointPlanRow,
     SetpointSnapshot,
+)
+from verdify_schemas.system_infra import (
+    DataGap,
+    ESP32LogRow,
+    SensorRegistry,
+    UtilityCost,
 )
 from verdify_schemas.telemetry import (
     ClimateRow,
@@ -47,23 +66,46 @@ def _docker_available() -> bool:
     return r.returncode == 0
 
 
-pytestmark = pytest.mark.skipif(not _docker_available(), reason="docker not available")
+def _ci_postgres_reachable() -> bool:
+    """In GitHub Actions a Postgres service container is reachable at
+    $POSTGRES_HOST:$POSTGRES_PORT (or defaults). When that env is present we
+    run psql against it directly; otherwise we expect a local docker-compose
+    stack and shell out to `docker exec`.
+    """
+    return bool(os.environ.get("POSTGRES_HOST"))
+
+
+pytestmark = pytest.mark.skipif(
+    not (_ci_postgres_reachable() or _docker_available()),
+    reason="no DB backend available (need POSTGRES_HOST env or local docker)",
+)
 
 
 def _table_columns(table: str) -> set[str]:
     sql = f"SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='{table}'"
-    r = subprocess.run(
-        ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-c", sql],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=True,
-    )
+    if _ci_postgres_reachable():
+        env = os.environ.copy()
+        env.setdefault("PGHOST", env.get("POSTGRES_HOST", "localhost"))
+        env.setdefault("PGPORT", env.get("POSTGRES_PORT", "5432"))
+        env.setdefault("PGUSER", env.get("POSTGRES_USER", "verdify"))
+        env.setdefault("PGPASSWORD", env.get("POSTGRES_PASSWORD", "verdify"))
+        env.setdefault("PGDATABASE", env.get("POSTGRES_DB", "verdify"))
+        cmd = ["psql", "-t", "-A", "-c", sql]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=True, env=env)
+    else:
+        r = subprocess.run(
+            ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-c", sql],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
     return {ln.strip() for ln in r.stdout.splitlines() if ln.strip()}
 
 
 # (schema class, DB table name)
 DB_BACKED = [
+    # Sprint 20/21 — telemetry + plan + setpoint + crops + lessons
     (ClimateRow, "climate"),
     (Diagnostics, "diagnostics"),
     (EquipmentStateEvent, "equipment_state"),
@@ -82,6 +124,22 @@ DB_BACKED = [
     (CropEvent, "crop_events"),
     (Observation, "observations"),
     (PlannerLesson, "planner_lessons"),
+    # Sprint 22 Phase 2 — operations + forecast ops + system infra + media
+    (Treatment, "treatments"),
+    (Harvest, "harvests"),
+    (IrrigationLog, "irrigation_log"),
+    (IrrigationSchedule, "irrigation_schedule"),
+    (LabResult, "lab_results"),
+    (MaintenanceLog, "maintenance_log"),
+    (ConsumablesLog, "consumables_log"),
+    (CropTargetProfile, "crop_target_profiles"),
+    (ForecastActionLog, "forecast_action_log"),
+    (ForecastActionRule, "forecast_action_rules"),
+    (UtilityCost, "utility_cost"),
+    (ImageObservation, "image_observations"),
+    (SensorRegistry, "sensor_registry"),
+    (ESP32LogRow, "esp32_logs"),
+    (DataGap, "data_gaps"),
 ]
 
 
