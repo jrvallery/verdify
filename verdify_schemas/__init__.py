@@ -180,12 +180,16 @@ from .vault import (
 )
 from .views import (
     ClampActivity24h,
+    CropHistoryEntry,
+    CropLifecycle,
+    CropLifecycleEvent,
     DailyOscillation,
     DailyOscillationSummary,
     DewPointRiskRow,
     OverrideActivity24h,
     PlanAccuracy,
     PlannerPerformance,
+    PositionCurrentEntry,
     WaterBudgetRow,
 )
 
@@ -205,6 +209,9 @@ __all__ = [
     "ClimateSnapshot",
     "Conditions",
     "ConsumablesLog",
+    "CropHistoryEntry",
+    "CropLifecycle",
+    "CropLifecycleEvent",
     "Crop",
     "CropAction",
     "CropCatalogCreate",
@@ -304,6 +311,7 @@ __all__ = [
     "SensorRegistry",
     "Position",
     "PositionCreate",
+    "PositionCurrentEntry",
     "PositionId",
     "PressureConstraint",
     "PressureGroup",

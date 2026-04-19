@@ -142,12 +142,9 @@ class EventCreate(BaseModel):
 class Crop(BaseModel):
     """crops table row — full persisted shape.
 
-    Note: the Sprint 22 FK columns (position_id, zone_id, crop_catalog_id)
-    are NOT mirrored here yet. They land on the DB in Phase 2 migration
-    086 and are added to this model in Phase 4 when the API switches over.
-    Keeping the row model in lockstep with the prod DB means the drift
-    guards (tests/test_drift_guards.py) remain meaningful through the
-    migration window.
+    Sprint 22 (migrations 085/086) added: position_id, zone_id, crop_catalog_id FKs.
+    Sprint 23 (migration 088) added: cleared_at timestamp + auto-event triggers.
+    The legacy string columns (position, zone) stay until Phase 4d deprecation.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -169,13 +166,24 @@ class Crop(BaseModel):
     target_vpd_high: float | None = None
     notes: str | None = None
     is_active: bool = True
+    cleared_at: AwareDatetime | None = None
     created_at: AwareDatetime | None = None
     updated_at: AwareDatetime | None = None
     greenhouse_id: str = "vallery"
+    # Sprint 22 topology FKs
+    position_id: int | None = None
+    zone_id: int | None = None
+    crop_catalog_id: int | None = None
 
 
 class CropEvent(BaseModel):
-    """crop_events table row — lifecycle audit."""
+    """crop_events table row — lifecycle audit.
+
+    Sprint 23 (migration 088): auto-populated by triggers on INSERT/UPDATE of
+    the parent crops row. source='trigger' for auto-logged events,
+    'manual'/'api'/'iris' for caller-driven events, 'backfill' for one-time
+    migration rows.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -190,13 +198,13 @@ class CropEvent(BaseModel):
     source: str = "manual"
     notes: str | None = None
     greenhouse_id: str = "vallery"
+    position_id: int | None = None  # Sprint 22: FK to positions.id
 
 
 class Observation(BaseModel):
     """observations table row.
 
-    The Sprint 22 FK columns (position_id, zone_id) land in migration 086
-    and are added to this model in Phase 4 after the API switches over.
+    Sprint 22 (migration 086) added: position_id, zone_id FKs.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -218,6 +226,8 @@ class Observation(BaseModel):
     image_observation_id: int | None = None
     health_score: float | None = None
     greenhouse_id: str = "vallery"
+    position_id: int | None = None
+    zone_id: int | None = None
 
 
 # ── MCP action envelopes ──────────────────────────────────────────────────

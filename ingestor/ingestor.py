@@ -28,6 +28,16 @@ import asyncpg
 import paho.mqtt.client as paho_mqtt
 import shared
 from aioesphomeapi import APIClient, APIConnectionError, LogLevel
+from pydantic import ValidationError
+
+# verdify_schemas lives one level up at /mnt/iris/verdify
+# (loaded via sys.path in shared.py / entrypoint). Import at module load.
+try:
+    from verdify_schemas import ClimateRow, EquipmentStateEvent
+except ImportError:
+    # During dev / first-run before verdify_schemas is on path, fall back gracefully.
+    ClimateRow = None
+    EquipmentStateEvent = None
 from aioesphomeapi.model import (
     BinarySensorInfo,
     NumberInfo,
@@ -228,6 +238,20 @@ async def write_climate(pool: asyncpg.Pool, ts: datetime) -> None:
     except ValidationError as e:
         log.error(f"climate row failed schema validation: {e}")
         return
+
+    # Sprint 23 Phase 4b: Pydantic validation at the asyncpg boundary.
+    # Validates numeric ranges (rh 0-100, vpd 0-20, ts tz-aware, etc.) and
+    # flags unknown column names that aren't in the ClimateRow schema. Fails
+    # loud instead of silent-null on schema drift.
+    if ClimateRow is not None:
+        try:
+            ClimateRow.model_validate({"ts": ts, **merged})
+        except ValidationError as e:
+            log.error("climate row failed Pydantic validation: %s", e)
+            # Continue — the write still attempts. Validation is observability,
+            # not a hard gate (yet). A future sprint will promote to fail-closed
+            # once the known-false-positive-free baseline is proven.
+
     cols_sql = ", ".join(["ts"] + cols)
     placeholders = ", ".join([f"${i + 1}" for i in range(len(cols) + 1)])
     values = [ts] + [merged.get(c) for c in cols]
@@ -255,6 +279,18 @@ async def write_equipment_events(pool: asyncpg.Pool, ts: datetime) -> None:
         validated.append((ts, equip, s))
     if not validated:
         return
+
+    # Sprint 23 Phase 4b: Pydantic validation against the EquipmentId Literal.
+    # Catches equipment slugs that aren't in the known set (typo → silent
+    # misroute previously). Failed validations are logged; the write still
+    # proceeds so a firmware-added slug doesn't halt the pipeline.
+    if EquipmentStateEvent is not None:
+        for equip, s in events:
+            try:
+                EquipmentStateEvent.model_validate({"ts": ts, "equipment": equip, "state": s})
+            except ValidationError as e:
+                log.warning("equipment_state event failed validation: equipment=%s state=%s: %s", equip, s, e)
+
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",

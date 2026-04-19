@@ -1013,6 +1013,128 @@ async def lessons_manage(action: str, lesson_id: int = 0, data: str = "") -> str
 
 
 # ═══════════════════════════════════════════════════════════════
+# Sprint 23 — Topology + crop-history tools for Iris
+# ═══════════════════════════════════════════════════════════════
+#
+# These expose the topology tables (zones/shelves/positions/equipment)
+# and the crop-history views to Iris, so planning decisions can reference
+# "what is currently at SOUTH-FLOOR-1" instead of opaque zone strings.
+
+
+@mcp.tool()
+async def topology() -> str:
+    """Return the full greenhouse → zones → shelves → positions tree.
+
+    Use this when you need to know the physical layout: what zones exist,
+    what shelves each zone contains, and what position slots are
+    defined. The planner uses this to validate setpoint scope (e.g.,
+    per-zone VPD targets) and the website uses it for navigation.
+    """
+    conn = await _db()
+    try:
+        row = await conn.fetchrow(
+            "SELECT greenhouse_id, greenhouse_name, zones FROM v_topology_tree WHERE greenhouse_id = 'vallery'"
+        )
+        if row is None:
+            return _json({"error": "topology not available"})
+        # asyncpg returns JSONB as str unless a codec is registered
+        z = row["zones"]
+        zones = json.loads(z) if isinstance(z, str) else z
+        return _json(
+            {
+                "greenhouse_id": row["greenhouse_id"],
+                "greenhouse_name": row["greenhouse_name"],
+                "zones": zones,
+            }
+        )
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def position_current(zone_slug: str = "") -> str:
+    """Return the current occupancy of every position (and which crop, if any).
+
+    Args:
+        zone_slug: optional — narrow to one zone (south, north, east, west, center).
+
+    Each row: position_label, crop_name, crop_stage, crop_days_in_place, is_occupied.
+    Use this to see "what is planted where right now."
+    """
+    conn = await _db()
+    try:
+        if zone_slug:
+            rows = await conn.fetch(
+                "SELECT * FROM v_position_current WHERE greenhouse_id = 'vallery' AND zone_slug = $1",
+                zone_slug,
+            )
+        else:
+            rows = await conn.fetch("SELECT * FROM v_position_current WHERE greenhouse_id = 'vallery'")
+        return _json([dict(r) for r in rows])
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def crop_history(position_id: int = 0) -> str:
+    """Return the chronological crop history at a given position.
+
+    Args:
+        position_id: the integer position_id. Use `position_current()` to find it.
+
+    Returns every crop that has ever been at this position, newest first, with
+    planted_date, cleared_at, final_stage, days_in_place, observation_count,
+    and harvest_count. Includes both active and historical rows.
+    """
+    conn = await _db()
+    try:
+        if not position_id:
+            return _json({"error": "position_id required"})
+        rows = await conn.fetch(
+            """
+            SELECT * FROM v_crop_history
+            WHERE position_id = $1 AND greenhouse_id = 'vallery'
+            ORDER BY planted_date DESC
+            """,
+            position_id,
+        )
+        return _json([dict(r) for r in rows])
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def crop_lifecycle(crop_id: int) -> str:
+    """Return a single crop's full lifecycle timeline.
+
+    Args:
+        crop_id: integer crop id.
+
+    Returns: planted_date, cleared_at, current_stage, days_alive, event timeline
+    (planted/stage_change/transplanted/removed/harvested), harvest totals
+    (weight_kg, units, revenue), observation count + avg health score.
+    The authoritative per-crop summary for planning decisions and
+    retrospective evaluation.
+    """
+    conn = await _db()
+    try:
+        row = await conn.fetchrow(
+            "SELECT * FROM v_crop_lifecycle WHERE crop_id = $1 AND greenhouse_id = 'vallery'",
+            crop_id,
+        )
+        if row is None:
+            return _json({"error": f"crop {crop_id} not found"})
+        d = dict(row)
+        # Unpack the JSONB events array
+        ev = d.get("events")
+        if isinstance(ev, str):
+            d["events"] = json.loads(ev)
+        return _json(d)
+    finally:
+        await conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════
 

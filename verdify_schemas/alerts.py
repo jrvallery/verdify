@@ -24,8 +24,7 @@ class AlertEnvelope(BaseModel):
     Mirrored 1:1 on `alert_log` writable columns. Enforced here so that a new
     alert_type in `alert_monitor` can't silently drift its payload shape.
 
-    Note: the Sprint 22 zone_id FK lands in migration 086 and gets added
-    here in Phase 4.
+    Sprint 22 (migration 086) added: zone_id FK to alert_log.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -35,6 +34,7 @@ class AlertEnvelope(BaseModel):
     category: AlertCategory
     sensor_id: str | None = None
     zone: str | None = None
+    zone_id: int | None = None
     message: str = Field(..., min_length=1)
     details: dict | None = None
     metric_value: float | None = None

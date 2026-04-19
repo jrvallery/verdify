@@ -8,12 +8,26 @@ Usage:
     uvicorn main:app --host 0.0.0.0 --port 8300
 """
 
+import json
 import os
 import sys
 from contextlib import asynccontextmanager
 
 import asyncpg
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+
+def _coerce_jsonb(row_dict: dict, *keys: str) -> dict:
+    """asyncpg returns JSONB columns as strings unless a codec is registered.
+    Parse the named keys from str → list/dict so response_model validation works.
+    """
+    for k in keys:
+        v = row_dict.get(k)
+        if isinstance(v, str):
+            row_dict[k] = json.loads(v)
+    return row_dict
+
 
 # verdify_schemas is mounted at /app/verdify_schemas inside the container
 # (see docker-compose.yml api.volumes). For host-side dev runs, /mnt/iris/verdify
@@ -34,6 +48,13 @@ from verdify_schemas import (  # noqa: E402
     ObservationWithCrop,
     ZoneDetail,
     ZoneListItem,
+    CropCreate,
+    CropHistoryEntry,
+    CropLifecycle,
+    CropUpdate,
+    EventCreate,
+    ObservationCreate,
+    PositionCurrentEntry,
 )
 
 # ── DB Connection ──
@@ -645,4 +666,379 @@ async def status():
         "latest_climate_ts": latest,
     }
 
-    # (duplicate /health removed — defined at line 233)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sprint 23 — Topology + crop-history endpoints
+# ═══════════════════════════════════════════════════════════════════════
+#
+# These endpoints consume the Sprint 22 topology tables and the Sprint 23
+# history views (v_position_current, v_crop_history, v_crop_lifecycle).
+# The legacy zone:str / position:str-based endpoints above remain in place
+# until callers migrate; Phase 4d drops them.
+
+
+# ── Topology tree (website nav, full-system debug) ────────────────────
+
+
+@app.get("/api/v1/topology")
+async def get_topology(greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Full greenhouse → zone → shelf → position tree as JSONB."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT greenhouse_id, greenhouse_name, zones FROM v_topology_tree WHERE greenhouse_id = $1",
+            greenhouse_id,
+        )
+        if row is None:
+            raise HTTPException(404, f"Greenhouse '{greenhouse_id}' not found")
+    return _coerce_jsonb(dict(row), "zones")
+
+
+# ── Zone full detail ──────────────────────────────────────────────────
+
+
+@app.get("/api/v1/zones/{zone_slug}/full")
+async def get_zone_full(zone_slug: str, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Zone detail: shelves[], sensors[], equipment[], water_systems[] (from v_zone_full)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT * FROM v_zone_full
+            WHERE greenhouse_id = $1 AND zone_slug = $2
+            """,
+            greenhouse_id,
+            zone_slug,
+        )
+        if row is None:
+            raise HTTPException(404, f"Zone '{zone_slug}' not found in '{greenhouse_id}'")
+    return _coerce_jsonb(dict(row), "shelves", "sensors", "equipment", "water_systems")
+
+
+# ── Positions (current state + history) ───────────────────────────────
+
+
+@app.get("/api/v1/positions", response_model=list[PositionCurrentEntry])
+async def list_positions(
+    zone_slug: str | None = None,
+    occupied_only: bool = False,
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+):
+    """Every active position + current crop (if any). Empty slots included unless occupied_only=true."""
+    sql = "SELECT * FROM v_position_current WHERE greenhouse_id = $1"
+    params: list = [greenhouse_id]
+    if zone_slug is not None:
+        sql += " AND zone_slug = $2"
+        params.append(zone_slug)
+    if occupied_only:
+        sql += " AND is_occupied"
+    sql += " ORDER BY zone_slug, shelf_slug, position_label"
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(sql, *params)
+    return [PositionCurrentEntry.model_validate(dict(r)) for r in rows]
+
+
+@app.get("/api/v1/positions/{position_id}")
+async def get_position(position_id: int, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Position detail: current occupancy + full crop history at this slot."""
+    async with pool.acquire() as conn:
+        current = await conn.fetchrow(
+            "SELECT * FROM v_position_current WHERE position_id = $1 AND greenhouse_id = $2",
+            position_id,
+            greenhouse_id,
+        )
+        if current is None:
+            raise HTTPException(404, f"Position {position_id} not found")
+        history_rows = await conn.fetch(
+            "SELECT * FROM v_crop_history WHERE position_id = $1 AND greenhouse_id = $2 ORDER BY planted_date DESC",
+            position_id,
+            greenhouse_id,
+        )
+    return {
+        "current": dict(current),
+        "history": [CropHistoryEntry.model_validate(dict(r)).model_dump() for r in history_rows],
+    }
+
+
+@app.post("/api/v1/positions/{position_id}/plant", status_code=201)
+async def plant_at_position(position_id: int, body: CropCreate, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Create a new crop at a specific position. Validates slot is unoccupied.
+
+    The unique-active-per-position partial index (migration 088) prevents
+    double-booking; a collision raises a 409.
+    """
+    async with pool.acquire() as conn:
+        pos = await conn.fetchrow(
+            """
+            SELECT p.id AS position_id, p.label, sh.zone_id, z.slug AS zone_slug
+            FROM positions p JOIN shelves sh ON sh.id = p.shelf_id JOIN zones z ON z.id = sh.zone_id
+            WHERE p.id = $1 AND p.greenhouse_id = $2
+            """,
+            position_id,
+            greenhouse_id,
+        )
+        if pos is None:
+            raise HTTPException(404, f"Position {position_id} not found")
+        # Resolve crop_catalog_id via slug / name
+        catalog_id = None
+        if body.crop_catalog_slug:
+            catalog_id = await conn.fetchval("SELECT id FROM crop_catalog WHERE slug = $1", body.crop_catalog_slug)
+        if catalog_id is None:
+            catalog_id = await conn.fetchval(
+                "SELECT id FROM crop_catalog WHERE lower(common_name) = lower($1) OR slug = lower($1)",
+                body.name,
+            )
+        try:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO crops (
+                    name, variety, position, zone, planted_date, expected_harvest, stage,
+                    count, seed_lot_id, supplier, base_temp_f, target_dli, target_vpd_low,
+                    target_vpd_high, notes, greenhouse_id,
+                    position_id, zone_id, crop_catalog_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                        $17, $18, $19)
+                RETURNING *
+                """,
+                body.name,
+                body.variety,
+                pos["label"],
+                pos["zone_slug"],
+                body.planted_date,
+                body.expected_harvest,
+                body.stage,
+                body.count,
+                body.seed_lot_id,
+                body.supplier,
+                body.base_temp_f,
+                body.target_dli,
+                body.target_vpd_low,
+                body.target_vpd_high,
+                body.notes,
+                greenhouse_id,
+                position_id,
+                pos["zone_id"],
+                catalog_id,
+            )
+        except asyncpg.exceptions.UniqueViolationError:
+            raise HTTPException(409, f"Position {position_id} ({pos['label']}) is already occupied by an active crop")
+    return dict(row)
+
+
+# ── Crop lifecycle (clear, transplant, harvest) + full timeline ───────
+
+
+@app.get("/api/v1/crops/{crop_id}/lifecycle", response_model=CropLifecycle)
+async def get_crop_lifecycle(crop_id: int, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Full crop timeline: events array, harvest totals, observations summary."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM v_crop_lifecycle WHERE crop_id = $1 AND greenhouse_id = $2",
+            crop_id,
+            greenhouse_id,
+        )
+        if row is None:
+            raise HTTPException(404, f"Crop {crop_id} not found")
+    return CropLifecycle.model_validate(_coerce_jsonb(dict(row), "events"))
+
+
+@app.post("/api/v1/crops/{crop_id}/clear")
+async def clear_crop(crop_id: int, operator: str | None = None):
+    """Mark a crop as inactive (cleared/removed). Trigger auto-sets cleared_at
+    and logs a 'removed' crop_events row."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE crops SET is_active = FALSE WHERE id = $1 AND is_active RETURNING id, cleared_at",
+            crop_id,
+        )
+        if row is None:
+            raise HTTPException(404, f"Crop {crop_id} not found or already cleared")
+        if operator:
+            await conn.execute(
+                "UPDATE crop_events SET operator = $1 WHERE crop_id = $2 AND event_type = 'removed' AND operator IS NULL",
+                operator,
+                crop_id,
+            )
+    return {"crop_id": crop_id, "is_active": False, "cleared_at": row["cleared_at"]}
+
+
+class TransplantBody(BaseModel):
+    new_position_id: int
+    operator: str | None = None
+    notes: str | None = None
+
+
+@app.post("/api/v1/crops/{crop_id}/transplant")
+async def transplant_crop(crop_id: int, body: TransplantBody, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Move a crop to a new position. Logs a 'transplanted' event with old/new position_ids."""
+    async with pool.acquire() as conn:
+        crop = await conn.fetchrow(
+            "SELECT id, position_id, stage, greenhouse_id FROM crops WHERE id = $1 AND is_active",
+            crop_id,
+        )
+        if crop is None:
+            raise HTTPException(404, f"Active crop {crop_id} not found")
+        target = await conn.fetchrow(
+            "SELECT p.id, p.label, sh.zone_id FROM positions p JOIN shelves sh ON sh.id = p.shelf_id WHERE p.id = $1 AND p.greenhouse_id = $2",
+            body.new_position_id,
+            greenhouse_id,
+        )
+        if target is None:
+            raise HTTPException(404, f"Target position {body.new_position_id} not found")
+        try:
+            await conn.execute(
+                "UPDATE crops SET position_id = $1, zone_id = $2, position = $3 WHERE id = $4",
+                body.new_position_id,
+                target["zone_id"],
+                target["label"],
+                crop_id,
+            )
+        except asyncpg.exceptions.UniqueViolationError:
+            raise HTTPException(409, f"Target position {body.new_position_id} is occupied")
+        await conn.execute(
+            """
+            INSERT INTO crop_events (ts, crop_id, event_type, source, operator, notes, greenhouse_id, position_id)
+            VALUES (now(), $1, 'transplanted', 'api', $2, $3, $4, $5)
+            """,
+            crop_id,
+            body.operator,
+            body.notes or f"Transplanted to position {body.new_position_id}",
+            crop["greenhouse_id"],
+            body.new_position_id,
+        )
+    return {"crop_id": crop_id, "new_position_id": body.new_position_id, "new_position_label": target["label"]}
+
+
+class HarvestBody(BaseModel):
+    weight_kg: float | None = None
+    unit_count: int | None = None
+    quality_grade: str | None = None
+    unit_price: float | None = None
+    revenue: float | None = None
+    advance_stage: str | None = None  # optional: also update crops.stage
+    operator: str | None = None
+    notes: str | None = None
+
+
+@app.post("/api/v1/crops/{crop_id}/harvest", status_code=201)
+async def harvest_crop(crop_id: int, body: HarvestBody, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Record a harvest against this crop. Optionally advance stage."""
+    async with pool.acquire() as conn:
+        crop = await conn.fetchrow(
+            "SELECT id, position_id, zone, stage FROM crops WHERE id = $1 AND greenhouse_id = $2",
+            crop_id,
+            greenhouse_id,
+        )
+        if crop is None:
+            raise HTTPException(404, f"Crop {crop_id} not found")
+        row = await conn.fetchrow(
+            """
+            INSERT INTO harvests (
+                ts, crop_id, weight_kg, unit_count, quality_grade, unit_price, revenue,
+                zone, operator, notes, greenhouse_id, position_id
+            )
+            VALUES (now(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING *
+            """,
+            crop_id,
+            body.weight_kg,
+            body.unit_count,
+            body.quality_grade,
+            body.unit_price,
+            body.revenue,
+            crop["zone"],
+            body.operator,
+            body.notes,
+            greenhouse_id,
+            crop["position_id"],
+        )
+        if body.advance_stage and body.advance_stage != crop["stage"]:
+            await conn.execute("UPDATE crops SET stage = $1 WHERE id = $2", body.advance_stage, crop_id)
+    return dict(row)
+
+
+# ── Crop catalog ──────────────────────────────────────────────────────
+
+
+@app.get("/api/v1/crop-catalog")
+async def list_crop_catalog():
+    """All crop types in the catalog (with aggregated stage/season profiles)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM v_crop_catalog_with_profiles ORDER BY slug")
+    return [_coerce_jsonb(dict(r), "stage_season_profiles") for r in rows]
+
+
+@app.get("/api/v1/crop-catalog/{slug}")
+async def get_crop_catalog_entry(slug: str):
+    """Single catalog entry + hourly profile detail."""
+    async with pool.acquire() as conn:
+        entry = await conn.fetchrow("SELECT * FROM v_crop_catalog_with_profiles WHERE slug = $1", slug)
+        if entry is None:
+            raise HTTPException(404, f"Crop catalog entry '{slug}' not found")
+        hours = await conn.fetch(
+            """
+            SELECT * FROM crop_target_profiles
+            WHERE crop_catalog_id = (SELECT id FROM crop_catalog WHERE slug = $1)
+            ORDER BY growth_stage, season, hour_of_day
+            """,
+            slug,
+        )
+    return {"entry": _coerce_jsonb(dict(entry), "stage_season_profiles"), "hourly_profiles": [dict(h) for h in hours]}
+
+
+# ── Equipment, switches, sensors (read-only for now) ──────────────────
+
+
+@app.get("/api/v1/equipment")
+async def list_equipment(zone_slug: str | None = None, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    sql = """
+        SELECT e.*, z.slug AS zone_slug
+        FROM equipment e LEFT JOIN zones z ON z.id = e.zone_id
+        WHERE e.greenhouse_id = $1 AND e.is_active
+    """
+    params: list = [greenhouse_id]
+    if zone_slug is not None:
+        sql += " AND z.slug = $2"
+        params.append(zone_slug)
+    sql += " ORDER BY e.kind, e.slug"
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(sql, *params)
+    return [_coerce_jsonb(dict(r), "specs") for r in rows]
+
+
+@app.get("/api/v1/switches")
+async def list_switches(greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Full relay map — v_equipment_relay_map."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM v_equipment_relay_map WHERE greenhouse_id = $1 ORDER BY board, pin",
+            greenhouse_id,
+        )
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/v1/sensors")
+async def list_sensors(zone_slug: str | None = None, greenhouse_id: str = DEFAULT_GREENHOUSE):
+    sql = """
+        SELECT s.*, z.slug AS zone_slug
+        FROM sensors s LEFT JOIN zones z ON z.id = s.zone_id
+        WHERE s.greenhouse_id = $1 AND s.is_active
+    """
+    params: list = [greenhouse_id]
+    if zone_slug is not None:
+        sql += " AND z.slug = $2"
+        params.append(zone_slug)
+    sql += " ORDER BY s.kind, s.slug"
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(sql, *params)
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/v1/pressure-groups/status")
+async def pressure_group_status(greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Current mister/drip activity per pressure group (v_pressure_group_status)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM v_pressure_group_status WHERE greenhouse_id = $1 ORDER BY group_slug",
+            greenhouse_id,
+        )
+    return [_coerce_jsonb(dict(r), "systems") for r in rows]
