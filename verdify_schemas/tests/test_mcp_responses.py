@@ -102,10 +102,18 @@ class TestScorecard:
         with pytest.raises(ValidationError):
             ScorecardResponse.from_metric_rows([("totally_new_kpi", 42)])
 
-    def test_metric_names_exposes_25(self):
-        assert len(ScorecardResponse.metric_names()) == 25
-        assert "planner_score" in ScorecardResponse.metric_names()
-        assert "7d_avg_score" in ScorecardResponse.metric_names()
+    def test_metric_names_exposes_all_dialect_metrics(self):
+        """Schema is a superset of both DB dialects:
+        - Live deployed fn_planner_scorecard emits 25 metrics.
+        - Migration-076/077-era (what CI's db/schema.sql serves) emits 27 —
+          the deployed function dropped `7d_avg_stress` + `7d_avg_dp_risk`.
+        Schema covers both until G15 resyncs migrations with live."""
+        names = ScorecardResponse.metric_names()
+        assert len(names) == 27
+        assert "planner_score" in names
+        assert "7d_avg_score" in names
+        assert "7d_avg_stress" in names  # CI-only until G15
+        assert "7d_avg_dp_risk" in names  # CI-only until G15
 
 
 # ── Drift guard: live fn_planner_scorecard() metric names must be a subset of

@@ -116,6 +116,14 @@ class ScorecardResponse(BaseModel):
     avg_therms_7d: float | None = Field(default=None, alias="7d_avg_therms")
     avg_water_gal_7d: float | None = Field(default=None, alias="7d_avg_water_gal")
 
+    # Present in the migration-076/077-era function (what CI's Postgres serves
+    # via db/schema.sql) but removed in the deployed version as of 2026-04-19.
+    # Schema is a superset so it passes the drift guard against both dialects.
+    # Once G15 resyncs migrations with live, one definition becomes canonical
+    # and these two fields become either permanent or removable.
+    avg_stress_7d: float | None = Field(default=None, alias="7d_avg_stress")
+    avg_dp_risk_7d: float | None = Field(default=None, alias="7d_avg_dp_risk")
+
     @classmethod
     def from_metric_rows(cls, rows: Iterable[Any]) -> ScorecardResponse:
         """Build from `fn_planner_scorecard()` rows.

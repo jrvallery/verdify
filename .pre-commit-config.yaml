@@ -1,6 +1,9 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
+    # Must stay within one minor of the ruff CI installs (unpinned `pip install ruff`).
+    # v0.11 and v0.15 disagree on how `mcp.server.fastmcp` is classified in isort —
+    # leaving them apart causes a commit/CI ping-pong on mcp/server.py import order.
+    rev: v0.15.10
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
