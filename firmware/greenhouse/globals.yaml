@@ -125,10 +125,6 @@ globals:
     initial_value: 'true'
 
   # ─── Watchdog / failsafe ───
-  - id: last_case_probe
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
   - id: last_external_update
     type: uint32_t
     restore_value: no
@@ -243,14 +239,6 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
-  - id: dh_cycles_today
-    type: int
-    restore_value: no
-    initial_value: '0'
-  - id: dh_safety_today
-    type: int
-    restore_value: no
-    initial_value: '0'
 
   # ─── Runtime metrics (ms since midnight) ───
   # These values accumulate the total on‑time for each relay in milliseconds.
@@ -331,12 +319,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
-
-  # ─── Vent hold timer (anti-cycling) ───
-  - id: vent_hold_timer_ms
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
 
   # ─── Outdoor RH adaptive mode ───
   - id: outdoor_rh_mode

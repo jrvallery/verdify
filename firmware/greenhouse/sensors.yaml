@@ -141,7 +141,6 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            id(last_case_probe)      = id(sntp_time).now().timestamp;
             id(last_external_update) = millis() / 1000;
             id(last_case_ms) = millis();
 
@@ -831,26 +830,6 @@ sensor:
     accuracy_decimals: 0
     update_interval: 30s
     lambda: "return id(cnt_vent_today);"
-
-  - platform: template
-    id: daily_dehum_cycles
-    name: "De‑Hum Cycles (today)"
-    entity_category: diagnostic
-    state_class: total
-    unit_of_measurement: "cycles"
-    accuracy_decimals: 0
-    update_interval: 30s
-    lambda: "return id(dh_cycles_today);"
-
-  - platform: template
-    id: daily_dehum_safety
-    name: "Safety De‑Hum Cycles (today)"
-    entity_category: diagnostic
-    state_class: total
-    unit_of_measurement: "cycles"
-    accuracy_decimals: 0
-    update_interval: 30s
-    lambda: "return id(dh_safety_today);"
 
   # --------------------------------------------------------------------------
   # 5. RUNTIME METRICS (DIAGNOSTIC)
