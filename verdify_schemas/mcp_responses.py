@@ -16,9 +16,10 @@ Skipped intentionally:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date as DateType
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -46,14 +47,107 @@ class ClimateSnapshot(BaseModel):
     mode: str | None = None
 
 
-class ScorecardResponse(BaseModel):
-    """`scorecard(target_date)` tool response — flat metric→value dict.
+def _scorecard_value_to_float(value: Any) -> float | None:
+    """Normalize asyncpg Decimal / str / None into float | None for scorecard metrics."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if not value or value.lower() in {"n/a", "perfect", "none", "null"}:
+            return None
+        return float(value)
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
 
-    Permissive (extra='allow') because fn_planner_scorecard returns a
-    variable set of metrics depending on data availability.
+
+class ScorecardResponse(BaseModel):
+    """`scorecard(target_date)` tool response — typed projection of
+    `fn_planner_scorecard()` (25 metrics).
+
+    All fields are Optional: partial days (today, data gaps) emit a subset
+    of metrics. Unknown metric keys raise ValidationError — if the DB
+    function grows a new metric, this schema fails loud instead of silently
+    dropping it. Wire format preserves the historical `7d_avg_*` JSON keys
+    via aliases; downstream consumers (Iris prompt, daily-plan renderer,
+    Grafana panels) keep reading the same shape.
+
+    Authoritative metric list is the deployed DB function, not a migration
+    file — as of 2026-04-18 the checked-in migrations + `db/schema.sql` are
+    stale relative to live (known infra drift flagged to coordinator).
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    # ── Score + compliance ──────────────────────────────────────────
+    planner_score: float | None = None
+    compliance_pct: float | None = None
+    temp_compliance_pct: float | None = None
+    vpd_compliance_pct: float | None = None
+
+    # ── Stress hours (four independent categories; overlap allowed so
+    #    total_stress_h can exceed 24h)
+    total_stress_h: float | None = None
+    heat_stress_h: float | None = None
+    cold_stress_h: float | None = None
+    vpd_high_stress_h: float | None = None
+    vpd_low_stress_h: float | None = None
+
+    # ── Utility usage (raw)
+    kwh: float | None = None
+    therms: float | None = None
+    water_gal: float | None = None
+    mister_water_gal: float | None = None
+
+    # ── Utility cost (USD)
+    cost_electric: float | None = None
+    cost_gas: float | None = None
+    cost_water: float | None = None
+    cost_total: float | None = None
+
+    # ── Dew point
+    dp_margin_min_f: float | None = None
+    dp_risk_hours: float | None = None
+
+    # ── 7-day averages (alias preserves `7d_*` wire keys) ───────────
+    avg_score_7d: float | None = Field(default=None, alias="7d_avg_score")
+    avg_compliance_7d: float | None = Field(default=None, alias="7d_avg_compliance")
+    avg_cost_7d: float | None = Field(default=None, alias="7d_avg_cost")
+    avg_kwh_7d: float | None = Field(default=None, alias="7d_avg_kwh")
+    avg_therms_7d: float | None = Field(default=None, alias="7d_avg_therms")
+    avg_water_gal_7d: float | None = Field(default=None, alias="7d_avg_water_gal")
+
+    # Present in the migration-076/077-era function (what CI's Postgres serves
+    # via db/schema.sql) but removed in the deployed version as of 2026-04-19.
+    # Schema is a superset so it passes the drift guard against both dialects.
+    # Once G15 resyncs migrations with live, one definition becomes canonical
+    # and these two fields become either permanent or removable.
+    avg_stress_7d: float | None = Field(default=None, alias="7d_avg_stress")
+    avg_dp_risk_7d: float | None = Field(default=None, alias="7d_avg_dp_risk")
+
+    @classmethod
+    def from_metric_rows(cls, rows: Iterable[Any]) -> ScorecardResponse:
+        """Build from `fn_planner_scorecard()` rows.
+
+        Accepts asyncpg Records, dicts with (metric, value) keys, or raw
+        2-tuples. Converts Decimal → float and treats sentinel strings
+        ('n/a', 'perfect') as None.
+        """
+        data: dict[str, float | None] = {}
+        for row in rows:
+            if isinstance(row, tuple):
+                metric, value = row[0], row[1]
+            else:
+                metric, value = row["metric"], row["value"]
+            data[str(metric)] = _scorecard_value_to_float(value)
+        return cls.model_validate(data)
+
+    @classmethod
+    def metric_names(cls) -> frozenset[str]:
+        """Wire-format metric names this schema recognizes (with 7d_ aliases)."""
+        names: set[str] = set()
+        for field_name, field in cls.model_fields.items():
+            names.add(field.alias or field_name)
+        return frozenset(names)
 
 
 class EquipmentStateRow(BaseModel):
