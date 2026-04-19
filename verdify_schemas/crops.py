@@ -16,6 +16,8 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from .operations import HarvestCreate, TreatmentCreate
+from .catalog import CropCatalogId
+from .topology import PositionId, ZoneId
 
 CropStage = Literal["seed", "germination", "seedling", "vegetative", "flowering", "fruiting", "harvest", "cleared"]
 CropEventType = Literal[
@@ -45,7 +47,13 @@ ObservationType = Literal[
 
 
 class CropCreate(BaseModel):
-    """POST /api/v1/crops body + MCP crops.create data payload."""
+    """POST /api/v1/crops body + MCP crops.create data payload.
+
+    Sprint 22 adds optional FK references (position_id, zone_id, crop_catalog_id)
+    alongside the legacy string fields (position, zone, name/variety).
+    During Phases 1-3 both are accepted; Phase 4 switches callers; Phase 6
+    drops the strings.
+    """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -65,6 +73,14 @@ class CropCreate(BaseModel):
     target_vpd_high: float | None = Field(default=None, ge=0, le=20)
     notes: str | None = None
 
+    # Sprint 22: typed FK references (optional during migration)
+    position_id: int | None = None
+    zone_id: int | None = None
+    crop_catalog_id: int | None = None
+    position_label: PositionId | None = None
+    zone_slug: ZoneId | None = None
+    crop_catalog_slug: CropCatalogId | None = None
+
 
 class CropUpdate(BaseModel):
     """PUT /api/v1/crops/{id} body — every field optional (patch semantics)."""
@@ -82,6 +98,11 @@ class CropUpdate(BaseModel):
     target_vpd_low: float | None = Field(default=None, ge=0, le=20)
     target_vpd_high: float | None = Field(default=None, ge=0, le=20)
     notes: str | None = None
+
+    # Sprint 22: typed FK references (optional during migration)
+    position_id: int | None = None
+    zone_id: int | None = None
+    crop_catalog_id: int | None = None
 
 
 class ObservationCreate(BaseModel):
@@ -119,7 +140,15 @@ class EventCreate(BaseModel):
 
 
 class Crop(BaseModel):
-    """crops table row — full persisted shape."""
+    """crops table row — full persisted shape.
+
+    Note: the Sprint 22 FK columns (position_id, zone_id, crop_catalog_id)
+    are NOT mirrored here yet. They land on the DB in Phase 2 migration
+    086 and are added to this model in Phase 4 when the API switches over.
+    Keeping the row model in lockstep with the prod DB means the drift
+    guards (tests/test_drift_guards.py) remain meaningful through the
+    migration window.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -164,7 +193,11 @@ class CropEvent(BaseModel):
 
 
 class Observation(BaseModel):
-    """observations table row."""
+    """observations table row.
+
+    The Sprint 22 FK columns (position_id, zone_id) land in migration 086
+    and are added to this model in Phase 4 after the API switches over.
+    """
 
     model_config = ConfigDict(extra="ignore")
 

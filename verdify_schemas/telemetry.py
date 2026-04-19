@@ -188,12 +188,17 @@ EquipmentId = Literal[
 
 
 class EquipmentStateEvent(BaseModel):
-    """equipment_state hypertable row — on-change relay events."""
+    """equipment_state hypertable row — on-change relay events.
+
+    `equipment` is the closed set defined by the `EquipmentId` Literal. A
+    drift test in tests/test_drift_guards.py confirms it against the
+    dispatcher's emission set.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
     ts: AwareDatetime
-    equipment: str
+    equipment: EquipmentId
     state: bool
     greenhouse_id: str = "vallery"
 
