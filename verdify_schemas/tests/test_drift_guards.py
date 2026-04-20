@@ -38,7 +38,7 @@ from verdify_schemas.operations import (
     MaintenanceLog,
     Treatment,
 )
-from verdify_schemas.plan import PlanJournalRow
+from verdify_schemas.plan import PlanDeliveryLogRow, PlanJournalRow
 from verdify_schemas.setpoint import (
     SetpointChange,
     SetpointClamp,
@@ -117,6 +117,7 @@ DB_BACKED = [
     (SetpointSnapshot, "setpoint_snapshot"),
     (SetpointClamp, "setpoint_clamps"),
     (PlanJournalRow, "plan_journal"),
+    (PlanDeliveryLogRow, "plan_delivery_log"),
     (DailySummaryRow, "daily_summary"),
     (ForecastHour, "weather_forecast"),
     (AlertLogRow, "alert_log"),

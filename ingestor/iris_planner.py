@@ -478,7 +478,7 @@ def gather_context() -> str:
 # ── Gateway delivery ─────────────────────────────────────────────
 
 
-def send_to_iris(event_type: str, label: str, context: str | None = None) -> bool:
+def send_to_iris(event_type: str, label: str, context: str | None = None) -> dict:
     """Send a planning event to Iris's planner session via OpenClaw gateway.
 
     Args:
@@ -487,27 +487,44 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> boo
         context: Pre-gathered context string. If None, runs gather-plan-context.sh.
 
     Returns:
-        True if the message was accepted by the gateway, False otherwise.
+        Sprint 24.6 (F14): a result dict the caller writes to plan_delivery_log.
+        Keys: delivered (bool), event_type, event_label, session_key, wake_mode,
+        gateway_status (int|None), gateway_body (str, truncated to 2k chars).
+        `delivered=True` means gateway returned 2xx; it does NOT mean Iris
+        wrote a plan (that's verified separately by planning_heartbeat's
+        30-min pass).
     """
+    result = {
+        "delivered": False,
+        "event_type": event_type,
+        "event_label": label,
+        "session_key": OPENCLAW_SESSION_KEY,
+        "wake_mode": None,
+        "gateway_status": None,
+        "gateway_body": None,
+    }
+
     if context is None:
         context = gather_context()
 
     builder = _PROMPT_BUILDERS.get(event_type)
     if not builder:
         log.error("Unknown event type: %s", event_type)
-        return False
+        result["gateway_body"] = f"unknown event_type: {event_type}"
+        return result
 
     message = builder(context, label)
 
     # SUNRISE/SUNSET/DEVIATION are high-priority — process immediately.
     # FORECAST/TRANSITION can wait for the next heartbeat.
     wake_now = event_type in ("SUNRISE", "SUNSET", "DEVIATION")
+    result["wake_mode"] = "now" if wake_now else "next-heartbeat"
 
     payload = {
         "message": message,
         "agentId": "iris-planner",
         "sessionKey": OPENCLAW_SESSION_KEY,
-        "wakeMode": "now" if wake_now else "next-heartbeat",
+        "wakeMode": result["wake_mode"],
         "deliver": False,
     }
 
@@ -527,15 +544,20 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> boo
         with urllib.request.urlopen(req, timeout=30) as resp:
             status = resp.getcode()
             body = resp.read().decode("utf-8", errors="replace")
+            result["gateway_status"] = status
+            result["gateway_body"] = body[:2000]
             if status < 300:
                 log.info("Iris planner: %s/%s delivered (status %d)", event_type, label, status)
-                return True
+                result["delivered"] = True
             else:
                 log.error("Iris planner: %s/%s rejected (status %d): %s", event_type, label, status, body[:200])
-                return False
     except urllib.error.HTTPError as e:
-        log.error("Iris planner HTTP error: %s %s — %d %s", event_type, label, e.code, e.read().decode()[:200])
-        return False
+        body_s = e.read().decode(errors="replace")[:2000]
+        log.error("Iris planner HTTP error: %s %s — %d %s", event_type, label, e.code, body_s[:200])
+        result["gateway_status"] = e.code
+        result["gateway_body"] = body_s
     except Exception as e:
         log.error("Iris planner delivery failed: %s %s — %s", event_type, label, e)
-        return False
+        result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
+
+    return result
