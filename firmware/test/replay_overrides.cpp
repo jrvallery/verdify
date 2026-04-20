@@ -304,6 +304,15 @@ int main(int argc, char* argv[]) {
         p.in.enthalpy_delta = -5.0f; p.in.vpd_south = 1.5f; p.in.vpd_west = 1.5f;
         p.in.vpd_east = 1.5f; p.in.local_hour = 12; p.in.occupied = false;
         p.sp = default_setpoints();
+        // Sprint-11: default_setpoints() is now wide (2-band model —
+        // dispatcher pushes real crop band). Override to a realistic
+        // operational band so synthetic probes that rely on vpd_above_band
+        // (relief_cycle_breaker, seal_blocked_temp) trigger the way they
+        // would in production.
+        p.sp.temp_high = 82.0f; p.sp.temp_low = 65.0f;
+        p.sp.vpd_high = 1.4f;   p.sp.vpd_low = 0.8f;
+        p.sp.safety_max = 95.0f; p.sp.safety_min = 45.0f;
+        p.sp.vpd_max_safe = 2.5f; p.sp.vpd_min_safe = 0.3f;
         p.st = initial_state();
         p.mode = IDLE;
         return p;

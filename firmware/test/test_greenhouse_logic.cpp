@@ -35,10 +35,28 @@ static SensorInputs make_inputs(float temp, float vpd, float rh = 60.0f) {
              .dew_point_f = temp - 10.0f, .outdoor_rh_pct = 30.0f,
              .enthalpy_delta = -5.0f,
              .vpd_south = vpd, .vpd_west = vpd, .vpd_east = vpd,
-             .local_hour = 12, .occupied = false,
-             // Sprint-10 0.3: default to photoperiod=true since local_hour=12
-             // is midday; night tests construct inputs explicitly.
-             .is_photoperiod = true };
+             .local_hour = 12, .occupied = false };
+}
+
+// Sprint-11: default_setpoints() now returns PERMISSIVE wide defaults
+// (temp 40-95°F, vpd 0.35-2.80 kPa) matching the two-band model where
+// the dispatcher pushes the real crop band. Many pre-sprint-11 tests
+// were written against the narrow pre-sprint-10 defaults (82/65/1.4/0.8)
+// and exercise behavior at specific sensor values inside that band.
+// band_setpoints() restores those values so tests keep their semantics
+// without coupling to the firmware default constants.
+static Setpoints band_setpoints() {
+    Setpoints sp = default_setpoints();
+    sp.temp_high = 82.0f;
+    sp.temp_low  = 65.0f;
+    sp.vpd_high  = 1.4f;
+    sp.vpd_low   = 0.8f;
+    sp.safety_max = 95.0f;
+    sp.safety_min = 45.0f;
+    sp.vpd_max_safe = 2.5f;
+    sp.vpd_min_safe = 0.3f;
+    sp.dehum_aggressive_kpa = 0.6f;
+    return sp;
 }
 
 // Helper: run resolve_equipment with state
@@ -58,13 +76,17 @@ TEST(idle_when_in_band) {
 
 TEST(ventilate_when_hot) {
     auto s = initial_state();
-    ASSERT_EQ(determine_mode(make_inputs(84, 0.9), default_setpoints(), s, 5000), VENTILATE);
+    // Sprint-11: default_setpoints() widened to temp_high=95. Pin temp_high=82
+    // explicitly so this test keeps its original semantics.
+    auto sp = default_setpoints();
+    sp.temp_high = 82.0f;
+    ASSERT_EQ(determine_mode(make_inputs(84, 0.9), sp, s, 5000), VENTILATE);
     PASS();
 }
 
 TEST(sealed_after_dwell) {
     auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
-    ASSERT_EQ(determine_mode(make_inputs(72, 1.5), default_setpoints(), s, 5000), SEALED_MIST);
+    ASSERT_EQ(determine_mode(make_inputs(72, 1.5), band_setpoints(), s, 5000), SEALED_MIST);
     PASS();
 }
 
@@ -76,19 +98,19 @@ TEST(not_sealed_before_dwell) {
 
 TEST(safety_cool) {
     auto s = initial_state();
-    ASSERT_EQ(determine_mode(make_inputs(96, 1), default_setpoints(), s, 5000), SAFETY_COOL);
+    ASSERT_EQ(determine_mode(make_inputs(96, 1), band_setpoints(), s, 5000), SAFETY_COOL);
     PASS();
 }
 
 TEST(safety_heat) {
     auto s = initial_state();
-    ASSERT_EQ(determine_mode(make_inputs(44, 0.3), default_setpoints(), s, 5000), SAFETY_HEAT);
+    ASSERT_EQ(determine_mode(make_inputs(44, 0.3), band_setpoints(), s, 5000), SAFETY_HEAT);
     PASS();
 }
 
 TEST(relief_after_sealed_max) {
     auto s = initial_state(); s.mode_prev = SEALED_MIST; s.sealed_timer_ms = 600000;
-    ASSERT_EQ(determine_mode(make_inputs(72, 1.5), default_setpoints(), s, 5000), THERMAL_RELIEF);
+    ASSERT_EQ(determine_mode(make_inputs(72, 1.5), band_setpoints(), s, 5000), THERMAL_RELIEF);
     PASS();
 }
 
@@ -103,7 +125,7 @@ TEST(dehum_when_vpd_low) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(fix1_mode_prev_tracks_correctly) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     s.vpd_watch_timer_ms = 60000;
     // Cycle 1: enter SEALED_MIST
     Mode m1 = determine_mode(make_inputs(72, 1.5), sp, s, 5000);
@@ -131,7 +153,7 @@ TEST(fix1_relief_to_idle_transition) {
 
 TEST(fix2_vpd_safety_no_stomp_safety_heat) {
     auto s = initial_state();
-    Mode m = determine_mode(make_inputs(40, 3.5), default_setpoints(), s, 5000);
+    Mode m = determine_mode(make_inputs(40, 3.5), band_setpoints(), s, 5000);
     ASSERT_EQ(m, SAFETY_HEAT);
     PASS();
 }
@@ -191,15 +213,15 @@ TEST(fix3_heat_hysteresis) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(fix4_dehum_stays_until_vpd_low) {
-    auto sp = default_setpoints(); auto s = initial_state();
-    // Enter DEHUM at VPD=0.15 (below vpd_low - HV = 0.2)
-    determine_mode(make_inputs(72, 0.15), sp, s, 5000);
+    auto sp = band_setpoints(); auto s = initial_state();
+    // band_setpoints: vpd_low=0.8. Enter DEHUM at VPD=0.45 (below vpd_low-HV=0.5)
+    determine_mode(make_inputs(72, 0.45), sp, s, 5000);
     ASSERT_EQ(s.mode, DEHUM_VENT);
-    // VPD rises to 0.35 (still below vpd_low=0.5) → stay
-    determine_mode(make_inputs(72, 0.35), sp, s, 5000);
+    // VPD rises to 0.7 (still below vpd_low=0.8) → stay
+    determine_mode(make_inputs(72, 0.7), sp, s, 5000);
     ASSERT_EQ(s.mode, DEHUM_VENT);
-    // VPD rises to 0.5 (at vpd_low) → exit
-    determine_mode(make_inputs(72, 0.5), sp, s, 5000);
+    // VPD rises to 0.8 (at vpd_low) → exit
+    determine_mode(make_inputs(72, 0.8), sp, s, 5000);
     ASSERT_EQ(s.mode, IDLE);
     PASS();
 }
@@ -209,16 +231,16 @@ TEST(fix4_dehum_stays_until_vpd_low) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(fix5_relief_exits_to_ventilate_when_hot) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     s.mode_prev = THERMAL_RELIEF; s.relief_timer_ms = 89000;
     // VPD resolved but temp is high → should VENTILATE, not IDLE
-    Mode m = determine_mode(make_inputs(84, 0.8), sp, s, 5000);
+    Mode m = determine_mode(make_inputs(84, 0.9), sp, s, 5000);
     ASSERT_EQ(m, VENTILATE);
     PASS();
 }
 
 TEST(fix5_relief_exits_to_sealed_when_vpd_high) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     s.mode_prev = THERMAL_RELIEF; s.relief_timer_ms = 89000;
     s.vpd_watch_timer_ms = 60000;  // dwell satisfied
     // VPD still high → should re-seal
@@ -241,7 +263,7 @@ TEST(fix6_econ_heat_electric_only) {
 }
 
 TEST(fix6_econ_heat_capped_by_temp) {
-    auto sp = default_setpoints(); sp.econ_block = true;
+    auto sp = band_setpoints(); sp.econ_block = true;
     // Temp 80°F is near Thigh (82). 80 >= 82-5=77 → too hot for econ heating
     auto out = equip(IDLE, 80, 0.3, sp);
     ASSERT_FALSE(out.heat1);  // temp too high for econ heating
@@ -295,7 +317,7 @@ TEST(fix8_sensor_fault_equipment) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(r2_2_sensor_fault_preserves_mode_prev) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     // Enter VENTILATE
     determine_mode(make_inputs(84, 0.9), sp, s, 5000);
     ASSERT_EQ(s.mode_prev, VENTILATE);
@@ -309,7 +331,7 @@ TEST(r2_2_sensor_fault_preserves_mode_prev) {
 }
 
 TEST(r2_3_vpd_override_no_stomp_ventilate) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     // Temp is hot (needs cooling) AND VPD is extreme
     auto in = make_inputs(84, 3.5);
     Mode m = determine_mode(in, sp, s, 5000);
@@ -343,7 +365,7 @@ TEST(r2_5_occupancy_blocks_fog) {
 }
 
 TEST(r2_6_relief_cycle_forces_ventilate) {
-    auto sp = default_setpoints(); sp.max_relief_cycles = 3;
+    auto sp = band_setpoints(); sp.max_relief_cycles = 3;
     auto s = initial_state();
     s.relief_cycle_count = 3;  // at the limit
     s.vpd_watch_timer_ms = 60000;
@@ -367,11 +389,11 @@ TEST(r2_8_dehum_respects_econ_block_change) {
 }
 
 TEST(r2_9_fog_stage_blocked_by_time_window) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     s.mode_prev = SEALED_MIST; s.sealed_timer_ms = 100000;
     s.mist_stage = MIST_S2; s.mist_stage_timer_ms = 0;
     // VPD demands fog BUT it's outside the fog time window
-    SensorInputs in = make_inputs(72, 1.7, 60);
+    SensorInputs in = make_inputs(72, 1.9, 60);
     in.local_hour = 22;  // 10 PM — outside 7-17 window
     determine_mode(in, sp, s, 5000);
     // Should NOT escalate to MIST_FOG
@@ -384,7 +406,7 @@ TEST(r2_9_fog_stage_blocked_by_time_window) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(fix9_mist_stage_s1_on_seal) {
-    auto sp = default_setpoints(); auto s = initial_state();
+    auto sp = band_setpoints(); auto s = initial_state();
     s.vpd_watch_timer_ms = 60000;
     determine_mode(make_inputs(72, 1.5), sp, s, 5000);
     ASSERT_EQ(s.mist_stage, MIST_S1);
@@ -392,7 +414,7 @@ TEST(fix9_mist_stage_s1_on_seal) {
 }
 
 TEST(fix9_mist_stage_s1_to_s2) {
-    auto sp = default_setpoints(); sp.mist_s2_delay_ms = 300000;
+    auto sp = band_setpoints(); sp.mist_s2_delay_ms = 300000;
     auto s = initial_state();
     s.mode_prev = SEALED_MIST; s.sealed_timer_ms = 100000;
     s.mist_stage = MIST_S1; s.mist_stage_timer_ms = 300000;
@@ -403,12 +425,12 @@ TEST(fix9_mist_stage_s1_to_s2) {
 }
 
 TEST(fix9_mist_stage_s2_to_fog) {
-    auto sp = default_setpoints(); sp.fog_escalation_kpa = 0.4;
+    auto sp = band_setpoints(); sp.fog_escalation_kpa = 0.4;
     auto s = initial_state();
     s.mode_prev = SEALED_MIST; s.sealed_timer_ms = 100000;
     s.mist_stage = MIST_S2; s.mist_stage_timer_ms = 0;
-    // VPD = 1.7 > vpd_high(1.2) + fog_escalation(0.4) = 1.6 → FOG
-    determine_mode(make_inputs(72, 1.7), sp, s, 5000);
+    // VPD = 1.9 > vpd_high(1.4) + fog_escalation(0.4) = 1.8 → FOG
+    determine_mode(make_inputs(72, 1.9), sp, s, 5000);
     ASSERT_EQ(s.mist_stage, MIST_FOG);
     PASS();
 }
@@ -661,7 +683,7 @@ TEST(obs1e_fog_gate_quiet_when_not_in_s2) {
 }
 
 TEST(obs1e_relief_cycle_breaker_fires) {
-    auto sp = default_setpoints();
+    auto sp = band_setpoints();
     auto s = initial_state();
     s.vpd_watch_timer_ms = 60000;
     s.relief_cycle_count = sp.max_relief_cycles;  // at the ceiling
@@ -683,9 +705,9 @@ TEST(obs1e_relief_cycle_breaker_quiet_below_ceiling) {
 }
 
 TEST(obs1e_seal_blocked_temp_fires) {
-    auto sp = default_setpoints();
+    auto sp = band_setpoints();
     auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
-    // within 5°F of safety_max (default 95°F) — planner wants seal, firmware won't
+    // within 5°F of safety_max (band 95°F) — planner wants seal, firmware won't
     auto in = make_inputs(sp.safety_max - 3.0f, 1.5f);
     auto f = evaluate_overrides(in, sp, s, VENTILATE);
     ASSERT_TRUE(f.seal_blocked_temp);
@@ -775,7 +797,7 @@ TEST(s8_r23_preserves_mist_stage_when_already_sealed) {
     // Pre-sprint-8: R2-3 unconditionally reset mist_stage to MIST_S1,
     // demoting peak MIST_FOG back to S1 at the exact moment VPD was
     // worst. Now: state preserved when pre_r23_mode == SEALED_MIST.
-    auto sp = default_setpoints();
+    auto sp = band_setpoints();
     auto s = initial_state();
     s.mode_prev = SEALED_MIST;
     s.mist_stage = MIST_FOG;
@@ -1103,108 +1125,8 @@ TEST(s10_econ_heat_margin_is_tunable) {
     PASS();
 }
 
-TEST(s10_day_night_uses_day_values_when_photoperiod_true) {
-    auto sp = default_setpoints();
-    sp.temp_high_day = 78.0f;
-    sp.temp_high_night = 68.0f;
-    sp.vpd_high_day = 1.2f;
-    sp.vpd_high_night = 0.9f;
-    auto s = initial_state();
-    auto in = make_inputs(75.0f, 1.0f);
-    in.is_photoperiod = true;
-    Mode m = determine_mode(in, sp, s, 5000);
-    // At 75°F with day temp_high=78: not cooling. VPD 1.0 < day high 1.2 → in band.
-    ASSERT_EQ(m, IDLE);
-    // Now 76°F with VPD 1.3 (above day high 1.2) — seal dwell accumulates.
-    in = make_inputs(76.0f, 1.3f);
-    in.is_photoperiod = true;
-    determine_mode(in, sp, s, 60000);
-    ASSERT_TRUE(s.vpd_watch_timer_ms > 0u);
-    PASS();
-}
-
-TEST(s10_day_night_uses_night_values_when_photoperiod_false) {
-    auto sp = default_setpoints();
-    sp.temp_high_day = 78.0f;
-    sp.temp_high_night = 68.0f;
-    sp.vpd_high_day = 1.2f;
-    sp.vpd_high_night = 0.9f;
-    auto s = initial_state();
-    // At 72°F (above night high 68): should trigger cooling even though
-    // 72 is comfortably below the day high.
-    auto in = make_inputs(72.0f, 0.8f);
-    in.is_photoperiod = false;
-    Mode m = determine_mode(in, sp, s, 5000);
-    ASSERT_EQ(m, VENTILATE);  // 72 > 68 + bias_cool=0 → cooling
-    PASS();
-}
-
-TEST(s10_day_night_falls_back_to_legacy_when_unset) {
-    // resolve_active_band falls back to sp.temp_high etc. if the day/night
-    // field is 0 (unset). Exercise by zeroing the day fields and relying on
-    // legacy temp_high.
-    auto sp = default_setpoints();
-    sp.temp_high = 82.0f;
-    sp.temp_high_day = 0.0f;   // force fallback
-    sp.temp_high_night = 0.0f;
-    auto in = make_inputs(84.0f, 0.9f);
-    auto s = initial_state();
-    Mode m = determine_mode(in, sp, s, 5000);
-    ASSERT_EQ(m, VENTILATE);  // uses legacy temp_high=82, 84 > 82
-    PASS();
-}
-
-TEST(s10_photoperiod_swap_activates_different_thresholds) {
-    // Same sensor inputs, swap the flag — behavior changes.
-    auto sp = default_setpoints();
-    sp.temp_high_day = 80.0f;
-    sp.temp_high_night = 68.0f;
-    auto in = make_inputs(72.0f, 0.9f);  // between the two highs
-
-    auto s_day = initial_state();
-    in.is_photoperiod = true;
-    Mode m_day = determine_mode(in, sp, s_day, 5000);
-    ASSERT_EQ(m_day, IDLE);  // 72 < day high 80
-
-    auto s_night = initial_state();
-    in.is_photoperiod = false;
-    Mode m_night = determine_mode(in, sp, s_night, 5000);
-    ASSERT_EQ(m_night, VENTILATE);  // 72 > night high 68
-    PASS();
-}
-
-TEST(s10_validate_backfills_day_night_from_legacy) {
-    Setpoints sp = default_setpoints();
-    sp.temp_high = 85.0f;
-    sp.temp_high_day = 0.0f;
-    sp.temp_high_night = 0.0f;
-    sp.vpd_high = 1.4f;
-    sp.vpd_high_day = 0.0f;
-    sp.vpd_high_night = 0.0f;
-    validate_setpoints(sp);
-    ASSERT_EQ(sp.temp_high_day, 85.0f);
-    ASSERT_EQ(sp.temp_high_night, 85.0f);
-    ASSERT_EQ(sp.vpd_high_day, 1.4f);
-    ASSERT_EQ(sp.vpd_high_night, 1.4f);
-    PASS();
-}
-
-TEST(s10_validate_enforces_day_night_pair_ordering) {
-    Setpoints sp = default_setpoints();
-    // Inverted within the day pair
-    sp.temp_high_day = 70.0f;
-    sp.temp_low_day = 75.0f;
-    // Inverted within the night pair
-    sp.vpd_high_night = 0.5f;
-    sp.vpd_low_night = 0.8f;
-    validate_setpoints(sp);
-    ASSERT_TRUE(sp.temp_low_day < sp.temp_high_day);
-    ASSERT_TRUE(sp.vpd_low_night < sp.vpd_high_night);
-    PASS();
-}
-
 TEST(s9_safety_heat_runs_lead_fan_for_circulation) {
-    auto sp = default_setpoints();
+    auto sp = band_setpoints();
     auto s = initial_state();
     auto in = make_inputs(40.0f, 0.3f);  // trips safety_heat
     Mode m = determine_mode(in, sp, s, 5000);
@@ -1227,7 +1149,7 @@ TEST(s9_safety_heat_runs_lead_fan_for_circulation) {
 TEST(s8_safety_heat_clears_same_timers_as_safety_cool) {
     // Pre-sprint-8: SAFETY_HEAT left relief_timer_ms, vent_latch_timer_ms,
     // and vpd_watch_timer_ms populated with whatever they held pre-safety.
-    auto sp = default_setpoints();
+    auto sp = band_setpoints();
     auto s = initial_state();
     s.sealed_timer_ms     = 100000;
     s.relief_timer_ms     = 50000;

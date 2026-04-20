@@ -319,23 +319,6 @@ interval:
           auto sntp_now = id(sntp_time).now();
           int local_hour = sntp_now.is_valid() ? sntp_now.hour : 12;
 
-          // Sprint-10 0.3: compute is_photoperiod (hybrid).
-          // Primary: scheduled window (tunable via photoperiod_*_hour).
-          // Override: outdoor lux > 5000 means direct sun — flip to day
-          // even if outside the scheduled window (handles schedule drift,
-          // DST transitions, sensor-time skew). A cloudy noon still
-          // registers as day because it's inside the scheduled window;
-          // a 2 AM indoor LED test stays as night because indoor lighting
-          // is orders of magnitude below the outdoor 5000 lux threshold.
-          int ps = id(photoperiod_start_hour);
-          int pe = id(photoperiod_end_hour);
-          bool in_photo_window = (ps <= pe)
-              ? (local_hour >= ps && local_hour < pe)
-              : (local_hour >= ps || local_hour < pe);
-          float outdoor_lux = id(tempest_lux);
-          bool lux_bright = !isnan(outdoor_lux) && outdoor_lux > 5000.0f;
-          bool is_photoperiod = in_photo_window || lux_bright;
-
           SensorInputs sensor_in = {
               .temp_f = Tin, .vpd_kpa = VPD, .rh_pct = RHin,
               .dew_point_f = isnan(id(dewpoint_avg).state) ? Tin - 10.0f : id(dewpoint_avg).state,
@@ -345,8 +328,7 @@ interval:
               .vpd_west = id(vpd_west).state,
               .vpd_east = id(vpd_east).state,
               .local_hour = local_hour,
-              .occupied = id(greenhouse_occupied),
-              .is_photoperiod = is_photoperiod
+              .occupied = id(greenhouse_occupied)
           };
 
           Setpoints setpts = {
@@ -377,16 +359,7 @@ interval:
               // the pre-sprint-10 hardcoded constants):
               .vent_latch_timeout_ms = 1800000u,
               .safety_max_seal_margin_f = 5.0f,
-              .econ_heat_margin_f = 5.0f,
-              // sprint-10 0.3 day/night pairs:
-              .temp_high_day   = id(target_temp_high_day_f),
-              .temp_high_night = id(target_temp_high_night_f),
-              .temp_low_day    = id(target_temp_low_day_f),
-              .temp_low_night  = id(target_temp_low_night_f),
-              .vpd_high_day    = id(target_vpd_high_day_kpa),
-              .vpd_high_night  = id(target_vpd_high_night_kpa),
-              .vpd_low_day     = id(target_vpd_low_day_kpa),
-              .vpd_low_night   = id(target_vpd_low_night_kpa)
+              .econ_heat_margin_f = 5.0f
           };
 
           validate_setpoints(setpts);
@@ -1270,22 +1243,12 @@ interval:
                     auto cf = [](float v, float lo, float hi) -> float { return isnan(v) ? (lo+hi)/2.0f : fmax(lo, fmin(hi, v)); };
                     auto ci = [](int v, int lo, int hi) -> int { return v < lo ? lo : (v > hi ? hi : v); };
 
-                    // ── Climate (clamped to tunables.yaml min/max) ──
-                    if(key == "temp_low"){ val = cf(val, 40, 80); if(fabs(id(target_temp_low_f) - val) > 0.01f){ id(target_temp_low_f) = val; id(num_temp_low).publish_state(val); applied++; }}
-                    if(key == "temp_high"){ val = cf(val, 60, 100); if(fabs(id(target_temp_high_f) - val) > 0.01f){ id(target_temp_high_f) = val; id(num_temp_high).publish_state(val); applied++; }}
-                    if(key == "vpd_low"){ val = cf(val, 0.1, 1.5); if(fabs(id(target_vpd_low_kpa) - val) > 0.01f){ id(target_vpd_low_kpa) = val; id(num_vpd_low).publish_state(val); applied++; }}
-                    if(key == "vpd_high"){ val = cf(val, 0.5, 3.0); if(fabs(id(target_vpd_high_kpa) - val) > 0.01f){ id(target_vpd_high_kpa) = val; id(num_vpd_high).publish_state(val); applied++; }}
-                    // Sprint-10 0.3: day/night pairs + photoperiod window.
-                    if(key == "temp_low_day"){ val = cf(val, 40, 85); if(fabs(id(target_temp_low_day_f) - val) > 0.01f){ id(target_temp_low_day_f) = val; id(num_temp_low_day).publish_state(val); applied++; }}
-                    if(key == "temp_high_day"){ val = cf(val, 60, 100); if(fabs(id(target_temp_high_day_f) - val) > 0.01f){ id(target_temp_high_day_f) = val; id(num_temp_high_day).publish_state(val); applied++; }}
-                    if(key == "temp_low_night"){ val = cf(val, 35, 80); if(fabs(id(target_temp_low_night_f) - val) > 0.01f){ id(target_temp_low_night_f) = val; id(num_temp_low_night).publish_state(val); applied++; }}
-                    if(key == "temp_high_night"){ val = cf(val, 50, 95); if(fabs(id(target_temp_high_night_f) - val) > 0.01f){ id(target_temp_high_night_f) = val; id(num_temp_high_night).publish_state(val); applied++; }}
-                    if(key == "vpd_low_day"){ val = cf(val, 0.3, 1.5); if(fabs(id(target_vpd_low_day_kpa) - val) > 0.01f){ id(target_vpd_low_day_kpa) = val; id(num_vpd_low_day).publish_state(val); applied++; }}
-                    if(key == "vpd_high_day"){ val = cf(val, 0.6, 2.5); if(fabs(id(target_vpd_high_day_kpa) - val) > 0.01f){ id(target_vpd_high_day_kpa) = val; id(num_vpd_high_day).publish_state(val); applied++; }}
-                    if(key == "vpd_low_night"){ val = cf(val, 0.2, 1.2); if(fabs(id(target_vpd_low_night_kpa) - val) > 0.01f){ id(target_vpd_low_night_kpa) = val; id(num_vpd_low_night).publish_state(val); applied++; }}
-                    if(key == "vpd_high_night"){ val = cf(val, 0.5, 2.0); if(fabs(id(target_vpd_high_night_kpa) - val) > 0.01f){ id(target_vpd_high_night_kpa) = val; id(num_vpd_high_night).publish_state(val); applied++; }}
-                    if(key == "photoperiod_start_hour"){ int v = ci((int)val, 0, 23); if(id(photoperiod_start_hour) != v){ id(photoperiod_start_hour) = v; id(num_photoperiod_start).publish_state(v); applied++; }}
-                    if(key == "photoperiod_end_hour"){ int v = ci((int)val, 0, 23); if(id(photoperiod_end_hour) != v){ id(photoperiod_end_hour) = v; id(num_photoperiod_end).publish_state(v); applied++; }}
+                    // ── Climate (clamped to tunables.yaml min/max). Dispatcher pushes
+                    // the single active band per planner cycle; firmware defaults are wide. ──
+                    if(key == "temp_low"){ val = cf(val, 30, 80); if(fabs(id(target_temp_low_f) - val) > 0.01f){ id(target_temp_low_f) = val; id(num_temp_low).publish_state(val); applied++; }}
+                    if(key == "temp_high"){ val = cf(val, 40, 100); if(fabs(id(target_temp_high_f) - val) > 0.01f){ id(target_temp_high_f) = val; id(num_temp_high).publish_state(val); applied++; }}
+                    if(key == "vpd_low"){ val = cf(val, 0.1, 1.0); if(fabs(id(target_vpd_low_kpa) - val) > 0.01f){ id(target_vpd_low_kpa) = val; id(num_vpd_low).publish_state(val); applied++; }}
+                    if(key == "vpd_high"){ val = cf(val, 0.4, 3.0); if(fabs(id(target_vpd_high_kpa) - val) > 0.01f){ id(target_vpd_high_kpa) = val; id(num_vpd_high).publish_state(val); applied++; }}
                     if(key == "bias_heat"){ val = cf(val, -10, 10); if(fabs(id(bias_heat_f) - val) > 0.01f){ id(bias_heat_f) = val; id(num_bias_heat).publish_state(val); applied++; }}
                     if(key == "bias_cool"){ val = cf(val, -10, 10); if(fabs(id(bias_cool_f) - val) > 0.01f){ id(bias_cool_f) = val; id(num_bias_cool).publish_state(val); applied++; }}
                     if(key == "temp_hysteresis"){ val = cf(val, 0.5, 3); if(fabs(id(hyst_temp_f) - val) > 0.01f){ id(hyst_temp_f) = val; id(num_hyst_temp).publish_state(val); applied++; }}
