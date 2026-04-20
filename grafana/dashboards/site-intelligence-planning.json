@@ -1024,7 +1024,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', sent_at) AS time,\n       count(*)::int AS \"Timed out\"\n  FROM planner_trigger_log\n WHERE status = 'timed_out'\n   AND sent_at > $__timeFrom() AND sent_at < $__timeTo()\n GROUP BY 1\n ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', delivered_at) AS time,\n       count(*)::int AS \"Timed out\"\n  FROM plan_delivery_log\n WHERE status = 'timed_out'\n   AND delivered_at > $__timeFrom() AND delivered_at < $__timeTo()\n GROUP BY 1\n ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1110,7 +1110,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(pj.planner_instance, 'unknown') AS instance,\n       EXTRACT(EPOCH FROM pj.created_at - ptl.sent_at)::float AS latency_seconds\n  FROM plan_journal pj\n  JOIN planner_trigger_log ptl ON ptl.trigger_id = pj.trigger_id\n WHERE pj.created_at > $__timeFrom() AND pj.created_at < $__timeTo()\n   AND pj.created_at >= ptl.sent_at\n ORDER BY 2",
+          "rawSql": "SELECT COALESCE(pj.planner_instance, 'unknown') AS instance,\n       EXTRACT(EPOCH FROM pj.created_at - ptl.delivered_at)::float AS latency_seconds\n  FROM plan_journal pj\n  JOIN plan_delivery_log ptl ON ptl.trigger_id = pj.trigger_id\n WHERE pj.created_at > $__timeFrom() AND pj.created_at < $__timeTo()\n   AND pj.created_at >= ptl.delivered_at\n ORDER BY 2",
           "refId": "A",
           "sql": {
             "columns": [
