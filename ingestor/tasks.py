@@ -661,9 +661,12 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
-        # 7. Planner stale
+        # 7. Planner stale. Threshold 14h = SUNSET→SUNRISE gap (~12.7h) + 1.3h slack.
+        # Iris emits full plans at SUNRISE and SUNSET only; interim TRANSITION /
+        # FORECAST / DEVIATION events adjust tunables or trigger replans. An 8h
+        # threshold guaranteed a daily false-positive mid-afternoon.
         plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")
-        if plan_age and plan_age > 28800:
+        if plan_age and plan_age > 50400:
             alerts.append(
                 {
                     "alert_type": "planner_stale",
