@@ -43,6 +43,59 @@ globals:
     restore_value: no
     initial_value: '0.30'
 
+  # ─── Sprint-10 0.3: day/night setpoint pairs ───
+  # Production flow: dispatcher pushes these every planner cycle. Legacy
+  # target_temp_*/target_vpd_* above remain as fallback when day/night
+  # aren't populated (resolve_active_band in greenhouse_types.h handles
+  # the fallback; validate_setpoints back-fills if called). Longmont
+  # defaults from the Phase-0 plan: day 72-78°F / VPD 0.9-1.2;
+  # night 62-68°F / VPD 0.6-0.9.
+  - id: target_temp_low_day_f
+    type: float
+    restore_value: no
+    initial_value: '72.0'
+  - id: target_temp_high_day_f
+    type: float
+    restore_value: no
+    initial_value: '78.0'
+  - id: target_temp_low_night_f
+    type: float
+    restore_value: no
+    initial_value: '62.0'
+  - id: target_temp_high_night_f
+    type: float
+    restore_value: no
+    initial_value: '68.0'
+  - id: target_vpd_low_day_kpa
+    type: float
+    restore_value: no
+    initial_value: '0.90'
+  - id: target_vpd_high_day_kpa
+    type: float
+    restore_value: no
+    initial_value: '1.20'
+  - id: target_vpd_low_night_kpa
+    type: float
+    restore_value: no
+    initial_value: '0.60'
+  - id: target_vpd_high_night_kpa
+    type: float
+    restore_value: no
+    initial_value: '0.90'
+  # Photoperiod window (local hours). is_photoperiod computed as:
+  # hour in [start, end) OR (tempest_lux > 5000 for outdoor daylight
+  # override). Hybrid handles cloudy days (schedule wins) and off-schedule
+  # direct sun (lux overrides). start > end wraps midnight (not expected
+  # for photoperiod but the comparison supports it).
+  - id: photoperiod_start_hour
+    type: int
+    restore_value: no
+    initial_value: '6'
+  - id: photoperiod_end_hour
+    type: int
+    restore_value: no
+    initial_value: '20'
+
   # ─── Feed-forward biases & safety rails (°F & kPa) ───
   - id: bias_heat_f
     type: float
@@ -125,10 +178,6 @@ globals:
     initial_value: 'true'
 
   # ─── Watchdog / failsafe ───
-  - id: last_case_probe
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
   - id: last_external_update
     type: uint32_t
     restore_value: no
@@ -243,11 +292,29 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
-  - id: dh_cycles_today
+
+  # Sprint-7: per-zone mister + drip cycle counters. Incremented at rising
+  # edge in turn_on_zone() and the irrigation dispatch. Closes the audit
+  # gap where fan/heat/fog/vent had cycle counters but irrigation relays
+  # only had runtime. The ingestor-side comparison view pairs these with
+  # equipment_state-derived counts to detect firmware/db drift.
+  - id: cnt_mister_south_today
     type: int
     restore_value: no
     initial_value: '0'
-  - id: dh_safety_today
+  - id: cnt_mister_west_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_mister_center_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_drip_wall_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_drip_center_today
     type: int
     restore_value: no
     initial_value: '0'
@@ -331,12 +398,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
-
-  # ─── Vent hold timer (anti-cycling) ───
-  - id: vent_hold_timer_ms
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
 
   # ─── Outdoor RH adaptive mode ───
   - id: outdoor_rh_mode
@@ -452,6 +513,31 @@ globals:
 
   - id: runtime_mister_center_ms
     type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Per-zone last-fire timestamps (ms, sprint-2 fairness watchdog) ───
+  # Stamped by turn_on_zone() in controls.yaml. select_overdue_zone() reads
+  # these to steer misting to stressed zones the scoring formula would
+  # otherwise under-serve. `0` means "never fired since boot" — handled
+  # naturally by `now_ms - 0 == now_ms` which only exceeds the 10 min
+  # fairness window after 10 min of uptime.
+  - id: last_fire_south_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_fire_west_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_fire_center_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Daily counter of fairness-watchdog overrides (reset at midnight).
+  - id: cnt_mister_fairness_overrides_today
+    type: int
     restore_value: no
     initial_value: '0'
 

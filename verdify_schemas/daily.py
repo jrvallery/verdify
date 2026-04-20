@@ -52,6 +52,9 @@ class DailySummaryRow(BaseModel):
     cycles_safety_dehum: int = 0
     cycles_grow_light: int | None = None
 
+    # Mister fairness watchdog (sprint-24-alignment — firmware sprint-2 feature)
+    mister_fairness_overrides_today: int | None = Field(default=None, ge=0)
+
     # Equipment runtime (minutes)
     runtime_fan1_min: float = 0.0
     runtime_fan2_min: float = 0.0

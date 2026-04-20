@@ -35,7 +35,10 @@ static SensorInputs make_inputs(float temp, float vpd, float rh = 60.0f) {
              .dew_point_f = temp - 10.0f, .outdoor_rh_pct = 30.0f,
              .enthalpy_delta = -5.0f,
              .vpd_south = vpd, .vpd_west = vpd, .vpd_east = vpd,
-             .local_hour = 12, .occupied = false };
+             .local_hour = 12, .occupied = false,
+             // Sprint-10 0.3: default to photoperiod=true since local_hour=12
+             // is midday; night tests construct inputs explicitly.
+             .is_photoperiod = true };
 }
 
 // Helper: run resolve_equipment with state
@@ -161,25 +164,25 @@ TEST(fix3_ventilate_exit_hysteresis) {
 
 TEST(fix3_heat_hysteresis) {
     // IN-12 (Sprint 19): fixed after commit 2b61ee6 swapped the inverted
-    // dH2 / heat_hysteresis thresholds. The prior assertion used
-    // (Tlow - heat_hysteresis) as the heat2 threshold; the current code
-    // uses (Tlow - dH2). dH2 defaults to 5, so heat2 threshold is 53°F
-    // at temp_low=58, not 57°F.
+    // dH2 / heat_hysteresis thresholds. Sprint-9 P1#7: S2 is now latched
+    // via ControlState.heat2_latched; the fresh state passed by equip()
+    // starts with heat2_latched=false, so S1-only is the only behavior
+    // exercisable without going through determine_mode. See
+    // s9_heat2_latches_* tests for the S2 latch lifecycle.
     auto sp = default_setpoints(); sp.temp_low = 58; sp.heat_hysteresis = 1.0;
-    // s1 (electric) threshold: Tlow + heat_hysteresis = 59°F
-    // s2 (gas)      threshold: Tlow - dH2             = 53°F
-    // 57.5°F → s1 only
+    // S1 (electric) threshold: Tlow + heat_hysteresis = 59°F
+    // 57.5°F → S1 on (below threshold), S2 not latched yet
     auto out = equip(IDLE, 57.5, 0.9, sp);
-    ASSERT_TRUE(out.heat1);   // 57.5 < 59  (electric on)
-    ASSERT_FALSE(out.heat2);  // 57.5 > 53  (gas off)
-    // 56.5°F still s1 only (previously asserted gas-on, wrong)
+    ASSERT_TRUE(out.heat1);
+    ASSERT_FALSE(out.heat2);
     auto out2 = equip(IDLE, 56.5, 0.9, sp);
     ASSERT_TRUE(out2.heat1);
     ASSERT_FALSE(out2.heat2);
-    // 52°F triggers s2 too — coverage for the gas-stage threshold
+    // Even at 52°F (below S2 threshold), fresh state with latched=false
+    // does not fire S2 — the latch must be set by determine_mode first.
     auto out3 = equip(IDLE, 52.0, 0.9, sp);
-    ASSERT_TRUE(out3.heat1);  // 52 < 59
-    ASSERT_TRUE(out3.heat2);  // 52 < 53
+    ASSERT_TRUE(out3.heat1);
+    ASSERT_FALSE(out3.heat2);
     PASS();
 }
 
@@ -468,12 +471,16 @@ TEST(no_heater_with_vent) {
 }
 
 TEST(no_fan_without_vent) {
+    // Sprint-9 P2#11: SAFETY_HEAT intentionally runs the lead fan for
+    // canopy circulation while the vent stays closed (keep heat in).
+    // Whitelist it — the invariant still holds for every normal mode.
     auto sp = default_setpoints(); int v = 0;
     for (float t = 40; t <= 100; t += 2)
         for (float vpd = 0.1f; vpd <= 3.5f; vpd += 0.1f) {
             auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
             Mode m = determine_mode(make_inputs(t, vpd), sp, s, 5000);
             auto out = resolve_equipment(m, make_inputs(t, vpd), sp, s, true);
+            if (m == SAFETY_HEAT) continue;
             if (!out.vent && (out.fan1 || out.fan2)) v++;
         }
     ASSERT_EQ(v, 0); PASS();
@@ -757,6 +764,484 @@ TEST(obs1e_all_quiet_on_idle_in_band) {
     ASSERT_FALSE(f.relief_cycle_breaker);
     ASSERT_FALSE(f.seal_blocked_temp);
     ASSERT_FALSE(f.vpd_dry_override);
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-8 — R2-3 state preservation + midnight-wrap fog window
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s8_r23_preserves_mist_stage_when_already_sealed) {
+    // Pre-sprint-8: R2-3 unconditionally reset mist_stage to MIST_S1,
+    // demoting peak MIST_FOG back to S1 at the exact moment VPD was
+    // worst. Now: state preserved when pre_r23_mode == SEALED_MIST.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.mist_stage_timer_ms = 45000;
+    s.sealed_timer_ms = 300000;
+    s.vpd_watch_timer_ms = 60000;  // dwell mature
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_EQ(s.mist_stage, MIST_FOG);  // NOT demoted
+    ASSERT_TRUE(s.mist_stage_timer_ms >= 45000);  // NOT reset
+    ASSERT_FALSE(s.dry_override_active);  // not a forced transition
+    PASS();
+}
+
+TEST(s8_r23_preserves_sealed_timer_under_sustained_dryness) {
+    // Pre-sprint-8: sealed_timer_ms was reset to dt_ms every cycle
+    // while R2-3 fired, making sealed_max_ms unreachable and defeating
+    // the THERMAL_RELIEF backstop. Post: timer accumulates normally, and
+    // the state machine hits THERMAL_RELIEF once sealed_timer >= max.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.sealed_timer_ms = sp.sealed_max_ms - 5000;  // 5 s from max
+    s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);  // R2-3 trigger
+    // Tick 1 (dt=10s): normal accumulator advances sealed_timer past max.
+    // R2-3 fires but no longer resets the timer (sprint-8 fix).
+    Mode m = determine_mode(in, sp, s, 10000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_TRUE(s.sealed_timer_ms > sp.sealed_max_ms);
+    // Tick 2: the was_sealed branch now sees sealed_timer_ms >= max and
+    // transitions to THERMAL_RELIEF. Pre-sprint-8 this path was
+    // permanently unreachable under sustained R2-3 triggering.
+    m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, THERMAL_RELIEF);
+    PASS();
+}
+
+TEST(s8_r23_still_forces_seal_from_idle) {
+    // Sanity: the non-sealed path still seeds mist_stage and
+    // sealed_timer as before. Regression check on the main R2-3 flow.
+    auto sp = default_setpoints();
+    auto s = initial_state();  // mode_prev = IDLE, no dwell maturity
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_EQ(s.mist_stage, MIST_S1);  // fresh seal seeds S1
+    ASSERT_EQ(s.sealed_timer_ms, 5000u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, sp.vpd_watch_dwell_ms);
+    ASSERT_TRUE(s.dry_override_active);  // this IS a forced override
+    PASS();
+}
+
+TEST(s8_fog_window_wraps_midnight) {
+    // Pre-sprint-8: a window crossing midnight (start > end) evaluated
+    // to (hour < start || hour >= end) == true for every hour, gating
+    // fog 24/7. Now: (hour >= start || hour < end) inside the wrap.
+    auto sp = default_setpoints();
+    sp.fog_window_start = 22;
+    sp.fog_window_end = 6;
+    auto s = initial_state();
+    s.mist_stage = MIST_FOG;
+    auto in = make_inputs(72.0f, 1.7f);
+
+    // Inside the wrap — fog permitted
+    in.local_hour = 23;
+    ASSERT_TRUE(fog_permitted(in, sp));
+    in.local_hour = 0;
+    ASSERT_TRUE(fog_permitted(in, sp));
+    in.local_hour = 5;
+    ASSERT_TRUE(fog_permitted(in, sp));
+
+    // Outside the wrap — fog gated
+    in.local_hour = 6;   // inclusive end
+    ASSERT_FALSE(fog_permitted(in, sp));
+    in.local_hour = 12;
+    ASSERT_FALSE(fog_permitted(in, sp));
+    in.local_hour = 21;  // one hour before start
+    ASSERT_FALSE(fog_permitted(in, sp));
+
+    // Non-wrapping window (start <= end) still works
+    sp.fog_window_start = 7;
+    sp.fog_window_end = 17;
+    in.local_hour = 12;
+    ASSERT_TRUE(fog_permitted(in, sp));
+    in.local_hour = 17;  // inclusive end
+    ASSERT_FALSE(fog_permitted(in, sp));
+    in.local_hour = 6;
+    ASSERT_FALSE(fog_permitted(in, sp));
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-9 — Heat S2 latch + validate_setpoints relational + SAFETY_HEAT fan
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s9_heat2_latch_sets_when_below_s2_threshold) {
+    auto sp = default_setpoints();
+    sp.temp_low = 58.0f;
+    sp.dH2 = 5.0f;  // S2 threshold = 53°F
+    auto s = initial_state();
+    ASSERT_FALSE(s.heat2_latched);
+    // 52°F → below Tlow - dH2 → latch sets
+    determine_mode(make_inputs(52.0f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    // resolve_equipment honors the latch
+    auto out = resolve_equipment(IDLE, make_inputs(52.0f, 0.9f), sp, s, true);
+    ASSERT_TRUE(out.heat1);
+    ASSERT_TRUE(out.heat2);
+    PASS();
+}
+
+TEST(s9_heat2_latches_through_minor_fluctuation) {
+    // Pre-sprint-9: a temp oscillating between 56 and 54 (in the band
+    // between S2-threshold 53 and S1-exit 59) rapid-cycles the gas valve.
+    // Post: latch holds state through the band.
+    auto sp = default_setpoints();
+    sp.temp_low = 58.0f;
+    sp.dH2 = 5.0f;
+    sp.heat_hysteresis = 1.0f;  // S1 exit = 59°F
+    auto s = initial_state();
+    // Latch sets at 52°F.
+    determine_mode(make_inputs(52.0f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    // Temp recovers into the hysteresis band — latch holds.
+    determine_mode(make_inputs(55.0f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    determine_mode(make_inputs(58.5f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    // Temp crosses S1 exit — latch releases.
+    determine_mode(make_inputs(59.0f, 0.9f), sp, s, 5000);
+    ASSERT_FALSE(s.heat2_latched);
+    PASS();
+}
+
+TEST(s9_heat2_latch_does_not_re_set_in_hysteresis_band) {
+    // After release, mild undershoot into the band should NOT re-latch.
+    // Only a drop below S2 threshold re-latches.
+    auto sp = default_setpoints();
+    sp.temp_low = 58.0f;
+    sp.dH2 = 5.0f;
+    sp.heat_hysteresis = 1.0f;
+    auto s = initial_state();
+    s.heat2_latched = false;
+    determine_mode(make_inputs(55.0f, 0.9f), sp, s, 5000);  // in the band
+    ASSERT_FALSE(s.heat2_latched);
+    determine_mode(make_inputs(53.5f, 0.9f), sp, s, 5000);  // still in band
+    ASSERT_FALSE(s.heat2_latched);
+    determine_mode(make_inputs(52.0f, 0.9f), sp, s, 5000);  // below threshold
+    ASSERT_TRUE(s.heat2_latched);
+    PASS();
+}
+
+TEST(s9_validate_swaps_inverted_vpd_bounds) {
+    Setpoints sp = default_setpoints();
+    // Operator typo: swapped low and high.
+    sp.vpd_low = 1.5f;
+    sp.vpd_high = 0.5f;
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.vpd_low < sp.vpd_high);
+    // Individual clamps kept vpd_high inside [0.3, 5.0] and pulled
+    // vpd_low below it.
+    ASSERT_TRUE(sp.vpd_high >= 0.3f && sp.vpd_high <= 5.0f);
+    ASSERT_TRUE(sp.vpd_low >= 0.1f);
+    PASS();
+}
+
+TEST(s9_validate_enforces_vpd_ordering_across_all_four) {
+    Setpoints sp = default_setpoints();
+    // vpd_min_safe and vpd_max_safe were unclamped pre-sprint-9.
+    sp.vpd_min_safe = 2.0f;   // nonsense: above vpd_low (0.5)
+    sp.vpd_max_safe = 0.5f;   // nonsense: below vpd_high (1.2)
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.vpd_min_safe < sp.vpd_low);
+    ASSERT_TRUE(sp.vpd_low < sp.vpd_high);
+    ASSERT_TRUE(sp.vpd_high < sp.vpd_max_safe);
+    PASS();
+}
+
+TEST(s9_validate_enforces_safety_gt_thigh_plus_dc2) {
+    Setpoints sp = default_setpoints();
+    sp.temp_high = 82.0f;
+    sp.dC2 = 15.0f;          // 82 + 15 = 97, above safety_max 95
+    sp.safety_max = 95.0f;
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.temp_high + sp.dC2 < sp.safety_max);
+    PASS();
+}
+
+TEST(s9_validate_fixes_zero_width_fog_window) {
+    Setpoints sp = default_setpoints();
+    sp.fog_window_start = 12;
+    sp.fog_window_end = 12;  // zero width
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.fog_window_start != sp.fog_window_end);
+    PASS();
+}
+
+TEST(s9_validate_prevents_relief_longer_than_sealed) {
+    Setpoints sp = default_setpoints();
+    sp.sealed_max_ms = 100000;
+    sp.relief_duration_ms = 200000;  // longer than sealed window
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.relief_duration_ms < sp.sealed_max_ms);
+    PASS();
+}
+
+TEST(s9_validate_preserves_valid_input) {
+    Setpoints sp = default_setpoints();
+    Setpoints before = sp;
+    validate_setpoints(sp);
+    // Sensible defaults should survive unchanged for all the core fields.
+    ASSERT_EQ(sp.temp_high, before.temp_high);
+    ASSERT_EQ(sp.temp_low,  before.temp_low);
+    ASSERT_EQ(sp.vpd_high,  before.vpd_high);
+    ASSERT_EQ(sp.vpd_low,   before.vpd_low);
+    ASSERT_EQ(sp.safety_max, before.safety_max);
+    ASSERT_EQ(sp.safety_min, before.safety_min);
+    ASSERT_EQ(sp.fog_window_start, before.fog_window_start);
+    ASSERT_EQ(sp.fog_window_end, before.fog_window_end);
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-10 — THERMAL_RELIEF both fans + vpd_min_safe SEALED exit +
+// tunable magic numbers + day/night setpoint pairs
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s10_thermal_relief_runs_both_fans) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    auto out_lead1 = resolve_equipment(THERMAL_RELIEF, make_inputs(80.0f, 1.5f), sp, s, /*lead=*/true);
+    ASSERT_TRUE(out_lead1.vent);
+    ASSERT_TRUE(out_lead1.fan1);
+    ASSERT_TRUE(out_lead1.fan2);  // sprint-10: no longer lead-only
+    auto out_lead2 = resolve_equipment(THERMAL_RELIEF, make_inputs(80.0f, 1.5f), sp, s, /*lead=*/false);
+    ASSERT_TRUE(out_lead2.vent);
+    ASSERT_TRUE(out_lead2.fan1);
+    ASSERT_TRUE(out_lead2.fan2);
+    PASS();
+}
+
+TEST(s10_vpd_min_safe_breaks_sealed_mist_with_cleanup) {
+    // Pre-sprint-10: vpd_min_safe only overrode mode==IDLE. A sticky
+    // SEALED_MIST could drive VPD below vpd_min_safe with no exit.
+    auto sp = default_setpoints();
+    sp.econ_block = false;
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.sealed_timer_ms = 200000;
+    s.vpd_watch_timer_ms = 60000;
+    s.mist_stage_timer_ms = 30000;
+    // VPD dangerously low while sealed
+    auto in = make_inputs(72.0f, sp.vpd_min_safe - 0.05f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, DEHUM_VENT);
+    // Seal-state cleanup: matches the was_sealed exit path.
+    ASSERT_EQ(s.sealed_timer_ms, 0u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, 0u);
+    ASSERT_EQ(s.mist_stage, MIST_WATCH);
+    ASSERT_EQ(s.mist_stage_timer_ms, 0u);
+    PASS();
+}
+
+TEST(s10_vpd_min_safe_override_respects_econ_block) {
+    // With econ_block=true, the vpd_min_safe override does not force
+    // DEHUM_VENT. Trace: the was_sealed branch exits SEALED_MIST to
+    // IDLE because vpd_below_exit is trivially true at vpd_min_safe,
+    // then the override sees mode=IDLE + econ_block=true and stays
+    // in IDLE rather than flipping to DEHUM_VENT. Net: with econ
+    // blocking the greenhouse lets the humidity sit — the P3#15
+    // policy item still applies, this test just documents the
+    // current econ-vs-safe precedence.
+    auto sp = default_setpoints();
+    sp.econ_block = true;
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_S1;
+    s.sealed_timer_ms = 100000;
+    s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, sp.vpd_min_safe - 0.05f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, IDLE);  // was_sealed exited; econ_block prevents DEHUM_VENT
+    PASS();
+}
+
+TEST(s10_vent_latch_timeout_is_tunable) {
+    // Verify the ex-magic-number behaves as a Setpoints field.
+    auto sp = default_setpoints();
+    sp.vent_latch_timeout_ms = 120000;  // shorten to 2 min for test
+    sp.max_relief_cycles = 3;
+    auto s = initial_state();
+    s.relief_cycle_count = 3;
+    s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, 1.5f);
+    // Accumulate enough to trip the timeout
+    determine_mode(in, sp, s, 60000);
+    determine_mode(in, sp, s, 60000);
+    Mode m = determine_mode(in, sp, s, 5000);
+    // After ≥120 s of VENTILATE-latch, cycle count should reset.
+    ASSERT_EQ(s.relief_cycle_count, 0u);
+    ASSERT_EQ(s.vent_latch_timer_ms, 0u);
+    PASS();
+}
+
+TEST(s10_econ_heat_margin_is_tunable) {
+    auto sp = default_setpoints();
+    sp.econ_block = true;
+    sp.econ_heat_margin_f = 2.0f;  // tighter than the 5.0 default
+    sp.temp_high = 80.0f;
+    auto s = initial_state();
+    // Temp at 79 (within old 5°F margin but outside new 2°F margin)
+    // Old behavior: heat1 on. New: heat1 off.
+    auto in = make_inputs(79.0f, 0.2f);
+    auto out = resolve_equipment(IDLE, in, sp, s, true);
+    ASSERT_FALSE(out.heat1);
+    // Temp at 77 — still inside the tightened 2°F margin (80-2=78), so
+    // the condition `temp_f < Thigh - margin` = 77 < 78 = true → heat
+    in = make_inputs(77.0f, 0.2f);
+    out = resolve_equipment(IDLE, in, sp, s, true);
+    ASSERT_TRUE(out.heat1);
+    PASS();
+}
+
+TEST(s10_day_night_uses_day_values_when_photoperiod_true) {
+    auto sp = default_setpoints();
+    sp.temp_high_day = 78.0f;
+    sp.temp_high_night = 68.0f;
+    sp.vpd_high_day = 1.2f;
+    sp.vpd_high_night = 0.9f;
+    auto s = initial_state();
+    auto in = make_inputs(75.0f, 1.0f);
+    in.is_photoperiod = true;
+    Mode m = determine_mode(in, sp, s, 5000);
+    // At 75°F with day temp_high=78: not cooling. VPD 1.0 < day high 1.2 → in band.
+    ASSERT_EQ(m, IDLE);
+    // Now 76°F with VPD 1.3 (above day high 1.2) — seal dwell accumulates.
+    in = make_inputs(76.0f, 1.3f);
+    in.is_photoperiod = true;
+    determine_mode(in, sp, s, 60000);
+    ASSERT_TRUE(s.vpd_watch_timer_ms > 0u);
+    PASS();
+}
+
+TEST(s10_day_night_uses_night_values_when_photoperiod_false) {
+    auto sp = default_setpoints();
+    sp.temp_high_day = 78.0f;
+    sp.temp_high_night = 68.0f;
+    sp.vpd_high_day = 1.2f;
+    sp.vpd_high_night = 0.9f;
+    auto s = initial_state();
+    // At 72°F (above night high 68): should trigger cooling even though
+    // 72 is comfortably below the day high.
+    auto in = make_inputs(72.0f, 0.8f);
+    in.is_photoperiod = false;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);  // 72 > 68 + bias_cool=0 → cooling
+    PASS();
+}
+
+TEST(s10_day_night_falls_back_to_legacy_when_unset) {
+    // resolve_active_band falls back to sp.temp_high etc. if the day/night
+    // field is 0 (unset). Exercise by zeroing the day fields and relying on
+    // legacy temp_high.
+    auto sp = default_setpoints();
+    sp.temp_high = 82.0f;
+    sp.temp_high_day = 0.0f;   // force fallback
+    sp.temp_high_night = 0.0f;
+    auto in = make_inputs(84.0f, 0.9f);
+    auto s = initial_state();
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);  // uses legacy temp_high=82, 84 > 82
+    PASS();
+}
+
+TEST(s10_photoperiod_swap_activates_different_thresholds) {
+    // Same sensor inputs, swap the flag — behavior changes.
+    auto sp = default_setpoints();
+    sp.temp_high_day = 80.0f;
+    sp.temp_high_night = 68.0f;
+    auto in = make_inputs(72.0f, 0.9f);  // between the two highs
+
+    auto s_day = initial_state();
+    in.is_photoperiod = true;
+    Mode m_day = determine_mode(in, sp, s_day, 5000);
+    ASSERT_EQ(m_day, IDLE);  // 72 < day high 80
+
+    auto s_night = initial_state();
+    in.is_photoperiod = false;
+    Mode m_night = determine_mode(in, sp, s_night, 5000);
+    ASSERT_EQ(m_night, VENTILATE);  // 72 > night high 68
+    PASS();
+}
+
+TEST(s10_validate_backfills_day_night_from_legacy) {
+    Setpoints sp = default_setpoints();
+    sp.temp_high = 85.0f;
+    sp.temp_high_day = 0.0f;
+    sp.temp_high_night = 0.0f;
+    sp.vpd_high = 1.4f;
+    sp.vpd_high_day = 0.0f;
+    sp.vpd_high_night = 0.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.temp_high_day, 85.0f);
+    ASSERT_EQ(sp.temp_high_night, 85.0f);
+    ASSERT_EQ(sp.vpd_high_day, 1.4f);
+    ASSERT_EQ(sp.vpd_high_night, 1.4f);
+    PASS();
+}
+
+TEST(s10_validate_enforces_day_night_pair_ordering) {
+    Setpoints sp = default_setpoints();
+    // Inverted within the day pair
+    sp.temp_high_day = 70.0f;
+    sp.temp_low_day = 75.0f;
+    // Inverted within the night pair
+    sp.vpd_high_night = 0.5f;
+    sp.vpd_low_night = 0.8f;
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.temp_low_day < sp.temp_high_day);
+    ASSERT_TRUE(sp.vpd_low_night < sp.vpd_high_night);
+    PASS();
+}
+
+TEST(s9_safety_heat_runs_lead_fan_for_circulation) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(40.0f, 0.3f);  // trips safety_heat
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_HEAT);
+    // Lead fan 1
+    auto out1 = resolve_equipment(SAFETY_HEAT, in, sp, s, /*lead_is_fan1=*/true);
+    ASSERT_TRUE(out1.heat1);
+    ASSERT_TRUE(out1.heat2);
+    ASSERT_TRUE(out1.fan1);
+    ASSERT_FALSE(out1.fan2);
+    ASSERT_FALSE(out1.vent);
+    // Lead fan 2
+    auto out2 = resolve_equipment(SAFETY_HEAT, in, sp, s, /*lead_is_fan1=*/false);
+    ASSERT_FALSE(out2.fan1);
+    ASSERT_TRUE(out2.fan2);
+    ASSERT_FALSE(out2.vent);
+    PASS();
+}
+
+TEST(s8_safety_heat_clears_same_timers_as_safety_cool) {
+    // Pre-sprint-8: SAFETY_HEAT left relief_timer_ms, vent_latch_timer_ms,
+    // and vpd_watch_timer_ms populated with whatever they held pre-safety.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.sealed_timer_ms     = 100000;
+    s.relief_timer_ms     = 50000;
+    s.vpd_watch_timer_ms  = 60000;
+    s.relief_cycle_count  = 2;
+    s.vent_latch_timer_ms = 200000;
+    auto in = make_inputs(40.0f, 0.3f);  // trips safety_heat
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_HEAT);
+    ASSERT_EQ(s.sealed_timer_ms, 0u);
+    ASSERT_EQ(s.relief_timer_ms, 0u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, 0u);
+    ASSERT_EQ(s.relief_cycle_count, 0u);
+    ASSERT_EQ(s.vent_latch_timer_ms, 0u);
     PASS();
 }
 

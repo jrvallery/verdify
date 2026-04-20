@@ -154,36 +154,64 @@ class Diagnostics(BaseModel):
     vent_latch_timer_s: int | None = Field(default=None, ge=0, le=1800)
 
 
-# Every equipment_state row asserts one of these. Keep the literal in sync
-# with the dispatcher's emission set; the drift guard test confirms it against
-# the enum that firmware controls.yaml publishes.
+# Every equipment_state row asserts one of these. Must cover every value in
+# ingestor/entity_map.py EQUIPMENT_BINARY_MAP + EQUIPMENT_SWITCH_MAP plus the
+# HA-sync emission set in tasks.py (lights, config switches, occupancy).
+# Sprint 24 hotfix: added the 16 names topology Sprint 22 missed — without
+# these, equipment_state events were silently dropped at INSERT time.
 EquipmentId = Literal[
+    # Core relays (ESP32 BinarySensor)
     "fan1",
     "fan2",
     "vent",
     "fog",
     "heat1",
     "heat2",
+    # Misting zones (ESP32 Switch)
     "mister_south",
     "mister_west",
     "mister_center",
     "mister_any",
-    "drip_wall",
-    "drip_center",
     "mister_south_fert",
     "mister_west_fert",
+    # Drip zones (ESP32 Switch)
+    "drip_wall",
+    "drip_center",
     "drip_wall_fert",
     "drip_center_fert",
     "fert_master_valve",
+    # Water-safety status (ESP32 BinarySensor, derived in ingestor tasks)
     "water_flowing",
     "leak_detected",
+    # Grow lights — both the legacy short names and the live entity_map ones
     "gl1",
     "gl2",
     "grow_light",
+    "grow_light_main",
+    "grow_light_grow",
+    # Internal controller modes (not emitted today; reserved)
     "dehum",
     "safety_dehum",
+    # Occupancy + door
     "occupancy",
     "door_open",
+    # Firmware breaker / burst states (ESP32 BinarySensor)
+    "fan_burst_active",
+    "fog_burst_active",
+    "vent_bypass_active",
+    # Firmware gates / health (ESP32 BinarySensor)
+    "mister_budget_exceeded",
+    "economiser_blocked",
+    "sntp_status",
+    # Config switches (ESP32 Switch / HA switch sync)
+    "economiser_enabled",
+    "fog_closes_vent",
+    "gl_auto_mode",
+    "irrigation_enabled",
+    "irrigation_wall_enabled",
+    "irrigation_center_enabled",
+    "irrigation_weather_skip",
+    "occupancy_inhibit",
 ]
 
 

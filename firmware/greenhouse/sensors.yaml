@@ -141,7 +141,6 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            id(last_case_probe)      = id(sntp_time).now().timestamp;
             id(last_external_update) = millis() / 1000;
             id(last_case_ms) = millis();
 
@@ -832,25 +831,59 @@ sensor:
     update_interval: 30s
     lambda: "return id(cnt_vent_today);"
 
+  # Sprint-7: per-zone mister + drip cycle counters. Increments at rising
+  # edge of the underlying relay (see turn_on_zone in controls.yaml for
+  # misters; irrigation dispatch in controls.yaml section 14b for drips).
+  # Reset at local midnight via greenhouse.yaml on_time handler.
   - platform: template
-    id: daily_dehum_cycles
-    name: "De‑Hum Cycles (today)"
+    id: daily_mister_south_cycles
+    name: "Cycles • Mister South (today)"
     entity_category: diagnostic
     state_class: total
     unit_of_measurement: "cycles"
     accuracy_decimals: 0
     update_interval: 30s
-    lambda: "return id(dh_cycles_today);"
+    lambda: "return id(cnt_mister_south_today);"
 
   - platform: template
-    id: daily_dehum_safety
-    name: "Safety De‑Hum Cycles (today)"
+    id: daily_mister_west_cycles
+    name: "Cycles • Mister West (today)"
     entity_category: diagnostic
     state_class: total
     unit_of_measurement: "cycles"
     accuracy_decimals: 0
     update_interval: 30s
-    lambda: "return id(dh_safety_today);"
+    lambda: "return id(cnt_mister_west_today);"
+
+  - platform: template
+    id: daily_mister_center_cycles
+    name: "Cycles • Mister Center (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_mister_center_today);"
+
+  - platform: template
+    id: daily_drip_wall_cycles
+    name: "Cycles • Drip Wall (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_drip_wall_today);"
+
+  - platform: template
+    id: daily_drip_center_cycles
+    name: "Cycles • Drip Center (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_drip_center_today);"
 
   # --------------------------------------------------------------------------
   # 5. RUNTIME METRICS (DIAGNOSTIC)
@@ -1347,6 +1380,20 @@ sensor:
     update_interval: 30s
     lambda: "return id(runtime_mister_center_ms) / 3600000.0;"
 
+  # Sprint-2: fairness watchdog override counter. Increments each time
+  # select_overdue_zone() chose a zone because it had been stressed for
+  # ≥10 min without firing. Reset at midnight. Expect 0–5/day if the
+  # starvation pattern observed in the 90-day audit is real; 0 if the
+  # scoring formula is already fair in practice.
+  - platform: template
+    id: mister_fairness_overrides_today
+    name: "Mister Fairness Overrides (today)"
+    entity_category: diagnostic
+    state_class: total
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_mister_fairness_overrides_today);"
+
   - platform: template
     id: cfg_mister_engage_kpa
     name: "Cfg Mister Engage (kPa)"
@@ -1367,6 +1414,70 @@ sensor:
     update_interval: 30s
     lambda: "return id(mister_all_kpa);"
 
+  # Sprint-3: per-zone VPD target readbacks + mister scoring tunables.
+  # The setpoint dispatcher pushes vpd_target_{south,west,east,center},
+  # mister_center_penalty, east_adjacency_factor every planner cycle. Without
+  # a cfg_* readback, the ingestor's alert_monitor can't confirm the firmware
+  # applied them — every cycle produced 5 setpoint_unconfirmed alerts (3 warning
+  # + 2 critical once >15 min stale). Adding readbacks closes the confirmation
+  # loop; observed at entity_category: diagnostic with 30 s update interval.
+  - platform: template
+    id: cfg_vpd_target_south
+    name: "Cfg • VPD Target South (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(vpd_target_south);"
+
+  - platform: template
+    id: cfg_vpd_target_west
+    name: "Cfg • VPD Target West (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(vpd_target_west);"
+
+  - platform: template
+    id: cfg_vpd_target_east
+    name: "Cfg • VPD Target East (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(vpd_target_east);"
+
+  - platform: template
+    id: cfg_vpd_target_center
+    name: "Cfg • VPD Target Center (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(vpd_target_center);"
+
+  - platform: template
+    id: cfg_mister_center_penalty
+    name: "Cfg • Mister Center Penalty"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(mister_center_penalty);"
+
+  - platform: template
+    id: cfg_east_adjacency_factor
+    name: "Cfg • East Adjacency Factor"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: "return id(east_adjacency_factor);"
 
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template

@@ -312,6 +312,8 @@ DAILY_ACCUM_MAP: dict[str, str] = {
     # Drip runtimes
     "wall_drips_runtime__today_": "runtime_drip_wall_h",
     "center_drips_runtime__today_": "runtime_drip_center_h",
+    # Firmware sprint-2 fairness watchdog counter (resets at midnight)
+    "mister_fairness_overrides__today_": "mister_fairness_overrides_today",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -350,6 +352,17 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___min_vent_off__s_": "min_vent_off_s",
     "cfg_mister_engage__kpa_": "mister_engage_kpa",
     "cfg_mister_all__kpa_": "mister_all_kpa",
+    # Sprint-3 (firmware): per-zone VPD targets + mister scoring readbacks.
+    # The dispatcher pushes these six every planner cycle; before firmware
+    # sprint-3 there was no cfg_* readback, so alert_monitor fired
+    # setpoint_unconfirmed every cycle. Firmware sensor names use the
+    # "Cfg • Foo Bar (unit)" pattern, which slugifies to cfg___foo_bar__unit_.
+    "cfg___vpd_target_south__kpa_": "vpd_target_south",
+    "cfg___vpd_target_west__kpa_": "vpd_target_west",
+    "cfg___vpd_target_east__kpa_": "vpd_target_east",
+    "cfg___vpd_target_center__kpa_": "vpd_target_center",
+    "cfg___mister_center_penalty": "mister_center_penalty",
+    "cfg___east_adjacency_factor": "east_adjacency_factor",
     # Per-zone VPD targets (from crop band, pushed by dispatcher)
     "vpd_target_south__kpa_": "vpd_target_south",
     "vpd_target_west__kpa_": "vpd_target_west",

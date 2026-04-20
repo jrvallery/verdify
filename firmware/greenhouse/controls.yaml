@@ -36,6 +36,12 @@ interval:
           static uint32_t last_ms = millis();
           uint32_t now_ms = millis();
           uint32_t dt_ms  = (now_ms < last_ms) ? 0 : (now_ms - last_ms);
+          // Sprint-10 0.4a: clamp dt_ms. The interval is 5 s; anything
+          // larger is a hiccup (RTOS hang, OTA pause, debugger break).
+          // sat_add prevents overflow but not behavioral skipping — one
+          // huge dt_ms can leap through vpd_watch_dwell, sealed_max_ms,
+          // and mist_s2_delay_ms in a single tick.
+          if(dt_ms > 5000) dt_ms = 5000;
           last_ms = now_ms;
 
           /**************** 2 — relay metadata & helpers **************************/
@@ -313,6 +319,23 @@ interval:
           auto sntp_now = id(sntp_time).now();
           int local_hour = sntp_now.is_valid() ? sntp_now.hour : 12;
 
+          // Sprint-10 0.3: compute is_photoperiod (hybrid).
+          // Primary: scheduled window (tunable via photoperiod_*_hour).
+          // Override: outdoor lux > 5000 means direct sun — flip to day
+          // even if outside the scheduled window (handles schedule drift,
+          // DST transitions, sensor-time skew). A cloudy noon still
+          // registers as day because it's inside the scheduled window;
+          // a 2 AM indoor LED test stays as night because indoor lighting
+          // is orders of magnitude below the outdoor 5000 lux threshold.
+          int ps = id(photoperiod_start_hour);
+          int pe = id(photoperiod_end_hour);
+          bool in_photo_window = (ps <= pe)
+              ? (local_hour >= ps && local_hour < pe)
+              : (local_hour >= ps || local_hour < pe);
+          float outdoor_lux = id(tempest_lux);
+          bool lux_bright = !isnan(outdoor_lux) && outdoor_lux > 5000.0f;
+          bool is_photoperiod = in_photo_window || lux_bright;
+
           SensorInputs sensor_in = {
               .temp_f = Tin, .vpd_kpa = VPD, .rh_pct = RHin,
               .dew_point_f = isnan(id(dewpoint_avg).state) ? Tin - 10.0f : id(dewpoint_avg).state,
@@ -322,7 +345,8 @@ interval:
               .vpd_west = id(vpd_west).state,
               .vpd_east = id(vpd_east).state,
               .local_hour = local_hour,
-              .occupied = id(greenhouse_occupied)
+              .occupied = id(greenhouse_occupied),
+              .is_photoperiod = is_photoperiod
           };
 
           Setpoints setpts = {
@@ -348,7 +372,21 @@ interval:
               .fog_window_end = id(fog_time_window_end),
               .dehum_aggressive_kpa = 0.6f,
               .occupancy_inhibit = id(occupancy_inhibit_enabled) && id(greenhouse_occupied),
-              .econ_block = econ_block
+              .econ_block = econ_block,
+              // sprint-10 0.4b magic-numbers-now-tunable (defaults match
+              // the pre-sprint-10 hardcoded constants):
+              .vent_latch_timeout_ms = 1800000u,
+              .safety_max_seal_margin_f = 5.0f,
+              .econ_heat_margin_f = 5.0f,
+              // sprint-10 0.3 day/night pairs:
+              .temp_high_day   = id(target_temp_high_day_f),
+              .temp_high_night = id(target_temp_high_night_f),
+              .temp_low_day    = id(target_temp_low_day_f),
+              .temp_low_night  = id(target_temp_low_night_f),
+              .vpd_high_day    = id(target_vpd_high_day_kpa),
+              .vpd_high_night  = id(target_vpd_high_night_kpa),
+              .vpd_low_day     = id(target_vpd_low_day_kpa),
+              .vpd_low_night   = id(target_vpd_low_night_kpa)
           };
 
           validate_setpoints(setpts);
@@ -391,6 +429,18 @@ interval:
             float east_vpd  = id(vpd_east).state;
             float avg_vpd   = VPD;
             bool humidity_demand = (mode == SEALED_MIST);
+
+            // Defensive: zero the engage-delay timers on SEALED_MIST rising edge.
+            // The mister_blocked branch intentionally preserves them (fast
+            // re-engage when block clears), so a SEALED→IDLE bounce inside the
+            // 60s idle holdoff could otherwise carry stale accumulation into
+            // the next seal cycle and fire mister_state=1 immediately.
+            static bool was_sealed = false;
+            if(humidity_demand && !was_sealed){
+              id(humid_s1_duration_ms) = 0;
+              id(humid_s2_duration_ms) = 0;
+            }
+            was_sealed = humidity_demand;
 
             // Misters only run in SEALED_MIST mode.
             // Misters run in ANY humidity state including with vent open —
@@ -492,9 +542,13 @@ interval:
                 id(south_wall_mister).turn_off();
                 id(west_wall_mister).turn_off();
                 id(center_mister).turn_off();
-                if(zone == 1) id(south_wall_mister).turn_on();
-                else if(zone == 2) id(west_wall_mister).turn_on();
-                else if(zone == 3) id(center_mister).turn_on();
+                // sprint-2: last-fire ms for fairness watchdog.
+                // sprint-7: per-zone cycle counters at the rising edge
+                //          (turn_on_zone is always preceded by all-off,
+                //          so every call is an off→on transition).
+                if(zone == 1)      { id(south_wall_mister).turn_on(); id(last_fire_south_ms)  = now_ms; id(cnt_mister_south_today)  += 1; }
+                else if(zone == 2) { id(west_wall_mister).turn_on();  id(last_fire_west_ms)   = now_ms; id(cnt_mister_west_today)   += 1; }
+                else if(zone == 3) { id(center_mister).turn_on();     id(last_fire_center_ms) = now_ms; id(cnt_mister_center_today) += 1; }
                 id(mister_pulse_zone) = zone;
                 id(mister_selected_zone) = zone;
               };
@@ -508,8 +562,47 @@ interval:
 
               const char* zone_names[] = {"none", "south", "west", "center"};
 
+              // Fairness watchdog (sprint-2): if a stressed zone hasn't fired in
+              // FAIRNESS_WINDOW_MS, it bypasses the stress-scoring contest. Motivated
+              // by the 90-day audit showing west stressed 36% of time but firing only
+              // 13% of mister cycles — center's use of avg_vpd as a stress proxy
+              // correlates it with south, and east adjacency boosts south+center when
+              // east is stressed; west gets neither boost. Guarantees no stressed
+              // zone waits longer than 10 min without a pulse. Ties → most overdue.
+              auto select_overdue_zone = [&]() -> int {
+                const uint32_t FAIRNESS_WINDOW_MS = 600000UL;  // 10 min
+                int candidate = 0;
+                uint32_t candidate_age = 0;
+                auto check = [&](int z, float vpd, float target, uint32_t last_fire) {
+                  if(isnan(vpd) || target <= 0.0f) return;
+                  if(vpd <= target) return;  // zone not stressed
+                  uint32_t age = now_ms - last_fire;  // last_fire==0 ⇒ age == uptime
+                  if(age > FAIRNESS_WINDOW_MS && age > candidate_age) {
+                    candidate = z;
+                    candidate_age = age;
+                  }
+                };
+                check(1, south_vpd, id(vpd_target_south),  id(last_fire_south_ms));
+                check(2, west_vpd,  id(vpd_target_west),   id(last_fire_west_ms));
+                check(3, avg_vpd,   id(vpd_target_center), id(last_fire_center_ms));
+                return candidate;
+              };
+
+              // Pulse-zone selector: watchdog first, stress scoring second.
+              // Caller must have already decided "fire a pulse now"; this only
+              // answers "which zone." Increments fairness counter when watchdog wins.
+              auto select_zone_for_pulse = [&]() -> int {
+                int overdue = select_overdue_zone();
+                if(overdue > 0) {
+                  id(cnt_mister_fairness_overrides_today) += 1;
+                  ESP_LOGI("mister","FAIRNESS: zone=%s overdue — overriding scoring",
+                           zone_names[overdue]);
+                  return overdue;
+                }
+                return select_most_stressed_zone();
+              };
+
               // --- S1 ENGAGE: misters start when any zone is stressed OR global threshold exceeded ---
-              int pre_zone = select_most_stressed_zone();
               bool global_stressed = (avg_vpd > VPDhi);
 
               if(id(mister_state) == 0
@@ -517,7 +610,8 @@ interval:
                  && id(humid_s1_duration_ms) >= MISTER_ENGAGE_DELAY_MS
                  && (any_zone_stressed || global_stressed)){
 
-                int zone = pre_zone > 0 ? pre_zone : 1;  // Use pre-computed zone, fallback south
+                int zone = select_zone_for_pulse();
+                if(zone == 0) zone = 1;  // Fallback south if no zone stressed
                 if(zone > 0) {  // Engage
                   id(mister_state) = 1;  // S1 = single zone pulse
                   id(mister_vpd_at_start) = avg_vpd;  // Track effectiveness
@@ -536,7 +630,7 @@ interval:
                    && avg_vpd > id(mister_all_kpa)){
                   id(mister_state) = 2;  // S2 = all zones rotating
                   id(mister_rotation_index) = 0;
-                  int zone = select_most_stressed_zone();
+                  int zone = select_zone_for_pulse();
                   turn_on_zone(zone);
                   uint32_t weighted_ms = PULSE_ON_MS;
                   float svpd = isnan(south_vpd) ? 0.0f : south_vpd;
@@ -561,7 +655,7 @@ interval:
                 ESP_LOGI("mister","S2→S1: VPD=%.2f", avg_vpd);
                 id(mister_state) = 1;
                 id(humid_s2_duration_ms) = 0;
-                int zone = select_most_stressed_zone();
+                int zone = select_zone_for_pulse();
                 turn_on_zone(zone);
                 id(mister_pulse_timer_ms) = PULSE_ON_MS;
               }
@@ -603,7 +697,7 @@ interval:
                     // === GAP → NEXT PULSE ===
                     if(id(mister_state) == 1){
                       // S1: re-read VPD, pulse most stressed zone
-                      int zone = select_most_stressed_zone();
+                      int zone = select_zone_for_pulse();
                       if(zone == 0) zone = 1;  // Fallback
                       id(mister_vpd_at_start) = avg_vpd;  // Track effectiveness
                       turn_on_zone(zone);
@@ -613,7 +707,7 @@ interval:
 
                     }else if(id(mister_state) == 2){
                       // S2: pick the most stressed zone each pulse (not round-robin)
-                      int zone = select_most_stressed_zone();
+                      int zone = select_zone_for_pulse();
                       if(zone == 0) zone = 1;  // Fallback to south if all zones in-band
                       id(mister_vpd_at_start) = avg_vpd;  // Track effectiveness
                       turn_on_zone(zone);
@@ -1030,12 +1124,15 @@ interval:
               // Open fert master if fert run
               if(is_fert) id(fertilizer_master_valve).turn_on();
 
-              // Turn on drip line
+              // Turn on drip line. sprint-7: count one cycle per dispatch —
+              // matches equipment_state's rising-edge count for the
+              // underlying relay. Fert/clean increment the same zone
+              // counter (audit granularity is per-zone).
               switch(job){
-                case 1: id(wall_drips).turn_on(); break;
-                case 2: id(wall_drips_fertilized).turn_on(); break;
-                case 3: id(center_drips).turn_on(); break;
-                case 4: id(center_drips_fertilized).turn_on(); break;
+                case 1: id(wall_drips).turn_on();              id(cnt_drip_wall_today)   += 1; break;
+                case 2: id(wall_drips_fertilized).turn_on();   id(cnt_drip_wall_today)   += 1; break;
+                case 3: id(center_drips).turn_on();            id(cnt_drip_center_today) += 1; break;
+                case 4: id(center_drips_fertilized).turn_on(); id(cnt_drip_center_today) += 1; break;
               }
 
               const char* names[] = {"","WALL_CLEAN","WALL_FERT","CENTER_CLEAN","CENTER_FERT"};
@@ -1067,8 +1164,12 @@ interval:
                 flush_origin = job;
                 id(irrig_state) = is_wall ? 5 : 6;
                 id(irrig_timer_ms) = uint32_t(flush_min) * 60000UL;
-                if(is_wall) id(wall_drips).turn_on();
-                else        id(center_drips).turn_on();
+                // sprint-7: flush is a separate rising edge on wall_drips /
+                // center_drips (the non-fert relay) — ingestor's
+                // equipment_state sees it as a new cycle, so firmware
+                // must count it to stay consistent.
+                if(is_wall) { id(wall_drips).turn_on();   id(cnt_drip_wall_today)   += 1; }
+                else        { id(center_drips).turn_on(); id(cnt_drip_center_today) += 1; }
                 ESP_LOGI("irrig","FLUSH %s — %dmin", is_wall ? "WALL" : "CENTER", flush_min);
               } else {
                 // Done — finalize
@@ -1174,6 +1275,17 @@ interval:
                     if(key == "temp_high"){ val = cf(val, 60, 100); if(fabs(id(target_temp_high_f) - val) > 0.01f){ id(target_temp_high_f) = val; id(num_temp_high).publish_state(val); applied++; }}
                     if(key == "vpd_low"){ val = cf(val, 0.1, 1.5); if(fabs(id(target_vpd_low_kpa) - val) > 0.01f){ id(target_vpd_low_kpa) = val; id(num_vpd_low).publish_state(val); applied++; }}
                     if(key == "vpd_high"){ val = cf(val, 0.5, 3.0); if(fabs(id(target_vpd_high_kpa) - val) > 0.01f){ id(target_vpd_high_kpa) = val; id(num_vpd_high).publish_state(val); applied++; }}
+                    // Sprint-10 0.3: day/night pairs + photoperiod window.
+                    if(key == "temp_low_day"){ val = cf(val, 40, 85); if(fabs(id(target_temp_low_day_f) - val) > 0.01f){ id(target_temp_low_day_f) = val; id(num_temp_low_day).publish_state(val); applied++; }}
+                    if(key == "temp_high_day"){ val = cf(val, 60, 100); if(fabs(id(target_temp_high_day_f) - val) > 0.01f){ id(target_temp_high_day_f) = val; id(num_temp_high_day).publish_state(val); applied++; }}
+                    if(key == "temp_low_night"){ val = cf(val, 35, 80); if(fabs(id(target_temp_low_night_f) - val) > 0.01f){ id(target_temp_low_night_f) = val; id(num_temp_low_night).publish_state(val); applied++; }}
+                    if(key == "temp_high_night"){ val = cf(val, 50, 95); if(fabs(id(target_temp_high_night_f) - val) > 0.01f){ id(target_temp_high_night_f) = val; id(num_temp_high_night).publish_state(val); applied++; }}
+                    if(key == "vpd_low_day"){ val = cf(val, 0.3, 1.5); if(fabs(id(target_vpd_low_day_kpa) - val) > 0.01f){ id(target_vpd_low_day_kpa) = val; id(num_vpd_low_day).publish_state(val); applied++; }}
+                    if(key == "vpd_high_day"){ val = cf(val, 0.6, 2.5); if(fabs(id(target_vpd_high_day_kpa) - val) > 0.01f){ id(target_vpd_high_day_kpa) = val; id(num_vpd_high_day).publish_state(val); applied++; }}
+                    if(key == "vpd_low_night"){ val = cf(val, 0.2, 1.2); if(fabs(id(target_vpd_low_night_kpa) - val) > 0.01f){ id(target_vpd_low_night_kpa) = val; id(num_vpd_low_night).publish_state(val); applied++; }}
+                    if(key == "vpd_high_night"){ val = cf(val, 0.5, 2.0); if(fabs(id(target_vpd_high_night_kpa) - val) > 0.01f){ id(target_vpd_high_night_kpa) = val; id(num_vpd_high_night).publish_state(val); applied++; }}
+                    if(key == "photoperiod_start_hour"){ int v = ci((int)val, 0, 23); if(id(photoperiod_start_hour) != v){ id(photoperiod_start_hour) = v; id(num_photoperiod_start).publish_state(v); applied++; }}
+                    if(key == "photoperiod_end_hour"){ int v = ci((int)val, 0, 23); if(id(photoperiod_end_hour) != v){ id(photoperiod_end_hour) = v; id(num_photoperiod_end).publish_state(v); applied++; }}
                     if(key == "bias_heat"){ val = cf(val, -10, 10); if(fabs(id(bias_heat_f) - val) > 0.01f){ id(bias_heat_f) = val; id(num_bias_heat).publish_state(val); applied++; }}
                     if(key == "bias_cool"){ val = cf(val, -10, 10); if(fabs(id(bias_cool_f) - val) > 0.01f){ id(bias_cool_f) = val; id(num_bias_cool).publish_state(val); applied++; }}
                     if(key == "temp_hysteresis"){ val = cf(val, 0.5, 3); if(fabs(id(hyst_temp_f) - val) > 0.01f){ id(hyst_temp_f) = val; id(num_hyst_temp).publish_state(val); applied++; }}
