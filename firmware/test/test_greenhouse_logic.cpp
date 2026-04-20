@@ -161,25 +161,25 @@ TEST(fix3_ventilate_exit_hysteresis) {
 
 TEST(fix3_heat_hysteresis) {
     // IN-12 (Sprint 19): fixed after commit 2b61ee6 swapped the inverted
-    // dH2 / heat_hysteresis thresholds. The prior assertion used
-    // (Tlow - heat_hysteresis) as the heat2 threshold; the current code
-    // uses (Tlow - dH2). dH2 defaults to 5, so heat2 threshold is 53°F
-    // at temp_low=58, not 57°F.
+    // dH2 / heat_hysteresis thresholds. Sprint-9 P1#7: S2 is now latched
+    // via ControlState.heat2_latched; the fresh state passed by equip()
+    // starts with heat2_latched=false, so S1-only is the only behavior
+    // exercisable without going through determine_mode. See
+    // s9_heat2_latches_* tests for the S2 latch lifecycle.
     auto sp = default_setpoints(); sp.temp_low = 58; sp.heat_hysteresis = 1.0;
-    // s1 (electric) threshold: Tlow + heat_hysteresis = 59°F
-    // s2 (gas)      threshold: Tlow - dH2             = 53°F
-    // 57.5°F → s1 only
+    // S1 (electric) threshold: Tlow + heat_hysteresis = 59°F
+    // 57.5°F → S1 on (below threshold), S2 not latched yet
     auto out = equip(IDLE, 57.5, 0.9, sp);
-    ASSERT_TRUE(out.heat1);   // 57.5 < 59  (electric on)
-    ASSERT_FALSE(out.heat2);  // 57.5 > 53  (gas off)
-    // 56.5°F still s1 only (previously asserted gas-on, wrong)
+    ASSERT_TRUE(out.heat1);
+    ASSERT_FALSE(out.heat2);
     auto out2 = equip(IDLE, 56.5, 0.9, sp);
     ASSERT_TRUE(out2.heat1);
     ASSERT_FALSE(out2.heat2);
-    // 52°F triggers s2 too — coverage for the gas-stage threshold
+    // Even at 52°F (below S2 threshold), fresh state with latched=false
+    // does not fire S2 — the latch must be set by determine_mode first.
     auto out3 = equip(IDLE, 52.0, 0.9, sp);
-    ASSERT_TRUE(out3.heat1);  // 52 < 59
-    ASSERT_TRUE(out3.heat2);  // 52 < 53
+    ASSERT_TRUE(out3.heat1);
+    ASSERT_FALSE(out3.heat2);
     PASS();
 }
 
@@ -468,12 +468,16 @@ TEST(no_heater_with_vent) {
 }
 
 TEST(no_fan_without_vent) {
+    // Sprint-9 P2#11: SAFETY_HEAT intentionally runs the lead fan for
+    // canopy circulation while the vent stays closed (keep heat in).
+    // Whitelist it — the invariant still holds for every normal mode.
     auto sp = default_setpoints(); int v = 0;
     for (float t = 40; t <= 100; t += 2)
         for (float vpd = 0.1f; vpd <= 3.5f; vpd += 0.1f) {
             auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
             Mode m = determine_mode(make_inputs(t, vpd), sp, s, 5000);
             auto out = resolve_equipment(m, make_inputs(t, vpd), sp, s, true);
+            if (m == SAFETY_HEAT) continue;
             if (!out.vent && (out.fan1 || out.fan2)) v++;
         }
     ASSERT_EQ(v, 0); PASS();
@@ -860,6 +864,158 @@ TEST(s8_fog_window_wraps_midnight) {
     ASSERT_FALSE(fog_permitted(in, sp));
     in.local_hour = 6;
     ASSERT_FALSE(fog_permitted(in, sp));
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-9 — Heat S2 latch + validate_setpoints relational + SAFETY_HEAT fan
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s9_heat2_latch_sets_when_below_s2_threshold) {
+    auto sp = default_setpoints();
+    sp.temp_low = 58.0f;
+    sp.dH2 = 5.0f;  // S2 threshold = 53°F
+    auto s = initial_state();
+    ASSERT_FALSE(s.heat2_latched);
+    // 52°F → below Tlow - dH2 → latch sets
+    determine_mode(make_inputs(52.0f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    // resolve_equipment honors the latch
+    auto out = resolve_equipment(IDLE, make_inputs(52.0f, 0.9f), sp, s, true);
+    ASSERT_TRUE(out.heat1);
+    ASSERT_TRUE(out.heat2);
+    PASS();
+}
+
+TEST(s9_heat2_latches_through_minor_fluctuation) {
+    // Pre-sprint-9: a temp oscillating between 56 and 54 (in the band
+    // between S2-threshold 53 and S1-exit 59) rapid-cycles the gas valve.
+    // Post: latch holds state through the band.
+    auto sp = default_setpoints();
+    sp.temp_low = 58.0f;
+    sp.dH2 = 5.0f;
+    sp.heat_hysteresis = 1.0f;  // S1 exit = 59°F
+    auto s = initial_state();
+    // Latch sets at 52°F.
+    determine_mode(make_inputs(52.0f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    // Temp recovers into the hysteresis band — latch holds.
+    determine_mode(make_inputs(55.0f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    determine_mode(make_inputs(58.5f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    // Temp crosses S1 exit — latch releases.
+    determine_mode(make_inputs(59.0f, 0.9f), sp, s, 5000);
+    ASSERT_FALSE(s.heat2_latched);
+    PASS();
+}
+
+TEST(s9_heat2_latch_does_not_re_set_in_hysteresis_band) {
+    // After release, mild undershoot into the band should NOT re-latch.
+    // Only a drop below S2 threshold re-latches.
+    auto sp = default_setpoints();
+    sp.temp_low = 58.0f;
+    sp.dH2 = 5.0f;
+    sp.heat_hysteresis = 1.0f;
+    auto s = initial_state();
+    s.heat2_latched = false;
+    determine_mode(make_inputs(55.0f, 0.9f), sp, s, 5000);  // in the band
+    ASSERT_FALSE(s.heat2_latched);
+    determine_mode(make_inputs(53.5f, 0.9f), sp, s, 5000);  // still in band
+    ASSERT_FALSE(s.heat2_latched);
+    determine_mode(make_inputs(52.0f, 0.9f), sp, s, 5000);  // below threshold
+    ASSERT_TRUE(s.heat2_latched);
+    PASS();
+}
+
+TEST(s9_validate_swaps_inverted_vpd_bounds) {
+    Setpoints sp = default_setpoints();
+    // Operator typo: swapped low and high.
+    sp.vpd_low = 1.5f;
+    sp.vpd_high = 0.5f;
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.vpd_low < sp.vpd_high);
+    // Individual clamps kept vpd_high inside [0.3, 5.0] and pulled
+    // vpd_low below it.
+    ASSERT_TRUE(sp.vpd_high >= 0.3f && sp.vpd_high <= 5.0f);
+    ASSERT_TRUE(sp.vpd_low >= 0.1f);
+    PASS();
+}
+
+TEST(s9_validate_enforces_vpd_ordering_across_all_four) {
+    Setpoints sp = default_setpoints();
+    // vpd_min_safe and vpd_max_safe were unclamped pre-sprint-9.
+    sp.vpd_min_safe = 2.0f;   // nonsense: above vpd_low (0.5)
+    sp.vpd_max_safe = 0.5f;   // nonsense: below vpd_high (1.2)
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.vpd_min_safe < sp.vpd_low);
+    ASSERT_TRUE(sp.vpd_low < sp.vpd_high);
+    ASSERT_TRUE(sp.vpd_high < sp.vpd_max_safe);
+    PASS();
+}
+
+TEST(s9_validate_enforces_safety_gt_thigh_plus_dc2) {
+    Setpoints sp = default_setpoints();
+    sp.temp_high = 82.0f;
+    sp.dC2 = 15.0f;          // 82 + 15 = 97, above safety_max 95
+    sp.safety_max = 95.0f;
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.temp_high + sp.dC2 < sp.safety_max);
+    PASS();
+}
+
+TEST(s9_validate_fixes_zero_width_fog_window) {
+    Setpoints sp = default_setpoints();
+    sp.fog_window_start = 12;
+    sp.fog_window_end = 12;  // zero width
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.fog_window_start != sp.fog_window_end);
+    PASS();
+}
+
+TEST(s9_validate_prevents_relief_longer_than_sealed) {
+    Setpoints sp = default_setpoints();
+    sp.sealed_max_ms = 100000;
+    sp.relief_duration_ms = 200000;  // longer than sealed window
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.relief_duration_ms < sp.sealed_max_ms);
+    PASS();
+}
+
+TEST(s9_validate_preserves_valid_input) {
+    Setpoints sp = default_setpoints();
+    Setpoints before = sp;
+    validate_setpoints(sp);
+    // Sensible defaults should survive unchanged for all the core fields.
+    ASSERT_EQ(sp.temp_high, before.temp_high);
+    ASSERT_EQ(sp.temp_low,  before.temp_low);
+    ASSERT_EQ(sp.vpd_high,  before.vpd_high);
+    ASSERT_EQ(sp.vpd_low,   before.vpd_low);
+    ASSERT_EQ(sp.safety_max, before.safety_max);
+    ASSERT_EQ(sp.safety_min, before.safety_min);
+    ASSERT_EQ(sp.fog_window_start, before.fog_window_start);
+    ASSERT_EQ(sp.fog_window_end, before.fog_window_end);
+    PASS();
+}
+
+TEST(s9_safety_heat_runs_lead_fan_for_circulation) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(40.0f, 0.3f);  // trips safety_heat
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_HEAT);
+    // Lead fan 1
+    auto out1 = resolve_equipment(SAFETY_HEAT, in, sp, s, /*lead_is_fan1=*/true);
+    ASSERT_TRUE(out1.heat1);
+    ASSERT_TRUE(out1.heat2);
+    ASSERT_TRUE(out1.fan1);
+    ASSERT_FALSE(out1.fan2);
+    ASSERT_FALSE(out1.vent);
+    // Lead fan 2
+    auto out2 = resolve_equipment(SAFETY_HEAT, in, sp, s, /*lead_is_fan1=*/false);
+    ASSERT_FALSE(out2.fan1);
+    ASSERT_TRUE(out2.fan2);
+    ASSERT_FALSE(out2.vent);
     PASS();
 }
 

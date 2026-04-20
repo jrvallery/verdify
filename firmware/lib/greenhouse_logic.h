@@ -124,6 +124,21 @@ inline Mode determine_mode(
     bool was_dehum  = (prev == DEHUM_VENT);
     bool in_thermal_relief = (prev == THERMAL_RELIEF);
 
+    // ── Sprint-9 P1#7: Heat S2 latch ──
+    // Set when temp drops below Tlow - dH2 (gas-stage demand).
+    // Clear when S1 is satisfied (temp >= Tlow + heat_hysteresis).
+    // In between the two thresholds the latch holds its state,
+    // preventing gas-valve rapid-cycling in the hysteresis band.
+    {
+        const float Tlow = sp.temp_low + sp.bias_heat;
+        if (in.temp_f < (Tlow - sp.dH2)) {
+            state.heat2_latched = true;
+        } else if (in.temp_f >= (Tlow + sp.heat_hysteresis)) {
+            state.heat2_latched = false;
+        }
+        // Else: hysteresis band — leave latch as-is.
+    }
+
     // ── VPD watch timer — suspended during safety modes ──
     if (vpd_above_band
         && prev != SEALED_MIST && prev != THERMAL_RELIEF
@@ -226,6 +241,14 @@ inline Mode determine_mode(
     }
 
     // ── R2-3: VPD dry override — cannot stomp active cooling or safety ──
+    //
+    // Sprint-9 P1#4: R2-3 intentionally bypasses `max_relief_cycles`.
+    // Under sustained extreme dryness (VPD > vpd_max_safe) plant damage
+    // outranks actuator thrash; the relief-cycle breaker protects the
+    // vent motor, but if we've fallen through to R2-3 the priority is
+    // moisture delivery. Temp-adjacent-safety is implicitly covered by
+    // the existing `temp_f < Thigh - temp_hysteresis` precondition
+    // (stricter than `safety_max - 5` under validate_setpoints'd bounds).
     {
         const bool can_seal_for_dryness =
             (mode != SAFETY_COOL)
@@ -397,7 +420,9 @@ inline RelayOutputs resolve_equipment(
     const float Thigh = sp.temp_high + sp.bias_cool;
 
     bool needs_heating_s1 = in.temp_f < (Tlow + sp.heat_hysteresis);
-    bool needs_heating_s2 = in.temp_f < (Tlow - sp.dH2);
+    // Sprint-9 P1#7: S2 is latched (see determine_mode). Reading the latch
+    // instead of recomputing the threshold gives us the hysteresis band.
+    bool needs_heating_s2 = state.heat2_latched;
 
     RelayOutputs out = {false, false, false, false, false, false};
 
@@ -417,6 +442,13 @@ inline RelayOutputs resolve_equipment(
 
         case SAFETY_HEAT:
             out.heat1 = true; out.heat2 = true;
+            // Sprint-9 P2#11: run the lead fan for canopy circulation.
+            // Without it, cold air pockets near the temp probe hold the
+            // safety condition indefinitely while the burner runs wide
+            // open near the probe. Vent stays closed (keep heat in).
+            // Violates the "no fan without vent" invariant by design —
+            // test `no_fan_without_vent` whitelists SAFETY_HEAT.
+            if (lead_is_fan1) out.fan1 = true; else out.fan2 = true;
             break;
 
         case SEALED_MIST:
