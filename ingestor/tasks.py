@@ -663,15 +663,17 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
-        # 7. Planner stale — F14 escalation ladder:
-        #   8h  → warning  (initial fire, as before)
-        #   12h → critical (Iris has truly not responded to multiple triggers)
-        # metric_value carries hours_since_last_plan; an existing open alert
-        # gets its severity upgraded when it crosses 12h. AlertEnvelope's
-        # deduplication in the insert loop means one open alert per
-        # (alert_type, sensor_id) — the upgrade happens in place.
+        # 7. Planner stale. Threshold 14h = SUNSET→SUNRISE gap (~12.7h) + 1.3h slack.
+        # Iris emits full plans at SUNRISE and SUNSET only; interim TRANSITION /
+        # FORECAST / DEVIATION events adjust tunables or trigger replans. An 8h
+        # threshold (pre-sprint-2) guaranteed a daily false-positive mid-afternoon;
+        # 14h fires only when a SUNRISE has genuinely missed. F14's severity
+        # ladder (≥12h critical, else warning) is kept for AlertEnvelope dedup
+        # structure but degenerates to always-critical at this threshold. This
+        # rule will be superseded by contract v1.4's per-(type,instance) SLAs
+        # in ingestor sprint-25; treat as an interim fix.
         plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")
-        if plan_age and plan_age > 28800:
+        if plan_age and plan_age > 50400:
             age_h = plan_age / 3600.0
             severity = "critical" if age_h >= 12 else "warning"
             alerts.append(
@@ -684,7 +686,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "message": f"No plan in {plan_age // 3600}h",
                     "details": {"age_s": plan_age, "age_h": round(age_h, 1)},
                     "metric_value": round(age_h, 1),
-                    "threshold_value": 8.0,
+                    "threshold_value": 14.0,
                 }
             )
 

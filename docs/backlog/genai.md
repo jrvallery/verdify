@@ -48,6 +48,9 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 | G13 | Scorecard "why did we fail": when `planner_score < 80`, compute top-2 contributing stress windows + include in next plan context | Prompt + MCP | unblocked by G3 | M | pending |
 | G14 | One-line clarification in `docs/agents/genai.md`: vault-writer scripts (`generate-*`) are `web` scope; genai owns the data models they consume | Doc | — | XS | **done** (600b7b9) |
 | G15 | **Infra drift**: `db/migrations/076-078` and `db/schema.sql` are stale vs live `fn_planner_scorecard()` (live emits 25 metrics incl. temp/vpd_compliance_pct, kwh/therms/water_gal/mister_water_gal, cost_electric/gas/water; migrations don't). Route to coordinator for a resync migration | Coordinator handshake | — | S | pending |
+| G16 | **`planner_stale` alert threshold 8h→14h.** False alarm 2026-04-19 14:27 UTC misled a sibling agent into reporting Iris as hung. Iris was fine — alert threshold sits below the SUNSET↔SUNRISE cadence (~12.7h) guaranteeing a daily false-positive. Cross-scope PR into ingestor (`ingestor/tasks.py:666` + `scripts/alert-monitor.py:284`, both `28800`→`50400`) | Cross-scope (ingestor) | — | XS | **done this sprint** |
+| G17 | Planning-cadence note at top of `docs/planner/greenhouse-playbook.md` explaining SUNRISE/SUNSET-only full plans + what a genuine stall looks like (no SUNRISE in 14h AND no `set_tunable` in 8h AND OpenClaw failing). Prevents future sibling agents from misdiagnosing the gap as an incident | Doc | — | XS | **done this sprint** |
+| G18 | (follow-up to G16) Replace flat `plan_age > 50400` check with a two-factor semantic check: no SUNRISE/SUNSET event delivered in 14h AND no `setpoint_changes WHERE source='iris' AND ts > now() - interval '8 hours'`. More accurate than a single age threshold. Ingestor may want to own this outright | Cross-scope (ingestor) | — | M | pending |
 
 ## Ideas (not committed)
 
