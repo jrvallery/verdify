@@ -31,6 +31,7 @@ from verdify_schemas import (
     EquipmentStateEvent,
     HAEntityState,
     OpenMeteoForecastResponse,
+    PlanDeliveryLogRow,
     SystemStateRow,
 )
 
@@ -662,20 +663,28 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
-        # 7. Planner stale
+        # 7. Planner stale — F14 escalation ladder:
+        #   8h  → warning  (initial fire, as before)
+        #   12h → critical (Iris has truly not responded to multiple triggers)
+        # metric_value carries hours_since_last_plan; an existing open alert
+        # gets its severity upgraded when it crosses 12h. AlertEnvelope's
+        # deduplication in the insert loop means one open alert per
+        # (alert_type, sensor_id) — the upgrade happens in place.
         plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")
         if plan_age and plan_age > 28800:
+            age_h = plan_age / 3600.0
+            severity = "critical" if age_h >= 12 else "warning"
             alerts.append(
                 {
                     "alert_type": "planner_stale",
-                    "severity": "warning",
+                    "severity": severity,
                     "category": "system",
                     "sensor_id": "system.planner",
                     "zone": None,
                     "message": f"No plan in {plan_age // 3600}h",
-                    "details": {"age_s": plan_age},
-                    "metric_value": None,
-                    "threshold_value": None,
+                    "details": {"age_s": plan_age, "age_h": round(age_h, 1)},
+                    "metric_value": round(age_h, 1),
+                    "threshold_value": 8.0,
                 }
             )
 
@@ -804,15 +813,48 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # ── Deduplicate + insert + resolve ──
         active_keys = {(a["alert_type"], a["sensor_id"]) for a in alerts}
         open_rows = await conn.fetch(
-            "SELECT id, alert_type, sensor_id, slack_ts FROM alert_log WHERE disposition = 'open'"
+            "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log WHERE disposition = 'open'"
         )
         open_keys = {(r["alert_type"], r["sensor_id"]): r for r in open_rows}
 
         slack_token = None
         new_count = 0
+        escalated_count = 0
         for a in alerts:
             key = (a["alert_type"], a["sensor_id"])
             if key in open_keys:
+                # F14 (Sprint 24.6): escalate severity in place. If the new
+                # envelope is critical and the open row is warning/info,
+                # upgrade and re-notify. Only planner_stale uses this path
+                # today; the pattern is general.
+                existing = open_keys[key]
+                if a["severity"] == "critical" and existing["severity"] != "critical":
+                    try:
+                        env = AlertEnvelope.model_validate(a)
+                    except ValidationError as e:
+                        log.error("alert escalation skipped (validation failed: %s): %r", e, a)
+                        continue
+                    await conn.execute(
+                        "UPDATE alert_log SET severity=$1, message=$2, details=$3, metric_value=$4 WHERE id=$5",
+                        env.severity,
+                        env.message,
+                        json.dumps(env.details) if env.details else None,
+                        env.metric_value,
+                        existing["id"],
+                    )
+                    if slack_token is None:
+                        try:
+                            slack_token = _load_token(SLACK_TOKEN_FILE)
+                        except Exception:
+                            slack_token = ""
+                    if slack_token:
+                        _post_slack(
+                            slack_token,
+                            SLACK_CHANNEL,
+                            f"\U0001f534 *[ESCALATED→CRITICAL]* `{env.alert_type}` — {env.message}",
+                            thread_ts=existing["slack_ts"],
+                        )
+                    escalated_count += 1
                 continue
             try:
                 env = AlertEnvelope.model_validate(a)
@@ -878,8 +920,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         )
                 resolved += 1
 
-        if new_count or resolved:
-            log.info("Alerts: %d new, %d resolved", new_count, resolved)
+        if new_count or resolved or escalated_count:
+            log.info("Alerts: %d new, %d resolved, %d escalated", new_count, resolved, escalated_count)
 
 
 # Reactive planner REMOVED in Sprint 5 P6 — replaced by forecast deviation monitor (P4)
@@ -2032,6 +2074,73 @@ def _compute_milestones() -> dict[str, datetime]:
     return _milestones_cache
 
 
+async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
+    """F14 (Sprint 24.6): persist a send_to_iris result to plan_delivery_log
+    for later delivery→plan correlation. Validated through PlanDeliveryLogRow
+    before INSERT; a ValidationError here means an unexpected event_type
+    (not in the Literal) or wake_mode — safer to drop than bleed bad data."""
+    row = {
+        "event_type": result["event_type"],
+        "event_label": result.get("event_label"),
+        "session_key": result.get("session_key"),
+        "wake_mode": result.get("wake_mode"),
+        "gateway_status": result.get("gateway_status"),
+        "gateway_body": result.get("gateway_body"),
+    }
+    try:
+        PlanDeliveryLogRow.model_validate(row)
+    except ValidationError as e:
+        log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
+        return
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO plan_delivery_log
+              (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
+            row["event_type"],
+            row["event_label"],
+            row["session_key"],
+            row["wake_mode"],
+            row["gateway_status"],
+            row["gateway_body"],
+        )
+
+
+async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, context: str) -> None:
+    """Call send_to_iris in the executor and persist the outcome to
+    plan_delivery_log. Called from every milestone/forecast/deviation path
+    so F14 correlation is complete regardless of trigger source."""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+    await _log_plan_delivery(pool, result)
+
+
+async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
+    """F14 (Sprint 24.6): for each unresolved plan_delivery_log row, look for
+    a plan_journal entry created after it and within a 2-hour window. Updates
+    `resulting_plan_id` + `plan_written_at`. Bounded to the last 6 hours and
+    events that can produce plans (SUNRISE/SUNSET/DEVIATION always do;
+    TRANSITION/FORECAST only when Iris chooses to update)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE plan_delivery_log pdl
+               SET resulting_plan_id = pj.plan_id,
+                   plan_written_at   = pj.created_at
+              FROM plan_journal pj
+             WHERE pdl.resulting_plan_id IS NULL
+               AND pdl.delivered_at > now() - interval '6 hours'
+               AND pj.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
+               AND pj.created_at = (
+                   SELECT MIN(p2.created_at) FROM plan_journal p2
+                    WHERE p2.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
+               )
+            """,
+        )
+
+
 async def planning_heartbeat(pool: asyncpg.Pool) -> None:
     """Check if a planning event should fire. Triggers Iris planner session."""
     now = datetime.now(_DENVER)
@@ -2069,7 +2178,7 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
             # Gather context and send to Iris (blocking — runs in executor)
             loop = asyncio.get_event_loop()
             context = await loop.run_in_executor(None, gather_context)
-            await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+            await _deliver_and_log(pool, event_type, label, context)
 
     # ── 3. Check for forecast changes ──
     global _last_forecast_fetch
@@ -2082,7 +2191,7 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("New forecast detected (fetched_at=%s), notifying Iris", latest_fetch)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await loop.run_in_executor(None, send_to_iris, "FORECAST", "New forecast data", context)
+                await _deliver_and_log(pool, "FORECAST", "New forecast data", context)
             _last_forecast_fetch = latest_fetch
 
     # ── 4. Check for deviations (route to Iris instead of trigger file) ──
@@ -2100,11 +2209,20 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("Deviation trigger found, routing to Iris: %s", reason)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await loop.run_in_executor(None, send_to_iris, "DEVIATION", deviations_str, context)
+                await _deliver_and_log(pool, "DEVIATION", deviations_str, context)
 
                 trigger_file.unlink(missing_ok=True)
             except Exception as e:
                 log.error("Failed to process deviation trigger: %s", e)
+
+    # ── 4b. Resolve plan_delivery_log entries (F14): update any unresolved
+    # rows where a plan landed within 2h of delivery. Runs every heartbeat
+    # so the correlation updates in near-real-time, not just at the 30-min
+    # verify check below.
+    try:
+        await _resolve_delivery_log(pool)
+    except Exception as e:
+        log.warning("plan_delivery_log resolve failed: %s", e)
 
     # ── 5. Verify plan delivery (30 min after SUNRISE/SUNSET) ──
     for key in ("SUNRISE", "SUNSET"):

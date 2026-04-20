@@ -208,3 +208,34 @@ class PlanJournalRow(BaseModel):
     validated_at: AwareDatetime | None = None
     hypothesis_structured: PlanHypothesisStructured | None = None
     greenhouse_id: str = "vallery"
+
+
+# ── Planner delivery audit (Sprint 24.6 — F14) ──────────────────────
+
+
+PlanDeliveryEventType = Literal["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION"]
+
+
+class PlanDeliveryLogRow(BaseModel):
+    """plan_delivery_log table row — one entry per send_to_iris call.
+
+    Ingestor writes this from planning_heartbeat immediately after each
+    delivery. The 30-min verification pass updates resulting_plan_id +
+    plan_written_at when a plan materializes. Makes delivery→plan
+    correlation query-able instead of requiring journal log scavenging.
+    See migration 092.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    delivered_at: AwareDatetime | None = None
+    event_type: PlanDeliveryEventType
+    event_label: str | None = None
+    session_key: str | None = None
+    wake_mode: Literal["now", "next-heartbeat"] | None = None
+    gateway_status: int | None = None
+    gateway_body: str | None = None
+    resulting_plan_id: str | None = None
+    plan_written_at: AwareDatetime | None = None
+    greenhouse_id: str = "vallery"
