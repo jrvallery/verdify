@@ -46,6 +46,31 @@ inline bool moisture_blocked_by_occupancy(const SensorInputs& in, const Setpoint
     return sp.occupancy_inhibit && in.occupied;
 }
 
+// ── Fog gating helpers (sprint-8) ──────────────────────────────────
+// Consolidates the RH ceiling / min temp / hour-of-day predicates that
+// previously lived in 5 places (MIST_S2→MIST_FOG entry, evaluate_overrides,
+// SAFETY_COOL/SEALED_MIST/VENTILATE-FW-9b in resolve_equipment). Occupancy
+// inhibit is a separate concern — callers check moisture_blocked_by_occupancy
+// themselves so that evaluate_overrides can continue to report fog_gate_* and
+// occupancy_blocks_moisture as independent flags.
+
+// Midnight-wrap-aware window check. start <= end → [start, end). Otherwise
+// the window crosses midnight (e.g. start=22, end=6 → 22:00-05:59 local).
+// Before sprint-8 this was two hardcoded comparisons that silently gated
+// fog 24/7 whenever a planner setpoint produced start > end.
+inline bool fog_hour_in_window(int hour, int start, int end) noexcept {
+    return (start <= end) ? (hour >= start && hour < end)
+                          : (hour >= start || hour < end);
+}
+
+// True iff all of RH, temp, and hour-of-day permit fogging. Occupancy is
+// NOT checked here — see moisture_blocked_by_occupancy().
+inline bool fog_permitted(const SensorInputs& in, const Setpoints& sp) noexcept {
+    return (in.rh_pct  <= sp.fog_rh_ceiling)
+        && (in.temp_f  >= sp.fog_min_temp)
+        && fog_hour_in_window(in.local_hour, sp.fog_window_start, sp.fog_window_end);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // determine_mode()
 // ═══════════════════════════════════════════════════════════════════
@@ -124,12 +149,16 @@ inline Mode determine_mode(
         mode = SAFETY_COOL;
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;   // sprint-8: match "suspended during safety" comment
         state.relief_cycle_count = 0;
         state.vent_latch_timer_ms = 0;  // FW-8
     } else if (safety_heat) {
         mode = SAFETY_HEAT;
         state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;      // sprint-8 P1#5: match SAFETY_COOL
+        state.vpd_watch_timer_ms = 0;   // sprint-8: match SAFETY_COOL
         state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;  // sprint-8 P1#5: match SAFETY_COOL
     } else if (in_thermal_relief) {
         state.relief_timer_ms = sat_add(state.relief_timer_ms, dt_ms);
         if (state.relief_timer_ms >= sp.relief_duration_ms) {
@@ -214,14 +243,21 @@ inline Mode determine_mode(
 
         if (in.vpd_kpa > sp.vpd_max_safe && can_seal_for_dryness) {
             mode = SEALED_MIST;
-            state.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
-            state.sealed_timer_ms = dt_ms;
-            state.mist_stage = MIST_S1;
-            state.mist_stage_timer_ms = 0;
-            // Firmware-forced seal: only count as a dry override when the
-            // transition was actually forced — if we were already SEALED_MIST
-            // via the planner-sanctioned dwell, this R2-3 branch is a no-op
-            // and not an override.
+            // sprint-8 P0#1/P0#2: only seed "new seal" state when we weren't
+            // already in SEALED_MIST. Otherwise:
+            //   - resetting mist_stage would demote MIST_S2/MIST_FOG to
+            //     MIST_S1 at exactly the moment peak VPD needs peak misting;
+            //   - resetting sealed_timer_ms every cycle would make
+            //     sealed_max_ms unreachable under sustained extreme
+            //     dryness, silently defeating the THERMAL_RELIEF backstop.
+            // The override flag still follows the prior semantics (only
+            // set when R2-3 actually forced the transition).
+            if (pre_r23_mode != SEALED_MIST) {
+                state.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+                state.sealed_timer_ms = dt_ms;
+                state.mist_stage = MIST_S1;
+                state.mist_stage_timer_ms = 0;
+            }
             state.dry_override_active = (pre_r23_mode != SEALED_MIST);
         }
     }
@@ -250,11 +286,8 @@ inline Mode determine_mode(
                     }
                     break;
                 case MIST_S2: {
-                    bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
-                        || (in.temp_f < sp.fog_min_temp)
-                        || (in.local_hour < sp.fog_window_start)
-                        || (in.local_hour >= sp.fog_window_end)
-                        || moisture_blocked_by_occupancy(in, sp);
+                    const bool fog_gated = !fog_permitted(in, sp)
+                                        || moisture_blocked_by_occupancy(in, sp);
                     if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
                         state.mist_stage = MIST_FOG;
                         state.mist_stage_timer_ms = 0;
@@ -328,8 +361,7 @@ inline OverrideFlags evaluate_overrides(
     f.fog_gate_rh     = fog_wanted && (in.rh_pct  > sp.fog_rh_ceiling);
     f.fog_gate_temp   = fog_wanted && (in.temp_f  < sp.fog_min_temp);
     f.fog_gate_window = fog_wanted
-        && ((in.local_hour <  sp.fog_window_start)
-         || (in.local_hour >= sp.fog_window_end));
+        && !fog_hour_in_window(in.local_hour, sp.fog_window_start, sp.fog_window_end);
 
     // Relief-cycle breaker: firmware forces VENTILATE instead of the seal
     // the planner's dwell was setting up.
@@ -378,15 +410,9 @@ inline RelayOutputs resolve_equipment(
         case SAFETY_COOL:
             out.vent = true;
             out.fan1 = true; out.fan2 = true;
-            {
-                // R2-5: Check live occupancy, not just config flag
-                bool fog_ok = !(in.rh_pct > sp.fog_rh_ceiling)
-                    && !(in.temp_f < sp.fog_min_temp)
-                    && (in.local_hour >= sp.fog_window_start)
-                    && (in.local_hour < sp.fog_window_end)
-                    && !moisture_blocked_by_occupancy(in, sp);
-                out.fog = fog_ok && in.vpd_kpa > sp.vpd_high;
-            }
+            out.fog = fog_permitted(in, sp)
+                   && !moisture_blocked_by_occupancy(in, sp)
+                   && in.vpd_kpa > sp.vpd_high;
             break;
 
         case SAFETY_HEAT:
@@ -396,15 +422,9 @@ inline RelayOutputs resolve_equipment(
         case SEALED_MIST:
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
-            {
-                bool fog_gated = (in.rh_pct > sp.fog_rh_ceiling)
-                    || (in.temp_f < sp.fog_min_temp)
-                    || (in.local_hour < sp.fog_window_start)
-                    || (in.local_hour >= sp.fog_window_end);
-                // R2-5: Check live occupancy for fog output
-                out.fog = (state.mist_stage == MIST_FOG) && !fog_gated
-                    && !moisture_blocked_by_occupancy(in, sp);
-            }
+            out.fog = (state.mist_stage == MIST_FOG)
+                   && fog_permitted(in, sp)
+                   && !moisture_blocked_by_occupancy(in, sp);
             break;
 
         case THERMAL_RELIEF:
@@ -417,13 +437,12 @@ inline RelayOutputs resolve_equipment(
             bool needs_both = in.temp_f > (Thigh + sp.dC2);
             if (lead_is_fan1) { out.fan1 = true; out.fan2 = needs_both; }
             else              { out.fan2 = true; out.fan1 = needs_both; }
-            // FW-9b: VPD emergency — fire fog even while venting (full battery)
+            // FW-9b: VPD emergency — fire fog even while venting.
+            // Only fog is forced here; misters aren't reachable in
+            // VENTILATE mode because mist_stage is reset to MIST_WATCH
+            // in determine_mode outside SEALED_MIST.
             if (in.vpd_kpa > sp.vpd_max_safe && !moisture_blocked_by_occupancy(in, sp)) {
-                bool fog_ok = !(in.rh_pct > sp.fog_rh_ceiling)
-                    && !(in.temp_f < sp.fog_min_temp)
-                    && (in.local_hour >= sp.fog_window_start)
-                    && (in.local_hour < sp.fog_window_end);
-                out.fog = fog_ok;
+                out.fog = fog_permitted(in, sp);
             }
             break;
         }

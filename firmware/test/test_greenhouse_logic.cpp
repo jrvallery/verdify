@@ -760,6 +760,130 @@ TEST(obs1e_all_quiet_on_idle_in_band) {
     PASS();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-8 — R2-3 state preservation + midnight-wrap fog window
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s8_r23_preserves_mist_stage_when_already_sealed) {
+    // Pre-sprint-8: R2-3 unconditionally reset mist_stage to MIST_S1,
+    // demoting peak MIST_FOG back to S1 at the exact moment VPD was
+    // worst. Now: state preserved when pre_r23_mode == SEALED_MIST.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.mist_stage_timer_ms = 45000;
+    s.sealed_timer_ms = 300000;
+    s.vpd_watch_timer_ms = 60000;  // dwell mature
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_EQ(s.mist_stage, MIST_FOG);  // NOT demoted
+    ASSERT_TRUE(s.mist_stage_timer_ms >= 45000);  // NOT reset
+    ASSERT_FALSE(s.dry_override_active);  // not a forced transition
+    PASS();
+}
+
+TEST(s8_r23_preserves_sealed_timer_under_sustained_dryness) {
+    // Pre-sprint-8: sealed_timer_ms was reset to dt_ms every cycle
+    // while R2-3 fired, making sealed_max_ms unreachable and defeating
+    // the THERMAL_RELIEF backstop. Post: timer accumulates normally, and
+    // the state machine hits THERMAL_RELIEF once sealed_timer >= max.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.sealed_timer_ms = sp.sealed_max_ms - 5000;  // 5 s from max
+    s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);  // R2-3 trigger
+    // Tick 1 (dt=10s): normal accumulator advances sealed_timer past max.
+    // R2-3 fires but no longer resets the timer (sprint-8 fix).
+    Mode m = determine_mode(in, sp, s, 10000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_TRUE(s.sealed_timer_ms > sp.sealed_max_ms);
+    // Tick 2: the was_sealed branch now sees sealed_timer_ms >= max and
+    // transitions to THERMAL_RELIEF. Pre-sprint-8 this path was
+    // permanently unreachable under sustained R2-3 triggering.
+    m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, THERMAL_RELIEF);
+    PASS();
+}
+
+TEST(s8_r23_still_forces_seal_from_idle) {
+    // Sanity: the non-sealed path still seeds mist_stage and
+    // sealed_timer as before. Regression check on the main R2-3 flow.
+    auto sp = default_setpoints();
+    auto s = initial_state();  // mode_prev = IDLE, no dwell maturity
+    auto in = make_inputs(72.0f, sp.vpd_max_safe + 0.2f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_EQ(s.mist_stage, MIST_S1);  // fresh seal seeds S1
+    ASSERT_EQ(s.sealed_timer_ms, 5000u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, sp.vpd_watch_dwell_ms);
+    ASSERT_TRUE(s.dry_override_active);  // this IS a forced override
+    PASS();
+}
+
+TEST(s8_fog_window_wraps_midnight) {
+    // Pre-sprint-8: a window crossing midnight (start > end) evaluated
+    // to (hour < start || hour >= end) == true for every hour, gating
+    // fog 24/7. Now: (hour >= start || hour < end) inside the wrap.
+    auto sp = default_setpoints();
+    sp.fog_window_start = 22;
+    sp.fog_window_end = 6;
+    auto s = initial_state();
+    s.mist_stage = MIST_FOG;
+    auto in = make_inputs(72.0f, 1.7f);
+
+    // Inside the wrap — fog permitted
+    in.local_hour = 23;
+    ASSERT_TRUE(fog_permitted(in, sp));
+    in.local_hour = 0;
+    ASSERT_TRUE(fog_permitted(in, sp));
+    in.local_hour = 5;
+    ASSERT_TRUE(fog_permitted(in, sp));
+
+    // Outside the wrap — fog gated
+    in.local_hour = 6;   // inclusive end
+    ASSERT_FALSE(fog_permitted(in, sp));
+    in.local_hour = 12;
+    ASSERT_FALSE(fog_permitted(in, sp));
+    in.local_hour = 21;  // one hour before start
+    ASSERT_FALSE(fog_permitted(in, sp));
+
+    // Non-wrapping window (start <= end) still works
+    sp.fog_window_start = 7;
+    sp.fog_window_end = 17;
+    in.local_hour = 12;
+    ASSERT_TRUE(fog_permitted(in, sp));
+    in.local_hour = 17;  // inclusive end
+    ASSERT_FALSE(fog_permitted(in, sp));
+    in.local_hour = 6;
+    ASSERT_FALSE(fog_permitted(in, sp));
+    PASS();
+}
+
+TEST(s8_safety_heat_clears_same_timers_as_safety_cool) {
+    // Pre-sprint-8: SAFETY_HEAT left relief_timer_ms, vent_latch_timer_ms,
+    // and vpd_watch_timer_ms populated with whatever they held pre-safety.
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    s.sealed_timer_ms     = 100000;
+    s.relief_timer_ms     = 50000;
+    s.vpd_watch_timer_ms  = 60000;
+    s.relief_cycle_count  = 2;
+    s.vent_latch_timer_ms = 200000;
+    auto in = make_inputs(40.0f, 0.3f);  // trips safety_heat
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_HEAT);
+    ASSERT_EQ(s.sealed_timer_ms, 0u);
+    ASSERT_EQ(s.relief_timer_ms, 0u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, 0u);
+    ASSERT_EQ(s.relief_cycle_count, 0u);
+    ASSERT_EQ(s.vent_latch_timer_ms, 0u);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis + OBS-1e\n");

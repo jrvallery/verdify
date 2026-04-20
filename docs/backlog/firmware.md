@@ -4,10 +4,11 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 ## In flight
 
-- **`firmware/sprint-7-cycle-audit`** — per-zone cycle counters for misters (south/west/center) + drips (wall/center). 5 new template sensors mirror the existing `cycles_fan1_today` pattern; firmware counts rising edges in `turn_on_zone()` (misters) and irrigation dispatch (drips, including the flush rising edge). Closes the audit-visibility gap where fan/heat/fog/vent had counters but irrigation relays only had runtime.
+- **`firmware/sprint-8-r23-fog-helper`** — multi-reviewer synthesis fix pass on `greenhouse_logic.h`. Three P0 bugs in the core state machine: (1) R2-3 demoting MIST_FOG→MIST_S1 when already sealed; (2) R2-3 resetting `sealed_timer_ms` under sustained extreme dryness, making the THERMAL_RELIEF backstop unreachable; (3) fog window gating 24/7 when `start > end` (midnight wrap broken). Fix extracts `fog_permitted()` + `fog_hour_in_window()` helpers, guards R2-3's state mutations behind `pre_r23_mode != SEALED_MIST`, and normalizes SAFETY_HEAT to clear the same timers as SAFETY_COOL. 5 new unit tests; 64/64 pass; replay clean against refreshed corpus.
 
 ## Recently landed
 
+- **`firmware/sprint-7-cycle-audit`** — per-zone cycle counters for misters + drips (5 new `cnt_*_today` globals + template sensors). Rising-edge counted in `turn_on_zone` and irrigation dispatch. Sensors live on ESP32; ingestor DAILY_ACCUM_MAP + coordinator migration queued as handoffs.
 - **`firmware/sprint-6-midnight-audit`** — docs-only. 60-day telemetry found no midnight edge-case; midday crash clustering logged for a separate sprint.
 - **`firmware/sprint-5-tooling`** — `make replay-corpus-refresh` + deploy-time `fw_version` bump. Corpus now covers through today; `diagnostics.firmware_version` is per-commit unique.
 - **`firmware/sprint-4-leak-debounce`** — `bs_leak_detected` gained a 30 s bleed-down grace period + added `fog_rly` to the valve list. Post-deploy: 0 `leak_detected` transitions in first 5-min watch window (vs baseline 2.3/5min).
@@ -42,8 +43,8 @@ Findings from the 2026-04-18 audit that live outside firmware scope. Each is a f
 
 ## Ideas (not yet committed)
 
-- Per-relay cycle-count audit in firmware (complement to ingestor-side counting). **Queued for sprint-7**.
-- **Midday crash-loop investigation.** 91 unexpected reboots in 60 days (Guru/Panic 51 + Task WDT 38), heavily clustered at local hours 11-13 (33 crashes, peaking at hour 12 with 14). Likely heap/stack pressure during peak mister-state-machine activity when VPD is highest. Separate from the sprint-6 midnight investigation, which ruled out midnight-specific issues.
+- **Midday crash-loop investigation.** 91 unexpected reboots in 60 days (Guru/Panic 51 + Task WDT 38), heavily clustered at local hours 11-13 (33 crashes, peaking at hour 12 with 14). Likely heap/stack pressure during peak mister-state-machine activity when VPD is highest.
+- **Sprint-8 follow-on items from multi-reviewer synthesis.** All non-P0 items from the review: P1#4 mirror `safety_max - 5` check in R2-3; P1#7 Stage-2 heater off hysteresis; P2#8 `validate_setpoints()` relational asserts; P2#9 `dt_ms` clamp; P2#10 magic numbers into Setpoints (`vent_latch_timeout_ms`, `safety_max_seal_margin_f`, `ECON_HEAT_MARGIN_F`); P2#11 SAFETY_HEAT fan circulation; P3#12 include THERMAL_RELIEF in `was_ventilating`; P3#13 extend `vpd_min_safe` override beyond IDLE; P3#14 fix "full battery" comment in VENTILATE FW-9b; P3#15 clarify `econ_block` + `vpd_min_safe` policy; P4#17 remove dead occupancy branch in mist_stage progression; P4#18 split `determine_mode`; P4#19 consolidate R2-X/FW-X history into DESIGN.md; P4#20 sharpen `evaluate_overrides` counterfactuals.
 
 ## Closed / resolved
 
