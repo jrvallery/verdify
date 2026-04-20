@@ -32,6 +32,7 @@ from verdify_schemas import (
     HAEntityState,
     OpenMeteoForecastResponse,
     PlanDeliveryLogRow,
+    SetpointChange,
     SystemStateRow,
 )
 
@@ -870,6 +871,56 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
+        # 12. Tunable zero-variance detection (Sprint 24.9, G-9).
+        # Firmware sprint-13 30-day scan flagged vpd_target_west pinned at
+        # 1.2 kPa across 33k samples — either fn_zone_vpd_targets has a
+        # west-zone default/bug or the west zone has no active crop. Catching
+        # this class of issue automatically (any dispatcher-owned tunable with
+        # stddev=0 over 7 days) surfaces the condition without waiting for
+        # an operator to notice.
+        zero_var_params = (
+            "vpd_target_south",
+            "vpd_target_west",
+            "vpd_target_east",
+            "vpd_target_center",
+            "temp_low",
+            "temp_high",
+            "vpd_low",
+            "vpd_high",
+        )
+        for r in await conn.fetch(
+            """
+            SELECT parameter, count(*) AS n, stddev(value) AS sd, avg(value) AS mean
+              FROM setpoint_snapshot
+             WHERE parameter = ANY($1::text[])
+               AND ts > now() - interval '7 days'
+             GROUP BY parameter
+            HAVING count(*) > 100 AND (stddev(value) IS NULL OR stddev(value) = 0)
+            """,
+            list(zero_var_params),
+        ):
+            alerts.append(
+                {
+                    "alert_type": "tunable_zero_variance",
+                    "severity": "warning",
+                    "category": "system",
+                    "sensor_id": f"setpoint.{r['parameter']}",
+                    "zone": None,
+                    "message": (
+                        f"Tunable `{r['parameter']}` has zero variance over 7 days "
+                        f"(n={r['n']}, pinned at {float(r['mean']):.3f}). "
+                        "Check dispatcher source (band / zone function / crop profile)."
+                    ),
+                    "details": {
+                        "parameter": r["parameter"],
+                        "sample_count": int(r["n"]),
+                        "pinned_value": float(r["mean"]),
+                    },
+                    "metric_value": 0.0,
+                    "threshold_value": None,
+                }
+            )
+
         # Reactive trigger marker removed in Sprint 5 P6 — deviation monitor handles replans
 
         # ── Deduplicate + insert + resolve ──
@@ -1228,6 +1279,23 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source = "band"
             else:
                 source = "plan"
+            # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
+            # Defense-in-depth: MCP's PlanTransition.params already validates
+            # at write time, but a regression there would silently corrupt
+            # setpoint_changes. Drift-surface the mismatch here where it's
+            # cheap (one row at a time) vs. downstream where it blows up a
+            # grafana panel or planner scorecard.
+            try:
+                SetpointChange(ts=datetime.now(UTC), parameter=param, value=float(val), source=source)
+            except ValidationError as e:
+                log.error(
+                    "dispatcher setpoint_change skipped (validation failed: %s): param=%s value=%s source=%s",
+                    e,
+                    param,
+                    val,
+                    source,
+                )
+                continue
             await conn.execute(
                 "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
                 param,
@@ -2073,7 +2141,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
 
 from astral import LocationInfo
 from astral.sun import sun as _sun
-from iris_planner import gather_context, send_to_iris
+from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
 
 _LOCATION = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
 _DENVER = ZoneInfo("America/Denver")
@@ -2156,7 +2224,12 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
     """F14 (Sprint 24.6): persist a send_to_iris result to plan_delivery_log
     for later delivery→plan correlation. Validated through PlanDeliveryLogRow
     before INSERT; a ValidationError here means an unexpected event_type
-    (not in the Literal) or wake_mode — safer to drop than bleed bad data."""
+    (not in the Literal) or wake_mode — safer to drop than bleed bad data.
+
+    Sprint 24.9 (G-7): honor an explicit `status` in the result dict when
+    present (e.g., 'delivery_failed' from the context-gather stub path).
+    When absent, the DB default 'pending' applies — unchanged from before.
+    """
     row = {
         "event_type": result["event_type"],
         "event_label": result.get("event_label"),
@@ -2170,26 +2243,71 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
     except ValidationError as e:
         log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
         return
+    explicit_status = result.get("status")
     async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO plan_delivery_log
-              (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            row["event_type"],
-            row["event_label"],
-            row["session_key"],
-            row["wake_mode"],
-            row["gateway_status"],
-            row["gateway_body"],
-        )
+        if explicit_status:
+            await conn.execute(
+                """
+                INSERT INTO plan_delivery_log
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
+                row["event_type"],
+                row["event_label"],
+                row["session_key"],
+                row["wake_mode"],
+                row["gateway_status"],
+                row["gateway_body"],
+                explicit_status,
+            )
+        else:
+            await conn.execute(
+                """
+                INSERT INTO plan_delivery_log
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                row["event_type"],
+                row["event_label"],
+                row["session_key"],
+                row["wake_mode"],
+                row["gateway_status"],
+                row["gateway_body"],
+            )
 
 
 async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, context: str) -> None:
     """Call send_to_iris in the executor and persist the outcome to
     plan_delivery_log. Called from every milestone/forecast/deviation path
-    so F14 correlation is complete regardless of trigger source."""
+    so F14 correlation is complete regardless of trigger source.
+
+    Sprint 24.9 (G-7): if context gathering failed upstream, skip the POST
+    entirely and log a plan_delivery_log row with status='delivery_failed'.
+    Previously the failure string was spliced into the prompt and Iris
+    received gibberish context — the 2026-04-19 incident had gather failures
+    that still produced 200 OK dispatches but no useful plan.
+    """
+    if context == CONTEXT_GATHER_FAILED_SENTINEL:
+        log.warning(
+            "Skipping %s/%s dispatch: context gathering failed (see alert_log plan_context_failed)",
+            event_type,
+            label,
+        )
+        # Write a stub plan_delivery_log row so the outage is visible in
+        # operational queries alongside successful deliveries.
+        stub_result = {
+            "delivered": False,
+            "event_type": event_type,
+            "event_label": label,
+            "session_key": None,
+            "wake_mode": None,
+            "gateway_status": None,
+            "gateway_body": "context_gather_failed",
+            "status": "delivery_failed",
+        }
+        await _log_plan_delivery(pool, stub_result)
+        return
+
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, send_to_iris, event_type, label, context)
     await _log_plan_delivery(pool, result)
@@ -2200,13 +2318,20 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
     a plan_journal entry created after it and within a 2-hour window. Updates
     `resulting_plan_id` + `plan_written_at`. Bounded to the last 6 hours and
     events that can produce plans (SUNRISE/SUNSET/DEVIATION always do;
-    TRANSITION/FORECAST only when Iris chooses to update)."""
+    TRANSITION/FORECAST only when Iris chooses to update).
+
+    Sprint 24.9 (G-3): also set status='plan_written' so consumers querying
+    `SELECT status, count(*)` see consistent state. Contract v1.4 §2.D
+    defines status as the authoritative lifecycle column; resulting_plan_id
+    is the join key. Keep them in sync.
+    """
     async with pool.acquire() as conn:
         await conn.execute(
             """
             UPDATE plan_delivery_log pdl
                SET resulting_plan_id = pj.plan_id,
-                   plan_written_at   = pj.created_at
+                   plan_written_at   = pj.created_at,
+                   status            = 'plan_written'
               FROM plan_journal pj
              WHERE pdl.resulting_plan_id IS NULL
                AND pdl.delivered_at > now() - interval '6 hours'

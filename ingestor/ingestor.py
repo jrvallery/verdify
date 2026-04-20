@@ -689,9 +689,25 @@ def on_state_change(entity_state) -> None:
         if val is None or (isinstance(val, float) and math.isnan(val)):
             return
 
-        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot)
+        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot).
+        # Sprint 24.9 (G-1, HO-2): apply the same physical-range validation
+        # as the setpoint_changes path. Pre-first-push firmware init can
+        # report cfg_safety_min_f=0 etc.; without this gate those zero rows
+        # pollute setpoint_snapshot and break 30-day range reports (see
+        # firmware sprint-13 tunable-cascade doc §Historical impact).
         cfg_param = CFG_READBACK_MAP.get(obj_id)
         if cfg_param:
+            if cfg_param in _SETPOINT_RANGES:
+                lo, hi = _SETPOINT_RANGES[cfg_param]
+                if val < lo or val > hi:
+                    log.warning(
+                        "cfg_readback rejected out-of-range: %s=%.3f (valid %s-%s)",
+                        cfg_param,
+                        val,
+                        lo,
+                        hi,
+                    )
+                    return
             state.cfg_readback[cfg_param] = val
             return
 

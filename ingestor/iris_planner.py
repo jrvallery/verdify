@@ -514,8 +514,21 @@ def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None
         log.warning("failed to record plan_context_failed alert: %s", e)
 
 
+# Sprint 24.9 (G-7): sentinel that tasks.py's _deliver_and_log checks to
+# decide whether to skip the actual /hooks/agent POST and mark the
+# plan_delivery_log row status='delivery_failed'. Before 24.9 the failure
+# string was spliced into the prompt and Iris received gibberish context.
+CONTEXT_GATHER_FAILED_SENTINEL = "__CONTEXT_GATHER_FAILED__"
+
+
 def gather_context() -> str:
-    """Run gather-plan-context.sh and return its output."""
+    """Run gather-plan-context.sh and return its output.
+
+    On failure returns CONTEXT_GATHER_FAILED_SENTINEL. Callers must detect
+    this and either skip the dispatch or mark the resulting
+    plan_delivery_log row as delivery_failed — DO NOT pass the sentinel to
+    send_to_iris (it would otherwise land in the prompt and confuse Iris).
+    """
     try:
         result = subprocess.run(
             ["/bin/bash", GATHER_SCRIPT],
@@ -526,12 +539,12 @@ def gather_context() -> str:
         if result.returncode != 0:
             log.error("gather-plan-context.sh failed: %s", result.stderr[:200])
             _record_plan_context_failure("nonzero_exit", result.stderr, result.returncode)
-            return f"(context gathering failed: {result.stderr[:200]})"
+            return CONTEXT_GATHER_FAILED_SENTINEL
         return result.stdout
     except subprocess.TimeoutExpired as e:
         log.error("gather-plan-context.sh timed out (60s)")
         _record_plan_context_failure("timeout", str(e), None)
-        return "(context gathering timed out)"
+        return CONTEXT_GATHER_FAILED_SENTINEL
 
 
 # ── Gateway delivery ─────────────────────────────────────────────
