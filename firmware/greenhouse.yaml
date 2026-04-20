@@ -10,6 +10,10 @@
 ###############################################################################
 
 substitutions:
+  # Fallback for manual `esphome compile greenhouse.yaml` invocations.
+  # `make firmware-deploy` overrides this at build time with
+  # `-s fw_version YYYY.M.D.{short-sha}` so diagnostics.firmware_version
+  # uniquely identifies each deploy's commit (sprint-5 / FW-V1).
   fw_version: "2026.4.15.1"
 
 esphome:

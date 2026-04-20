@@ -2,5 +2,8 @@ test_greenhouse
 replay_harness
 replay_overrides
 data/*.csv
+# Sprint-5 replay-corpus-refresh rollback snapshot — local-only, overwritten
+# on every `make replay-corpus-refresh`.
+data/replay_overrides.prev.csv.gz
 # Golden fixtures (tracked) — see Makefile test-firmware target
 !data/replay_overrides.csv.gz

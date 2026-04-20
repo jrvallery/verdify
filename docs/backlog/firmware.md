@@ -4,12 +4,13 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 ## In flight
 
-- **`firmware/sprint-4-leak-debounce`** — `bs_leak_detected` gains a 30 s bleed-down grace period + adds `fog_rly` to the valve list. Eliminates the ~5-41/hr false-positive `leak_detected` alerts that fire during mister pulse gaps when residual pipe pressure keeps flow above 0.1 gpm for several seconds after valve close. Real leaks (persist indefinitely) still fire after the 30 s grace.
+- **`firmware/sprint-5-tooling`** — replay corpus auto-refresh + `fw_version` deploy-time bump. New `make replay-corpus-refresh` target snapshots the previous `.csv.gz`, re-runs the export against the live DB, validates row-count didn't drop >5%, and re-runs the replay gate. `make firmware-deploy` now passes `-s fw_version YYYY.M.D.{short-sha}` so `diagnostics.firmware_version` uniquely identifies each commit deployed.
 
 ## Recently landed
 
-- **`firmware/sprint-3-cfg-readbacks`** — per-zone VPD target readback sensors. `cfg_vpd_target_{south,west,east,center}`, `cfg_mister_center_penalty`, `cfg_east_adjacency_factor`. Silenced the recurring `setpoint_unconfirmed` alerts at the source; ingestor routing in commit `4cc5df5`.
-- **`firmware/sprint-2-zone-fairness`** — 10-min last-fire watchdog for mister zone rotation. Counter `mister_fairness_overrides_today`. Ingestor wire-up followed in their sprint-24-alignment.
+- **`firmware/sprint-4-leak-debounce`** — `bs_leak_detected` gained a 30 s bleed-down grace period + added `fog_rly` to the valve list. Post-deploy: 0 `leak_detected` transitions in first 5-min watch window (vs baseline 2.3/5min).
+- **`firmware/sprint-3-cfg-readbacks`** — per-zone VPD target readback sensors. Ingestor routing in commit `4cc5df5`.
+- **`firmware/sprint-2-zone-fairness`** — 10-min last-fire watchdog. Counter `mister_fairness_overrides_today`. Ingestor wire-up followed.
 - **`firmware/sprint-1-housekeeping`** — drift fixes + dead-code cleanup + doc sync.
 
 ## Coordination queue (handoffs to other agents)
@@ -36,10 +37,12 @@ Findings from the 2026-04-18 audit that live outside firmware scope. Each is a f
 
 ## Ideas (not yet committed)
 
-- Revisit the 7-mode state machine's midnight transition — historical data showed edge-case behavior near 00:00.
-- Expand replay corpus to include the last 30 days automatically (complement to the fixed 8-month `replay_overrides.csv.gz`).
-- Per-relay cycle-count audit in firmware (complement to ingestor-side counting).
-- Run the 30-day post-sprint-2 follow-up audit (check west on-cycle share climbs from 15% toward 30%).
+- Revisit the 7-mode state machine's midnight transition — historical data showed edge-case behavior near 00:00. **Queued for sprint-6**.
+- Per-relay cycle-count audit in firmware (complement to ingestor-side counting). **Queued for sprint-7**.
+
+## Trigger-dated
+
+- **2026-05-19 — 30-day sprint-2 fairness follow-up audit.** Re-run the 90-day fairness audit query from the sprint-2 commit message (`4471743`). Expect west's on-cycle share to climb from 15% toward 30% of total mister cycles. Prerequisite: `make replay-corpus-refresh` has been run routinely so the corpus extends to that date.
 
 ## Gates / reminders
 

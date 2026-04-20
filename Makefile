@@ -48,6 +48,28 @@ test-replay-overrides: ## Validate evaluate_overrides() against full history + s
 	bash scripts/export-replay-overrides.sh
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp && ./test/replay_overrides test/data/replay_overrides.csv
 
+replay-corpus-refresh: ## Refresh the replay corpus .csv.gz from live DB + validate no regression
+	@bash -c '\
+		set -euo pipefail; \
+		CORPUS=firmware/test/data/replay_overrides.csv.gz; \
+		PREV=firmware/test/data/replay_overrides.prev.csv.gz; \
+		if [ -f "$$CORPUS" ]; then cp "$$CORPUS" "$$PREV"; echo "✓ snapshot existing → $$PREV"; fi; \
+		OUTDIR=firmware/test/data bash scripts/export-replay-overrides.sh 0; \
+		NEW=$$(wc -l < firmware/test/data/replay_overrides.csv); \
+		OLD=0; [ -f "$$PREV" ] && OLD=$$(gunzip -c "$$PREV" | wc -l); \
+		echo "  previous: $$OLD rows   new: $$NEW rows"; \
+		if [ "$$OLD" -gt 0 ] && [ "$$NEW" -lt $$((OLD * 95 / 100)) ]; then \
+			echo "✗ new corpus < 95%% of prior — aborting, restoring previous"; \
+			cp "$$PREV" "$$CORPUS"; \
+			rm -f firmware/test/data/replay_overrides.csv; \
+			exit 1; \
+		fi'
+	@echo "─── Re-running replay gate against refreshed corpus ───"
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp
+	./firmware/test/replay_overrides firmware/test/data/replay_overrides.csv | tail -30
+	@gzip -f firmware/test/data/replay_overrides.csv
+	@echo "✓ refreshed corpus archived at firmware/test/data/replay_overrides.csv.gz"
+
 test-v: ## Run tests with verbose output
 	$(PYTEST) tests/ -v --tb=long
 
@@ -61,8 +83,10 @@ site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatical
 
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
-	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
-	cd /srv/greenhouse/esphome && $(ESPHOME) upload --device 192.168.10.111 greenhouse.yaml
+	@FW_VERSION="$$(date +%Y.%-m.%-d).$$(git rev-parse --short HEAD)"; \
+	echo "─── Deploying fw_version=$$FW_VERSION ───"; \
+	cd /srv/greenhouse/esphome && $(ESPHOME) -s fw_version "$$FW_VERSION" compile greenhouse.yaml && \
+	$(ESPHOME) -s fw_version "$$FW_VERSION" upload --device 192.168.10.111 greenhouse.yaml
 	@echo ""
 	@echo "Waiting 60s for ESP32 reboot + ingestor reconnect + first diagnostics cycle..."
 	@sleep 60
