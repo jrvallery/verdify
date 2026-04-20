@@ -4,10 +4,11 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 ## In flight
 
-- **`firmware/sprint-5-tooling`** — replay corpus auto-refresh + `fw_version` deploy-time bump. New `make replay-corpus-refresh` target snapshots the previous `.csv.gz`, re-runs the export against the live DB, validates row-count didn't drop >5%, and re-runs the replay gate. `make firmware-deploy` now passes `-s fw_version YYYY.M.D.{short-sha}` so `diagnostics.firmware_version` uniquely identifies each commit deployed.
+- **`firmware/sprint-6-midnight-audit`** — docs-only close of the midnight-transition concern from the Ideas list. Full investigation writeup in commit message; conclusion recorded in backlog's Closed section.
 
 ## Recently landed
 
+- **`firmware/sprint-5-tooling`** — `make replay-corpus-refresh` target + deploy-time `fw_version` bump. Corpus refreshed from 4.65 MB/177k rows → 4.79 MB/182k rows covering through today. `diagnostics.firmware_version = 2026.4.19.c2bb9ba` post-deploy validates the per-commit label.
 - **`firmware/sprint-4-leak-debounce`** — `bs_leak_detected` gained a 30 s bleed-down grace period + added `fog_rly` to the valve list. Post-deploy: 0 `leak_detected` transitions in first 5-min watch window (vs baseline 2.3/5min).
 - **`firmware/sprint-3-cfg-readbacks`** — per-zone VPD target readback sensors. Ingestor routing in commit `4cc5df5`.
 - **`firmware/sprint-2-zone-fairness`** — 10-min last-fire watchdog. Counter `mister_fairness_overrides_today`. Ingestor wire-up followed.
@@ -37,8 +38,12 @@ Findings from the 2026-04-18 audit that live outside firmware scope. Each is a f
 
 ## Ideas (not yet committed)
 
-- Revisit the 7-mode state machine's midnight transition — historical data showed edge-case behavior near 00:00. **Queued for sprint-6**.
 - Per-relay cycle-count audit in firmware (complement to ingestor-side counting). **Queued for sprint-7**.
+- **Midday crash-loop investigation.** 91 unexpected reboots in 60 days (Guru/Panic 51 + Task WDT 38), heavily clustered at local hours 11-13 (33 crashes, peaking at hour 12 with 14). Likely heap/stack pressure during peak mister-state-machine activity when VPD is highest. Separate from the sprint-6 midnight investigation, which ruled out midnight-specific issues.
+
+## Closed / resolved
+
+- **Midnight-transition investigation** — _sprint-6, 2026-04-19_ — 60-day telemetry analysis found no evidence of edge-case behavior near 00:00 local. State-transition density, null rate, equipment activity, and crash distribution are all normal at midnight; midday (11-14 local) is where anomalies cluster. Counter-reset code paths reviewed and found correct. Full writeup in sprint-6 commit.
 
 ## Trigger-dated
 
