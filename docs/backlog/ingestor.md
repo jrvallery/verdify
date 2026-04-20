@@ -52,6 +52,8 @@ Closed F1/F2/F3/F4/F6/F7. Hotfix `4a89844` closed surface bugs in topology's `Eq
 
 **Branch:** `ingestor/sprint-25-alert-union`. Target: 2 weeks. Blocked by coordinator schema PR.
 
+**Schema PR spec:** [`docs/proposals/sprint-25-alert-envelope-union.md`](../proposals/sprint-25-alert-envelope-union.md) — full technical spec covering all 15 alert types with typed `*Details` models, drift guards, rollout sequence. Ready for coordinator execution.
+
 Scope reduced from the original plan: `EquipmentStateEvent.equipment: EquipmentId` was delivered by topology Sprint 22 upstream. Sprint 25 now covers the alert union only.
 
 - [ ] **Schema PR (coordinator, blocking)** Split `AlertEnvelope` into discriminated union keyed by `alert_type`. 13 types today: `sensor_offline`, `relay_stuck`, `vpd_stress`, `temp_safety`, `vpd_extreme`, `leak_detected`, `esp32_reboot`, `planner_stale`, `safety_invalid`, `heat_manual_override`, `soil_sensor_offline`, `heat_staging_inversion`, `setpoint_unconfirmed`. Each gets a typed `*Details` subtype with `extra="forbid"`.
