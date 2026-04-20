@@ -89,6 +89,11 @@ class TestPhysicsInvariants:
     def test_physics_invariants_are_canonical(self):
         import pathlib
 
+        # ingestor/tasks.py imports asyncpg; the schema-only CI env doesn't
+        # ship runtime deps, so skip cleanly instead of ModuleNotFoundError.
+        # Local `make test` (which installs ingestor deps) still runs this.
+        pytest.importorskip("asyncpg")
+
         here = pathlib.Path(__file__).resolve()
         repo_root = here.parent.parent.parent
         ingestor_path = str(repo_root / "ingestor")
