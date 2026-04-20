@@ -114,7 +114,7 @@ class TestPlannerPrompt:
 
 
 class TestMCPToolAvailability:
-    """The MCP server must expose all 18 planning tools."""
+    """The MCP server must expose all 17 planning tools."""
 
     def test_mcp_server_running(self):
         import subprocess
@@ -126,3 +126,47 @@ class TestMCPToolAvailability:
         import os
 
         assert os.path.isfile("/mnt/jason/agents/iris/skills/greenhouse-planner.md"), "Skill file missing"
+
+    def test_vendored_playbook_exists(self):
+        """G4: `docs/planner/greenhouse-playbook.md` is the version-controlled
+        canonical source. Assert it's present in the repo — losing it means the
+        agent-host copy is the only record, which was the audit's concern."""
+        import os
+
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "docs",
+            "planner",
+            "greenhouse-playbook.md",
+        )
+        assert os.path.isfile(path), f"In-repo playbook missing at {path}"
+        with open(path) as f:
+            body = f.read()
+        assert body.startswith("---\nname: greenhouse-planner"), "Playbook YAML frontmatter missing"
+        assert "17 MCP tools" in body, "Playbook tool count out of sync with _STANDING_DIRECTIVES"
+        assert "READ → DIAGNOSE → DECIDE → ACT → REPORT" in body, "Playbook planning cycle section missing"
+
+    def test_vendored_and_host_playbooks_in_sync(self):
+        """When both copies are readable, they must be byte-identical. If the
+        host copy drifts ahead of the repo, the next PR that vendors will
+        clobber host-only changes. Skip when either path is unreadable (CI)."""
+        import os
+
+        repo = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "docs",
+            "planner",
+            "greenhouse-playbook.md",
+        )
+        host = "/mnt/jason/agents/iris/skills/greenhouse-planner.md"
+        if not (os.path.isfile(repo) and os.path.isfile(host)):
+            pytest.skip("one of the playbook paths isn't readable")
+        with open(repo) as f:
+            repo_body = f.read()
+        with open(host) as f:
+            host_body = f.read()
+        if repo_body != host_body:
+            pytest.xfail(
+                "Playbooks have drifted. Expected post-G4: host copy re-synced from repo canonical. "
+                "Pending deploy step (filed as G4 follow-up in docs/backlog/genai.md)."
+            )

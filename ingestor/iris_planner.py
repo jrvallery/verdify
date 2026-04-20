@@ -16,6 +16,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from config import OPENCLAW_SESSION_KEY, OPENCLAW_TOKEN, OPENCLAW_URL
@@ -25,17 +26,34 @@ log = logging.getLogger("iris_planner")
 DENVER = ZoneInfo("America/Denver")
 GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
 
+# Iris reads this at runtime from her agent-host filesystem. The canonical
+# version-controlled source is `docs/planner/greenhouse-playbook.md` in the
+# verdify repo; the agent-host path must be kept in sync. A missing playbook
+# means Iris silently loses detailed tuning guidance — so we check at send
+# time and (a) log critical, (b) flag the outgoing prompt so Iris knows to
+# degrade gracefully instead of referencing a file she can't open.
+PLANNER_PLAYBOOK_PATH = Path("/mnt/jason/agents/iris/skills/greenhouse-planner.md")
+if not PLANNER_PLAYBOOK_PATH.exists():  # pragma: no cover — host-path check
+    log.warning(
+        "Planner playbook missing at %s. Iris will not have detailed tuning "
+        "guidance at runtime. Restore from docs/planner/greenhouse-playbook.md.",
+        PLANNER_PLAYBOOK_PATH,
+    )
+
 # ── Standing directives (prepended to every planning prompt) ─────
 
 _STANDING_DIRECTIVES = """
 ## Standing Directives (MANDATORY — read before every action)
 
-1. **Use MCP tools ONLY.** You have 18 tools:
+1. **Use MCP tools ONLY.** You have 17 tools:
    **Monitoring:** `climate`, `scorecard`, `equipment_state`, `forecast`, `history`
    **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `plan_status`, `plan_evaluate`
    **Knowledge:** `lessons`, `lessons_manage`
    **Crops:** `crops`, `observations`
    **Operations:** `alerts`, `query`
+   **Meta:** `plan_run` — operator-triggered ad-hoc planning. You normally do NOT
+     call this; you are already inside a planning cycle when you see this prompt.
+     Only use it if explicitly asked.
    NEVER run psql, docker exec, shell SQL, or any direct database access.
    The `query` tool runs read-only SQL if no dedicated tool exists — use it as escape hatch.
 
@@ -63,6 +81,8 @@ HOW the ESP32 controller responds to conditions. You do not control relays direc
 
 **Full operational playbook:** Read `skills/greenhouse-planner.md` for detailed workflows,
 stress diagnostics, crop management patterns, lesson management, and anti-patterns.
+(Canonical source is `docs/planner/greenhouse-playbook.md` in the verdify repo.
+The skills/ copy is an agent-host mirror kept in sync by deploy.)
 
 **Planning cycle:** READ (scorecard + climate + forecast) → DIAGNOSE (which compliance axis
 is the bottleneck, which stress type dominates) → DECIDE (apply lessons, then forecast) →
@@ -242,6 +262,45 @@ Gas heating is 3.9x cheaper per BTU than electric.
 - Zone VPD null: fall back to avg VPD. Don't hallucinate zone priorities from nulls.
 - Setpoint values = 0 after reboot: corrupt flash. Dispatcher auto-corrects within 5 min.
 - Solar = 0 at night: normal. Not a sensor failure.
+
+### Structured hypothesis (required on SUNRISE plans)
+
+When you call `set_plan()`, the `hypothesis` field should include a fenced
+```json``` block following the `PlanHypothesisStructured` shape. `set_plan()`
+extracts and validates it, stores it in `plan_journal.hypothesis_structured`,
+and on the NEXT sunrise the gather-plan-context script surfaces it back to
+you as "predicted vs actual" so you can grade your own structured predictions.
+
+Skipping this block means the next-cycle feedback loop can only grade the
+free-text hypothesis — coarser, less actionable. Always include it on
+SUNRISE plans. Optional on TRANSITION adjustments.
+
+Minimal valid block (all three sections required):
+```json
+{
+  "conditions": {
+    "outdoor_temp_peak_f": 82.0,
+    "outdoor_rh_min_pct": 12.0,
+    "solar_peak_w_m2": 900,
+    "cloud_cover_avg_pct": 15,
+    "notes": "hot dry spring day, clear skies"
+  },
+  "stress_windows": [
+    {"kind": "vpd_high", "start": "2026-04-19T10:00:00-06:00",
+     "end": "2026-04-19T16:00:00-06:00", "severity": "high",
+     "mitigation": "fog_escalation_kpa 0.25, mister_pulse_gap_s 20"}
+  ],
+  "rationale": [
+    {"parameter": "fog_escalation_kpa", "old_value": 0.4, "new_value": 0.25,
+     "forecast_anchor": "RH < 15% from 10:00-16:00",
+     "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0"}
+  ]
+}
+```
+
+`stress_windows` can be empty on mild days. `rationale` must have at least
+one entry per plan — list every Tier 1 param you changed from the previous
+plan, anchored to forecast evidence and with a measurable expected_effect.
 """
 
 # ── Event prompt templates ────────────────────────────────────────
@@ -514,6 +573,24 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
         return result
 
     message = builder(context, label)
+
+    # If Iris's agent-host playbook is missing, prepend a warning so she
+    # knows detailed tuning guidance isn't available this cycle and flags
+    # it in her Slack brief. The canonical in-repo copy is pointed at so
+    # the operator can restore it. Without this check the degradation is
+    # silent — Iris would reference skills/greenhouse-planner.md in her
+    # reasoning but be unable to open it.
+    if not PLANNER_PLAYBOOK_PATH.exists():
+        log.critical("Sending planning event with missing playbook: %s", PLANNER_PLAYBOOK_PATH)
+        message = (
+            "## ⚠ DEGRADED MODE — Planner playbook missing\n\n"
+            f"`{PLANNER_PLAYBOOK_PATH}` is not readable at this cycle. Do NOT\n"
+            "reference `skills/greenhouse-planner.md` in your reasoning. Operate\n"
+            "from the embedded _PLANNER_KNOWLEDGE block in this prompt only, and\n"
+            "mention the degradation in your Slack brief so Jason can restore it\n"
+            "from `docs/planner/greenhouse-playbook.md` in the verdify repo.\n\n"
+            "---\n\n"
+        ) + message
 
     # SUNRISE/SUNSET/DEVIATION are high-priority — process immediately.
     # FORECAST/TRANSITION can wait for the next heartbeat.

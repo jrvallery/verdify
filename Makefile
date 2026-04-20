@@ -119,6 +119,9 @@ sensor-health: ## Run sensor health sweep (layer 3 of Firmware Change Protocol)
 planner-publish: ## Publish today's plan to verdify.ai
 	bash scripts/publish-daily-plan.sh
 
+planner-dry: ## Dry-run planner prompts — render every event type and assert G2/G4/G7 invariants
+	@$(PYTHON) scripts/planner-dry.py
+
 # ── Stack ───────────────────────────────────────────────────────────
 
 up: ## Start all Docker services
