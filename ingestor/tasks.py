@@ -808,12 +808,80 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
+        # 11. OBS-3 coverage (Sprint 25-omnibus): firmware breaker state.
+        # Sprint 18 added relief_cycle_count + vent_latch_timer_s to
+        # diagnostics but alert_monitor didn't read them, so the planner had
+        # no warning before firmware force-latched VENTILATE. Thresholds
+        # chosen against the firmware default max_relief_cycles=3 (range 1–10
+        # per greenhouse_types.h:171); if the planner raises the cap, these
+        # warn a touch early but don't misfire.
+        obs3_row = await conn.fetchrow(
+            """
+            SELECT relief_cycle_count, vent_latch_timer_s, ts
+              FROM diagnostics
+             WHERE ts >= now() - interval '5 minutes'
+               AND (relief_cycle_count IS NOT NULL OR vent_latch_timer_s IS NOT NULL)
+             ORDER BY ts DESC LIMIT 1
+            """
+        )
+        if obs3_row:
+            relief = obs3_row["relief_cycle_count"]
+            if relief is not None and relief >= 2:
+                # Warning at ceiling-1 (nearing); critical at ceiling (3) or beyond.
+                severity = "critical" if relief >= 3 else "warning"
+                alerts.append(
+                    {
+                        "alert_type": "firmware_relief_ceiling",
+                        "severity": severity,
+                        "category": "equipment",
+                        "sensor_id": "diag.relief_cycle_count",
+                        "zone": None,
+                        "message": (
+                            f"Firmware relief_cycle_count={relief} "
+                            f"({'at/past' if relief >= 3 else 'nearing'} default ceiling=3; "
+                            f"VENTILATE force-latch {'active' if relief >= 3 else 'imminent'})"
+                        ),
+                        "details": {"relief_cycle_count": int(relief), "ceiling_default": 3},
+                        "metric_value": float(relief),
+                        "threshold_value": 3.0,
+                    }
+                )
+            latch = obs3_row["vent_latch_timer_s"]
+            if latch is not None and latch >= 600:
+                # Warning at 10 min latched; critical at 20 min (schema max 1800s).
+                severity = "critical" if latch >= 1200 else "warning"
+                alerts.append(
+                    {
+                        "alert_type": "firmware_vent_latched",
+                        "severity": severity,
+                        "category": "equipment",
+                        "sensor_id": "diag.vent_latch_timer_s",
+                        "zone": None,
+                        "message": (
+                            f"Firmware vent latched for {latch}s "
+                            f"({'critical' if latch >= 1200 else 'prolonged'}; "
+                            f"planner hasn't resolved the stress that triggered it)"
+                        ),
+                        "details": {"vent_latch_timer_s": int(latch)},
+                        "metric_value": float(latch),
+                        "threshold_value": 600.0,
+                    }
+                )
+
         # Reactive trigger marker removed in Sprint 5 P6 — deviation monitor handles replans
 
         # ── Deduplicate + insert + resolve ──
         active_keys = {(a["alert_type"], a["sensor_id"]) for a in alerts}
+        # Sprint 25-omnibus (setpoint_unconfirmed lifecycle fix): only
+        # consider alerts THIS monitor owns (source='system') for auto-resolve.
+        # Alerts inserted by other monitors (setpoint_confirmation_monitor
+        # writes source='ingestor'; iris_planner writes source='iris_planner';
+        # dispatcher writes source='dispatcher') have their own lifecycle
+        # — auto-resolving them here caused setpoint_unconfirmed to flap
+        # open↔resolved every alert_monitor cycle.
         open_rows = await conn.fetch(
-            "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log WHERE disposition = 'open'"
+            "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log "
+            "WHERE disposition = 'open' AND source = 'system'"
         )
         open_keys = {(r["alert_type"], r["sensor_id"]): r for r in open_rows}
 
@@ -2318,8 +2386,43 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
     Severity:
       - warning: 5 min < age < 15 min
       - critical: age >= 15 min (escalation)
+
+    Sprint 25-omnibus (setpoint_unconfirmed lifecycle fix): this monitor
+    now owns the full lifecycle of setpoint_unconfirmed alerts — both
+    creation (below) AND auto-resolution (first pass, next). alert_monitor
+    no longer touches source='ingestor' alerts; without this self-resolve
+    pass, confirmed setpoints would leave zombie open alerts forever.
     """
     async with pool.acquire() as conn:
+        # Pass 1: auto-resolve open alerts whose underlying setpoint_changes
+        # row is now confirmed_at NOT NULL. Matches on sensor_id's `setpoint.*`
+        # suffix back to the parameter name.
+        resolved = await conn.fetch(
+            """
+            UPDATE alert_log al
+               SET disposition = 'resolved',
+                   resolved_at = now(),
+                   resolved_by = 'system',
+                   resolution  = 'auto-resolved: confirmation landed'
+              FROM (
+                  SELECT DISTINCT ON (sc.parameter)
+                         sc.parameter, sc.confirmed_at
+                    FROM setpoint_changes sc
+                   WHERE sc.confirmed_at IS NOT NULL
+                     AND sc.ts > now() - interval '2 hours'
+                   ORDER BY sc.parameter, sc.ts DESC
+              ) confirmed
+             WHERE al.alert_type = 'setpoint_unconfirmed'
+               AND al.disposition = 'open'
+               AND al.source = 'ingestor'
+               AND al.sensor_id = 'setpoint.' || confirmed.parameter
+            RETURNING al.id
+            """,
+        )
+        if resolved:
+            log.info("setpoint_unconfirmed: auto-resolved %d alert(s) after confirmation", len(resolved))
+
+        # Pass 2: scan for still-unconfirmed rows that need alerting.
         rows = await conn.fetch(
             """
             SELECT parameter,
@@ -2403,3 +2506,82 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
             )
 
         log.info("Setpoint confirmation monitor: %d unconfirmed row(s)", len(rows))
+
+
+# ═════════════════════════════════════════════════════════════════
+# 17. MIDNIGHT WATCH (Sprint 24.7 — ops stopgap until contract v1.4 SLA rule)
+#
+# At 00:05 MDT each day, check whether tonight's MIDNIGHT opus trigger
+# fired and produced a plan. Posts ONE Slack message per night with the
+# outcome so operators know without scraping journalctl. Retires once
+# Sprint 25's alert_monitor rule 7 rewrite (per-pair SLA over
+# plan_delivery_log) lands — that's the structural fix; this is the
+# visibility gap-closer until then.
+#
+# Matches both future-canonical (event_type='MIDNIGHT' after Sprint 25
+# splits it out) and today's form (event_type='TRANSITION' with
+# event_label containing "Midnight").
+# ═════════════════════════════════════════════════════════════════
+
+_midnight_watch_last_date: str = ""
+
+
+async def midnight_watch(pool: asyncpg.Pool) -> None:
+    """Daily 00:05 MDT check that the midnight opus trigger ran.
+
+    Three Slack outcomes (per iris-dev's ops-stopgap spec):
+      - resulting_plan_id populated  → ✅ "Iris wrote plan X"
+      - row exists, plan NULL        → ⚠️ "delivered but no plan yet" (+ 2h-cover note)
+      - no row in the 30-min window  → 🔴 "trigger was not delivered" (escalation)
+    """
+    global _midnight_watch_last_date
+    now_mt = datetime.now(ZoneInfo("America/Denver"))
+
+    # Fire only in the 00:05-00:10 MDT window; dedupe by date so a ~60s
+    # task_loop that sees the window 5 times only posts once.
+    if now_mt.hour != 0 or not (5 <= now_mt.minute < 10):
+        return
+    today_str = str(now_mt.date())
+    if _midnight_watch_last_date == today_str:
+        return
+
+    async with pool.acquire() as conn:
+        # Match both v1.4 MIDNIGHT event_type and today's TRANSITION:midnight_posture label.
+        row = await conn.fetchrow(
+            """
+            SELECT event_type, event_label, delivered_at, resulting_plan_id
+              FROM plan_delivery_log
+             WHERE (event_type = 'MIDNIGHT'
+                    OR (event_type = 'TRANSITION' AND event_label ILIKE '%midnight%'))
+               AND delivered_at > now() - interval '30 minutes'
+             ORDER BY delivered_at DESC
+             LIMIT 1
+            """,
+        )
+
+        if row is None:
+            msg = "\U0001f534 *Midnight watch:* trigger was not delivered in the last 30 min (escalation)"
+        elif row["resulting_plan_id"]:
+            msg = (
+                f"\u2705 *Midnight watch:* Iris wrote plan `{row['resulting_plan_id']}` "
+                f"(trigger `{row['event_type']}/{row['event_label'] or ''}` at {row['delivered_at']:%H:%M UTC})"
+            )
+        else:
+            # Delivered but no plan — note if an earlier plan within 2h covers the window.
+            recent_plan = await conn.fetchval(
+                "SELECT plan_id FROM plan_journal WHERE created_at > now() - interval '2 hours' "
+                "ORDER BY created_at DESC LIMIT 1"
+            )
+            covers = f" (prior plan `{recent_plan}` within 2h may cover)" if recent_plan else ""
+            msg = (
+                f"\U0001f7e1 *Midnight watch:* trigger delivered at {row['delivered_at']:%H:%M UTC} "
+                f"but no plan yet{covers}"
+            )
+
+    _midnight_watch_last_date = today_str
+    try:
+        token = _load_token(SLACK_TOKEN_FILE)
+        _post_slack(token, SLACK_CHANNEL, msg)
+        log.info("midnight_watch: %s", msg)
+    except Exception as e:
+        log.error("midnight_watch Slack post failed: %s", e)

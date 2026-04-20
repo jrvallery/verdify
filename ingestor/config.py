@@ -49,7 +49,16 @@ GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/jason/agents/s
 # ── OpenClaw (Iris planner gateway) ──────────────────────────────
 OPENCLAW_URL = os.environ.get("OPENCLAW_URL", "http://127.0.0.1:18789")
 OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "iris-hooks-verdify-2026-04")
-OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", "agent:iris-planner:main")
+
+# Sprint 25 dual-Iris (contract v1.4 §2.G): per-instance agent/session routing.
+# Legacy OPENCLAW_SESSION_KEY kept for one cycle — Sprint 26 removes it.
+OPENCLAW_OPUS_AGENT_ID = os.environ.get("OPENCLAW_OPUS_AGENT_ID", "iris-planner")
+OPENCLAW_OPUS_SESSION_KEY = os.environ.get("OPENCLAW_OPUS_SESSION_KEY", "agent:iris-planner:main")
+OPENCLAW_LOCAL_AGENT_ID = os.environ.get("OPENCLAW_LOCAL_AGENT_ID", "iris-planner-local")
+OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent:iris-planner-local:main")
+# DEPRECATED in Sprint 25 — remove in Sprint 26. Reads the opus session key
+# as a fallback when new code calls legacy send_to_iris paths.
+OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_OPUS_SESSION_KEY)
 
 # ── Greenhouse ────────────────────────────────────────────────────
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")

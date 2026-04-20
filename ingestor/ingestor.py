@@ -66,6 +66,7 @@ from tasks import (
     grow_light_daily,
     ha_sensor_sync,
     matview_refresh,
+    midnight_watch,
     planning_heartbeat,
     setpoint_confirmation_monitor,
     setpoint_dispatcher,
@@ -1086,6 +1087,10 @@ async def task_loop(pool: asyncpg.Pool) -> None:
         ("daily_summary_live", 1800, daily_summary_live),
         ("grow_light_daily", 86400, grow_light_daily),
         ("planning_heartbeat", 60, planning_heartbeat),
+        # 60s poll; guards on time-of-day (only fires in 00:05-00:10 MDT window,
+        # dedup by date). Sprint 24.7 ops stopgap — retires when Sprint 25
+        # alert_monitor rule 7 rewrite ships.
+        ("midnight_watch", 60, midnight_watch),
     ]
     last_run: dict[str, float] = {name: 0.0 for name, _, _ in TASKS}
 
