@@ -2122,7 +2122,15 @@ def _compute_milestones() -> dict[str, datetime]:
     today = datetime.now(_DENVER).date()
     s = _sun(_LOCATION.observer, date=today, tzinfo=_DENVER)
     noon = s["noon"]
-    midnight = datetime.combine(today + _td(days=1), datetime.min.time(), tzinfo=_DENVER)
+    # Sprint 24.8 hotfix: midnight must be TODAY's 00:00, not tomorrow's.
+    # The old `today + _td(days=1)` form set the milestone to tomorrow's
+    # midnight, but the cache-per-day pattern rebuilds at date rollover
+    # — the exact moment the milestone would fire. Result: midnight_posture
+    # was perpetually 24h in the future and never dispatched. Today's 00:00
+    # is in the past by the time we observe it, but the firing window is
+    # `0 ≤ delta < 7200` so the task_loop's first tick past 00:00 MDT
+    # catches it via the normal window [0, 300s).
+    midnight = datetime.combine(today, datetime.min.time(), tzinfo=_DENVER)
 
     _milestones_cache = {
         "SUNRISE": s["sunrise"],
