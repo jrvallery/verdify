@@ -504,10 +504,13 @@ interval:
                 id(south_wall_mister).turn_off();
                 id(west_wall_mister).turn_off();
                 id(center_mister).turn_off();
-                // Stamp last-fire ms for the fairness watchdog (sprint-2).
-                if(zone == 1)      { id(south_wall_mister).turn_on(); id(last_fire_south_ms)  = now_ms; }
-                else if(zone == 2) { id(west_wall_mister).turn_on();  id(last_fire_west_ms)   = now_ms; }
-                else if(zone == 3) { id(center_mister).turn_on();     id(last_fire_center_ms) = now_ms; }
+                // sprint-2: last-fire ms for fairness watchdog.
+                // sprint-7: per-zone cycle counters at the rising edge
+                //          (turn_on_zone is always preceded by all-off,
+                //          so every call is an off→on transition).
+                if(zone == 1)      { id(south_wall_mister).turn_on(); id(last_fire_south_ms)  = now_ms; id(cnt_mister_south_today)  += 1; }
+                else if(zone == 2) { id(west_wall_mister).turn_on();  id(last_fire_west_ms)   = now_ms; id(cnt_mister_west_today)   += 1; }
+                else if(zone == 3) { id(center_mister).turn_on();     id(last_fire_center_ms) = now_ms; id(cnt_mister_center_today) += 1; }
                 id(mister_pulse_zone) = zone;
                 id(mister_selected_zone) = zone;
               };
@@ -1083,12 +1086,15 @@ interval:
               // Open fert master if fert run
               if(is_fert) id(fertilizer_master_valve).turn_on();
 
-              // Turn on drip line
+              // Turn on drip line. sprint-7: count one cycle per dispatch —
+              // matches equipment_state's rising-edge count for the
+              // underlying relay. Fert/clean increment the same zone
+              // counter (audit granularity is per-zone).
               switch(job){
-                case 1: id(wall_drips).turn_on(); break;
-                case 2: id(wall_drips_fertilized).turn_on(); break;
-                case 3: id(center_drips).turn_on(); break;
-                case 4: id(center_drips_fertilized).turn_on(); break;
+                case 1: id(wall_drips).turn_on();              id(cnt_drip_wall_today)   += 1; break;
+                case 2: id(wall_drips_fertilized).turn_on();   id(cnt_drip_wall_today)   += 1; break;
+                case 3: id(center_drips).turn_on();            id(cnt_drip_center_today) += 1; break;
+                case 4: id(center_drips_fertilized).turn_on(); id(cnt_drip_center_today) += 1; break;
               }
 
               const char* names[] = {"","WALL_CLEAN","WALL_FERT","CENTER_CLEAN","CENTER_FERT"};
@@ -1120,8 +1126,12 @@ interval:
                 flush_origin = job;
                 id(irrig_state) = is_wall ? 5 : 6;
                 id(irrig_timer_ms) = uint32_t(flush_min) * 60000UL;
-                if(is_wall) id(wall_drips).turn_on();
-                else        id(center_drips).turn_on();
+                // sprint-7: flush is a separate rising edge on wall_drips /
+                // center_drips (the non-fert relay) — ingestor's
+                // equipment_state sees it as a new cycle, so firmware
+                // must count it to stay consistent.
+                if(is_wall) { id(wall_drips).turn_on();   id(cnt_drip_wall_today)   += 1; }
+                else        { id(center_drips).turn_on(); id(cnt_drip_center_today) += 1; }
                 ESP_LOGI("irrig","FLUSH %s — %dmin", is_wall ? "WALL" : "CENTER", flush_min);
               } else {
                 // Done — finalize

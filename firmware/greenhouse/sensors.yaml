@@ -831,6 +831,60 @@ sensor:
     update_interval: 30s
     lambda: "return id(cnt_vent_today);"
 
+  # Sprint-7: per-zone mister + drip cycle counters. Increments at rising
+  # edge of the underlying relay (see turn_on_zone in controls.yaml for
+  # misters; irrigation dispatch in controls.yaml section 14b for drips).
+  # Reset at local midnight via greenhouse.yaml on_time handler.
+  - platform: template
+    id: daily_mister_south_cycles
+    name: "Cycles • Mister South (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_mister_south_today);"
+
+  - platform: template
+    id: daily_mister_west_cycles
+    name: "Cycles • Mister West (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_mister_west_today);"
+
+  - platform: template
+    id: daily_mister_center_cycles
+    name: "Cycles • Mister Center (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_mister_center_today);"
+
+  - platform: template
+    id: daily_drip_wall_cycles
+    name: "Cycles • Drip Wall (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_drip_wall_today);"
+
+  - platform: template
+    id: daily_drip_center_cycles
+    name: "Cycles • Drip Center (today)"
+    entity_category: diagnostic
+    state_class: total
+    unit_of_measurement: "cycles"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: "return id(cnt_drip_center_today);"
+
   # --------------------------------------------------------------------------
   # 5. RUNTIME METRICS (DIAGNOSTIC)
   # These sensors expose the accumulated runtime of each relay (minutes since

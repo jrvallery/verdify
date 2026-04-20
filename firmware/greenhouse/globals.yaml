@@ -240,6 +240,32 @@ globals:
     restore_value: no
     initial_value: '0'
 
+  # Sprint-7: per-zone mister + drip cycle counters. Incremented at rising
+  # edge in turn_on_zone() and the irrigation dispatch. Closes the audit
+  # gap where fan/heat/fog/vent had cycle counters but irrigation relays
+  # only had runtime. The ingestor-side comparison view pairs these with
+  # equipment_state-derived counts to detect firmware/db drift.
+  - id: cnt_mister_south_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_mister_west_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_mister_center_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_drip_wall_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_drip_center_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+
   # ─── Runtime metrics (ms since midnight) ───
   # These values accumulate the total on‑time for each relay in milliseconds.
   # They are reset to 0 at local midnight and updated each control loop.

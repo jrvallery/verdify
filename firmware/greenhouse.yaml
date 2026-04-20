@@ -261,6 +261,12 @@ time:
               id(runtime_mister_west_ms) = 0;
               id(runtime_mister_center_ms) = 0;
               id(cnt_mister_fairness_overrides_today) = 0;
+              /* sprint-7 per-zone cycle counters */
+              id(cnt_mister_south_today)  = 0;
+              id(cnt_mister_west_today)   = 0;
+              id(cnt_mister_center_today) = 0;
+              id(cnt_drip_wall_today)     = 0;
+              id(cnt_drip_center_today)   = 0;
           - logger.log: "Daily cycle counters reset (midnight)"
 
 # ───────────────────── BINARY SENSORS ─────────────────────
