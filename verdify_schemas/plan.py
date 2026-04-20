@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -208,12 +209,23 @@ class PlanJournalRow(BaseModel):
     validated_at: AwareDatetime | None = None
     hypothesis_structured: PlanHypothesisStructured | None = None
     greenhouse_id: str = "vallery"
+    # v1.4 audit columns (migration 093). Populated by MCP server from
+    # X-Planner-Instance + X-Trigger-Id headers; NULL on pre-v1.4 rows.
+    planner_instance: str | None = None
+    trigger_id: UUID | None = None
 
 
-# ── Planner delivery audit (Sprint 24.6 — F14) ──────────────────────
+# ── Planner delivery audit (Sprint 24.6 — F14, extended v1.4 in mig 093) ──
 
 
-PlanDeliveryEventType = Literal["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION"]
+PlanDeliveryEventType = Literal[
+    "SUNRISE", "SUNSET", "MIDNIGHT", "TRANSITION", "FORECAST", "DEVIATION", "HEARTBEAT", "MANUAL"
+]
+# v1.4 (contract §2.G): opus | local are the post-rollout instance values.
+# "iris-planner" is the backfill label for pre-v1.4 rows.
+PlannerInstance = Literal["opus", "local", "iris-planner"]
+# v1.4 (contract §2.F): lifecycle state on plan_delivery_log.
+PlanDeliveryStatus = Literal["pending", "acked", "plan_written", "timed_out", "delivery_failed"]
 
 
 class PlanDeliveryLogRow(BaseModel):
@@ -239,3 +251,10 @@ class PlanDeliveryLogRow(BaseModel):
     resulting_plan_id: str | None = None
     plan_written_at: AwareDatetime | None = None
     greenhouse_id: str = "vallery"
+    # v1.4 audit columns (migration 093). Populated by ingestor on INSERT
+    # and by MCP acknowledge_trigger; backfill sets instance='iris-planner'
+    # and derives status from resulting_plan_id / gateway_status / delivered_at.
+    trigger_id: UUID | None = None
+    instance: PlannerInstance | None = None
+    acked_at: AwareDatetime | None = None
+    status: PlanDeliveryStatus | None = None
