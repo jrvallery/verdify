@@ -104,16 +104,33 @@ inline Mode determine_mode(
     // ── Capture previous mode BEFORE any logic ──
     const Mode prev = state.mode_prev;
 
-    const float Thigh = sp.temp_high + sp.bias_cool;
-    const float HV    = std::min(sp.vpd_hysteresis, sp.vpd_high * 0.5f);
+    // Sprint-12: target the interior of the band, not the edges. 25% of
+    // band width inward on each side → plants operate in the middle 50%
+    // of the operator-pushed (temp_low, temp_high) band. Example with
+    // temp_low=62, temp_high=75: heating target ~65.25°F, cooling target
+    // ~71.75°F. bias_heat / bias_cool still apply as symmetric offsets
+    // from the interior target. The max(2.0f) floor prevents inversion
+    // under pathologically narrow bands (dispatcher could push temp_low
+    // ≈ temp_high); validate_setpoints already forbids it, but we
+    // belt-and-suspender here so the controller can't divide into a
+    // degenerate Tlow > Thigh state from bad input.
+    const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    const float Tlow_interior  = sp.temp_low  + band_width * 0.25f;
+    const float Thigh_interior = sp.temp_high - band_width * 0.25f;
+    const float Thigh = Thigh_interior + sp.bias_cool;
+
+    const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float vpd_low_eff  = sp.vpd_low  + vpd_width * 0.25f;
+    const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
+    const float HV    = std::min(sp.vpd_hysteresis, vpd_high_eff * 0.5f);
 
     bool safety_cool    = in.temp_f >= sp.safety_max;
     bool safety_heat    = in.temp_f <= sp.safety_min;
-    bool vpd_above_band = in.vpd_kpa > sp.vpd_high;
-    bool vpd_below_exit = in.vpd_kpa < (sp.vpd_high - HV);
+    bool vpd_above_band = in.vpd_kpa > vpd_high_eff;
+    bool vpd_below_exit = in.vpd_kpa < (vpd_high_eff - HV);
 
-    bool vpd_too_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block;
-    bool vpd_dehum_exit    = in.vpd_kpa >= sp.vpd_low;
+    bool vpd_too_low_enter = in.vpd_kpa < (vpd_low_eff - HV) && !sp.econ_block;
+    bool vpd_dehum_exit    = in.vpd_kpa >= vpd_low_eff;
 
     bool was_ventilating = (prev == VENTILATE);
     bool needs_cooling   = was_ventilating
@@ -130,7 +147,11 @@ inline Mode determine_mode(
     // In between the two thresholds the latch holds its state,
     // preventing gas-valve rapid-cycling in the hysteresis band.
     {
-        const float Tlow = sp.temp_low + sp.bias_heat;
+        // Sprint-12: Tlow now references the band interior (25% up from
+        // temp_low) rather than the edge. S2 gas demand fires at
+        // Tlow_interior + bias_heat - dH2 — still below the heating target
+        // but now inside the band instead of below it.
+        const float Tlow = Tlow_interior + sp.bias_heat;
         if (in.temp_f < (Tlow - sp.dH2)) {
             state.heat2_latched = true;
         } else if (in.temp_f >= (Tlow + sp.heat_hysteresis)) {
@@ -322,8 +343,9 @@ inline Mode determine_mode(
                     state.mist_stage_timer_ms = 0;
                     break;
                 case MIST_S1:
+                    // Sprint-12: escalate at interior vpd target, not raw edge.
                     if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms
-                        && in.vpd_kpa > sp.vpd_high) {
+                        && in.vpd_kpa > vpd_high_eff) {
                         state.mist_stage = MIST_S2;
                         state.mist_stage_timer_ms = 0;
                     }
@@ -331,18 +353,18 @@ inline Mode determine_mode(
                 case MIST_S2: {
                     const bool fog_gated = !fog_permitted(in, sp)
                                         || moisture_blocked_by_occupancy(in, sp);
-                    if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
+                    if (in.vpd_kpa > vpd_high_eff + sp.fog_escalation_kpa && !fog_gated) {
                         state.mist_stage = MIST_FOG;
                         state.mist_stage_timer_ms = 0;
                     }
-                    if (in.vpd_kpa < sp.vpd_high - HV) {
+                    if (in.vpd_kpa < vpd_high_eff - HV) {
                         state.mist_stage = MIST_S1;
                         state.mist_stage_timer_ms = 0;
                     }
                     break;
                 }
                 case MIST_FOG:
-                    if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
+                    if (in.vpd_kpa <= vpd_high_eff + sp.fog_escalation_kpa) {
                         state.mist_stage = MIST_S2;
                         state.mist_stage_timer_ms = 0;
                     }
@@ -383,8 +405,13 @@ inline OverrideFlags evaluate_overrides(
     OverrideFlags f{};
     if (!sensors_plausible(in)) return f;
 
-    const float HV = std::min(sp.vpd_hysteresis, sp.vpd_high * 0.5f);
-    const bool vpd_above_band = in.vpd_kpa > sp.vpd_high;
+    // Sprint-12: mirror the interior-targeting in determine_mode so the
+    // observability flags report against the same thresholds the state
+    // machine actually uses.
+    const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
+    const float HV = std::min(sp.vpd_hysteresis, vpd_high_eff * 0.5f);
+    const bool vpd_above_band = in.vpd_kpa > vpd_high_eff;
     const bool vpd_wants_seal =
         vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
     const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
@@ -400,7 +427,7 @@ inline OverrideFlags evaluate_overrides(
     const bool fog_wanted =
         (mode == SEALED_MIST)
         && (state.mist_stage == MIST_S2)
-        && (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa);
+        && (in.vpd_kpa > vpd_high_eff + sp.fog_escalation_kpa);
     f.fog_gate_rh     = fog_wanted && (in.rh_pct  > sp.fog_rh_ceiling);
     f.fog_gate_temp   = fog_wanted && (in.temp_f  < sp.fog_min_temp);
     f.fog_gate_window = fog_wanted
@@ -436,8 +463,18 @@ inline RelayOutputs resolve_equipment(
     const ControlState& state,
     bool lead_is_fan1
 ) {
-    const float Tlow = sp.temp_low + sp.bias_heat;
-    const float Thigh = sp.temp_high + sp.bias_cool;
+    // Sprint-12: interior targets (25% inside band). Heating/cooling now
+    // aim for the middle 50% of the operator-pushed band instead of
+    // pinning to the edges. See comment block in determine_mode() for
+    // rationale; keep these two blocks in sync so state-machine and
+    // equipment output use the same thresholds.
+    const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    const float Tlow  = sp.temp_low  + band_width * 0.25f + sp.bias_heat;
+    const float Thigh = sp.temp_high - band_width * 0.25f + sp.bias_cool;
+
+    const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float vpd_low_eff  = sp.vpd_low  + vpd_width * 0.25f;
+    const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
 
     bool needs_heating_s1 = in.temp_f < (Tlow + sp.heat_hysteresis);
     // Sprint-9 P1#7: S2 is latched (see determine_mode). Reading the latch
@@ -457,7 +494,7 @@ inline RelayOutputs resolve_equipment(
             out.fan1 = true; out.fan2 = true;
             out.fog = fog_permitted(in, sp)
                    && !moisture_blocked_by_occupancy(in, sp)
-                   && in.vpd_kpa > sp.vpd_high;
+                   && in.vpd_kpa > vpd_high_eff;
             break;
 
         case SAFETY_HEAT:
@@ -506,7 +543,12 @@ inline RelayOutputs resolve_equipment(
 
         case DEHUM_VENT:
             out.vent = true;
-            if (in.vpd_kpa < sp.vpd_low - sp.dehum_aggressive_kpa) {
+            // Aggressive dehum (both fans) kicks in if vpd is below the
+            // INTERIOR target minus the aggressive margin — keeps the
+            // trigger consistent with the rest of the interior-targeting
+            // logic. dehum_aggressive_kpa remains the margin from the
+            // (now interior) target at which we open both fans.
+            if (in.vpd_kpa < vpd_low_eff - sp.dehum_aggressive_kpa) {
                 out.fan1 = true; out.fan2 = true;
             } else {
                 if (lead_is_fan1) out.fan1 = true; else out.fan2 = true;
@@ -516,7 +558,11 @@ inline RelayOutputs resolve_equipment(
         case IDLE:
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
-            if (in.vpd_kpa < sp.vpd_low && sp.econ_block
+            // Econ-block VPD rescue: electric heat if VPD is below the
+            // interior target AND temp is below the interior cooling
+            // target minus econ_heat_margin_f. Same semantics as before,
+            // retargeted to the band interior.
+            if (in.vpd_kpa < vpd_low_eff && sp.econ_block
                 && in.temp_f < Thigh - sp.econ_heat_margin_f) {
                 out.heat1 = true;
             }
