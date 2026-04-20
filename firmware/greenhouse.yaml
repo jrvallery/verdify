@@ -411,13 +411,29 @@ binary_sensor:
     name: "Leak Detected"
     device_class: problem
     lambda: |-
-      float flow = id(water_flow_rate).state;
-      if(isnan(flow) || flow < 0.1) return false;
+      // Sprint-4: debounce against pipe bleed-down between mister pulses.
+      // Historical false-positive rate: 5-41 events/hour during mister-active
+      // windows. Residual flow after valve-close can linger above 0.1 gpm
+      // for 5-15s through the 25-45s pulse gap; the pre-sprint-4 lambda
+      // fired leak_detected during that window. A real leak persists
+      // indefinitely, so a 30s bleed-down grace period is safe.
+      //
+      // Also includes fog_rly in the valve list — the fog generator uses
+      // water and was previously missing, causing a separate false-positive
+      // class whenever fog fired without a mister in parallel.
+      static uint32_t last_valve_on_ms = 0;
+      uint32_t now_ms = millis();
       bool any_valve = id(wall_drips).state || id(center_drips).state
                     || id(south_wall_mister).state || id(west_wall_mister).state
                     || id(center_mister).state || id(wall_drips_fertilized).state
-                    || id(south_wall_mister_fertilized).state || id(west_wall_mister_fertilized).state;
-      return !any_valve;
+                    || id(south_wall_mister_fertilized).state || id(west_wall_mister_fertilized).state
+                    || id(fog_rly).state;
+      if(any_valve) last_valve_on_ms = now_ms;
+      float flow = id(water_flow_rate).state;
+      if(isnan(flow) || flow < 0.1) return false;
+      if(any_valve) return false;
+      if(now_ms - last_valve_on_ms < 30000) return false;  // 30 s bleed-down grace
+      return true;
 
 # ───────────────────── DASHBOARD BUTTONS ─────────────────────
 button:

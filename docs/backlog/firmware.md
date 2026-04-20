@@ -4,24 +4,26 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 ## In flight
 
-- **`firmware/sprint-3-cfg-readbacks`** — per-zone VPD target readback sensors. Adds `cfg_vpd_target_{south,west,east,center}`, `cfg_mister_center_penalty`, `cfg_east_adjacency_factor` template sensors so the ingestor's alert_monitor can confirm firmware applied the setpoints. Silences 5 recurring `setpoint_unconfirmed` alerts per planner cycle. No control-logic change.
+- **`firmware/sprint-4-leak-debounce`** — `bs_leak_detected` gains a 30 s bleed-down grace period + adds `fog_rly` to the valve list. Eliminates the ~5-41/hr false-positive `leak_detected` alerts that fire during mister pulse gaps when residual pipe pressure keeps flow above 0.1 gpm for several seconds after valve close. Real leaks (persist indefinitely) still fire after the 30 s grace.
 
 ## Recently landed
 
-- **`firmware/sprint-2-zone-fairness`** — 10-min last-fire watchdog for mister zone rotation. Added `mister_fairness_overrides_today` counter. 90-day audit mechanism + fix rationale in commit `4471743`.
+- **`firmware/sprint-3-cfg-readbacks`** — per-zone VPD target readback sensors. `cfg_vpd_target_{south,west,east,center}`, `cfg_mister_center_penalty`, `cfg_east_adjacency_factor`. Silenced the recurring `setpoint_unconfirmed` alerts at the source; ingestor routing in commit `4cc5df5`.
+- **`firmware/sprint-2-zone-fairness`** — 10-min last-fire watchdog for mister zone rotation. Counter `mister_fairness_overrides_today`. Ingestor wire-up followed in their sprint-24-alignment.
 - **`firmware/sprint-1-housekeeping`** — drift fixes + dead-code cleanup + doc sync.
 
 ## Coordination queue (handoffs to other agents)
 
 Findings from the 2026-04-18 audit that live outside firmware scope. Each is a focused handoff PR filed into the owning agent's scope, labeled `requested-by: firmware`:
 
-- [x] **Coordinator — EquipmentId schema reconciliation.** ✅ Landed as ingestor sprint-24 hotfix (commit `4a89844`): EquipmentId widening + fallback_window_s + test regression.
+- [x] **Coordinator — EquipmentId schema reconciliation.** ✅ Landed as ingestor sprint-24 hotfix (commit `4a89844`).
+- [x] **Ingestor — route `mister_fairness_overrides_today`.** ✅ Landed as ingestor sprint-24-alignment; `daily_summary.mister_fairness_overrides_today` column exists.
+- [x] **Ingestor — F10: `mister_state` / `mister_zone` STATE_MAP mismatch.** ✅ Landed as ingestor sprint-24-alignment; sensor_health is now 100% (0 stale).
 - [ ] **Coordinator — override flag enum guard.** Add a drift guard that compares `OverrideEvent.override_type` against the 7 flag names in `firmware/lib/greenhouse_types.h` (`OverrideFlags` struct). Today the schema accepts any string; a silent rename would corrupt `override_events`.
 - [ ] **Coordinator + genai — `sw_mister_closes_vent` routing.** Firmware handles the key in `controls.yaml`, but it's not in `verdify_schemas/tunables.py` ALL_TUNABLES or `entity_map.py` SETPOINT_MAP. Decide: add to schema or drop the firmware handler.
 - [ ] **Ingestor — alert monitor coverage for OBS-3.** `scripts/alert-monitor.py` does not watch `diagnostics.relief_cycle_count > 0` (breaker latched) or `diagnostics.vent_latch_timer_s > 1200` (vent stuck in latched VENTILATE). Add both, plus firmware version staleness vs. an expected pin.
 - [ ] **Ingestor — override events smoke test.** Add `test_override_events_written` to `tests/test_05_ingestor.py` to verify `gh_overrides` diff → `override_events` write.
-- [ ] **Ingestor — route `mister_fairness_overrides_today`.** New firmware sensor (sprint-2) not yet in `entity_map.py`. Without routing, the 7-day watch window is blind.
-- [ ] **Ingestor — F10: `mister_state` / `mister_zone` STATE_MAP mismatch.** Firmware emits these as numeric template sensors but `STATE_MAP` expects text sensors → 27-day stale in `v_sensor_staleness`. Pre-existing.
+- [ ] **Ingestor — `setpoint_unconfirmed` lifecycle fix.** alert_monitor tracks specific (param, value, push_ts) tuples; stale alerts persist indefinitely when a later push supersedes an older one before readback can confirm the older value. Net effect: 20+ critical alerts per 5 hours of active dispatch. Should resolve by latest-readback-for-parameter rather than require exact-push-match.
 - [ ] **Ingestor — F12 triage: `v_stress_hours_today` semantics.** "32 h cold_stress/day" suggests zone-summing not clock-summing. Doc fix or view fix.
 - [ ] **Genai — MCP `set_tunable()` validator.** Today MCP can push any key; if it's not in the firmware handler's accept list, it silently no-ops. Add a pre-push validation.
 - [ ] **Saas — real-time setpoint push.** `controls.yaml` references an aioesphomeapi push path that doesn't exist. Either implement or drop the comment.
