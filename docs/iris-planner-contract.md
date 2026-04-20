@@ -1,6 +1,8 @@
 # Iris Planner Contract v1 (DRAFT)
 
-**Status:** v1.3 by iris-dev (acting coordinator), 2026-04-19. Ratified by Jason. Landed at `docs/iris-planner-contract.md`. **Blocker before Phase 3 implementation starts:** FastMCP header-passthrough smoke test (see §5 Q5). If headers are swallowed by the transport, §2.C carrier must change before genai MCP work begins. Smoke-test owner: **Iris (opus)** — she has MCP access and can test the transport in-situ in one short cycle.
+**Status:** v1.4 by iris-dev (acting coordinator), 2026-04-19. Ratified by Jason. Landed at `docs/iris-planner-contract.md`. **Blocker before Phase 3 implementation starts:** FastMCP header-passthrough smoke test (see §5 Q5). If headers are swallowed by the transport, §2.C carrier must change before genai MCP work begins. Smoke-test owner: **Iris (opus)** — she has MCP access and can test the transport in-situ in one short cycle.
+
+**v1.4 change log (2026-04-19):** reconciled §2.D with pre-existing `plan_delivery_log` table from ingestor Sprint 24.6 F14 (migration 092). Contract no longer proposes a parallel `plan_delivery_log` — the existing table is **extended** with the contract-required columns (`trigger_id`, `instance`, `acked_at`, `status`). Column names in §2.D / §2.F use the existing migration's names (`delivered_at`, `event_type`, `resulting_plan_id`) rather than the v1.3 synonyms.
 **Applies to:** any Iris instance (`iris-planner` cloud Opus, `iris-planner-local` vLLM gemma, future peers), every trigger type (SUNRISE, SUNSET, TRANSITION, FORECAST, DEVIATION, MANUAL), and every agent that touches the planning path.
 
 ## 0. Why this exists
@@ -69,7 +71,7 @@ alert_monitor.planner_stale_rule()     (ingestor)
 - `404` = agentId not resolvable. ingestor alerts Slack.
 - `5xx` = gateway fault. Retry once, then alert.
 
-**Invariant:** every trigger gets a unique `X-Trigger-Id` logged to `ingestor.log` AND (next sprint) to a small `planner_trigger_log` table so ingestor can join triggers against downstream plan rows.
+**Invariant:** every trigger gets a unique `X-Trigger-Id` logged to `ingestor.log` AND (next sprint) to a small `plan_delivery_log` table so ingestor can join triggers against downstream plan rows.
 
 ### B. OpenClaw gateway → Iris agent session
 
@@ -102,9 +104,40 @@ alert_monitor.planner_stale_rule()     (ingestor)
 
 **Owner:** genai (MCP code) + coordinator (schema).
 
-**New schema columns + trigger log table (coordinator migration):**
+**Schema: extend existing `plan_delivery_log` (from migration 092 / sprint 24.6) + add instance/trigger columns to plan tables (coordinator migration).**
+
+`plan_delivery_log` is the established audit table, populated today by `ingestor/tasks.py::planning_heartbeat` immediately after `send_to_iris` returns. It already has `delivered_at`, `event_type`, `event_label`, `session_key`, `wake_mode`, `gateway_status`, `gateway_body`, `resulting_plan_id`, `plan_written_at`, `greenhouse_id`. The v1.4 contract extends it rather than creating a parallel `plan_delivery_log` (v1.3 spec'd one before I'd read migration 092 — my miss; web agent flagged the overlap 2026-04-19).
+
 ```sql
--- Instance + trigger correlation on existing tables
+BEGIN;
+
+-- Extend plan_delivery_log with contract-required columns
+ALTER TABLE plan_delivery_log ADD COLUMN IF NOT EXISTS trigger_id UUID UNIQUE;
+ALTER TABLE plan_delivery_log ADD COLUMN IF NOT EXISTS instance   TEXT;
+ALTER TABLE plan_delivery_log ADD COLUMN IF NOT EXISTS acked_at   TIMESTAMPTZ;
+ALTER TABLE plan_delivery_log ADD COLUMN IF NOT EXISTS status     TEXT DEFAULT 'pending';
+
+-- Status domain constraint
+ALTER TABLE plan_delivery_log DROP CONSTRAINT IF EXISTS plan_delivery_log_status_check;
+ALTER TABLE plan_delivery_log ADD CONSTRAINT plan_delivery_log_status_check
+    CHECK (status IN ('pending','acked','plan_written','timed_out','delivery_failed'));
+
+CREATE INDEX IF NOT EXISTS plan_delivery_log_trigger_id_idx ON plan_delivery_log(trigger_id);
+CREATE INDEX IF NOT EXISTS plan_delivery_log_status_idx     ON plan_delivery_log(status, delivered_at);
+
+-- Backfill existing rows with derived status + 'iris-planner' instance label
+UPDATE plan_delivery_log SET
+    instance = 'iris-planner',
+    status = CASE
+        WHEN resulting_plan_id IS NOT NULL                             THEN 'plan_written'
+        WHEN gateway_status IS NOT NULL
+             AND gateway_status NOT BETWEEN 200 AND 299                THEN 'delivery_failed'
+        WHEN delivered_at < now() - interval '2 hours'                 THEN 'timed_out'
+        ELSE 'pending'
+    END
+WHERE instance IS NULL;
+
+-- Instance + trigger correlation on plan tables (unchanged from v1.3)
 ALTER TABLE plan_journal       ADD COLUMN IF NOT EXISTS planner_instance TEXT;
 ALTER TABLE plan_journal       ADD COLUMN IF NOT EXISTS trigger_id       UUID;
 ALTER TABLE setpoint_changes   ADD COLUMN IF NOT EXISTS planner_instance TEXT;
@@ -112,25 +145,29 @@ ALTER TABLE setpoint_changes   ADD COLUMN IF NOT EXISTS trigger_id       UUID;
 CREATE INDEX IF NOT EXISTS idx_plan_journal_trigger_id ON plan_journal(trigger_id);
 CREATE INDEX IF NOT EXISTS idx_plan_journal_instance   ON plan_journal(planner_instance);
 
--- New trigger log (persistent, survives restarts; ~5 rows/day)
-CREATE TABLE IF NOT EXISTS planner_trigger_log (
-  trigger_id   UUID PRIMARY KEY,
-  instance     TEXT        NOT NULL,                  -- 'opus' | 'local'
-  trigger_type TEXT        NOT NULL,                  -- SUNRISE | SUNSET | TRANSITION | FORECAST | DEVIATION | MANUAL
-  sent_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  acked_at     TIMESTAMPTZ,                           -- set by acknowledge_trigger()
-  plan_id      TEXT,                                  -- set when a plan_journal row w/ matching trigger_id is observed
-  status       TEXT NOT NULL DEFAULT 'pending'        -- pending | acked | plan_written | timed_out
-);
-CREATE INDEX IF NOT EXISTS idx_trigger_log_status ON planner_trigger_log(status, sent_at);
-CREATE INDEX IF NOT EXISTS idx_trigger_log_sent_at ON planner_trigger_log(sent_at DESC);
-
--- Backfill
 UPDATE plan_journal     SET planner_instance = 'iris-planner' WHERE planner_instance IS NULL;
 UPDATE setpoint_changes SET planner_instance = 'iris-planner' WHERE planner_instance IS NULL AND source = 'iris';
+
+COMMIT;
 ```
 
-**Rationale for table over in-memory (from genai review):** ingestor restarts lose in-flight state and alert spuriously on already-acknowledged triggers (see G16 incident). Retrospective-join pattern already proven in G10 / G7 §15c. 5 rows/day × 7 cols is noise-level storage. Debuggability: `journalctl` is ephemeral; a table persists a rolling window.
+**Column-name reference (for consumers):**
+
+| concept                                      | column on `plan_delivery_log`          |
+|---|---|
+| trigger correlation id                       | `trigger_id` (new)                     |
+| planner instance (opus/local)                | `instance` (new)                       |
+| lifecycle state                              | `status` (new)                         |
+| when the ack was recorded                    | `acked_at` (new)                       |
+| when OpenClaw 200-OK'd the POST              | `delivered_at` (existing)              |
+| trigger type (SUNRISE/TRANSITION/...)        | `event_type` (existing)                |
+| human label ("Tree Shade")                   | `event_label` (existing)               |
+| plan row that this trigger produced          | `resulting_plan_id` (existing)         |
+| when that plan was written                   | `plan_written_at` (existing)           |
+| gateway response code / body                 | `gateway_status`, `gateway_body`       |
+| greenhouse tenant                            | `greenhouse_id` (existing; multi-tenant)|
+
+**Rationale for extension over parallel table:** the existing table has live production data since sprint 24.6, rich delivery metadata already being written, multi-tenant support, and an ingestor write path that's proven. Creating a parallel table would fragment the concept and require duplicated inserts. Extension gains trigger-id + instance + ack + status — the contract's actual needs — without churn.
 
 **Invariant:** every MCP write stamps both columns from the request context. Missing header → `planner_instance = 'unknown'`, `trigger_id = NULL`, plus a WARNING in `mcp.log`.
 
@@ -145,11 +182,11 @@ Unchanged — already working. Dispatcher reads `setpoint_plan`, pushes to ESP32
 **Owner:** ingestor (`alert_monitor.planner_stale_rule`).
 
 **Rule upgrade (from current rule 7):**
-- On every trigger send, ingestor records `(trigger_id, instance, trigger_type, sent_at, …)` in the `planner_trigger_log` table (see §2.D for schema).
+- Ingestor's existing `planning_heartbeat` write path (sprint 24.6) inserts one row per `send_to_iris` call into `plan_delivery_log`. Post-v1.4, that same INSERT also populates the new `trigger_id`, `instance`, and `status='pending'` columns.
 - Rule fires a Slack alert if ANY of:
-  - `sent_at + SLA(trigger_type, instance)` passes with no matching `plan_journal.trigger_id` AND no corresponding `acknowledge_trigger` call.
-  - `plan_journal.planner_instance` doesn't match the requested instance (wrong Iris wrote the plan).
-  - Gateway returns 401/403/404/5xx.
+  - `delivered_at + SLA(event_type, instance)` passes with a row still at `status='pending'` (no matching `plan_journal.trigger_id` observed AND no corresponding `acknowledge_trigger` call). On alert, the rule flips the row to `status='timed_out'` so it's not re-alerted.
+  - A `plan_journal` row is written where `planner_instance` doesn't match the trigger's requested `instance` (wrong-peer write).
+  - `gateway_status NOT BETWEEN 200 AND 299` → surface immediately with `status='delivery_failed'`, no SLA wait.
 
 **SLA table (2-dim — per trigger type × per instance).** Opus SUNRISE cycles run 8–12 min today; local gemma with ~60k prompt will be slower, so a flat threshold false-alarms on local. v1 starts with a 2× multiplier on `local`, tunable after a week of data:
 
@@ -243,7 +280,7 @@ This matches the operator principle: Opus is reserved for decisions that actuall
 
 Q1 (acknowledge_trigger tool). **Resolved: yes for v1.** Core shape as specified. Future refinement (`next_check_after` / `max_consecutive_acks` to prevent silent drift during extended quiet periods) → follow-up, not blocking.
 
-Q2 (Trigger log storage). **Resolved: table, not in-memory.** See §2.D `planner_trigger_log`. Reasoning: survives ingestor restarts, matches G10/G7 §15c retrospective-join pattern, ~5 rows/day is noise, debuggability beats ephemeral logs.
+Q2 (Trigger log storage). **Resolved: table, not in-memory.** See §2.D `plan_delivery_log`. Reasoning: survives ingestor restarts, matches G10/G7 §15c retrospective-join pattern, ~5 rows/day is noise, debuggability beats ephemeral logs.
 
 Q3 (SLAs). **Resolved: per-trigger × per-instance.** See §2.F table. v1 starts with 2× `local` multiplier, tune after one week of data.
 
