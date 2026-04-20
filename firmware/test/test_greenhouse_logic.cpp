@@ -35,7 +35,10 @@ static SensorInputs make_inputs(float temp, float vpd, float rh = 60.0f) {
              .dew_point_f = temp - 10.0f, .outdoor_rh_pct = 30.0f,
              .enthalpy_delta = -5.0f,
              .vpd_south = vpd, .vpd_west = vpd, .vpd_east = vpd,
-             .local_hour = 12, .occupied = false };
+             .local_hour = 12, .occupied = false,
+             // Sprint-10 0.3: default to photoperiod=true since local_hour=12
+             // is midday; night tests construct inputs explicitly.
+             .is_photoperiod = true };
 }
 
 // Helper: run resolve_equipment with state
@@ -995,6 +998,208 @@ TEST(s9_validate_preserves_valid_input) {
     ASSERT_EQ(sp.safety_min, before.safety_min);
     ASSERT_EQ(sp.fog_window_start, before.fog_window_start);
     ASSERT_EQ(sp.fog_window_end, before.fog_window_end);
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-10 — THERMAL_RELIEF both fans + vpd_min_safe SEALED exit +
+// tunable magic numbers + day/night setpoint pairs
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s10_thermal_relief_runs_both_fans) {
+    auto sp = default_setpoints();
+    auto s = initial_state();
+    auto out_lead1 = resolve_equipment(THERMAL_RELIEF, make_inputs(80.0f, 1.5f), sp, s, /*lead=*/true);
+    ASSERT_TRUE(out_lead1.vent);
+    ASSERT_TRUE(out_lead1.fan1);
+    ASSERT_TRUE(out_lead1.fan2);  // sprint-10: no longer lead-only
+    auto out_lead2 = resolve_equipment(THERMAL_RELIEF, make_inputs(80.0f, 1.5f), sp, s, /*lead=*/false);
+    ASSERT_TRUE(out_lead2.vent);
+    ASSERT_TRUE(out_lead2.fan1);
+    ASSERT_TRUE(out_lead2.fan2);
+    PASS();
+}
+
+TEST(s10_vpd_min_safe_breaks_sealed_mist_with_cleanup) {
+    // Pre-sprint-10: vpd_min_safe only overrode mode==IDLE. A sticky
+    // SEALED_MIST could drive VPD below vpd_min_safe with no exit.
+    auto sp = default_setpoints();
+    sp.econ_block = false;
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.sealed_timer_ms = 200000;
+    s.vpd_watch_timer_ms = 60000;
+    s.mist_stage_timer_ms = 30000;
+    // VPD dangerously low while sealed
+    auto in = make_inputs(72.0f, sp.vpd_min_safe - 0.05f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, DEHUM_VENT);
+    // Seal-state cleanup: matches the was_sealed exit path.
+    ASSERT_EQ(s.sealed_timer_ms, 0u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, 0u);
+    ASSERT_EQ(s.mist_stage, MIST_WATCH);
+    ASSERT_EQ(s.mist_stage_timer_ms, 0u);
+    PASS();
+}
+
+TEST(s10_vpd_min_safe_override_respects_econ_block) {
+    // With econ_block=true, the vpd_min_safe override does not force
+    // DEHUM_VENT. Trace: the was_sealed branch exits SEALED_MIST to
+    // IDLE because vpd_below_exit is trivially true at vpd_min_safe,
+    // then the override sees mode=IDLE + econ_block=true and stays
+    // in IDLE rather than flipping to DEHUM_VENT. Net: with econ
+    // blocking the greenhouse lets the humidity sit — the P3#15
+    // policy item still applies, this test just documents the
+    // current econ-vs-safe precedence.
+    auto sp = default_setpoints();
+    sp.econ_block = true;
+    auto s = initial_state();
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_S1;
+    s.sealed_timer_ms = 100000;
+    s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, sp.vpd_min_safe - 0.05f);
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, IDLE);  // was_sealed exited; econ_block prevents DEHUM_VENT
+    PASS();
+}
+
+TEST(s10_vent_latch_timeout_is_tunable) {
+    // Verify the ex-magic-number behaves as a Setpoints field.
+    auto sp = default_setpoints();
+    sp.vent_latch_timeout_ms = 120000;  // shorten to 2 min for test
+    sp.max_relief_cycles = 3;
+    auto s = initial_state();
+    s.relief_cycle_count = 3;
+    s.vpd_watch_timer_ms = 60000;
+    auto in = make_inputs(72.0f, 1.5f);
+    // Accumulate enough to trip the timeout
+    determine_mode(in, sp, s, 60000);
+    determine_mode(in, sp, s, 60000);
+    Mode m = determine_mode(in, sp, s, 5000);
+    // After ≥120 s of VENTILATE-latch, cycle count should reset.
+    ASSERT_EQ(s.relief_cycle_count, 0u);
+    ASSERT_EQ(s.vent_latch_timer_ms, 0u);
+    PASS();
+}
+
+TEST(s10_econ_heat_margin_is_tunable) {
+    auto sp = default_setpoints();
+    sp.econ_block = true;
+    sp.econ_heat_margin_f = 2.0f;  // tighter than the 5.0 default
+    sp.temp_high = 80.0f;
+    auto s = initial_state();
+    // Temp at 79 (within old 5°F margin but outside new 2°F margin)
+    // Old behavior: heat1 on. New: heat1 off.
+    auto in = make_inputs(79.0f, 0.2f);
+    auto out = resolve_equipment(IDLE, in, sp, s, true);
+    ASSERT_FALSE(out.heat1);
+    // Temp at 77 — still inside the tightened 2°F margin (80-2=78), so
+    // the condition `temp_f < Thigh - margin` = 77 < 78 = true → heat
+    in = make_inputs(77.0f, 0.2f);
+    out = resolve_equipment(IDLE, in, sp, s, true);
+    ASSERT_TRUE(out.heat1);
+    PASS();
+}
+
+TEST(s10_day_night_uses_day_values_when_photoperiod_true) {
+    auto sp = default_setpoints();
+    sp.temp_high_day = 78.0f;
+    sp.temp_high_night = 68.0f;
+    sp.vpd_high_day = 1.2f;
+    sp.vpd_high_night = 0.9f;
+    auto s = initial_state();
+    auto in = make_inputs(75.0f, 1.0f);
+    in.is_photoperiod = true;
+    Mode m = determine_mode(in, sp, s, 5000);
+    // At 75°F with day temp_high=78: not cooling. VPD 1.0 < day high 1.2 → in band.
+    ASSERT_EQ(m, IDLE);
+    // Now 76°F with VPD 1.3 (above day high 1.2) — seal dwell accumulates.
+    in = make_inputs(76.0f, 1.3f);
+    in.is_photoperiod = true;
+    determine_mode(in, sp, s, 60000);
+    ASSERT_TRUE(s.vpd_watch_timer_ms > 0u);
+    PASS();
+}
+
+TEST(s10_day_night_uses_night_values_when_photoperiod_false) {
+    auto sp = default_setpoints();
+    sp.temp_high_day = 78.0f;
+    sp.temp_high_night = 68.0f;
+    sp.vpd_high_day = 1.2f;
+    sp.vpd_high_night = 0.9f;
+    auto s = initial_state();
+    // At 72°F (above night high 68): should trigger cooling even though
+    // 72 is comfortably below the day high.
+    auto in = make_inputs(72.0f, 0.8f);
+    in.is_photoperiod = false;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);  // 72 > 68 + bias_cool=0 → cooling
+    PASS();
+}
+
+TEST(s10_day_night_falls_back_to_legacy_when_unset) {
+    // resolve_active_band falls back to sp.temp_high etc. if the day/night
+    // field is 0 (unset). Exercise by zeroing the day fields and relying on
+    // legacy temp_high.
+    auto sp = default_setpoints();
+    sp.temp_high = 82.0f;
+    sp.temp_high_day = 0.0f;   // force fallback
+    sp.temp_high_night = 0.0f;
+    auto in = make_inputs(84.0f, 0.9f);
+    auto s = initial_state();
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);  // uses legacy temp_high=82, 84 > 82
+    PASS();
+}
+
+TEST(s10_photoperiod_swap_activates_different_thresholds) {
+    // Same sensor inputs, swap the flag — behavior changes.
+    auto sp = default_setpoints();
+    sp.temp_high_day = 80.0f;
+    sp.temp_high_night = 68.0f;
+    auto in = make_inputs(72.0f, 0.9f);  // between the two highs
+
+    auto s_day = initial_state();
+    in.is_photoperiod = true;
+    Mode m_day = determine_mode(in, sp, s_day, 5000);
+    ASSERT_EQ(m_day, IDLE);  // 72 < day high 80
+
+    auto s_night = initial_state();
+    in.is_photoperiod = false;
+    Mode m_night = determine_mode(in, sp, s_night, 5000);
+    ASSERT_EQ(m_night, VENTILATE);  // 72 > night high 68
+    PASS();
+}
+
+TEST(s10_validate_backfills_day_night_from_legacy) {
+    Setpoints sp = default_setpoints();
+    sp.temp_high = 85.0f;
+    sp.temp_high_day = 0.0f;
+    sp.temp_high_night = 0.0f;
+    sp.vpd_high = 1.4f;
+    sp.vpd_high_day = 0.0f;
+    sp.vpd_high_night = 0.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.temp_high_day, 85.0f);
+    ASSERT_EQ(sp.temp_high_night, 85.0f);
+    ASSERT_EQ(sp.vpd_high_day, 1.4f);
+    ASSERT_EQ(sp.vpd_high_night, 1.4f);
+    PASS();
+}
+
+TEST(s10_validate_enforces_day_night_pair_ordering) {
+    Setpoints sp = default_setpoints();
+    // Inverted within the day pair
+    sp.temp_high_day = 70.0f;
+    sp.temp_low_day = 75.0f;
+    // Inverted within the night pair
+    sp.vpd_high_night = 0.5f;
+    sp.vpd_low_night = 0.8f;
+    validate_setpoints(sp);
+    ASSERT_TRUE(sp.temp_low_day < sp.temp_high_day);
+    ASSERT_TRUE(sp.vpd_low_night < sp.vpd_high_night);
     PASS();
 }
 

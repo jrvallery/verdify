@@ -100,6 +100,118 @@ number:
           id(hyst_vpd_kpa) = x;
           id(num_hyst_vpd).publish_state(x);
 
+  # --- Sprint-10 0.3: day/night setpoint pairs (°F + kPa) -------------
+  - platform: template
+    id: num_temp_low_day
+    name: "Set Temp Low Day °F"
+    min_value: 40
+    max_value: 85
+    step: 0.5
+    lambda: "return id(target_temp_low_day_f);"
+    set_action:
+      - lambda: |
+          id(target_temp_low_day_f) = x;
+          id(num_temp_low_day).publish_state(x);
+  - platform: template
+    id: num_temp_high_day
+    name: "Set Temp High Day °F"
+    min_value: 60
+    max_value: 100
+    step: 0.5
+    lambda: "return id(target_temp_high_day_f);"
+    set_action:
+      - lambda: |
+          id(target_temp_high_day_f) = x;
+          id(num_temp_high_day).publish_state(x);
+  - platform: template
+    id: num_temp_low_night
+    name: "Set Temp Low Night °F"
+    min_value: 35
+    max_value: 80
+    step: 0.5
+    lambda: "return id(target_temp_low_night_f);"
+    set_action:
+      - lambda: |
+          id(target_temp_low_night_f) = x;
+          id(num_temp_low_night).publish_state(x);
+  - platform: template
+    id: num_temp_high_night
+    name: "Set Temp High Night °F"
+    min_value: 50
+    max_value: 95
+    step: 0.5
+    lambda: "return id(target_temp_high_night_f);"
+    set_action:
+      - lambda: |
+          id(target_temp_high_night_f) = x;
+          id(num_temp_high_night).publish_state(x);
+  - platform: template
+    id: num_vpd_low_day
+    name: "Set VPD Low Day kPa"
+    min_value: 0.30
+    max_value: 1.50
+    step: 0.05
+    lambda: "return id(target_vpd_low_day_kpa);"
+    set_action:
+      - lambda: |
+          id(target_vpd_low_day_kpa) = x;
+          id(num_vpd_low_day).publish_state(x);
+  - platform: template
+    id: num_vpd_high_day
+    name: "Set VPD High Day kPa"
+    min_value: 0.60
+    max_value: 2.50
+    step: 0.05
+    lambda: "return id(target_vpd_high_day_kpa);"
+    set_action:
+      - lambda: |
+          id(target_vpd_high_day_kpa) = x;
+          id(num_vpd_high_day).publish_state(x);
+  - platform: template
+    id: num_vpd_low_night
+    name: "Set VPD Low Night kPa"
+    min_value: 0.20
+    max_value: 1.20
+    step: 0.05
+    lambda: "return id(target_vpd_low_night_kpa);"
+    set_action:
+      - lambda: |
+          id(target_vpd_low_night_kpa) = x;
+          id(num_vpd_low_night).publish_state(x);
+  - platform: template
+    id: num_vpd_high_night
+    name: "Set VPD High Night kPa"
+    min_value: 0.50
+    max_value: 2.00
+    step: 0.05
+    lambda: "return id(target_vpd_high_night_kpa);"
+    set_action:
+      - lambda: |
+          id(target_vpd_high_night_kpa) = x;
+          id(num_vpd_high_night).publish_state(x);
+  - platform: template
+    id: num_photoperiod_start
+    name: "Photoperiod Start Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(photoperiod_start_hour);"
+    set_action:
+      - lambda: |
+          id(photoperiod_start_hour) = (int)x;
+          id(num_photoperiod_start).publish_state((int)x);
+  - platform: template
+    id: num_photoperiod_end
+    name: "Photoperiod End Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(photoperiod_end_hour);"
+    set_action:
+      - lambda: |
+          id(photoperiod_end_hour) = (int)x;
+          id(num_photoperiod_end).publish_state((int)x);
+
   # --- Relay min on/off timing (seconds) ------------------------------
   - platform: template
     id: num_min_heat_on

@@ -48,6 +48,12 @@ struct SensorInputs {
     float vpd_east;
     int   local_hour;       // 0-23, from SNTP
     bool  occupied;         // greenhouse occupancy (from Sentinel)
+    // Sprint-10 0.3: photoperiod flag for day/night setpoint selection.
+    // Populated by controls.yaml as (in scheduled daylight window) OR
+    // (tempest_lux >> ambient threshold) — hybrid so a cloudy winter day
+    // still registers as "day" inside the window and a 2 AM LED test
+    // doesn't flip it on outside the window.
+    bool  is_photoperiod;
 };
 
 // ── Setpoints (band + planner tunables + firmware config) ──
@@ -80,10 +86,28 @@ struct Setpoints {
     float dehum_aggressive_kpa;
     bool  occupancy_inhibit;
     bool  econ_block;
+    // Sprint-10 0.4b: magic numbers extracted from greenhouse_logic.h.
+    // Defaults in default_setpoints() match the pre-sprint-10 constants.
+    uint32_t vent_latch_timeout_ms;    // was hardcoded 1800000 (30 min)
+    float    safety_max_seal_margin_f; // was hardcoded 5.0 (two places)
+    float    econ_heat_margin_f;       // was ECON_HEAT_MARGIN_F const
+    // Sprint-10 0.3: day/night setpoint pairs. Legacy temp_high/temp_low/
+    // vpd_high/vpd_low above remain as fallbacks (used when day/night are
+    // unset, or when validate_setpoints has not been invoked — typical in
+    // unit-test paths that construct Setpoints from default_setpoints and
+    // modify only the generic fields). Production flow: the planner /
+    // dispatcher pushes day/night-specific values every planner cycle.
+    float temp_high_day,  temp_high_night;
+    float temp_low_day,   temp_low_night;
+    float vpd_high_day,   vpd_high_night;
+    float vpd_low_day,    vpd_low_night;
 };
 
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
-static constexpr float ECON_HEAT_MARGIN_F = 5.0f;
+// Sprint-10 0.4b: ECON_HEAT_MARGIN_F moved into Setpoints as
+// econ_heat_margin_f (keeping the old constant removed intentionally to
+// prevent accidental re-use). Same for the former `1800000` vent-latch
+// timeout and the `5.0f` safety_max seal margin.
 
 // ── Persistent control state ──
 struct ControlState {
@@ -154,7 +178,22 @@ inline Setpoints default_setpoints() {
         .fog_escalation_kpa = 0.4f, .fog_rh_ceiling = 90.0f,
         .fog_min_temp = 55.0f, .fog_window_start = 7, .fog_window_end = 17,
         .dehum_aggressive_kpa = 0.6f,
-        .occupancy_inhibit = false, .econ_block = false
+        .occupancy_inhibit = false, .econ_block = false,
+        // Sprint-10 0.4b: magic number defaults match pre-sprint-10 constants.
+        .vent_latch_timeout_ms = 1800000u,  // 30 min
+        .safety_max_seal_margin_f = 5.0f,
+        .econ_heat_margin_f = 5.0f,
+        // Sprint-10 0.3: day/night pairs default to 0 (unset). The band
+        // resolver (resolve_active_band) falls back to the legacy generic
+        // values in that case, so existing test paths that construct
+        // Setpoints via default_setpoints() + modify only temp_high/etc.
+        // continue to exercise the same thresholds. Production callers
+        // invoke validate_setpoints() which back-fills the day/night
+        // pairs from the legacy values explicitly.
+        .temp_high_day = 0.0f,  .temp_high_night = 0.0f,
+        .temp_low_day  = 0.0f,  .temp_low_night  = 0.0f,
+        .vpd_high_day  = 0.0f,  .vpd_high_night  = 0.0f,
+        .vpd_low_day   = 0.0f,  .vpd_low_night   = 0.0f
     };
 }
 
@@ -230,6 +269,30 @@ inline void validate_setpoints(Setpoints& sp) {
     // "dehum_aggressive" engage threshold (vpd_low - dehum_aggressive_kpa)
     // is positive.
     sp.dehum_aggressive_kpa = std::max(0.05f, std::min(sp.vpd_low - 0.05f, sp.dehum_aggressive_kpa));
+
+    // --- sprint-10 0.4b: magic-number clamps ---
+    sp.vent_latch_timeout_ms = std::max(uint32_t(60000),
+                                        std::min(uint32_t(7200000), sp.vent_latch_timeout_ms));
+    sp.safety_max_seal_margin_f = std::max(1.0f, std::min(15.0f, sp.safety_max_seal_margin_f));
+    sp.econ_heat_margin_f       = std::max(1.0f, std::min(15.0f, sp.econ_heat_margin_f));
+
+    // --- sprint-10 0.3: back-fill day/night from legacy, then enforce
+    // relational ordering within each pair. Back-fill only when the
+    // day/night field is unset (== 0) — an explicit push of 0 for a
+    // day/night setpoint is invalid input and we treat it as "not set."
+    if (sp.temp_high_day   <= 0.0f) sp.temp_high_day   = sp.temp_high;
+    if (sp.temp_high_night <= 0.0f) sp.temp_high_night = sp.temp_high;
+    if (sp.temp_low_day    <= 0.0f) sp.temp_low_day    = sp.temp_low;
+    if (sp.temp_low_night  <= 0.0f) sp.temp_low_night  = sp.temp_low;
+    if (sp.vpd_high_day    <= 0.0f) sp.vpd_high_day    = sp.vpd_high;
+    if (sp.vpd_high_night  <= 0.0f) sp.vpd_high_night  = sp.vpd_high;
+    if (sp.vpd_low_day     <= 0.0f) sp.vpd_low_day     = sp.vpd_low;
+    if (sp.vpd_low_night   <= 0.0f) sp.vpd_low_night   = sp.vpd_low;
+    // Pair ordering: low < high within each photoperiod.
+    if (sp.temp_low_day    >= sp.temp_high_day)   sp.temp_low_day    = sp.temp_high_day   - 5.0f;
+    if (sp.temp_low_night  >= sp.temp_high_night) sp.temp_low_night  = sp.temp_high_night - 5.0f;
+    if (sp.vpd_low_day     >= sp.vpd_high_day)    sp.vpd_low_day     = sp.vpd_high_day    - 0.1f;
+    if (sp.vpd_low_night   >= sp.vpd_high_night)  sp.vpd_low_night   = sp.vpd_high_night  - 0.1f;
 }
 
 inline ControlState initial_state() {
@@ -243,4 +306,29 @@ inline ControlState initial_state() {
         .dry_override_active = false,
         .heat2_latched = false
     };
+}
+
+// ── Sprint-10 0.3: active band resolver ───────────────────────────
+// Picks day or night setpoints based on in.is_photoperiod. Falls back
+// to the legacy sp.{temp_high,temp_low,vpd_high,vpd_low} if the
+// day/night fields are unset (zero) — this preserves existing test
+// behavior that constructs Setpoints from default_setpoints() and
+// modifies only the generic fields. In production these are always
+// populated (validate_setpoints back-fills if needed).
+struct ActiveBand {
+    float temp_high, temp_low;
+    float vpd_high, vpd_low;
+};
+
+inline ActiveBand resolve_active_band(const SensorInputs& in, const Setpoints& sp) noexcept {
+    auto pick = [](float day, float night, float fallback, bool is_day) {
+        float v = is_day ? day : night;
+        return (v > 0.0f) ? v : fallback;
+    };
+    ActiveBand a;
+    a.temp_high = pick(sp.temp_high_day, sp.temp_high_night, sp.temp_high, in.is_photoperiod);
+    a.temp_low  = pick(sp.temp_low_day,  sp.temp_low_night,  sp.temp_low,  in.is_photoperiod);
+    a.vpd_high  = pick(sp.vpd_high_day,  sp.vpd_high_night,  sp.vpd_high,  in.is_photoperiod);
+    a.vpd_low   = pick(sp.vpd_low_day,   sp.vpd_low_night,   sp.vpd_low,   in.is_photoperiod);
+    return a;
 }
