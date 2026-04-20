@@ -85,9 +85,19 @@ class TestSplitInvariants:
         """G7: structured hypothesis guidance must reach both instances."""
         assert "Structured hypothesis" in iris_planner._PLANNER_CORE
 
-    def test_core_contains_tier1_table(self, iris_planner):
-        """Both instances must know the 24 Tier 1 tunables they can tune."""
-        assert "24 Tier 1 Tunables" in iris_planner._PLANNER_CORE
+    def test_core_contains_full_tunable_dictionary(self, iris_planner):
+        """Both instances must know every param they can push. Sprint-4 expanded
+        the dictionary from 24 Tier 1 to all 86 ALL_TUNABLES per
+        docs/tunable-cascade.md."""
+        from verdify_schemas.tunables import ALL_TUNABLES
+
+        assert "Tunable Dictionary (all 86" in iris_planner._PLANNER_CORE, (
+            "dictionary header missing — Tier 1 section was renamed in sprint-4"
+        )
+        # Every tunable name must appear as a literal token in CORE so Iris can
+        # look it up when reasoning. Drift guard against future schema additions.
+        missing = sorted(t for t in ALL_TUNABLES if t not in iris_planner._PLANNER_CORE)
+        assert not missing, f"CORE dictionary missing {len(missing)} tunables: {missing[:10]}"
 
     def test_core_contains_decision_precedence(self, iris_planner):
         assert "Decision Precedence" in iris_planner._PLANNER_CORE
@@ -99,9 +109,9 @@ class TestSplitInvariants:
     def test_extended_contains_controller_modes(self, iris_planner):
         assert "Controller Modes" in iris_planner._PLANNER_EXTENDED
 
-    def test_extended_does_not_duplicate_tier1_table(self, iris_planner):
-        """Tier 1 table must appear exactly once (in CORE) — no duplication."""
-        assert "24 Tier 1 Tunables" not in iris_planner._PLANNER_EXTENDED
+    def test_extended_does_not_duplicate_dictionary(self, iris_planner):
+        """Dictionary header must appear exactly once (in CORE) — no duplication."""
+        assert "Tunable Dictionary" not in iris_planner._PLANNER_EXTENDED
 
     def test_legacy_knowledge_alias_unchanged(self, iris_planner):
         """_PLANNER_KNOWLEDGE is the legacy concatenation; any consumer still

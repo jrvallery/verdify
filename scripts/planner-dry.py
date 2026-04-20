@@ -44,14 +44,25 @@ LOCAL_PREAMBLE_MAX_CHARS = 52_000 * 4
 assert "17 tools" in p._STANDING_DIRECTIVES, "tool-count guard (G2): '17 tools' missing"
 assert p.PLANNER_PLAYBOOK_PATH.exists(), f"playbook missing at {p.PLANNER_PLAYBOOK_PATH}"
 
-# Sprint-3 split: CORE must have the hypothesis format AND the Tier 1 table.
-# EXTENDED must have the long-form reference AND not duplicate the Tier 1 table.
+# Sprint-3 split + Sprint-4 dictionary expansion: CORE must have the hypothesis
+# format AND the full 86-tunable dictionary. EXTENDED must have the long-form
+# reference AND not duplicate the dictionary.
 assert "Structured hypothesis" in p._PLANNER_CORE, (
     "structured-hypothesis guidance (G7) missing from _PLANNER_CORE — must ship to both instances"
 )
-assert "24 Tier 1 Tunables" in p._PLANNER_CORE, "Tier 1 tunables table must live in CORE"
+assert "Tunable Dictionary (all 86" in p._PLANNER_CORE, (
+    "Tunable Dictionary header missing from _PLANNER_CORE — sprint-4 expanded Tier 1 → all 86"
+)
+# Drift guard: every tunable name in ALL_TUNABLES must appear literally in CORE.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from verdify_schemas.tunables import ALL_TUNABLES  # noqa: E402
+
+_missing_tunables = sorted(t for t in ALL_TUNABLES if t not in p._PLANNER_CORE)
+assert not _missing_tunables, f"CORE dictionary missing {len(_missing_tunables)} ALL_TUNABLES: {_missing_tunables[:10]}"
 assert "Validated Lessons" in p._PLANNER_EXTENDED, "full lessons list belongs in EXTENDED"
-assert "24 Tier 1 Tunables" not in p._PLANNER_EXTENDED, "Tier 1 table should not be duplicated in EXTENDED"
+assert "Tunable Dictionary" not in p._PLANNER_EXTENDED, (
+    "Dictionary should not be duplicated in EXTENDED — CORE is the single source"
+)
 
 # Preamble sanity for both instances.
 opus_preamble = p._compose_preamble("opus")
