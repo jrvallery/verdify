@@ -17,11 +17,19 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from config import OPENCLAW_SESSION_KEY, OPENCLAW_TOKEN, OPENCLAW_URL
 
 log = logging.getLogger("iris_planner")
+
+# Planner peer instances. Added in sprint-3 for dual-Iris routing per
+# docs/iris-planner-contract.md v1.3. "opus" = cloud Claude Opus session
+# (full knowledge). "local" = on-host vLLM gemma session (trimmed lite
+# variant ≤60k gemma tokens). Callers pass instance explicitly; no
+# implicit failover per contract §2.G.
+PlannerInstance = Literal["opus", "local"]
 
 DENVER = ZoneInfo("America/Denver")
 GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
@@ -71,9 +79,30 @@ _STANDING_DIRECTIVES = """
    The dispatcher pushes changes to the ESP32 within 5 minutes.
 """
 
-# ── Planner knowledge (shared across all event types) ────────────
+# ── Planner knowledge — split for dual-Iris routing (sprint-3, G6) ──
+#
+# Two layers. Both are static per planner-session → opus-cacheable. The
+# order matters for Anthropic prompt-caching (stable prefix first, drop-in
+# addendum after). Local instance sends only _STANDING_DIRECTIVES + CORE;
+# opus sends directives + CORE + EXTENDED.
+#
+#   _PLANNER_CORE      — must-send for both opus and local. Decision
+#                        precedence, KPIs, the 24 Tier 1 tunables table,
+#                        stress-type definitions, data quality rules, and
+#                        the structured-hypothesis format (G7). Without
+#                        these, neither instance can plan safely.
+#
+#   _PLANNER_EXTENDED  — opus-only reference material. Stress interpretation
+#                        long-form, controller modes, mist stages, vent
+#                        oscillation pattern, condensation safety, physical
+#                        reference, utility rates, full validated lessons.
+#                        Gemma-local gets the tables; it looks up the prose
+#                        in docs/planner/greenhouse-playbook.md if it needs
+#                        detail beyond the Tier 1 reference.
+#
+# Contract: docs/iris-planner-contract.md §2.B, §2.G.
 
-_PLANNER_KNOWLEDGE = """
+_PLANNER_CORE = """
 ## Greenhouse Planner Knowledge
 
 You are the greenhouse supervisory planner. You adjust Tier 1 tunables that shape
@@ -134,6 +163,101 @@ Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to foc
 - `vpd_high_stress`: VPD > vpd_high — misting too conservative or vent open during dry air
 - `vpd_low_stress`: VPD < vpd_low — over-humidification or fog overshoot
 
+### 24 Tier 1 Tunables (your controls)
+
+**VPD response + misting:**
+| Parameter | Unit | Range | Default | What it does |
+|-----------|------|-------|---------|-------------|
+| vpd_hysteresis | kPa | 0.1-0.5 | 0.3 | Band exit dead zone. Larger = fewer mist cycles |
+| vpd_watch_dwell_s | s | 30-120 | 60 | Observation time before sealing. Prevents transient triggers |
+| mister_engage_kpa | kPa | 1.0-1.8 | 1.6 | VPD threshold for south misters |
+| mister_all_kpa | kPa | 1.3-2.2 | 1.9 | VPD threshold for all-zone rotation |
+| mister_pulse_on_s | s | 30-90 | 60 | Mister burst duration |
+| mister_pulse_gap_s | s | 10-60 | 45 | Evaporation dwell. 15-20s dry days, 45s humid days |
+| mister_vpd_weight | x | 1.0-3.0 | 1.5 | Driest-zone-first weighting |
+| mister_water_budget_gal | gal/d | 200-500 | 500 | Daily water limit. Never the bottleneck |
+
+**Vent coordination:**
+| Parameter | Unit | Range | Default | What it does |
+|-----------|------|-------|---------|-------------|
+| mist_vent_close_lead_s | s | 0-60 | 15 | Close vent before misters start |
+| mist_max_closed_vent_s | s | 120-900 | 600 | Max sealed time before thermal relief |
+| mist_vent_reopen_delay_s | s | 0-120 | 45 | Hold vent closed after misting |
+| mist_thermal_relief_s | s | 30-300 | 90 | Mandatory vent opening duration |
+| enthalpy_open | kJ/kg | -5 to 0 | -2 | Prefer ventilation when outdoor enthalpy better |
+| enthalpy_close | kJ/kg | 0 to +5 | 1 | Prefer sealing when outdoor enthalpy worse |
+| min_vent_on_s | s | 30-300 | 60 | Min vent open time (anti-chatter) |
+| min_vent_off_s | s | 30-300 | 60 | Min vent closed time |
+
+**Fog:**
+| Parameter | Unit | Range | Default | What it does |
+|-----------|------|-------|---------|-------------|
+| min_fog_on_s | s | 15-300 | 60 | Min fog on-time per cycle |
+| min_fog_off_s | s | 15-300 | 60 | Min gap between fog cycles |
+| fog_escalation_kpa | kPa | 0.2-0.8 | 0.4 | VPD above band to trigger fog. Lower = more fog |
+
+**Thermal + biases:**
+| Parameter | Unit | Range | Default | What it does |
+|-----------|------|-------|---------|-------------|
+| d_cool_stage_2 | F | 2-5 | 3 | Gap between single-fan and dual-fan cooling |
+| bias_heat | F | -5 to +5 | 0 | Shift heating floor. +2 = pre-heat earlier |
+| bias_cool | F | -5 to +5 | 0 | Shift cooling ceiling. +3 = delay cooling (prevents vent oscillation) |
+| min_heat_on_s | s | 60-300 | 120 | Min heater on-time (ignition protection) |
+| min_heat_off_s | s | 120-600 | 300 | Min gap between heater cycles |
+
+### Data Quality
+
+- Zone VPD null: fall back to avg VPD. Don't hallucinate zone priorities from nulls.
+- Setpoint values = 0 after reboot: corrupt flash. Dispatcher auto-corrects within 5 min.
+- Solar = 0 at night: normal. Not a sensor failure.
+
+### Structured hypothesis (required on SUNRISE plans)
+
+When you call `set_plan()`, the `hypothesis` field should include a fenced
+```json``` block following the `PlanHypothesisStructured` shape. `set_plan()`
+extracts and validates it, stores it in `plan_journal.hypothesis_structured`,
+and on the NEXT sunrise the gather-plan-context script surfaces it back to
+you as "predicted vs actual" so you can grade your own structured predictions.
+
+Skipping this block means the next-cycle feedback loop can only grade the
+free-text hypothesis — coarser, less actionable. Always include it on
+SUNRISE plans. Optional on TRANSITION adjustments.
+
+Minimal valid block (all three sections required):
+```json
+{
+  "conditions": {
+    "outdoor_temp_peak_f": 82.0,
+    "outdoor_rh_min_pct": 12.0,
+    "solar_peak_w_m2": 900,
+    "cloud_cover_avg_pct": 15,
+    "notes": "hot dry spring day, clear skies"
+  },
+  "stress_windows": [
+    {"kind": "vpd_high", "start": "2026-04-19T10:00:00-06:00",
+     "end": "2026-04-19T16:00:00-06:00", "severity": "high",
+     "mitigation": "fog_escalation_kpa 0.25, mister_pulse_gap_s 20"}
+  ],
+  "rationale": [
+    {"parameter": "fog_escalation_kpa", "old_value": 0.4, "new_value": 0.25,
+     "forecast_anchor": "RH < 15% from 10:00-16:00",
+     "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0"}
+  ]
+}
+```
+
+`stress_windows` can be empty on mild days. `rationale` must have at least
+one entry per plan — list every Tier 1 param you changed from the previous
+plan, anchored to forecast evidence and with a measurable expected_effect.
+"""
+
+_PLANNER_EXTENDED = """
+## Extended Reference (opus only)
+
+The following sections are reference material the full-context instance
+gets on top of CORE. The local gemma instance sees only CORE; it consults
+`docs/planner/greenhouse-playbook.md` for detail when it needs it.
+
 ### Interpreting Stress Types
 
 - **cold_stress** is usually caused by heater/vent oscillation, NOT insufficient heating.
@@ -186,48 +310,6 @@ vent flush) → cycle repeats. You control the cycle timing with tunables.
 - Blocked above fog_rh_ceiling (90%), below fog_min_temp, outside fog time window (07:00-17:00)
 - Fog ALWAYS closes vent. Do not assume fog availability outside the window.
 
-### 24 Tier 1 Tunables (your controls)
-
-**VPD response + misting:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| vpd_hysteresis | kPa | 0.1-0.5 | 0.3 | Band exit dead zone. Larger = fewer mist cycles |
-| vpd_watch_dwell_s | s | 30-120 | 60 | Observation time before sealing. Prevents transient triggers |
-| mister_engage_kpa | kPa | 1.0-1.8 | 1.6 | VPD threshold for south misters |
-| mister_all_kpa | kPa | 1.3-2.2 | 1.9 | VPD threshold for all-zone rotation |
-| mister_pulse_on_s | s | 30-90 | 60 | Mister burst duration |
-| mister_pulse_gap_s | s | 10-60 | 45 | Evaporation dwell. 15-20s dry days, 45s humid days |
-| mister_vpd_weight | x | 1.0-3.0 | 1.5 | Driest-zone-first weighting |
-| mister_water_budget_gal | gal/d | 200-500 | 500 | Daily water limit. Never the bottleneck |
-
-**Vent coordination:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| mist_vent_close_lead_s | s | 0-60 | 15 | Close vent before misters start |
-| mist_max_closed_vent_s | s | 120-900 | 600 | Max sealed time before thermal relief |
-| mist_vent_reopen_delay_s | s | 0-120 | 45 | Hold vent closed after misting |
-| mist_thermal_relief_s | s | 30-300 | 90 | Mandatory vent opening duration |
-| enthalpy_open | kJ/kg | -5 to 0 | -2 | Prefer ventilation when outdoor enthalpy better |
-| enthalpy_close | kJ/kg | 0 to +5 | 1 | Prefer sealing when outdoor enthalpy worse |
-| min_vent_on_s | s | 30-300 | 60 | Min vent open time (anti-chatter) |
-| min_vent_off_s | s | 30-300 | 60 | Min vent closed time |
-
-**Fog:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| min_fog_on_s | s | 15-300 | 60 | Min fog on-time per cycle |
-| min_fog_off_s | s | 15-300 | 60 | Min gap between fog cycles |
-| fog_escalation_kpa | kPa | 0.2-0.8 | 0.4 | VPD above band to trigger fog. Lower = more fog |
-
-**Thermal + biases:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| d_cool_stage_2 | F | 2-5 | 3 | Gap between single-fan and dual-fan cooling |
-| bias_heat | F | -5 to +5 | 0 | Shift heating floor. +2 = pre-heat earlier |
-| bias_cool | F | -5 to +5 | 0 | Shift cooling ceiling. +3 = delay cooling (prevents vent oscillation) |
-| min_heat_on_s | s | 60-300 | 120 | Min heater on-time (ignition protection) |
-| min_heat_off_s | s | 120-600 | 300 | Min gap between heater cycles |
-
 ### Greenhouse Physical Reference
 
 - 367 sqft, 3,614 cuft volume, elongated hexagon, 5,090 ft elevation (Longmont CO)
@@ -256,52 +338,36 @@ Gas heating is 3.9x cheaper per BTU than electric.
 8. **Water budget 500 gal:** Must never be the bottleneck.
 9. **Vent during misting:** Never happens — SEALED_MIST structurally closes vent. Validated.
 10. **Dew point:** Keep margin >5F. bias warmer on cold clear nights (radiative cooling risk).
-
-### Data Quality
-
-- Zone VPD null: fall back to avg VPD. Don't hallucinate zone priorities from nulls.
-- Setpoint values = 0 after reboot: corrupt flash. Dispatcher auto-corrects within 5 min.
-- Solar = 0 at night: normal. Not a sensor failure.
-
-### Structured hypothesis (required on SUNRISE plans)
-
-When you call `set_plan()`, the `hypothesis` field should include a fenced
-```json``` block following the `PlanHypothesisStructured` shape. `set_plan()`
-extracts and validates it, stores it in `plan_journal.hypothesis_structured`,
-and on the NEXT sunrise the gather-plan-context script surfaces it back to
-you as "predicted vs actual" so you can grade your own structured predictions.
-
-Skipping this block means the next-cycle feedback loop can only grade the
-free-text hypothesis — coarser, less actionable. Always include it on
-SUNRISE plans. Optional on TRANSITION adjustments.
-
-Minimal valid block (all three sections required):
-```json
-{
-  "conditions": {
-    "outdoor_temp_peak_f": 82.0,
-    "outdoor_rh_min_pct": 12.0,
-    "solar_peak_w_m2": 900,
-    "cloud_cover_avg_pct": 15,
-    "notes": "hot dry spring day, clear skies"
-  },
-  "stress_windows": [
-    {"kind": "vpd_high", "start": "2026-04-19T10:00:00-06:00",
-     "end": "2026-04-19T16:00:00-06:00", "severity": "high",
-     "mitigation": "fog_escalation_kpa 0.25, mister_pulse_gap_s 20"}
-  ],
-  "rationale": [
-    {"parameter": "fog_escalation_kpa", "old_value": 0.4, "new_value": 0.25,
-     "forecast_anchor": "RH < 15% from 10:00-16:00",
-     "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0"}
-  ]
-}
-```
-
-`stress_windows` can be empty on mild days. `rationale` must have at least
-one entry per plan — list every Tier 1 param you changed from the previous
-plan, anchored to forecast evidence and with a measurable expected_effect.
 """
+
+
+def _compose_preamble(instance: PlannerInstance = "opus") -> str:
+    """Compose the prompt preamble for a given planner instance.
+
+    The returned string is the stable, per-session prefix that the event
+    builder prepends to the per-cycle context. Order is intentional so
+    Anthropic prompt-caching gets a clean break on opus:
+
+        _STANDING_DIRECTIVES  (always — trigger handling rules)
+        _PLANNER_CORE         (always — must-know tables + hypothesis format)
+        _PLANNER_EXTENDED     (opus only — reference long-form)
+        {per-cycle context}   (appended by event builder; never cached)
+
+    `local` gets directives + core only, so the gemma prompt stays under
+    the contract's ≤60k gemma-token budget (≈ ≤52k Claude tokens with a
+    15% safety cushion for gemma's heavier encoding).
+    """
+    if instance == "local":
+        return _STANDING_DIRECTIVES + _PLANNER_CORE
+    return _STANDING_DIRECTIVES + _PLANNER_CORE + _PLANNER_EXTENDED
+
+
+# Legacy alias — any caller referring to `_PLANNER_KNOWLEDGE` as one blob
+# now gets both halves in the order they were concatenated before the
+# split. Kept so planner-dry and external spot-checks that grep for
+# "## Greenhouse Planner Knowledge" keep working until sub-scope B
+# threads the `instance` kwarg through every caller.
+_PLANNER_KNOWLEDGE = _PLANNER_CORE + _PLANNER_EXTENDED
 
 # ── Event prompt templates ────────────────────────────────────────
 
@@ -468,14 +534,17 @@ Post to #greenhouse with what deviated, your diagnosis, and what you changed."""
 
 # ── Prompt router ─────────────────────────────────────────────────
 
-_PREAMBLE = _STANDING_DIRECTIVES + _PLANNER_KNOWLEDGE
+# _PREAMBLE keeps the opus-full preamble for any caller that still treats
+# the preamble as a module-level constant. Instance-aware callers should
+# use _compose_preamble(instance) instead.
+_PREAMBLE = _compose_preamble("opus")
 
 _PROMPT_BUILDERS = {
-    "SUNRISE": lambda ctx, lbl: _PREAMBLE + _sunrise_prompt(ctx),
-    "SUNSET": lambda ctx, lbl: _PREAMBLE + _sunset_prompt(ctx),
-    "TRANSITION": lambda ctx, lbl: _PREAMBLE + _transition_prompt(ctx, lbl),
-    "FORECAST": lambda ctx, lbl: _PREAMBLE + _forecast_prompt(ctx),
-    "DEVIATION": lambda ctx, lbl: _PREAMBLE + _deviation_prompt(ctx, lbl),
+    "SUNRISE": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _sunrise_prompt(ctx),
+    "SUNSET": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _sunset_prompt(ctx),
+    "TRANSITION": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _transition_prompt(ctx, lbl),
+    "FORECAST": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _forecast_prompt(ctx),
+    "DEVIATION": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _deviation_prompt(ctx, lbl),
 }
 
 

@@ -23,6 +23,15 @@ deploy-time automation follow-up.
 
 You are the planner for a 367 sq ft greenhouse at 5,090 feet in Longmont, Colorado. This skill defines how you use your 17 MCP tools to keep plants alive, costs down, and the system learning.
 
+## Prompt Variants — CORE vs EXTENDED
+
+The runtime prompt is split into two layers so the same playbook can drive both the cloud Opus instance and the on-host local-lite instance (gemma) without two separate documents drifting apart.
+
+- **CORE** — must-send to both instances. Covers decision precedence, KPIs, the 24 Tier 1 tunables table, stress-type definitions, data quality rules, and the structured-hypothesis format. Implemented as `_PLANNER_CORE` in `ingestor/iris_planner.py`. Everything in this file from the start through the end of "Closing the Learning Loop" is CORE-eligible content; check the runtime source for the exact bytes.
+- **EXTENDED** — opus only. Reference material the full-context instance gets on top of CORE: stress interpretation long-form, controller-mode details, mist stages, vent oscillation, physical reference, utility rates, and the full validated-lessons list. Implemented as `_PLANNER_EXTENDED`. Gemma-local reads `docs/planner/greenhouse-playbook.md` (this file) at runtime if it needs detail beyond CORE.
+
+If you edit this file, mark conceptually EXTENDED-only content with a trailing `_(EXTENDED — opus only)_` italic tag so a future prompt-editor can see the boundary. Any section that both instances must see stays unmarked and is treated as CORE.
+
 ## The Planning Cycle
 
 Every planning event follows this flow:
