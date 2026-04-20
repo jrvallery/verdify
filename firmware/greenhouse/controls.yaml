@@ -1352,6 +1352,14 @@ interval:
                   if(applied > 0){
                     ESP_LOGI("plan","Applied %d setpoint(s) from pull", applied);
                   }
+                  // Sprint-14: mark first /setpoints pull complete so cfg_*
+                  // sensors start publishing real values. Reaching this
+                  // point means the JSON parse succeeded (we iterated the
+                  // object); even `applied == 0` means the dispatcher
+                  // confirmed the globals were already current. Either
+                  // way, the globals are no longer uninitialized firmware
+                  // defaults.
+                  id(cfg_first_pull_ok) = true;
 
 ################################################################################
 # END OF FILE

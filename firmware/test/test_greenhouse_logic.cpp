@@ -1042,6 +1042,53 @@ TEST(s9_validate_preserves_valid_input) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Sprint-14 — clamp bias_heat / bias_cool to ±5°F in validate_setpoints
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s14_validate_clamps_bias_heat_above_5) {
+    Setpoints sp = default_setpoints();
+    sp.bias_heat = 10.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.bias_heat, 5.0f);
+    PASS();
+}
+
+TEST(s14_validate_clamps_bias_heat_below_minus_5) {
+    Setpoints sp = default_setpoints();
+    sp.bias_heat = -10.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.bias_heat, -5.0f);
+    PASS();
+}
+
+TEST(s14_validate_clamps_bias_cool_above_5) {
+    Setpoints sp = default_setpoints();
+    sp.bias_cool = 50.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.bias_cool, 5.0f);
+    PASS();
+}
+
+TEST(s14_validate_clamps_bias_cool_below_minus_5) {
+    Setpoints sp = default_setpoints();
+    sp.bias_cool = -50.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.bias_cool, -5.0f);
+    PASS();
+}
+
+TEST(s14_validate_preserves_bias_in_range) {
+    // Values inside [-5, 5] must survive validate unchanged.
+    Setpoints sp = default_setpoints();
+    sp.bias_heat = 3.0f;
+    sp.bias_cool = -2.0f;
+    validate_setpoints(sp);
+    ASSERT_EQ(sp.bias_heat, 3.0f);
+    ASSERT_EQ(sp.bias_cool, -2.0f);
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Sprint-10 — THERMAL_RELIEF both fans + vpd_min_safe SEALED exit +
 // tunable magic numbers + day/night setpoint pairs
 // ═══════════════════════════════════════════════════════════════════

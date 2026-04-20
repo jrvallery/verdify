@@ -1007,7 +1007,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(target_temp_low_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(target_temp_low_f);
 
   - platform: template
     id: cfg_temp_high_f
@@ -1018,7 +1020,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(target_temp_high_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(target_temp_high_f);
 
   - platform: template
     id: cfg_stage2_heat_delta_f
@@ -1029,7 +1033,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(stage2_heat_delta_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(stage2_heat_delta_f);
 
   - platform: template
     id: cfg_stage2_cool_delta_f
@@ -1040,7 +1046,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(stage2_cool_delta_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(stage2_cool_delta_f);
 
   - platform: template
     id: cfg_hyst_temp_f
@@ -1051,7 +1059,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(hyst_temp_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(hyst_temp_f);
 
   # ─── VPD band & hysteresis (kPa) ───────────────────────────────────────
   - platform: template
@@ -1062,7 +1072,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(target_vpd_low_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(target_vpd_low_kpa);
 
   - platform: template
     id: cfg_vpd_high_kpa
@@ -1072,7 +1084,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(target_vpd_high_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(target_vpd_high_kpa);
 
   - platform: template
     id: cfg_hyst_vpd_kpa
@@ -1082,7 +1096,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(hyst_vpd_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(hyst_vpd_kpa);
 
   # ─── Feed‑forward biases (°F) ─────────────────────────────────────────-
   - platform: template
@@ -1094,7 +1110,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(bias_heat_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(bias_heat_f);
 
   - platform: template
     id: cfg_bias_cool_f
@@ -1105,7 +1123,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(bias_cool_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(bias_cool_f);
 
   # ─── Safety rails (°F & kPa) ───────────────────────────────────────────
   - platform: template
@@ -1117,7 +1137,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(safety_min_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(safety_min_f);
 
   - platform: template
     id: cfg_safety_max_f
@@ -1128,7 +1150,9 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(safety_max_f);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(safety_max_f);
 
   - platform: template
     id: cfg_safety_vpd_min_kpa
@@ -1138,7 +1162,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(safety_vpd_min_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(safety_vpd_min_kpa);
 
   - platform: template
     id: cfg_safety_vpd_max_kpa
@@ -1148,7 +1174,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(safety_vpd_max_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(safety_vpd_max_kpa);
 
   # ─── Economiser thresholds & site pressure ────────────────────────────
   - platform: template
@@ -1160,7 +1188,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(site_pressure_hpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(site_pressure_hpa);
 
   - platform: template
     id: cfg_enthalpy_open_kjkg
@@ -1170,7 +1200,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(enthalpy_open_kjkg);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(enthalpy_open_kjkg);
 
   - platform: template
     id: cfg_enthalpy_close_kjkg
@@ -1180,7 +1212,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(enthalpy_close_kjkg);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(enthalpy_close_kjkg);
 
   # ─── Manual‑burst & control timers ─────────────────────────────────────
   - platform: template
@@ -1192,7 +1226,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(fan_burst_minutes);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(fan_burst_minutes);
 
   - platform: template
     id: cfg_vent_bypass_min
@@ -1203,7 +1239,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(vent_bypass_minutes);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vent_bypass_minutes);
 
   - platform: template
     id: cfg_fog_burst_min
@@ -1214,7 +1252,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(fog_burst_minutes);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(fog_burst_minutes);
 
   - platform: template
     id: cfg_lead_rotate_timeout_s
@@ -1225,7 +1265,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(lead_rotate_timeout_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(lead_rotate_timeout_s);
 
   - platform: template
     id: cfg_fallback_window_s
@@ -1236,7 +1278,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(fallback_window_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(fallback_window_s);
 
   # ─── Relay timing tunables (seconds) ─────────────────────────────────
   - platform: template
@@ -1248,7 +1292,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(min_heat_on_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(min_heat_on_s);
 
   - platform: template
     id: cfg_min_heat_off_s
@@ -1259,7 +1305,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(min_heat_off_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(min_heat_off_s);
 
   - platform: template
     id: cfg_min_fan_on_s
@@ -1270,7 +1318,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(min_fan_on_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(min_fan_on_s);
 
   - platform: template
     id: cfg_min_fan_off_s
@@ -1281,7 +1331,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(min_fan_off_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(min_fan_off_s);
 
   # ─── Vent relay timing tunables (seconds) ─────────────────────────────
   - platform: template
@@ -1293,7 +1345,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(min_vent_on_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(min_vent_on_s);
 
   - platform: template
     id: cfg_min_vent_off_s
@@ -1304,7 +1358,9 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(min_vent_off_s);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(min_vent_off_s);
 
   # --------------------------------------------------------------------------
   # 8. DLI — Daily Light Integral (B5)
@@ -1402,7 +1458,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(mister_engage_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(mister_engage_kpa);
 
   - platform: template
     id: cfg_mister_all_kpa
@@ -1412,7 +1470,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(mister_all_kpa);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(mister_all_kpa);
 
   # Sprint-3: per-zone VPD target readbacks + mister scoring tunables.
   # The setpoint dispatcher pushes vpd_target_{south,west,east,center},
@@ -1429,7 +1489,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(vpd_target_south);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vpd_target_south);
 
   - platform: template
     id: cfg_vpd_target_west
@@ -1439,7 +1501,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(vpd_target_west);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vpd_target_west);
 
   - platform: template
     id: cfg_vpd_target_east
@@ -1449,7 +1513,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(vpd_target_east);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vpd_target_east);
 
   - platform: template
     id: cfg_vpd_target_center
@@ -1459,7 +1525,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(vpd_target_center);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vpd_target_center);
 
   - platform: template
     id: cfg_mister_center_penalty
@@ -1468,7 +1536,9 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(mister_center_penalty);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(mister_center_penalty);
 
   - platform: template
     id: cfg_east_adjacency_factor
@@ -1477,7 +1547,124 @@ sensor:
     accuracy_decimals: 2
     entity_category: diagnostic
     update_interval: 30s
-    lambda: "return id(east_adjacency_factor);"
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(east_adjacency_factor);
+
+  # ─── Sprint-14: close readback gaps for dispatcher-pushable params ─────────
+  # These 9 parameters are parsed by the /setpoints handler and stored
+  # in ESP32 globals, but pre-sprint-14 had no cfg_* readback sensor.
+  # Sprint-24.7 confirmation monitor can cover them once ingestor's
+  # CFG_READBACK_MAP picks them up (handoff PR).
+
+  - platform: template
+    id: cfg_d_heat_stage_2_f
+    name: "Cfg • d_heat_stage_2 (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(stage2_heat_delta_f);
+
+  - platform: template
+    id: cfg_d_cool_stage_2_f
+    name: "Cfg • d_cool_stage_2 (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(stage2_cool_delta_f);
+
+  - platform: template
+    id: cfg_vpd_watch_dwell_s
+    name: "Cfg • VPD Watch Dwell (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(vpd_watch_dwell_s);
+
+  - platform: template
+    id: cfg_mister_all_delay_s
+    name: "Cfg • Mister All Delay (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mister_all_delay_s);
+
+  - platform: template
+    id: cfg_fog_escalation_kpa
+    name: "Cfg • Fog Escalation (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(fog_escalation_kpa);
+
+  - platform: template
+    id: cfg_fog_rh_ceiling_pct
+    name: "Cfg • Fog RH Ceiling (%)"
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(fog_rh_ceiling_pct);
+
+  - platform: template
+    id: cfg_fog_min_temp_f
+    name: "Cfg • Fog Min Temp (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(fog_min_temp_f);
+
+  - platform: template
+    id: cfg_fog_time_window_start
+    name: "Cfg • Fog Window Start (hour)"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(fog_time_window_start);
+
+  - platform: template
+    id: cfg_fog_time_window_end
+    name: "Cfg • Fog Window End (hour)"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(fog_time_window_end);
 
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template

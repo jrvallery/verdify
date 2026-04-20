@@ -195,6 +195,13 @@ inline void validate_setpoints(Setpoints& sp) {
     sp.vpd_hysteresis = std::max(0.05f, std::min(sp.vpd_high * 0.5f, sp.vpd_hysteresis));
     sp.temp_hysteresis = std::max(0.5f, std::min(5.0f, sp.temp_hysteresis));
     sp.heat_hysteresis = std::max(0.0f, std::min(3.0f, sp.heat_hysteresis));
+    // Sprint-14: clamp biases to ±5°F. Pre-sprint-14 these were
+    // unclamped — a dispatcher push of bias_heat = -50 would disable
+    // heating entirely. 30-day observed operational range was
+    // bias_cool ∈ [-1, 5], bias_heat ∈ [0, 5]; [-5, 5] covers observed
+    // usage and matches the ±5°F margin the rest of validate uses.
+    sp.bias_heat = std::max(-5.0f, std::min(5.0f, sp.bias_heat));
+    sp.bias_cool = std::max(-5.0f, std::min(5.0f, sp.bias_cool));
     sp.safety_max = std::max(sp.temp_high + 5.0f, std::min(120.0f, sp.safety_max));
     sp.safety_min = std::max(30.0f, std::min(sp.temp_low - 5.0f, sp.safety_min));
     sp.sealed_max_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.sealed_max_ms));

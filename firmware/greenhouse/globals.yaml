@@ -811,6 +811,19 @@ globals:
     restore_value: no
     initial_value: '99999'  # Start stale — force fresh pull on boot
 
+  # Sprint-14: gate cfg_* readback publishes until the first /setpoints
+  # pull completes. Without this gate, cfg_* sensors publish the
+  # firmware-default globals at boot (before the dispatcher has pushed
+  # real values) and the resulting rows poison setpoint_snapshot
+  # analytics (observed: min=0 for temp_high/vpd_low/safety_* across
+  # the 30-day trailing window). Flipped true at the end of the
+  # /setpoints pull handler (see controls.yaml). cfg_* sensors return
+  # NAN while this is false; ingestor filters NAN and skips writing.
+  - id: cfg_first_pull_ok
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
   # ─── Occupancy-based mist inhibit ───
   - id: greenhouse_occupied
     type: bool
