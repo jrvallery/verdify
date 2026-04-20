@@ -10,6 +10,10 @@
 ###############################################################################
 
 substitutions:
+  # Fallback for manual `esphome compile greenhouse.yaml` invocations.
+  # `make firmware-deploy` overrides this at build time with
+  # `-s fw_version YYYY.M.D.{short-sha}` so diagnostics.firmware_version
+  # uniquely identifies each deploy's commit (sprint-5 / FW-V1).
   fw_version: "2026.4.15.1"
 
 esphome:
@@ -252,12 +256,17 @@ time:
               id(cnt_heat2_today) = 0;
               id(cnt_fog_today)   = 0;
               id(cnt_vent_today)  = 0;
-              id(dh_cycles_today) = 0;
-              id(dh_safety_today)= 0;
               id(mister_water_today) = 0.0f;
               id(runtime_mister_south_ms) = 0;
               id(runtime_mister_west_ms) = 0;
               id(runtime_mister_center_ms) = 0;
+              id(cnt_mister_fairness_overrides_today) = 0;
+              /* sprint-7 per-zone cycle counters */
+              id(cnt_mister_south_today)  = 0;
+              id(cnt_mister_west_today)   = 0;
+              id(cnt_mister_center_today) = 0;
+              id(cnt_drip_wall_today)     = 0;
+              id(cnt_drip_center_today)   = 0;
           - logger.log: "Daily cycle counters reset (midnight)"
 
 # ───────────────────── BINARY SENSORS ─────────────────────
@@ -412,13 +421,29 @@ binary_sensor:
     name: "Leak Detected"
     device_class: problem
     lambda: |-
-      float flow = id(water_flow_rate).state;
-      if(isnan(flow) || flow < 0.1) return false;
+      // Sprint-4: debounce against pipe bleed-down between mister pulses.
+      // Historical false-positive rate: 5-41 events/hour during mister-active
+      // windows. Residual flow after valve-close can linger above 0.1 gpm
+      // for 5-15s through the 25-45s pulse gap; the pre-sprint-4 lambda
+      // fired leak_detected during that window. A real leak persists
+      // indefinitely, so a 30s bleed-down grace period is safe.
+      //
+      // Also includes fog_rly in the valve list — the fog generator uses
+      // water and was previously missing, causing a separate false-positive
+      // class whenever fog fired without a mister in parallel.
+      static uint32_t last_valve_on_ms = 0;
+      uint32_t now_ms = millis();
       bool any_valve = id(wall_drips).state || id(center_drips).state
                     || id(south_wall_mister).state || id(west_wall_mister).state
                     || id(center_mister).state || id(wall_drips_fertilized).state
-                    || id(south_wall_mister_fertilized).state || id(west_wall_mister_fertilized).state;
-      return !any_valve;
+                    || id(south_wall_mister_fertilized).state || id(west_wall_mister_fertilized).state
+                    || id(fog_rly).state;
+      if(any_valve) last_valve_on_ms = now_ms;
+      float flow = id(water_flow_rate).state;
+      if(isnan(flow) || flow < 0.1) return false;
+      if(any_valve) return false;
+      if(now_ms - last_valve_on_ms < 30000) return false;  // 30 s bleed-down grace
+      return true;
 
 # ───────────────────── DASHBOARD BUTTONS ─────────────────────
 button:

@@ -8,14 +8,18 @@
 globals:
 
   # ─── Temperature band (°F) ───
+  # Wide defaults; the dispatcher pushes the real crop band every planner
+  # cycle. If the dispatcher is silent, these permissive values let the
+  # safety rails (safety_min_f/safety_max_f below) take over without
+  # firmware narrowing to a mid-range guess.
   - id: target_temp_low_f
     type: float
     restore_value: no
-    initial_value: '60.0'
+    initial_value: '40.0'
   - id: target_temp_high_f
     type: float
     restore_value: no
-    initial_value: '75.0'
+    initial_value: '95.0'
   - id: stage2_heat_delta_f
     type: float
     restore_value: no
@@ -30,14 +34,15 @@ globals:
     initial_value: '1.0'
 
   # ─── Humidity / VPD (kPa) ───
+  # Wide defaults — see comment on target_temp_low_f.
   - id: target_vpd_low_kpa
     type: float
     restore_value: no
-    initial_value: '0.50'
+    initial_value: '0.35'
   - id: target_vpd_high_kpa
     type: float
     restore_value: no
-    initial_value: '1.50'
+    initial_value: '2.80'
   - id: hyst_vpd_kpa
     type: float
     restore_value: no
@@ -125,10 +130,6 @@ globals:
     initial_value: 'true'
 
   # ─── Watchdog / failsafe ───
-  - id: last_case_probe
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
   - id: last_external_update
     type: uint32_t
     restore_value: no
@@ -243,11 +244,29 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
-  - id: dh_cycles_today
+
+  # Sprint-7: per-zone mister + drip cycle counters. Incremented at rising
+  # edge in turn_on_zone() and the irrigation dispatch. Closes the audit
+  # gap where fan/heat/fog/vent had cycle counters but irrigation relays
+  # only had runtime. The ingestor-side comparison view pairs these with
+  # equipment_state-derived counts to detect firmware/db drift.
+  - id: cnt_mister_south_today
     type: int
     restore_value: no
     initial_value: '0'
-  - id: dh_safety_today
+  - id: cnt_mister_west_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_mister_center_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_drip_wall_today
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: cnt_drip_center_today
     type: int
     restore_value: no
     initial_value: '0'
@@ -331,12 +350,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
-
-  # ─── Vent hold timer (anti-cycling) ───
-  - id: vent_hold_timer_ms
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
 
   # ─── Outdoor RH adaptive mode ───
   - id: outdoor_rh_mode
@@ -452,6 +465,31 @@ globals:
 
   - id: runtime_mister_center_ms
     type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # ─── Per-zone last-fire timestamps (ms, sprint-2 fairness watchdog) ───
+  # Stamped by turn_on_zone() in controls.yaml. select_overdue_zone() reads
+  # these to steer misting to stressed zones the scoring formula would
+  # otherwise under-serve. `0` means "never fired since boot" — handled
+  # naturally by `now_ms - 0 == now_ms` which only exceeds the 10 min
+  # fairness window after 10 min of uptime.
+  - id: last_fire_south_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_fire_west_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_fire_center_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Daily counter of fairness-watchdog overrides (reset at midnight).
+  - id: cnt_mister_fairness_overrides_today
+    type: int
     restore_value: no
     initial_value: '0'
 
@@ -772,6 +810,19 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '99999'  # Start stale — force fresh pull on boot
+
+  # Sprint-14: gate cfg_* readback publishes until the first /setpoints
+  # pull completes. Without this gate, cfg_* sensors publish the
+  # firmware-default globals at boot (before the dispatcher has pushed
+  # real values) and the resulting rows poison setpoint_snapshot
+  # analytics (observed: min=0 for temp_high/vpd_low/safety_* across
+  # the 30-day trailing window). Flipped true at the end of the
+  # /setpoints pull handler (see controls.yaml). cfg_* sensors return
+  # NAN while this is false; ingestor filters NAN and skips writing.
+  - id: cfg_first_pull_ok
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
   # ─── Occupancy-based mist inhibit ───
   - id: greenhouse_occupied

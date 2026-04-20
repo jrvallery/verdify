@@ -5,7 +5,10 @@
 set -euo pipefail
 
 DAYS=${1:-0}  # 0 = all history
-OUTDIR=/srv/verdify/firmware/test/data
+# OUTDIR is env-overridable so Makefile targets can pin output directly into
+# the firmware worktree's test/data/. Default preserves the original location
+# for standalone invocations from the main repo.
+OUTDIR=${OUTDIR:-/srv/verdify/firmware/test/data}
 mkdir -p "$OUTDIR"
 OUTFILE="$OUTDIR/replay_overrides.csv"
 

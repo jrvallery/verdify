@@ -30,6 +30,9 @@ from verdify_schemas import (
     EnergySample,
     EquipmentStateEvent,
     HAEntityState,
+    OpenMeteoForecastResponse,
+    PlanDeliveryLogRow,
+    SetpointChange,
     SystemStateRow,
 )
 
@@ -661,20 +664,30 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
-        # 7. Planner stale
+        # 7. Planner stale. Threshold 14h = SUNSET→SUNRISE gap (~12.7h) + 1.3h slack.
+        # Iris emits full plans at SUNRISE and SUNSET only; interim TRANSITION /
+        # FORECAST / DEVIATION events adjust tunables or trigger replans. An 8h
+        # threshold (pre-sprint-2) guaranteed a daily false-positive mid-afternoon;
+        # 14h fires only when a SUNRISE has genuinely missed. F14's severity
+        # ladder (≥12h critical, else warning) is kept for AlertEnvelope dedup
+        # structure but degenerates to always-critical at this threshold. This
+        # rule will be superseded by contract v1.4's per-(type,instance) SLAs
+        # in ingestor sprint-25; treat as an interim fix.
         plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")
-        if plan_age and plan_age > 28800:
+        if plan_age and plan_age > 50400:
+            age_h = plan_age / 3600.0
+            severity = "critical" if age_h >= 12 else "warning"
             alerts.append(
                 {
                     "alert_type": "planner_stale",
-                    "severity": "warning",
+                    "severity": severity,
                     "category": "system",
                     "sensor_id": "system.planner",
                     "zone": None,
                     "message": f"No plan in {plan_age // 3600}h",
-                    "details": {"age_s": plan_age},
-                    "metric_value": None,
-                    "threshold_value": None,
+                    "details": {"age_s": plan_age, "age_h": round(age_h, 1)},
+                    "metric_value": round(age_h, 1),
+                    "threshold_value": 14.0,
                 }
             )
 
@@ -701,7 +714,9 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     {
                         "alert_type": "safety_invalid",
                         "severity": "critical",
-                        "category": "safety",
+                        # "system" per AlertCategory literal; semantic
+                        # "safety" subtype is Sprint 25's discriminated union.
+                        "category": "system",
                         "sensor_id": f"setpoint.{param}",
                         "zone": None,
                         "message": f"CRITICAL: {param}={val} is invalid — state machine safety compromised",
@@ -796,20 +811,171 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
+        # 11. OBS-3 coverage (Sprint 25-omnibus): firmware breaker state.
+        # Sprint 18 added relief_cycle_count + vent_latch_timer_s to
+        # diagnostics but alert_monitor didn't read them, so the planner had
+        # no warning before firmware force-latched VENTILATE. Thresholds
+        # chosen against the firmware default max_relief_cycles=3 (range 1–10
+        # per greenhouse_types.h:171); if the planner raises the cap, these
+        # warn a touch early but don't misfire.
+        obs3_row = await conn.fetchrow(
+            """
+            SELECT relief_cycle_count, vent_latch_timer_s, ts
+              FROM diagnostics
+             WHERE ts >= now() - interval '5 minutes'
+               AND (relief_cycle_count IS NOT NULL OR vent_latch_timer_s IS NOT NULL)
+             ORDER BY ts DESC LIMIT 1
+            """
+        )
+        if obs3_row:
+            relief = obs3_row["relief_cycle_count"]
+            if relief is not None and relief >= 2:
+                # Warning at ceiling-1 (nearing); critical at ceiling (3) or beyond.
+                severity = "critical" if relief >= 3 else "warning"
+                alerts.append(
+                    {
+                        "alert_type": "firmware_relief_ceiling",
+                        "severity": severity,
+                        "category": "equipment",
+                        "sensor_id": "diag.relief_cycle_count",
+                        "zone": None,
+                        "message": (
+                            f"Firmware relief_cycle_count={relief} "
+                            f"({'at/past' if relief >= 3 else 'nearing'} default ceiling=3; "
+                            f"VENTILATE force-latch {'active' if relief >= 3 else 'imminent'})"
+                        ),
+                        "details": {"relief_cycle_count": int(relief), "ceiling_default": 3},
+                        "metric_value": float(relief),
+                        "threshold_value": 3.0,
+                    }
+                )
+            latch = obs3_row["vent_latch_timer_s"]
+            if latch is not None and latch >= 600:
+                # Warning at 10 min latched; critical at 20 min (schema max 1800s).
+                severity = "critical" if latch >= 1200 else "warning"
+                alerts.append(
+                    {
+                        "alert_type": "firmware_vent_latched",
+                        "severity": severity,
+                        "category": "equipment",
+                        "sensor_id": "diag.vent_latch_timer_s",
+                        "zone": None,
+                        "message": (
+                            f"Firmware vent latched for {latch}s "
+                            f"({'critical' if latch >= 1200 else 'prolonged'}; "
+                            f"planner hasn't resolved the stress that triggered it)"
+                        ),
+                        "details": {"vent_latch_timer_s": int(latch)},
+                        "metric_value": float(latch),
+                        "threshold_value": 600.0,
+                    }
+                )
+
+        # 12. Tunable zero-variance detection (Sprint 24.9, G-9).
+        # Firmware sprint-13 30-day scan flagged vpd_target_west pinned at
+        # 1.2 kPa across 33k samples — either fn_zone_vpd_targets has a
+        # west-zone default/bug or the west zone has no active crop. Catching
+        # this class of issue automatically (any dispatcher-owned tunable with
+        # stddev=0 over 7 days) surfaces the condition without waiting for
+        # an operator to notice.
+        zero_var_params = (
+            "vpd_target_south",
+            "vpd_target_west",
+            "vpd_target_east",
+            "vpd_target_center",
+            "temp_low",
+            "temp_high",
+            "vpd_low",
+            "vpd_high",
+        )
+        for r in await conn.fetch(
+            """
+            SELECT parameter, count(*) AS n, stddev(value) AS sd, avg(value) AS mean
+              FROM setpoint_snapshot
+             WHERE parameter = ANY($1::text[])
+               AND ts > now() - interval '7 days'
+             GROUP BY parameter
+            HAVING count(*) > 100 AND (stddev(value) IS NULL OR stddev(value) = 0)
+            """,
+            list(zero_var_params),
+        ):
+            alerts.append(
+                {
+                    "alert_type": "tunable_zero_variance",
+                    "severity": "warning",
+                    "category": "system",
+                    "sensor_id": f"setpoint.{r['parameter']}",
+                    "zone": None,
+                    "message": (
+                        f"Tunable `{r['parameter']}` has zero variance over 7 days "
+                        f"(n={r['n']}, pinned at {float(r['mean']):.3f}). "
+                        "Check dispatcher source (band / zone function / crop profile)."
+                    ),
+                    "details": {
+                        "parameter": r["parameter"],
+                        "sample_count": int(r["n"]),
+                        "pinned_value": float(r["mean"]),
+                    },
+                    "metric_value": 0.0,
+                    "threshold_value": None,
+                }
+            )
+
         # Reactive trigger marker removed in Sprint 5 P6 — deviation monitor handles replans
 
         # ── Deduplicate + insert + resolve ──
         active_keys = {(a["alert_type"], a["sensor_id"]) for a in alerts}
+        # Sprint 25-omnibus (setpoint_unconfirmed lifecycle fix): only
+        # consider alerts THIS monitor owns (source='system') for auto-resolve.
+        # Alerts inserted by other monitors (setpoint_confirmation_monitor
+        # writes source='ingestor'; iris_planner writes source='iris_planner';
+        # dispatcher writes source='dispatcher') have their own lifecycle
+        # — auto-resolving them here caused setpoint_unconfirmed to flap
+        # open↔resolved every alert_monitor cycle.
         open_rows = await conn.fetch(
-            "SELECT id, alert_type, sensor_id, slack_ts FROM alert_log WHERE disposition = 'open'"
+            "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log "
+            "WHERE disposition = 'open' AND source = 'system'"
         )
         open_keys = {(r["alert_type"], r["sensor_id"]): r for r in open_rows}
 
         slack_token = None
         new_count = 0
+        escalated_count = 0
         for a in alerts:
             key = (a["alert_type"], a["sensor_id"])
             if key in open_keys:
+                # F14 (Sprint 24.6): escalate severity in place. If the new
+                # envelope is critical and the open row is warning/info,
+                # upgrade and re-notify. Only planner_stale uses this path
+                # today; the pattern is general.
+                existing = open_keys[key]
+                if a["severity"] == "critical" and existing["severity"] != "critical":
+                    try:
+                        env = AlertEnvelope.model_validate(a)
+                    except ValidationError as e:
+                        log.error("alert escalation skipped (validation failed: %s): %r", e, a)
+                        continue
+                    await conn.execute(
+                        "UPDATE alert_log SET severity=$1, message=$2, details=$3, metric_value=$4 WHERE id=$5",
+                        env.severity,
+                        env.message,
+                        json.dumps(env.details) if env.details else None,
+                        env.metric_value,
+                        existing["id"],
+                    )
+                    if slack_token is None:
+                        try:
+                            slack_token = _load_token(SLACK_TOKEN_FILE)
+                        except Exception:
+                            slack_token = ""
+                    if slack_token:
+                        _post_slack(
+                            slack_token,
+                            SLACK_CHANNEL,
+                            f"\U0001f534 *[ESCALATED→CRITICAL]* `{env.alert_type}` — {env.message}",
+                            thread_ts=existing["slack_ts"],
+                        )
+                    escalated_count += 1
                 continue
             try:
                 env = AlertEnvelope.model_validate(a)
@@ -875,8 +1041,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         )
                 resolved += 1
 
-        if new_count or resolved:
-            log.info("Alerts: %d new, %d resolved", new_count, resolved)
+        if new_count or resolved or escalated_count:
+            log.info("Alerts: %d new, %d resolved, %d escalated", new_count, resolved, escalated_count)
 
 
 # Reactive planner REMOVED in Sprint 5 P6 — replaced by forecast deviation monitor (P4)
@@ -893,20 +1059,17 @@ _last_pushed: dict[str, float] = {}
 
 # FW-3 (Sprint 18): physics sanity invariants. Planner values outside
 # these bounds are clamped before dispatch and logged to setpoint_clamps
-# with reason='invariant_violation'. Catches physically-impossible or
-# dangerous values (e.g. fog_window_start=25, max_relief_cycles=50) that
-# would otherwise be silently written to setpoint_changes and confuse the
-# firmware or waste water budget.
+# with reason='invariant_violation'. Every key must be a canonical
+# ALL_TUNABLES entry — see test_physics_invariants_are_canonical.
 #
 # Format: param → (min, max). None means no bound on that side.
 _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
     # Time-of-day windows (hour of day)
-    "fog_window_start": (0, 23),
-    "fog_window_end": (1, 24),
+    "fog_time_window_start": (0, 23),
+    "fog_time_window_end": (1, 24),
     "gl_sunrise_hour": (0, 23),
     "gl_sunset_hour": (1, 24),
-    # Integer counters
-    "max_relief_cycles": (1, 10),
+    # Integer counters (seconds)
     "mister_engage_delay_s": (5, 300),
     "mister_all_delay_s": (10, 600),
     "vpd_watch_dwell_s": (10, 600),
@@ -914,17 +1077,13 @@ _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
     "mister_water_budget_gal": (100, 5000),
     # Temperature bounds (°F)
     "fog_min_temp_f": (32, 90),
-    "fog_min_temp": (32, 90),
     "safety_min": (30, 60),
     "safety_max": (80, 120),
     # Percentages
     "fog_rh_ceiling_pct": (50, 100),
-    "fog_rh_ceiling": (50, 100),
     # VPD (kPa) safety rails
     "safety_vpd_min": (0.1, 1.0),
     "safety_vpd_max": (1.5, 5.0),
-    "vpd_max_safe": (1.5, 5.0),
-    "vpd_min_safe": (0.1, 1.0),
     # Hysteresis (kPa)
     "vpd_hysteresis": (0.05, 1.0),
     # Biases (°F)
@@ -1120,6 +1279,23 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source = "band"
             else:
                 source = "plan"
+            # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
+            # Defense-in-depth: MCP's PlanTransition.params already validates
+            # at write time, but a regression there would silently corrupt
+            # setpoint_changes. Drift-surface the mismatch here where it's
+            # cheap (one row at a time) vs. downstream where it blows up a
+            # grafana panel or planner scorecard.
+            try:
+                SetpointChange(ts=datetime.now(UTC), parameter=param, value=float(val), source=source)
+            except ValidationError as e:
+                log.error(
+                    "dispatcher setpoint_change skipped (validation failed: %s): param=%s value=%s source=%s",
+                    e,
+                    param,
+                    val,
+                    source,
+                )
+                continue
             await conn.execute(
                 "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
                 param,
@@ -1229,51 +1405,66 @@ _FORECAST_URL = (
 
 
 def _fetch_forecast() -> list[dict] | None:
+    """Fetch 16-day hourly forecast from Open-Meteo. Validated via
+    OpenMeteoForecastResponse — parallel-array length mismatch fails loud
+    instead of silently index-truncating like the old hand-zipped loop."""
     req = urllib.request.Request(_FORECAST_URL, headers={"User-Agent": "verdify-ingestor/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        hourly = data.get("hourly", {})
-        times = hourly.get("time", [])
-        if not times:
-            return None
-        n = len(times)
-        rows = []
-        for i in range(n):
-            rows.append(
-                {
-                    "ts": times[i],
-                    "temp_f": hourly.get("temperature_2m", [None] * n)[i],
-                    "rh_pct": hourly.get("relative_humidity_2m", [None] * n)[i],
-                    "dew_point_f": hourly.get("dew_point_2m", [None] * n)[i],
-                    "feels_like_f": hourly.get("apparent_temperature", [None] * n)[i],
-                    "vpd_kpa": hourly.get("vapour_pressure_deficit", [None] * n)[i],
-                    "precip_prob_pct": hourly.get("precipitation_probability", [None] * n)[i],
-                    "precip_in": hourly.get("precipitation", [None] * n)[i],
-                    "rain_in": hourly.get("rain", [None] * n)[i],
-                    "snow_in": hourly.get("snowfall", [None] * n)[i],
-                    "weather_code": hourly.get("weather_code", [None] * n)[i],
-                    "cloud_cover_pct": hourly.get("cloud_cover", [None] * n)[i],
-                    "cloud_cover_low_pct": hourly.get("cloud_cover_low", [None] * n)[i],
-                    "cloud_cover_high_pct": hourly.get("cloud_cover_high", [None] * n)[i],
-                    "wind_speed_mph": hourly.get("wind_speed_10m", [None] * n)[i],
-                    "wind_dir_deg": hourly.get("wind_direction_10m", [None] * n)[i],
-                    "wind_gust_mph": hourly.get("wind_gusts_10m", [None] * n)[i],
-                    "solar_w_m2": hourly.get("shortwave_radiation", [None] * n)[i],
-                    "direct_radiation_w_m2": hourly.get("direct_radiation", [None] * n)[i],
-                    "diffuse_radiation_w_m2": hourly.get("diffuse_radiation", [None] * n)[i],
-                    "uv_index": hourly.get("uv_index", [None] * n)[i],
-                    "sunshine_duration_s": hourly.get("sunshine_duration", [None] * n)[i],
-                    "surface_pressure_hpa": hourly.get("surface_pressure", [None] * n)[i],
-                    "et0_mm": hourly.get("et0_fao_evapotranspiration", [None] * n)[i],
-                    "soil_temp_f": hourly.get("soil_temperature_0cm", [None] * n)[i],
-                    "visibility_m": hourly.get("visibility", [None] * n)[i],
-                }
-            )
-        return rows
+            raw = json.loads(resp.read())
     except Exception as e:
         log.warning("Forecast fetch failed: %s", e)
         return None
+
+    try:
+        response = OpenMeteoForecastResponse.model_validate(raw)
+    except ValidationError as e:
+        log.warning("Open-Meteo response failed schema validation: %s", e)
+        return None
+
+    hourly = response.hourly
+    times = hourly.time
+    if not times:
+        return None
+    n = len(times)
+
+    def col(name: str) -> list:
+        arr = getattr(hourly, name, None)
+        return arr if arr is not None else [None] * n
+
+    rows = []
+    for i in range(n):
+        rows.append(
+            {
+                "ts": times[i],
+                "temp_f": col("temperature_2m")[i],
+                "rh_pct": col("relative_humidity_2m")[i],
+                "dew_point_f": col("dew_point_2m")[i],
+                "feels_like_f": col("apparent_temperature")[i],
+                "vpd_kpa": col("vapour_pressure_deficit")[i],
+                "precip_prob_pct": col("precipitation_probability")[i],
+                "precip_in": col("precipitation")[i],
+                "rain_in": col("rain")[i],
+                "snow_in": col("snowfall")[i],
+                "weather_code": col("weather_code")[i],
+                "cloud_cover_pct": col("cloud_cover")[i],
+                "cloud_cover_low_pct": col("cloud_cover_low")[i],
+                "cloud_cover_high_pct": col("cloud_cover_high")[i],
+                "wind_speed_mph": col("wind_speed_10m")[i],
+                "wind_dir_deg": col("wind_direction_10m")[i],
+                "wind_gust_mph": col("wind_gusts_10m")[i],
+                "solar_w_m2": col("shortwave_radiation")[i],
+                "direct_radiation_w_m2": col("direct_radiation")[i],
+                "diffuse_radiation_w_m2": col("diffuse_radiation")[i],
+                "uv_index": col("uv_index")[i],
+                "sunshine_duration_s": col("sunshine_duration")[i],
+                "surface_pressure_hpa": col("surface_pressure")[i],
+                "et0_mm": col("et0_fao_evapotranspiration")[i],
+                "soil_temp_f": col("soil_temperature_0cm")[i],
+                "visibility_m": col("visibility")[i],
+            }
+        )
+    return rows
 
 
 async def forecast_sync(pool: asyncpg.Pool) -> None:
@@ -1677,7 +1868,18 @@ _DS_WATTAGES = {
 
 
 async def daily_summary_live(pool: asyncpg.Pool) -> None:
-    """Update daily_summary for today with live running aggregates."""
+    """Update daily_summary for today with live running aggregates.
+
+    Two-writer contract (paired with ingestor.py::write_daily_summary):
+      - `write_daily_summary` owns the midnight UPSERT of raw ESP32 accumulators.
+      - This function owns the 30-min UPDATE of derived aggregates:
+        climate min/max/avg, stress_hours_*, compliance_pct (temp/vpd/both),
+        min_dp_margin_f, dp_risk_hours, kwh_estimated, therms_estimated,
+        cost_electric/gas/water/total. It also rewrites cycles/runtimes
+        computed from equipment_state transitions — which overrides the
+        midnight ESP32-accumulator values for the current day (intentional:
+        equipment-state-derived is the higher-fidelity source).
+    """
     async with pool.acquire() as conn:
         today = await conn.fetchval("SELECT (now() AT TIME ZONE 'America/Denver')::date")
 
@@ -1939,7 +2141,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
 
 from astral import LocationInfo
 from astral.sun import sun as _sun
-from iris_planner import gather_context, send_to_iris
+from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
 
 _LOCATION = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
 _DENVER = ZoneInfo("America/Denver")
@@ -1990,7 +2192,15 @@ def _compute_milestones() -> dict[str, datetime]:
     today = datetime.now(_DENVER).date()
     s = _sun(_LOCATION.observer, date=today, tzinfo=_DENVER)
     noon = s["noon"]
-    midnight = datetime.combine(today + _td(days=1), datetime.min.time(), tzinfo=_DENVER)
+    # Sprint 24.8 hotfix: midnight must be TODAY's 00:00, not tomorrow's.
+    # The old `today + _td(days=1)` form set the milestone to tomorrow's
+    # midnight, but the cache-per-day pattern rebuilds at date rollover
+    # — the exact moment the milestone would fire. Result: midnight_posture
+    # was perpetually 24h in the future and never dispatched. Today's 00:00
+    # is in the past by the time we observe it, but the firing window is
+    # `0 ≤ delta < 7200` so the task_loop's first tick past 00:00 MDT
+    # catches it via the normal window [0, 300s).
+    midnight = datetime.combine(today, datetime.min.time(), tzinfo=_DENVER)
 
     _milestones_cache = {
         "SUNRISE": s["sunrise"],
@@ -2008,6 +2218,130 @@ def _compute_milestones() -> dict[str, datetime]:
     _load_milestone_state()
 
     return _milestones_cache
+
+
+async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
+    """F14 (Sprint 24.6): persist a send_to_iris result to plan_delivery_log
+    for later delivery→plan correlation. Validated through PlanDeliveryLogRow
+    before INSERT; a ValidationError here means an unexpected event_type
+    (not in the Literal) or wake_mode — safer to drop than bleed bad data.
+
+    Sprint 24.9 (G-7): honor an explicit `status` in the result dict when
+    present (e.g., 'delivery_failed' from the context-gather stub path).
+    When absent, the DB default 'pending' applies — unchanged from before.
+    """
+    row = {
+        "event_type": result["event_type"],
+        "event_label": result.get("event_label"),
+        "session_key": result.get("session_key"),
+        "wake_mode": result.get("wake_mode"),
+        "gateway_status": result.get("gateway_status"),
+        "gateway_body": result.get("gateway_body"),
+    }
+    try:
+        PlanDeliveryLogRow.model_validate(row)
+    except ValidationError as e:
+        log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
+        return
+    explicit_status = result.get("status")
+    async with pool.acquire() as conn:
+        if explicit_status:
+            await conn.execute(
+                """
+                INSERT INTO plan_delivery_log
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
+                row["event_type"],
+                row["event_label"],
+                row["session_key"],
+                row["wake_mode"],
+                row["gateway_status"],
+                row["gateway_body"],
+                explicit_status,
+            )
+        else:
+            await conn.execute(
+                """
+                INSERT INTO plan_delivery_log
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                row["event_type"],
+                row["event_label"],
+                row["session_key"],
+                row["wake_mode"],
+                row["gateway_status"],
+                row["gateway_body"],
+            )
+
+
+async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, context: str) -> None:
+    """Call send_to_iris in the executor and persist the outcome to
+    plan_delivery_log. Called from every milestone/forecast/deviation path
+    so F14 correlation is complete regardless of trigger source.
+
+    Sprint 24.9 (G-7): if context gathering failed upstream, skip the POST
+    entirely and log a plan_delivery_log row with status='delivery_failed'.
+    Previously the failure string was spliced into the prompt and Iris
+    received gibberish context — the 2026-04-19 incident had gather failures
+    that still produced 200 OK dispatches but no useful plan.
+    """
+    if context == CONTEXT_GATHER_FAILED_SENTINEL:
+        log.warning(
+            "Skipping %s/%s dispatch: context gathering failed (see alert_log plan_context_failed)",
+            event_type,
+            label,
+        )
+        # Write a stub plan_delivery_log row so the outage is visible in
+        # operational queries alongside successful deliveries.
+        stub_result = {
+            "delivered": False,
+            "event_type": event_type,
+            "event_label": label,
+            "session_key": None,
+            "wake_mode": None,
+            "gateway_status": None,
+            "gateway_body": "context_gather_failed",
+            "status": "delivery_failed",
+        }
+        await _log_plan_delivery(pool, stub_result)
+        return
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+    await _log_plan_delivery(pool, result)
+
+
+async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
+    """F14 (Sprint 24.6): for each unresolved plan_delivery_log row, look for
+    a plan_journal entry created after it and within a 2-hour window. Updates
+    `resulting_plan_id` + `plan_written_at`. Bounded to the last 6 hours and
+    events that can produce plans (SUNRISE/SUNSET/DEVIATION always do;
+    TRANSITION/FORECAST only when Iris chooses to update).
+
+    Sprint 24.9 (G-3): also set status='plan_written' so consumers querying
+    `SELECT status, count(*)` see consistent state. Contract v1.4 §2.D
+    defines status as the authoritative lifecycle column; resulting_plan_id
+    is the join key. Keep them in sync.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE plan_delivery_log pdl
+               SET resulting_plan_id = pj.plan_id,
+                   plan_written_at   = pj.created_at,
+                   status            = 'plan_written'
+              FROM plan_journal pj
+             WHERE pdl.resulting_plan_id IS NULL
+               AND pdl.delivered_at > now() - interval '6 hours'
+               AND pj.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
+               AND pj.created_at = (
+                   SELECT MIN(p2.created_at) FROM plan_journal p2
+                    WHERE p2.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
+               )
+            """,
+        )
 
 
 async def planning_heartbeat(pool: asyncpg.Pool) -> None:
@@ -2047,7 +2381,7 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
             # Gather context and send to Iris (blocking — runs in executor)
             loop = asyncio.get_event_loop()
             context = await loop.run_in_executor(None, gather_context)
-            await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+            await _deliver_and_log(pool, event_type, label, context)
 
     # ── 3. Check for forecast changes ──
     global _last_forecast_fetch
@@ -2060,7 +2394,7 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("New forecast detected (fetched_at=%s), notifying Iris", latest_fetch)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await loop.run_in_executor(None, send_to_iris, "FORECAST", "New forecast data", context)
+                await _deliver_and_log(pool, "FORECAST", "New forecast data", context)
             _last_forecast_fetch = latest_fetch
 
     # ── 4. Check for deviations (route to Iris instead of trigger file) ──
@@ -2078,11 +2412,20 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("Deviation trigger found, routing to Iris: %s", reason)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await loop.run_in_executor(None, send_to_iris, "DEVIATION", deviations_str, context)
+                await _deliver_and_log(pool, "DEVIATION", deviations_str, context)
 
                 trigger_file.unlink(missing_ok=True)
             except Exception as e:
                 log.error("Failed to process deviation trigger: %s", e)
+
+    # ── 4b. Resolve plan_delivery_log entries (F14): update any unresolved
+    # rows where a plan landed within 2h of delivery. Runs every heartbeat
+    # so the correlation updates in near-real-time, not just at the 30-min
+    # verify check below.
+    try:
+        await _resolve_delivery_log(pool)
+    except Exception as e:
+        log.warning("plan_delivery_log resolve failed: %s", e)
 
     # ── 5. Verify plan delivery (30 min after SUNRISE/SUNSET) ──
     for key in ("SUNRISE", "SUNSET"):
@@ -2178,8 +2521,43 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
     Severity:
       - warning: 5 min < age < 15 min
       - critical: age >= 15 min (escalation)
+
+    Sprint 25-omnibus (setpoint_unconfirmed lifecycle fix): this monitor
+    now owns the full lifecycle of setpoint_unconfirmed alerts — both
+    creation (below) AND auto-resolution (first pass, next). alert_monitor
+    no longer touches source='ingestor' alerts; without this self-resolve
+    pass, confirmed setpoints would leave zombie open alerts forever.
     """
     async with pool.acquire() as conn:
+        # Pass 1: auto-resolve open alerts whose underlying setpoint_changes
+        # row is now confirmed_at NOT NULL. Matches on sensor_id's `setpoint.*`
+        # suffix back to the parameter name.
+        resolved = await conn.fetch(
+            """
+            UPDATE alert_log al
+               SET disposition = 'resolved',
+                   resolved_at = now(),
+                   resolved_by = 'system',
+                   resolution  = 'auto-resolved: confirmation landed'
+              FROM (
+                  SELECT DISTINCT ON (sc.parameter)
+                         sc.parameter, sc.confirmed_at
+                    FROM setpoint_changes sc
+                   WHERE sc.confirmed_at IS NOT NULL
+                     AND sc.ts > now() - interval '2 hours'
+                   ORDER BY sc.parameter, sc.ts DESC
+              ) confirmed
+             WHERE al.alert_type = 'setpoint_unconfirmed'
+               AND al.disposition = 'open'
+               AND al.source = 'ingestor'
+               AND al.sensor_id = 'setpoint.' || confirmed.parameter
+            RETURNING al.id
+            """,
+        )
+        if resolved:
+            log.info("setpoint_unconfirmed: auto-resolved %d alert(s) after confirmation", len(resolved))
+
+        # Pass 2: scan for still-unconfirmed rows that need alerting.
         rows = await conn.fetch(
             """
             SELECT parameter,
@@ -2263,3 +2641,82 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
             )
 
         log.info("Setpoint confirmation monitor: %d unconfirmed row(s)", len(rows))
+
+
+# ═════════════════════════════════════════════════════════════════
+# 17. MIDNIGHT WATCH (Sprint 24.7 — ops stopgap until contract v1.4 SLA rule)
+#
+# At 00:05 MDT each day, check whether tonight's MIDNIGHT opus trigger
+# fired and produced a plan. Posts ONE Slack message per night with the
+# outcome so operators know without scraping journalctl. Retires once
+# Sprint 25's alert_monitor rule 7 rewrite (per-pair SLA over
+# plan_delivery_log) lands — that's the structural fix; this is the
+# visibility gap-closer until then.
+#
+# Matches both future-canonical (event_type='MIDNIGHT' after Sprint 25
+# splits it out) and today's form (event_type='TRANSITION' with
+# event_label containing "Midnight").
+# ═════════════════════════════════════════════════════════════════
+
+_midnight_watch_last_date: str = ""
+
+
+async def midnight_watch(pool: asyncpg.Pool) -> None:
+    """Daily 00:05 MDT check that the midnight opus trigger ran.
+
+    Three Slack outcomes (per iris-dev's ops-stopgap spec):
+      - resulting_plan_id populated  → ✅ "Iris wrote plan X"
+      - row exists, plan NULL        → ⚠️ "delivered but no plan yet" (+ 2h-cover note)
+      - no row in the 30-min window  → 🔴 "trigger was not delivered" (escalation)
+    """
+    global _midnight_watch_last_date
+    now_mt = datetime.now(ZoneInfo("America/Denver"))
+
+    # Fire only in the 00:05-00:10 MDT window; dedupe by date so a ~60s
+    # task_loop that sees the window 5 times only posts once.
+    if now_mt.hour != 0 or not (5 <= now_mt.minute < 10):
+        return
+    today_str = str(now_mt.date())
+    if _midnight_watch_last_date == today_str:
+        return
+
+    async with pool.acquire() as conn:
+        # Match both v1.4 MIDNIGHT event_type and today's TRANSITION:midnight_posture label.
+        row = await conn.fetchrow(
+            """
+            SELECT event_type, event_label, delivered_at, resulting_plan_id
+              FROM plan_delivery_log
+             WHERE (event_type = 'MIDNIGHT'
+                    OR (event_type = 'TRANSITION' AND event_label ILIKE '%midnight%'))
+               AND delivered_at > now() - interval '30 minutes'
+             ORDER BY delivered_at DESC
+             LIMIT 1
+            """,
+        )
+
+        if row is None:
+            msg = "\U0001f534 *Midnight watch:* trigger was not delivered in the last 30 min (escalation)"
+        elif row["resulting_plan_id"]:
+            msg = (
+                f"\u2705 *Midnight watch:* Iris wrote plan `{row['resulting_plan_id']}` "
+                f"(trigger `{row['event_type']}/{row['event_label'] or ''}` at {row['delivered_at']:%H:%M UTC})"
+            )
+        else:
+            # Delivered but no plan — note if an earlier plan within 2h covers the window.
+            recent_plan = await conn.fetchval(
+                "SELECT plan_id FROM plan_journal WHERE created_at > now() - interval '2 hours' "
+                "ORDER BY created_at DESC LIMIT 1"
+            )
+            covers = f" (prior plan `{recent_plan}` within 2h may cover)" if recent_plan else ""
+            msg = (
+                f"\U0001f7e1 *Midnight watch:* trigger delivered at {row['delivered_at']:%H:%M UTC} "
+                f"but no plan yet{covers}"
+            )
+
+    _midnight_watch_last_date = today_str
+    try:
+        token = _load_token(SLACK_TOKEN_FILE)
+        _post_slack(token, SLACK_CHANNEL, msg)
+        log.info("midnight_watch: %s", msg)
+    except Exception as e:
+        log.error("midnight_watch Slack post failed: %s", e)

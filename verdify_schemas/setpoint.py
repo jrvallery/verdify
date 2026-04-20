@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -28,6 +29,10 @@ class SetpointChange(BaseModel):
     source: SetpointSource = "plan"
     confirmed_at: AwareDatetime | None = None
     greenhouse_id: str = "vallery"
+    # v1.4 audit columns (migration 093). Populated by MCP set_tunable
+    # from X-Planner-Instance + X-Trigger-Id headers; NULL on pre-v1.4 rows.
+    planner_instance: str | None = None
+    trigger_id: UUID | None = None
 
 
 class SetpointPlanRow(BaseModel):

@@ -279,9 +279,9 @@ async def check_conditions(conn) -> list[dict]:
             }
         )
 
-    # 7. Planner heartbeat — no plan written in 8h
+    # 7. Planner heartbeat — no plan written in 14h (SUNSET→SUNRISE ~12.7h + 1.3h slack)
     plan_age = await conn.fetchval("SELECT EXTRACT(EPOCH FROM now() - MAX(created_at))::int FROM setpoint_plan")
-    if plan_age is not None and plan_age > 28800:  # 8 hours
+    if plan_age is not None and plan_age > 50400:  # 14 hours
         alerts.append(
             {
                 "alert_type": "planner_stale",

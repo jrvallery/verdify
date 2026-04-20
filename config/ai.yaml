@@ -70,3 +70,34 @@ context:
   static_builder: scripts/gather-static-context.sh
   max_context_chars: 100000
   max_static_chars: 50000
+
+# ── Planner Routing & SLA (Dual-Iris, contract v1.4) ─────────────
+# Runtime knobs for the dual-peer planner routing policy. Consumed by:
+#   - ingestor/planner_routing.py (classify_severity + pick_instance + sla_for)
+#   - ingestor/alert_monitor rule 7 (SLA-breach detection)
+# Contract spec: docs/iris-planner-contract.md §2.F (SLA) + §2.G (routing).
+# Tunable without code change; start with v1 defaults, review after a week of data.
+planner_routing:
+  # Severity thresholds — ingestor.classify_severity returns "major" when any
+  # is exceeded; "minor" otherwise. Major → routes to opus, minor → local.
+  forecast_major_delta_vpd_kPa: 0.5    # |Δvpd_outdoor| above → major FORECAST
+  forecast_major_delta_temp_F: 10      # |Δtemp_F| above → major FORECAST
+  deviation_major_threshold: 0.15      # normalized band-excursion → major DEVIATION
+  deviation_prolonged_cycles: 3        # pending >= N cycles → major DEVIATION
+
+planner_sla:
+  # SLA in minutes, keyed by (instance, trigger_type). Absent = no SLA.
+  # Opus targets (scheduled: SUNRISE / SUNSET / MIDNIGHT) + ad-hoc majors.
+  # Local targets (routine: TRANSITION / HEARTBEAT) + minor forecast/deviation.
+  # 2× multiplier on local baseline (gemma inference + larger prompt both slower).
+  opus:
+    SUNRISE:    15
+    SUNSET:     15
+    MIDNIGHT:   15
+    FORECAST:   30
+    DEVIATION:  10
+  local:
+    TRANSITION: 30
+    FORECAST:   60
+    DEVIATION:  20
+    HEARTBEAT:  15

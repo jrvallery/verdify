@@ -31,6 +31,14 @@ The runtime prompt is split into two layers so the same playbook can drive both 
 - **EXTENDED** — opus only. Reference material the full-context instance gets on top of CORE: stress interpretation long-form, controller-mode details, mist stages, vent oscillation, physical reference, utility rates, and the full validated-lessons list. Implemented as `_PLANNER_EXTENDED`. Gemma-local reads `docs/planner/greenhouse-playbook.md` (this file) at runtime if it needs detail beyond CORE.
 
 If you edit this file, mark conceptually EXTENDED-only content with a trailing `_(EXTENDED — opus only)_` italic tag so a future prompt-editor can see the boundary. Any section that both instances must see stays unmarked and is treated as CORE.
+## Planning Cadence (read first, flag-before-you-panic)
+
+Full 72-hour plans are emitted at **SUNRISE and SUNSET only** — roughly 12 hours apart. Interim **TRANSITION**, **FORECAST**, and **DEVIATION** events adjust individual tunables via `set_tunable` or issue a replan only when conditions materially deviate from the governing plan. A 9-hour gap between full plans is **expected** by design, not a signal that the planner is hung.
+
+Monitoring consequences:
+- The `planner_stale` alert is calibrated against this cadence. If you (or a sibling agent) sees a gap of 8–13 hours between `plan_journal` rows with no new `set_tunable` activity, that is not a stale planner — that's a normal mid-cycle window.
+- Before flagging "planner is stuck," check the `CONTEXT COMPLETENESS` block at the end of the plan-context bundle (emitted by `scripts/gather-plan-context.sh`). If all dependency checks pass and `plan_journal` has a current-day SUNRISE row, the system is working as designed.
+- A genuine stall looks like: no SUNRISE in the last 14+ hours, AND no `setpoint_changes WHERE source='iris'` in the last 8 hours, AND OpenClaw unreachable or logging delivery failures.
 
 ## The Planning Cycle
 

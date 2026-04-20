@@ -66,6 +66,7 @@ from tasks import (
     grow_light_daily,
     ha_sensor_sync,
     matview_refresh,
+    midnight_watch,
     planning_heartbeat,
     setpoint_confirmation_monitor,
     setpoint_dispatcher,
@@ -79,6 +80,7 @@ from verdify_schemas import (
     DailySummaryRow,
     Diagnostics,
     EquipmentStateEvent,
+    ESP32LogRow,
     OverrideEvent,
     SetpointChange,
     SetpointSnapshot,
@@ -354,24 +356,31 @@ async def write_override_events(pool: asyncpg.Pool, ts: datetime) -> None:
 
 
 async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
-    """Flush pending setpoint change events."""
+    """Flush pending setpoint change events.
+
+    These rows originate from the ESP32 reporting a configured-value change
+    (firmware local override, manual HA switch toggle, etc.) — not from the
+    dispatcher's own pushes (those write directly in tasks.py::setpoint_dispatcher
+    with source='plan' | 'band'). Tagged source='esp32' to preserve provenance
+    per SetpointSource literal in verdify_schemas/setpoint.py.
+    """
     if not state.pending_setpoints:
         return
     changes = state.pending_setpoints.copy()
     state.pending_setpoints.clear()
-    validated: list[tuple[datetime, str, float]] = []
+    validated: list[tuple[datetime, str, float, str]] = []
     for param, val in changes:
         try:
-            SetpointChange(ts=ts, parameter=param, value=val, greenhouse_id=GREENHOUSE_ID)
+            SetpointChange(ts=ts, parameter=param, value=val, source="esp32", greenhouse_id=GREENHOUSE_ID)
         except ValidationError as e:
             log.error(f"setpoint_changes skipped (validation failed: {e}): param={param} value={val}")
             continue
-        validated.append((ts, param, val))
+        validated.append((ts, param, val, "esp32"))
     if not validated:
         return
     async with pool.acquire() as conn:
         await conn.executemany(
-            "INSERT INTO setpoint_changes (ts, parameter, value) VALUES ($1, $2, $3)",
+            "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES ($1, $2, $3, $4)",
             validated,
         )
     log.debug(f"setpoint_changes: {len(validated)} changes written")
@@ -409,7 +418,18 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
 
 
 async def write_daily_summary(pool: asyncpg.Pool) -> None:
-    """Snapshot daily accumulator values. Called at 00:05 each day."""
+    """Snapshot daily accumulator values. Called at 00:05 each day.
+
+    Two-writer contract for daily_summary (see tasks.py::daily_summary_live):
+      - This function owns the midnight UPSERT of raw accumulators from the
+        ESP32's cycle/runtime/water counters: cycles_*, runtime_*_min,
+        runtime_mister_*_h, water_used_gal, mister_water_gal, dli_final.
+      - `daily_summary_live` refreshes every 30 min with the live-computed
+        climate rollups + stress_hours_* + compliance_pct + cost_* + dp_risk_*
+        and also rewrites runtimes/cycles from equipment_state transitions.
+    Column ownership overlaps on cycles/runtimes; `daily_summary_live`'s values
+    win for the current day because it runs after this snapshot.
+    """
     today = datetime.now(UTC).date()
     today_str = str(today)
     if state._daily_snapshot_date == today_str:
@@ -442,6 +462,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
         log.error(f"daily_summary row failed schema validation: {e}")
         return
 
+    fairness = d.get("mister_fairness_overrides_today")
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO daily_summary (
@@ -451,11 +472,12 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
                 runtime_fan1_min, runtime_fan2_min, runtime_heat1_min, runtime_heat2_min,
                 runtime_fog_min, runtime_vent_min,
                 runtime_mister_south_h, runtime_mister_west_h, runtime_mister_center_h,
-                water_used_gal, mister_water_gal, dli_final
+                water_used_gal, mister_water_gal, dli_final,
+                mister_fairness_overrides_today
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9,
                 $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21
+                $19, $20, $21, $22
             ) ON CONFLICT (date) DO UPDATE SET
                 cycles_fan1 = EXCLUDED.cycles_fan1,
                 cycles_fan2 = EXCLUDED.cycles_fan2,
@@ -477,6 +499,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
                 water_used_gal = EXCLUDED.water_used_gal,
                 mister_water_gal = EXCLUDED.mister_water_gal,
                 dli_final = EXCLUDED.dli_final,
+                mister_fairness_overrides_today = EXCLUDED.mister_fairness_overrides_today,
                 captured_at = NOW()
             """,
             today,
@@ -500,6 +523,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
             water_total,
             mister_water,
             dli,
+            int(fairness) if fairness is not None else None,
         )
     state._daily_snapshot_date = today_str
     log.info(f"daily_summary written for {today}")
@@ -513,18 +537,31 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
     state.pending_logs.clear()
     ts = datetime.now(UTC)
 
+    # Validate each row through ESP32LogRow before the INSERT. Schema enforces
+    # message min_length=1 — empty-after-ANSI-strip payloads get dropped here
+    # instead of landing in the DB as blank rows.
+    validated: list[tuple[datetime, str, str | None, str]] = []
+    for lvl, tag, msg in logs:
+        try:
+            ESP32LogRow(ts=ts, level=lvl, tag=tag, message=msg)
+        except ValidationError:
+            continue
+        validated.append((ts, lvl, tag, msg))
+    if not validated:
+        return
+
     # Write to DB
     async with pool.acquire() as conn:
         await conn.executemany(
             "INSERT INTO esp32_logs (ts, level, tag, message) VALUES ($1, $2, $3, $4)",
-            [(ts, lvl, tag, msg) for lvl, tag, msg in logs],
+            validated,
         )
 
     # Push to Loki (best-effort, don't block on failure)
     try:
         loki_lines = []
         ts_ns = str(int(ts.timestamp() * 1e9))
-        for lvl, tag, msg in logs:
+        for _ts, lvl, tag, msg in validated:
             loki_lines.append([ts_ns, f"[{lvl}] [{tag or 'esp32'}] {msg}"])
         payload = json.dumps(
             {
@@ -542,7 +579,7 @@ async def write_esp32_logs(pool: asyncpg.Pool) -> None:
     except Exception:
         pass  # Don't fail ingestor if Loki is down
 
-    log.debug(f"esp32_logs: {len(logs)} messages written")
+    log.debug(f"esp32_logs: {len(validated)} messages written")
 
 
 def on_log_message(msg) -> None:
@@ -580,6 +617,39 @@ _SETPOINT_RANGES = {
 # Boot window: suppress ESP32 setpoint reports for 60s after connect
 # to prevent firmware defaults from polluting the DB
 _BOOT_WINDOW_S = 60
+
+# F10 (Sprint 24-alignment): firmware emits mister_state + mister_selected_zone
+# as numeric template sensors (state_class=measurement), not text. Map the int
+# codes to human-readable names before routing to system_state so Grafana
+# and the planner see "S1"/"south" not "1". Unknown codes fall through as
+# "unknown(N)" so drift is visible.
+# Source: firmware/greenhouse/controls.yaml (state machine) + greenhouse_types.h
+# (MistStage enum).
+_MISTER_STATE_NAMES = {
+    0: "WATCH",
+    1: "S1",
+    2: "S2",
+    3: "FOG",
+}
+_MISTER_ZONE_NAMES = {
+    0: "none",
+    1: "south",
+    2: "west",
+    3: "center",
+}
+_NUMERIC_STATE_DECODERS = {
+    "mister_state": _MISTER_STATE_NAMES,
+    "mister_zone": _MISTER_ZONE_NAMES,
+}
+
+
+def _decode_numeric_state(entity_name: str, val: float) -> str:
+    """F10: translate a numeric state-machine code to a human label."""
+    decoder = _NUMERIC_STATE_DECODERS.get(entity_name)
+    if decoder is None:
+        return str(val)
+    code = int(val)
+    return decoder.get(code, f"unknown({code})")
 
 
 def _accept_setpoint(param: str, value: float) -> bool:
@@ -619,9 +689,25 @@ def on_state_change(entity_state) -> None:
         if val is None or (isinstance(val, float) and math.isnan(val)):
             return
 
-        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot)
+        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot).
+        # Sprint 24.9 (G-1, HO-2): apply the same physical-range validation
+        # as the setpoint_changes path. Pre-first-push firmware init can
+        # report cfg_safety_min_f=0 etc.; without this gate those zero rows
+        # pollute setpoint_snapshot and break 30-day range reports (see
+        # firmware sprint-13 tunable-cascade doc §Historical impact).
         cfg_param = CFG_READBACK_MAP.get(obj_id)
         if cfg_param:
+            if cfg_param in _SETPOINT_RANGES:
+                lo, hi = _SETPOINT_RANGES[cfg_param]
+                if val < lo or val > hi:
+                    log.warning(
+                        "cfg_readback rejected out-of-range: %s=%.3f (valid %s-%s)",
+                        cfg_param,
+                        val,
+                        lo,
+                        hi,
+                    )
+                    return
             state.cfg_readback[cfg_param] = val
             return
 
@@ -648,6 +734,21 @@ def on_state_change(entity_state) -> None:
             state.setpoints[param] = val
             if old != val:
                 state.pending_setpoints.append((param, val))
+            return
+
+        # F10: numeric state-machine template sensors (mister_state,
+        # mister_selected_zone) route to system_state as decoded strings.
+        # These are diagnostic signals the planner uses to correlate VPD
+        # outcomes with which zone was firing; without this route they
+        # go stale in v_sensor_staleness within minutes.
+        entity = STATE_MAP.get(obj_id)
+        if entity:
+            decoded = _decode_numeric_state(entity, val)
+            old = state.system.get(entity)
+            state.system[entity] = decoded
+            if old != decoded:
+                state.pending_states.append((entity, decoded))
+                log.info(f"state: {entity} → {decoded}")
             return
 
     elif etype == "binary":
@@ -1002,6 +1103,10 @@ async def task_loop(pool: asyncpg.Pool) -> None:
         ("daily_summary_live", 1800, daily_summary_live),
         ("grow_light_daily", 86400, grow_light_daily),
         ("planning_heartbeat", 60, planning_heartbeat),
+        # 60s poll; guards on time-of-day (only fires in 00:05-00:10 MDT window,
+        # dedup by date). Sprint 24.7 ops stopgap — retires when Sprint 25
+        # alert_monitor rule 7 rewrite ships.
+        ("midnight_watch", 60, midnight_watch),
     ]
     last_run: dict[str, float] = {name: 0.0 for name, _, _ in TASKS}
 

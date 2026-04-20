@@ -36,11 +36,14 @@ ESP32 controller code, build pipeline, replay validation, OTA, sensor health.
 - Bumping firmware version in a way that requires ingestor / planner code changes
 - Touching `controls.yaml` in ways that rename or remove entities (entity_map.py depends on these)
 
-## Recent arc (pre-agent-org, for context)
+## Recent arc
 
-- Sprint 15: ESP32 reboot resilience, firmware hardening
-- Sprint 16: OBS-1e silent-override event emission
-- Sprint 17: Sensor fault resilience, per-probe staleness, OTA auto-rollback
-- Sprint 18: Deterministic dispatch (Milestone A2)
+The pre-agent-org operational stream (Sprints 15–23) retires with the agent split (see `CLAUDE.md`). Highlights of work now visible in the code:
 
-See `docs/backlog/firmware.md` for next work.
+- ESP32 reboot resilience and global-validation on boot (`greenhouse.yaml` `on_boot`)
+- OBS-1e silent-override event emission (`evaluate_overrides()` in `greenhouse_logic.h`, `gh_overrides` text sensor, `override_events` DB table)
+- Sensor fault resilience, per-probe staleness exclusion (`average_*` lambdas in `sensors.yaml`), OTA auto-rollback via `make firmware-deploy`
+- OBS-3 control-state exposure: `ctl_relief_cycle_count`, `ctl_vent_latch_timer_s`
+- 8-month historical replay gate (`make test-firmware`)
+
+Sprint counter starts fresh under this agent. See `docs/backlog/firmware.md` for the current queue.

@@ -80,10 +80,22 @@ struct Setpoints {
     float dehum_aggressive_kpa;
     bool  occupancy_inhibit;
     bool  econ_block;
+    // Sprint-10 0.4b: magic numbers extracted from greenhouse_logic.h.
+    // Defaults in default_setpoints() match the pre-sprint-10 constants.
+    uint32_t vent_latch_timeout_ms;    // was hardcoded 1800000 (30 min)
+    float    safety_max_seal_margin_f; // was hardcoded 5.0 (two places)
+    float    econ_heat_margin_f;       // was ECON_HEAT_MARGIN_F const
+    // Sprint-11: day/night pairs removed. Two-band model: safety rails +
+    // the one dispatcher-pushed band (temp_low/temp_high/vpd_low/vpd_high
+    // above). Day/night phasing is the dispatcher's job — firmware does
+    // not model temporal modes. See feedback_band_architecture memory.
 };
 
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
-static constexpr float ECON_HEAT_MARGIN_F = 5.0f;
+// Sprint-10 0.4b: ECON_HEAT_MARGIN_F moved into Setpoints as
+// econ_heat_margin_f (keeping the old constant removed intentionally to
+// prevent accidental re-use). Same for the former `1800000` vent-latch
+// timeout and the `5.0f` safety_max seal margin.
 
 // ── Persistent control state ──
 struct ControlState {
@@ -102,6 +114,11 @@ struct ControlState {
     // yet sanctioned. Read by evaluate_overrides() — cannot be reconstructed
     // post-hoc because R2-3 mutates vpd_watch_timer_ms in the same cycle.
     bool dry_override_active;
+    // Sprint-9 P1#7: Stage-2 heater latch. Set when temp < Tlow - dH2.
+    // Cleared when temp >= Tlow + heat_hysteresis (S1 satisfied). Prevents
+    // gas-valve rapid cycling in the hysteresis band between the two
+    // thresholds. Managed by determine_mode; read by resolve_equipment.
+    bool heat2_latched;
 };
 
 struct RelayOutputs {
@@ -134,28 +151,42 @@ inline uint32_t sat_add(uint32_t a, uint32_t b) noexcept {
 }
 
 // ── Defaults ──
+// Sprint-11 widening: firmware defaults are PERMISSIVE, bounded only by
+// safety rails. The dispatcher pushes the real crop band every planner
+// cycle; if the dispatcher is silent, we sit in a wide "don't narrow"
+// regime so safety rails are the only active constraint. Two-band model:
+// safety rails + one dispatcher-pushed band.
 inline Setpoints default_setpoints() {
     return {
-        .temp_high = 82.0f, .temp_low = 58.0f,
-        .vpd_high = 1.2f, .vpd_low = 0.5f,
+        .temp_high = 95.0f, .temp_low = 40.0f,    // wide — dispatcher narrows
+        .vpd_high = 2.80f,  .vpd_low = 0.35f,      // wide — dispatcher narrows
         .bias_cool = 0.0f, .bias_heat = 0.0f,
         .vpd_hysteresis = 0.3f, .temp_hysteresis = 1.5f, .heat_hysteresis = 1.0f,
         .dH2 = 5.0f, .dC2 = 3.0f,
-        .safety_max = 95.0f, .safety_min = 45.0f,
+        .safety_max = 100.0f, .safety_min = 35.0f,
         .vpd_max_safe = 3.0f, .vpd_min_safe = 0.3f,
         .sealed_max_ms = 600000, .relief_duration_ms = 90000,
         .vpd_watch_dwell_ms = 60000, .mist_s2_delay_ms = 300000,
         .max_relief_cycles = 3,
         .fog_escalation_kpa = 0.4f, .fog_rh_ceiling = 90.0f,
         .fog_min_temp = 55.0f, .fog_window_start = 7, .fog_window_end = 17,
-        .dehum_aggressive_kpa = 0.6f,
-        .occupancy_inhibit = false, .econ_block = false
+        .dehum_aggressive_kpa = 0.3f,              // must be < vpd_low
+        .occupancy_inhibit = false, .econ_block = false,
+        .vent_latch_timeout_ms = 1800000u,
+        .safety_max_seal_margin_f = 5.0f,
+        .econ_heat_margin_f = 5.0f
     };
 }
 
 // Caller must invoke before passing setpoints to determine_mode().
 // This function is NOT called automatically — the contract is explicit.
+//
+// Sprint-9 P2#8: extended with relational asserts so one mis-entered HA
+// number can't silently create unreachable modes or mode thrash. Each
+// relational clamp picks the "safe side" when the input is inverted so
+// the controller stays responsive while logs flag the violation.
 inline void validate_setpoints(Setpoints& sp) {
+    // --- individual-value clamps (pre-sprint-9) ---
     sp.temp_high = std::max(50.0f, std::min(110.0f, sp.temp_high));
     sp.temp_low = std::max(30.0f, std::min(90.0f, sp.temp_low));
     if (sp.temp_low >= sp.temp_high) sp.temp_low = sp.temp_high - 5.0f;
@@ -164,11 +195,74 @@ inline void validate_setpoints(Setpoints& sp) {
     sp.vpd_hysteresis = std::max(0.05f, std::min(sp.vpd_high * 0.5f, sp.vpd_hysteresis));
     sp.temp_hysteresis = std::max(0.5f, std::min(5.0f, sp.temp_hysteresis));
     sp.heat_hysteresis = std::max(0.0f, std::min(3.0f, sp.heat_hysteresis));
+    // Sprint-14: clamp biases to ±5°F. Pre-sprint-14 these were
+    // unclamped — a dispatcher push of bias_heat = -50 would disable
+    // heating entirely. 30-day observed operational range was
+    // bias_cool ∈ [-1, 5], bias_heat ∈ [0, 5]; [-5, 5] covers observed
+    // usage and matches the ±5°F margin the rest of validate uses.
+    sp.bias_heat = std::max(-5.0f, std::min(5.0f, sp.bias_heat));
+    sp.bias_cool = std::max(-5.0f, std::min(5.0f, sp.bias_cool));
     sp.safety_max = std::max(sp.temp_high + 5.0f, std::min(120.0f, sp.safety_max));
     sp.safety_min = std::max(30.0f, std::min(sp.temp_low - 5.0f, sp.safety_min));
     sp.sealed_max_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.sealed_max_ms));
     sp.relief_duration_ms = std::max(uint32_t(15000), std::min(uint32_t(600000), sp.relief_duration_ms));
     sp.max_relief_cycles = std::max(uint32_t(1), std::min(uint32_t(10), sp.max_relief_cycles));
+
+    // --- sprint-9 P2#8: relational asserts + previously-unclamped scalars ---
+    // vpd_min_safe and vpd_max_safe were completely unclamped before
+    // sprint-9, which meant bad HA values could make either bound useless.
+    sp.vpd_max_safe = std::max(sp.vpd_high + 0.1f, std::min(8.0f, sp.vpd_max_safe));
+    sp.vpd_min_safe = std::max(0.05f, std::min(sp.vpd_low - 0.05f, sp.vpd_min_safe));
+    // Full ordering: vpd_min_safe < vpd_low < vpd_high < vpd_max_safe.
+    // The three clamps above already enforce adjacent pairs; no further
+    // fix-up needed as long as vpd_low stayed strictly < vpd_high.
+
+    // Thigh + dC2 must be below safety_max or the planner can demand
+    // aggressive cooling right up to the safety threshold with no buffer.
+    sp.dC2 = std::max(1.0f, std::min(sp.safety_max - sp.temp_high - 1.0f, sp.dC2));
+    if (sp.dC2 < 1.0f) sp.dC2 = 1.0f;  // floor after the relational clamp
+    sp.dH2 = std::max(1.0f, std::min(20.0f, sp.dH2));
+
+    // Relief must complete inside the sealed window, else the was_sealed
+    // branch's THERMAL_RELIEF backstop can't meaningfully gate re-seal.
+    if (sp.relief_duration_ms >= sp.sealed_max_ms) {
+        sp.relief_duration_ms = sp.sealed_max_ms / 4;  // 25% of seal window
+        if (sp.relief_duration_ms < 15000) sp.relief_duration_ms = 15000;
+    }
+
+    // Fog window: if start == end the window is zero-width (fog always
+    // gated) or always-open depending on which comparison wins. Force
+    // the default 7-17 window as a recovery point.
+    if (sp.fog_window_start == sp.fog_window_end) {
+        sp.fog_window_start = 7;
+        sp.fog_window_end = 17;
+    }
+    // Clamp hours to [0, 23] individually (wrap-aware — start > end is
+    // valid for midnight-crossing windows).
+    sp.fog_window_start = std::max(0, std::min(23, sp.fog_window_start));
+    sp.fog_window_end   = std::max(0, std::min(23, sp.fog_window_end));
+
+    // vpd_watch_dwell and mist_s2_delay need non-zero values; zero would
+    // make the watchdog fire on every cycle and the S1→S2 promotion
+    // happen instantly.
+    sp.vpd_watch_dwell_ms = std::max(uint32_t(1000), std::min(uint32_t(600000), sp.vpd_watch_dwell_ms));
+    sp.mist_s2_delay_ms   = std::max(uint32_t(1000), std::min(uint32_t(1800000), sp.mist_s2_delay_ms));
+
+    // Fog-specific clamps
+    sp.fog_escalation_kpa = std::max(0.05f, std::min(2.0f, sp.fog_escalation_kpa));
+    sp.fog_rh_ceiling     = std::max(30.0f, std::min(100.0f, sp.fog_rh_ceiling));
+    sp.fog_min_temp       = std::max(30.0f, std::min(100.0f, sp.fog_min_temp));
+
+    // Dehum aggressiveness delta must fit under vpd_low so the
+    // "dehum_aggressive" engage threshold (vpd_low - dehum_aggressive_kpa)
+    // is positive.
+    sp.dehum_aggressive_kpa = std::max(0.05f, std::min(sp.vpd_low - 0.05f, sp.dehum_aggressive_kpa));
+
+    // --- sprint-10 0.4b: magic-number clamps ---
+    sp.vent_latch_timeout_ms = std::max(uint32_t(60000),
+                                        std::min(uint32_t(7200000), sp.vent_latch_timeout_ms));
+    sp.safety_max_seal_margin_f = std::max(1.0f, std::min(15.0f, sp.safety_max_seal_margin_f));
+    sp.econ_heat_margin_f       = std::max(1.0f, std::min(15.0f, sp.econ_heat_margin_f));
 }
 
 inline ControlState initial_state() {
@@ -179,6 +273,7 @@ inline ControlState initial_state() {
         .sealed_timer_ms = 0, .relief_timer_ms = 0,
         .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
         .relief_cycle_count = 0, .vent_latch_timer_ms = 0,
-        .dry_override_active = false
+        .dry_override_active = false,
+        .heat2_latched = false
     };
 }

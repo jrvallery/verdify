@@ -42,6 +42,15 @@ class TestTunableEnumShape:
         - /srv/verdify/ingestor (Iris VM; compat symlink to /mnt/iris/verdify)
         - <repo-root>/ingestor (CI checkout path)
         - /mnt/iris/verdify/ingestor (NFS path)
+
+        Bidirectional assertions:
+        - Every SETPOINT_MAP value must be in ALL_TUNABLES (dispatcher can't
+          route a param the schema doesn't know).
+        - Every ALL_TUNABLES entry must be either dispatched (SETPOINT_MAP) or
+          readback-only (CFG_READBACK_MAP). Firmware-internal readback-only
+          tunables (e.g. fallback_window_s) need a home in ALL_TUNABLES so
+          SetpointSnapshot validates; they have no SETPOINT_MAP route by
+          design and are allowed here.
         """
         import pathlib
 
@@ -50,20 +59,61 @@ class TestTunableEnumShape:
         for p in ("/srv/verdify/ingestor", str(repo_root / "ingestor"), "/mnt/iris/verdify/ingestor"):
             if p not in sys.path:
                 sys.path.insert(0, p)
-        from entity_map import SETPOINT_MAP
+        from entity_map import CFG_READBACK_MAP, SETPOINT_MAP
 
         em_tunables = set(SETPOINT_MAP.values())
+        readback_tunables = set(CFG_READBACK_MAP.values())
+        routed_tunables = em_tunables | readback_tunables
         schema_tunables = set(ALL_TUNABLES)
 
         missing_in_schema = sorted(em_tunables - schema_tunables)
-        missing_in_em = sorted(schema_tunables - em_tunables)
+        unrouted_in_schema = sorted(schema_tunables - routed_tunables)
 
         assert not missing_in_schema, (
             f"entity_map has tunables the schema doesn't know: {missing_in_schema}. Add to verdify_schemas/tunables.py."
         )
-        assert not missing_in_em, (
-            f"schema has tunables entity_map doesn't route: {missing_in_em}. "
-            "Remove from schema or add to entity_map.SETPOINT_MAP."
+        assert not unrouted_in_schema, (
+            f"schema has tunables neither SETPOINT_MAP nor CFG_READBACK_MAP routes: {unrouted_in_schema}. "
+            "Remove from schema or add to one of the entity_map maps."
+        )
+
+
+class TestPhysicsInvariants:
+    """Sprint 24: `_PHYSICS_INVARIANTS` drift guard. Every key the dispatcher
+    clamps must be a canonical ALL_TUNABLES entry; non-canonical names would
+    fail SetpointChange validation upstream and never reach the invariant
+    check, making those entries dead defense. Catches the Sprint 18→23 drift
+    (fog_window_start vs fog_time_window_start, vpd_max_safe, etc.) at CI time.
+    """
+
+    def test_physics_invariants_are_canonical(self):
+        import pathlib
+
+        # ingestor/tasks.py imports asyncpg; the schema-only CI env doesn't
+        # ship runtime deps, so skip cleanly instead of ModuleNotFoundError.
+        # Local `make test` (which installs ingestor deps) still runs this.
+        pytest.importorskip("asyncpg")
+
+        here = pathlib.Path(__file__).resolve()
+        repo_root = here.parent.parent.parent
+        ingestor_path = str(repo_root / "ingestor")
+
+        # Worktree-safe: prefer THIS repo's ingestor module. Unlike entity_map
+        # (which stays in lockstep across worktrees), _PHYSICS_INVARIANTS can
+        # differ per branch during a sprint, so we must import from the same
+        # commit as this test file. Force-reorder sys.path + clear cached import.
+        if ingestor_path in sys.path:
+            sys.path.remove(ingestor_path)
+        sys.path.insert(0, ingestor_path)
+        sys.modules.pop("tasks", None)
+
+        from tasks import _PHYSICS_INVARIANTS
+
+        invariant_keys = set(_PHYSICS_INVARIANTS.keys())
+        non_canonical = sorted(invariant_keys - set(ALL_TUNABLES))
+        assert not non_canonical, (
+            f"_PHYSICS_INVARIANTS has non-canonical keys: {non_canonical}. "
+            "Rename to match ALL_TUNABLES or remove. Dead keys are silently dead defense."
         )
 
 

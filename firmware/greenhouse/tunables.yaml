@@ -4,10 +4,11 @@
 
 number:
   # --- Temperature band (°F) -----------------------------------------
+  # Wide min/max — dispatcher pushes real crop band each planner cycle.
   - platform: template
     id: num_temp_low
     name: "Set Temp Low °F"
-    min_value: 40
+    min_value: 30
     max_value: 80
     step: 0.5
     lambda: "return id(target_temp_low_f);"
@@ -19,7 +20,7 @@ number:
   - platform: template
     id: num_temp_high
     name: "Set Temp High °F"
-    min_value: 60
+    min_value: 40
     max_value: 100
     step: 0.5
     lambda: "return id(target_temp_high_f);"
@@ -66,10 +67,11 @@ number:
           id(num_hyst_temp).publish_state(x);
 
   # --- VPD set‑band (kPa) --------------------------------------------
+  # Wide min/max — dispatcher pushes real crop band each planner cycle.
   - platform: template
     id: num_vpd_low
     name: "Set VPD Low kPa"
-    min_value: 0.30
+    min_value: 0.10
     max_value: 1.00
     step: 0.05
     lambda: "return id(target_vpd_low_kpa);"
@@ -80,7 +82,7 @@ number:
   - platform: template
     id: num_vpd_high
     name: "Set VPD High kPa"
-    min_value: 1.00
+    min_value: 0.40
     max_value: 3.00
     step: 0.05
     lambda: "return id(target_vpd_high_kpa);"

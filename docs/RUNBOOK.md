@@ -1,11 +1,103 @@
 # Verdify Operations Runbook
 
 **VM:** vm-docker-iris (192.168.30.150)
-**Last updated:** 2026-03-29
+**Last updated:** 2026-04-20 (pre-Jason-departure refresh)
 
 ---
 
-## Service Inventory
+## 2026-04-20 Updates (since 2026-03-29)
+
+Consolidated delta from the dual-Iris rollout + overnight incidents. Read these before debugging any planner/alert-related issue.
+
+### Contract v1.4 + dual-Iris plumbing
+
+- **`docs/iris-planner-contract.md`** is the wire-protocol source of truth. Dual-Iris (opus + local vLLM gemma) routing, SLA(trigger_type, instance), `acknowledge_trigger` MCP tool, `X-Trigger-Id` / `X-Planner-Instance` / `X-Heartbeat-Readonly` headers.
+- **Migration 093 applied** (2026-04-20 08:05 MDT): `plan_delivery_log` extended with `trigger_id`, `instance`, `acked_at`, `status` columns + CHECK constraint on status values. `plan_journal` and `setpoint_changes` got `planner_instance` + `trigger_id`.
+- **Pydantic v1.4 audit fields** landed in `verdify_schemas/plan.py` and `setpoint.py` (commit `d822485`).
+- Rollout phase: schema ✅ landed. genai Sub-scope A (prompt split) ✅ committed local on `genai/sprint-3-mcp-contract` branch. Sub-scope B (MCP header stamping + acknowledge_trigger) blocked on Iris's Q5 FastMCP smoke test answer. Ingestor sprint-25 (consume new signature) blocked on genai B.
+
+### Alert changes
+
+- **`planner_stale` threshold: 8h → 14h** (PR #15 merged `6c2f5b3` 2026-04-20). Rationale: SUNSET→SUNRISE gap is ~12.7h; 14h = that + 1.3h slack, fires only on genuine SUNRISE miss. See `ingestor/tasks.py:675-691`.
+- **`setpoint_unconfirmed` lifecycle fixed** (sprint-24.7, `51c4781`). Was flapping every 5 min because `alert_monitor`'s auto-resolve iterated ALL open alerts and closed any whose key wasn't in its cycle's active_keys; `setpoint_confirmation_monitor` now owns full lifecycle of its own alerts. Alert rule auto-resolve now filters to `source='system'`.
+- **OBS-3 rules added** (sprint-24.7): `firmware_relief_ceiling` (warn@2, crit@3) and `firmware_vent_latched` (warn@600s, crit@1200s). Reads diagnostics columns Sprint 18 added but alert_monitor never consumed.
+- **`midnight_watch` task** (sprint-24.7): ops stopgap that polls `plan_delivery_log` at 00:05–00:10 MDT for MIDNIGHT/TRANSITION:midnight_posture delivery. Posts one Slack message (✅ / 🟡 / 🔴). Retires when sprint-25's per-pair SLA rule lands.
+- **MIDNIGHT dispatch bug** (sprint-24.8, `98ff9a1`): single-line fix — cached milestone was set to `today + 1 day` at date rollover, making it perpetually 24h in the future. Now `datetime.combine(today, …)` so first task_loop past 00:00 hits firing window. Overnight `midnight_watch` 🔴 at 00:05 correctly surfaced this.
+
+### Firmware changes (sprint-11, `b8bcfb7`)
+
+- **Day/night setpoint pairs REMOVED entirely.** Sprint-10 phase-0 added them; they silently outranked the dispatcher's crop band overnight 2026-04-19/20, plants tracked firmware's invented 62-68°F night band for 10h, temp bottomed at 53.7°F, 41 SEALED_MIST transitions.
+- **New architectural rule:** **two sources of band in the firmware, and only two:**
+  1. **Safety rails** (`safety_min/max`, `vpd_min_safe`, `vpd_max_safe`) — hard backstops, fallback only.
+  2. **Dispatcher-pushed band** (`temp_low/high`, `vpd_low/high`) — drives the 7-mode controller.
+- No photoperiod switches, no day/night resolution, no `resolve_active_band()` helper. If the dispatcher goes silent, firmware falls through to permissive defaults (40-95°F / 0.35-2.8 kPa) + safety rails.
+
+## iris-dev /loop (permanent operating mode)
+
+When Jason is away, iris-dev runs `/loop` in dynamic mode to monitor + coordinate without active user input.
+
+- **Start:** Jason invokes `/loop "<coordinator prompt>"` when disconnecting. Prompt is in `~/.claude-agents/iris-dev/plans/yo-iris-dev-you-help-humming-stonebraker.md`.
+- **Stop:** Any non-`/loop` message to iris-dev ends the cycle and hands control back.
+- **Cadence:** Dynamic via `ScheduleWakeup`. 60-270s cache-warm when active, 1200-1800s idle default, 3600s quiet-night cap.
+- **Each cycle:** scans tmux (agent-iris-iris-planner, agent-iris-iris, agent-verdify-{genai,ingestor,web,firmware,saas}), git log on main, `plan_delivery_log` status distribution, `setpoint_changes` age, open critical alerts. Updates `~/.claude-agents/iris-dev/projects/-mnt-iris-verdify/memory/STATUS.md`.
+- **Emergency triggers** (wake Jason via PushNotification + best-effort Slack):
+  - `temp_safety` critical (<40°F or >100°F inside greenhouse)
+  - `leak_detected` critical
+  - DP margin <2°F (condensation imminent)
+- **NOT emergencies** (daily digest instead): Iris silent across scheduled events, ESP32 push failures, dispatcher tick gaps, non-critical alerts, routine infra restarts.
+- **Commit Monitor** armed (task id varies per session) — fires notification on any new commit on main. iris-dev handles in-context and reschedules.
+
+## Quick health check (expanded, 2026-04-20)
+
+Run in this order; all should pass. Takes <30 seconds.
+
+```bash
+# 1. DB
+docker exec verdify-timescaledb pg_isready  # → accepting connections
+
+# 2. OpenClaw gateway (Iris's dispatch endpoint)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18789/status  # → 200
+
+# 3. Core services
+for s in verdify-ingestor verdify-mcp verdify-setpoint-server; do
+  systemctl is-active $s
+done  # → active, active, active
+
+# 4. Dispatcher recency (should be within last 6 min)
+docker exec verdify-timescaledb psql -U verdify -d verdify -c \
+  "SELECT now() - max(ts) AS since_last_push FROM setpoint_changes;"
+
+# 5. Active plan horizon (should extend at least 12h into the future)
+docker exec verdify-timescaledb psql -U verdify -d verdify -c \
+  "SELECT plan_id, max(ts) AS horizon FROM setpoint_plan WHERE is_active AND ts > now() GROUP BY plan_id;"
+
+# 6. Open critical alerts (should be 0)
+docker exec verdify-timescaledb psql -U verdify -d verdify -c \
+  "SELECT count(*) FROM alert_log WHERE disposition='open' AND severity='critical';"
+
+# 7. Grafana
+curl -s -o /dev/null -w '%{http_code}\n' https://graphs.verdify.ai/api/health  # → 200
+```
+
+If any returns unexpected, consult the failure-mode section below.
+
+## Applying a migration to prod
+
+Discovered 2026-04-20: `docker exec -i verdify-timescaledb psql -U verdify -d verdify < db/migrations/NNN-*.sql` works. Online-safe ALTERs are routine; destructive DDL (DROP/TRUNCATE) needs explicit approval.
+
+Example (migration 093 applied this morning):
+```bash
+docker exec -i verdify-timescaledb psql -U verdify -d verdify < /mnt/iris/verdify/db/migrations/093-planner-instance-audit.sql
+```
+
+Verify:
+```bash
+docker exec verdify-timescaledb psql -U verdify -d verdify -c "\d plan_delivery_log" | grep -E "trigger_id|instance|acked_at|status"
+```
+
+---
+
+
 
 | Service | Type | Restart | Check |
 |---------|------|---------|-------|

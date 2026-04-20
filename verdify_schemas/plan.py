@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -208,3 +209,52 @@ class PlanJournalRow(BaseModel):
     validated_at: AwareDatetime | None = None
     hypothesis_structured: PlanHypothesisStructured | None = None
     greenhouse_id: str = "vallery"
+    # v1.4 audit columns (migration 093). Populated by MCP server from
+    # X-Planner-Instance + X-Trigger-Id headers; NULL on pre-v1.4 rows.
+    planner_instance: str | None = None
+    trigger_id: UUID | None = None
+
+
+# ── Planner delivery audit (Sprint 24.6 — F14, extended v1.4 in mig 093) ──
+
+
+PlanDeliveryEventType = Literal[
+    "SUNRISE", "SUNSET", "MIDNIGHT", "TRANSITION", "FORECAST", "DEVIATION", "HEARTBEAT", "MANUAL"
+]
+# v1.4 (contract §2.G): opus | local are the post-rollout instance values.
+# "iris-planner" is the backfill label for pre-v1.4 rows.
+PlannerInstance = Literal["opus", "local", "iris-planner"]
+# v1.4 (contract §2.F): lifecycle state on plan_delivery_log.
+PlanDeliveryStatus = Literal["pending", "acked", "plan_written", "timed_out", "delivery_failed"]
+
+
+class PlanDeliveryLogRow(BaseModel):
+    """plan_delivery_log table row — one entry per send_to_iris call.
+
+    Ingestor writes this from planning_heartbeat immediately after each
+    delivery. The 30-min verification pass updates resulting_plan_id +
+    plan_written_at when a plan materializes. Makes delivery→plan
+    correlation query-able instead of requiring journal log scavenging.
+    See migration 092.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    delivered_at: AwareDatetime | None = None
+    event_type: PlanDeliveryEventType
+    event_label: str | None = None
+    session_key: str | None = None
+    wake_mode: Literal["now", "next-heartbeat"] | None = None
+    gateway_status: int | None = None
+    gateway_body: str | None = None
+    resulting_plan_id: str | None = None
+    plan_written_at: AwareDatetime | None = None
+    greenhouse_id: str = "vallery"
+    # v1.4 audit columns (migration 093). Populated by ingestor on INSERT
+    # and by MCP acknowledge_trigger; backfill sets instance='iris-planner'
+    # and derives status from resulting_plan_id / gateway_status / delivered_at.
+    trigger_id: UUID | None = None
+    instance: PlannerInstance | None = None
+    acked_at: AwareDatetime | None = None
+    status: PlanDeliveryStatus | None = None
