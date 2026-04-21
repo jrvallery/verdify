@@ -14,6 +14,7 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import asyncpg
 from mcp.server.fastmcp import FastMCP
@@ -291,13 +292,32 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
     if parameter not in TIER1:
         return json.dumps({"error": f"'{parameter}' is not a Tier 1 tunable", "allowed": sorted(TIER1)})
 
+    # Phase-1b: set_tunable writes to setpoint_plan (one-shot waypoint at
+    # ts=now()) so the dispatcher's plan-reading cycle doesn't overwrite
+    # the iris push within 5 minutes. Observed live 2026-04-21:
+    # min_heat_off_s=180 pushed at 11:36, overwritten to 300 from the
+    # prior sunrise plan within 4 minutes. setpoint_plan is the dispatcher's
+    # actual source of truth; writing there makes iris pushes durable until
+    # the next plan supersedes.
+    #
+    # plan_id format `iris-oneshot-<YYYYMMDD-HHMM>` lets the next set_plan
+    # call (which deactivates older plans) distinguish iris tactical pushes
+    # from automatic SUNRISE/SUNSET plans and preserve them across boundaries.
     conn = await _db()
     try:
+        now_mdt = datetime.now(ZoneInfo("America/Denver"))
+        plan_id = f"iris-oneshot-{now_mdt.strftime('%Y%m%d-%H%M')}"
         await conn.execute(
-            "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
+            """
+            INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason)
+            VALUES (now(), $1, $2, $3, 'iris', $4)
+            ON CONFLICT (ts, parameter, plan_id) DO UPDATE
+              SET value = EXCLUDED.value, reason = EXCLUDED.reason
+            """,
             parameter,
             value,
-            "iris",
+            plan_id,
+            reason,
         )
         return json.dumps(
             {
@@ -305,7 +325,12 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
                 "parameter": parameter,
                 "value": value,
                 "reason": reason,
-                "note": "Dispatcher will push to ESP32 within 5 minutes",
+                "plan_id": plan_id,
+                "note": (
+                    "Written to setpoint_plan as a one-shot waypoint at now(). "
+                    "Dispatcher pushes to ESP32 within 5 minutes and this value "
+                    "persists until the next set_plan or set_tunable supersedes."
+                ),
             }
         )
     finally:
@@ -460,8 +485,18 @@ async def set_plan(
 
     conn = await _db()
     try:
-        # Deactivate existing future waypoints
-        await conn.execute("UPDATE setpoint_plan SET is_active = false WHERE ts > now() AND is_active = true")
+        # Deactivate existing future waypoints EXCEPT iris-oneshot tactical pushes.
+        # Phase 1b: set_tunable writes to setpoint_plan with plan_id
+        # `iris-oneshot-<YYYYMMDD-HHMM>`. Those are live tactical adjustments
+        # that should survive across regular sunrise/sunset plans until
+        # superseded by a later waypoint. Plan-level supersession is by
+        # `created_at DESC` so the newer multi-waypoint plan still wins on
+        # any parameter it re-specifies.
+        await conn.execute(
+            """UPDATE setpoint_plan SET is_active = false
+               WHERE ts > now() AND is_active = true
+                 AND plan_id NOT LIKE 'iris-oneshot-%'"""
+        )
 
         # Write new waypoints (everything pre-validated — no further per-row guards needed)
         rows_written = 0
