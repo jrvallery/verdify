@@ -221,8 +221,13 @@ jobs:
         # Observed need from 2026-04-21 MCP staleness incident — MCP ran
         # 40+ hours with stale schema because nobody restarted it post-merge.
         # Forces PR authors to document which services bounce post-merge.
+        # Reads PR body via jq from $GITHUB_EVENT_PATH (not shell-interpolated
+        # ${{ github.event.pull_request.body }}) so arbitrary PR-body content
+        # including backticks/parens/quotes doesn't break the script.
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          BASE=$(git merge-base HEAD origin/${{ github.base_ref }})
+          BASE=$(git merge-base HEAD "origin/${BASE_REF}")
           SCHEMA_CHANGED=$(git diff --name-only "$BASE" HEAD -- \
             'verdify_schemas/**' 'ingestor/entity_map.py' 'mcp/server.py' 2>/dev/null | head -1)
           if [ -z "$SCHEMA_CHANGED" ]; then
@@ -230,8 +235,8 @@ jobs:
             exit 0
           fi
           echo "Schema-touching files changed: $SCHEMA_CHANGED"
-          PR_BODY="${{ github.event.pull_request.body }}"
-          if ! echo "$PR_BODY" | grep -iqE '(restart|bounce|service|systemctl)'; then
+          PR_BODY=$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH")
+          if ! printf '%s' "$PR_BODY" | grep -iqE '(restart|bounce|service|systemctl)'; then
             echo "::error::PR touches schema/entity_map/mcp but PR body doesn't mention service restart."
             echo "Add a 'Post-merge restart' line listing which services need to bounce (e.g. verdify-mcp, verdify-ingestor)."
             exit 1
