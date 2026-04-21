@@ -274,6 +274,9 @@ SETPOINT_MAP: dict[str, str] = {
     "outdoor_staleness_max__s_": "outdoor_staleness_max_s",
     "summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
     "summer_vent_enabled": "sw_summer_vent_enabled",
+    # Phase-2 dwell gate (plan firmware stabilization).
+    "dwell_gate_ms": "dwell_gate_ms",
+    "dwell_gate_enabled": "sw_dwell_gate_enabled",
 }
 
 # ──────────────────────────────────────────────────────────────

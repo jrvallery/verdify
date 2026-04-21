@@ -412,6 +412,52 @@ inline Mode determine_mode(
         // documented in backlog (P3#15 still open).
     }
 
+    // ── Phase-2 dwell gate ────────────────────────────────────────────
+    // Hold non-safety mode transitions for at least sp.dwell_gate_ms after
+    // the most recent accepted transition. Closes the whipsaw pattern
+    // observed 2026-04-17 (59 mode changes in 2h stable window) and
+    // 2026-04-20 (relief_cycle_breaker thrashing). Replay projects 80%
+    // reduction in stable-conditions transitions.
+    //
+    // Preempts: safety rails (SAFETY_COOL/HEAT), FAULT_HOLD-equivalent
+    // (SENSOR_FAULT), R2-3 dry override, vpd_min_safe rescue. Safety
+    // must ALWAYS fire immediately — no dwell gate on life-safety paths.
+    //
+    // Shadow mode: default sp.sw_dwell_gate_enabled=false. Firmware
+    // logs what it WOULD decide (via last_mode_reason suffix) but still
+    // applies the transition. After 14d shadow-mode bake, flip to true.
+    // See plan Phase 2 gate criteria.
+    //
+    // Accounting: last_transition_tick_ms is a "ms since last accepted
+    // transition" accumulator. Each cycle: += dt_ms if mode unchanged,
+    // reset to 0 when we accept a new transition.
+    {
+        const bool safety_preempts_dwell =
+            (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) ||
+            (mode == SENSOR_FAULT) ||
+            state.dry_override_active ||
+            (in.vpd_kpa < sp.vpd_min_safe);
+
+        const bool mode_would_change = (mode != state.mode_prev);
+        const bool in_dwell = state.last_transition_tick_ms < sp.dwell_gate_ms;
+
+        if (sp.sw_dwell_gate_enabled
+            && mode_would_change
+            && in_dwell
+            && !safety_preempts_dwell) {
+            // Hold. Report via last_mode_reason so diagnostics see it.
+            mode = state.mode_prev;
+            state.last_mode_reason = "dwell_hold";
+        }
+        // Update accumulator regardless of flag state — shadow mode needs
+        // the counter so post-flip the first transition has correct dwell.
+        if (mode != state.mode_prev) {
+            state.last_transition_tick_ms = 0;
+        } else {
+            state.last_transition_tick_ms = sat_add(state.last_transition_tick_ms, dt_ms);
+        }
+    }
+
     // ── Mist stage progression ──
     if (mode == SEALED_MIST) {
         // Occupancy blocks ALL moisture — freeze mist stage if occupied

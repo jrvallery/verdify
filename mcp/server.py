@@ -285,6 +285,9 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
         # planner should typically leave ON unless an A/B test requires.
         "sw_fog_closes_vent",
         "sw_mister_closes_vent",
+        # Phase-2 dwell gate (plan firmware stabilization).
+        "sw_dwell_gate_enabled",
+        "dwell_gate_ms",
     }
     # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
     if parameter not in ALL_TUNABLES:
