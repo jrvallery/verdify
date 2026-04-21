@@ -85,19 +85,23 @@ class TestSplitInvariants:
         """G7: structured hypothesis guidance must reach both instances."""
         assert "Structured hypothesis" in iris_planner._PLANNER_CORE
 
-    def test_core_contains_full_tunable_dictionary(self, iris_planner):
-        """Both instances must know every param they can push. Sprint-4 expanded
-        the dictionary from 24 Tier 1 to all 86 ALL_TUNABLES per
-        docs/tunable-cascade.md."""
-        from verdify_schemas.tunables import ALL_TUNABLES
+    def test_core_contains_tier1_tunable_dictionary(self, iris_planner):
+        """Phase-1d: prompt dropped from ~86 ALL_TUNABLES to Tier 1 only
+        (the ~30 daily-use knobs from verdify_schemas.tunable_registry).
+        Sprint-4's "dictionary of all 86" policy was the root cause of a
+        prompt-bloat spiral (see plan: phase 1d). The registry is now the
+        authoritative full list; the prompt only needs Tier 1 names
+        literal + an escape-hatch reference for Tier 2."""
+        from verdify_schemas.tunable_registry import REGISTRY
 
-        assert "Tunable Dictionary (all 86" in iris_planner._PLANNER_CORE, (
-            "dictionary header missing — Tier 1 section was renamed in sprint-4"
+        assert "Tunable Dictionary — Tier 1" in iris_planner._PLANNER_CORE, "Tier 1 dictionary header missing"
+        assert "docs/tunable-cascade.md" in iris_planner._PLANNER_CORE, (
+            "escape-hatch reference to full cascade doc missing"
         )
-        # Every tunable name must appear as a literal token in CORE so Iris can
-        # look it up when reasoning. Drift guard against future schema additions.
-        missing = sorted(t for t in ALL_TUNABLES if t not in iris_planner._PLANNER_CORE)
-        assert not missing, f"CORE dictionary missing {len(missing)} tunables: {missing[:10]}"
+        # Every Tier 1 param must appear as a literal token in CORE.
+        tier1 = {n for n, d in REGISTRY.items() if d.planner_pushable and d.tier == 1}
+        missing = sorted(t for t in tier1 if t not in iris_planner._PLANNER_CORE)
+        assert not missing, f"CORE Tier-1 dictionary missing {len(missing)} params: {missing[:10]}"
 
     def test_core_contains_decision_precedence(self, iris_planner):
         assert "Decision Precedence" in iris_planner._PLANNER_CORE
