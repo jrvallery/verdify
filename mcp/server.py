@@ -273,6 +273,17 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
         "min_heat_off_s",
         "mister_engage_delay_s",
         "mister_all_delay_s",
+        # Sprint-15 summer-vent gate — dispatcher-pushable tunables that
+        # planner should tune when hot-dry-afternoon regime activates.
+        "sw_summer_vent_enabled",
+        "vent_prefer_temp_delta_f",
+        "vent_prefer_dp_delta_f",
+        "outdoor_staleness_max_s",
+        "summer_vent_min_runtime_s",
+        # Sprint-15.1 vent-close interlocks — fixes 4/5/7. Operator toggles;
+        # planner should typically leave ON unless an A/B test requires.
+        "sw_fog_closes_vent",
+        "sw_mister_closes_vent",
     }
     # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
     if parameter not in ALL_TUNABLES:
