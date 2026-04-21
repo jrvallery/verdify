@@ -163,136 +163,86 @@ Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to foc
 - `vpd_high_stress`: VPD > vpd_high — misting too conservative or vent open during dry air
 - `vpd_low_stress`: VPD < vpd_low — over-humidification or fog overshoot
 
-### Tunable Dictionary (all 86 — complete list of pushable params)
+### Tunable Dictionary — Tier 1 (30 daily-use knobs)
 
-You can push any of these 86 params via `set_tunable(param, value, reason)` or
-as a transition key in `set_plan`. Canonical source: `docs/tunable-cascade.md`
-in the verdify repo (full DB/firmware/cfg_readback mapping). Ranges below are
-the dispatcher's clamp bounds; pushing outside the range lands in
-`setpoint_clamps` (audited, rejected). Readback annotation: `[no RB]` means
-no `cfg_*` sensor verifies the push — it's fire-and-forget. Prefer readback-
-verified params when the choice is available.
+Push via `set_tunable(param, value, reason)` or as a transition key in
+`set_plan`. Ranges are dispatcher clamp bounds; pushing outside clamps
+lands in `setpoint_clamps` (audited, rejected). Every Tier 1 knob below
+is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
+drops within one planner cycle.
 
-★ = Tier 1 (your daily-use controls, ~24 params). Use these first; reach into
-the rest only when a specific situation demands (new irrigation schedule,
-sw_* toggle, zone-specific VPD target rebalance, etc.).
+The full registry (80 live tunables + clamps + push owners + readback
+status) is defined in `verdify_schemas/tunable_registry.py`. For Tier 2
+escape-hatch params (irrigation schedules, economiser site constants,
+per-zone VPD targets, sw_* toggles you rarely touch, safety rails —
+operator-owned) see `docs/tunable-cascade.md` or read the registry.
+**If you need a tier-2 param the firmware clamp is the source of truth.**
 
-**Crop-driven band (planner can override within clamp, but crop profile sets the baseline):**
-- `temp_low` °F, [30-80], def 58 — lower band edge; HEAT_S1 target ★
-- `temp_high` °F, [40-100], def 82 — upper band edge; VENTILATE trigger ★
-- `vpd_low` kPa, [0.1-1.0], def 0.35 — DEHUM_VENT trigger ★
-- `vpd_high` kPa, [0.4-3.0], def 2.8 — SEALED_MIST trigger ★
-- `temp_hysteresis` °F, [0.5-3.0], def 1.5 — mode transition dead zone
-- `vpd_hysteresis` kPa, [0.05-1.0], def 0.3 — larger = fewer mist cycles ★
+**Crop band (push daily to match weather / growth stage):**
+- `temp_low` °F — lower band edge; HEAT_S1 target
+- `temp_high` °F — upper band edge; VENTILATE trigger
+- `vpd_low` kPa — DEHUM_VENT trigger
+- `vpd_high` kPa — SEALED_MIST trigger
+- `vpd_hysteresis` kPa, [0.05-1.0], def 0.3 — larger = fewer mist cycles
 
-**Bias / offsets (operator-set, planner tunes for daytime vs overnight posture):**
-- `bias_heat` °F, [0-10], def 0 — adds to temp_low for internal Tlow. +2 = pre-heat earlier ★
-- `bias_cool` °F, [0-10], def 0 — subtracts from temp_high. +3 = delay cooling (prevents oscillation) ★
+**Bias (daytime vs overnight posture):**
+- `bias_heat` °F, [-10 to +10], def 0 — adds to temp_low for internal Tlow
+- `bias_cool` °F, [-10 to +10], def 0 — adds to temp_high-bias. +3 = delay cooling
 
-**Safety rails (firmware clamps these — safety_min ≤ temp_low-5, safety_max ≥ temp_high+5):**
-- `safety_min` °F, [30-60], def 35 — SAFETY_HEAT trigger
-- `safety_max` °F, [80-110], def 100 — SAFETY_COOL trigger
-- `safety_vpd_min` kPa, [0.1-1.5], def 0.3 — DEHUM_VENT force trigger
-- `safety_vpd_max` kPa, [2.5-3.0], def 3.0 — R2-3 dry override seal
+**Staging:**
+- `d_cool_stage_2` °F, [0-5], def 2 — fan2 engages at Thigh + this
 
-**Temperature staging:**
-- `d_heat_stage_2` °F, [0-5], def 2 — heat2 engages at Tlow - this [no RB]
-- `d_cool_stage_2` °F, [0-5], def 2 — fan2 engages at Thigh + this [no RB] ★
+**Mister engagement:**
+- `mister_engage_kpa` kPa, [0.6-2.5], def 1.2 — SEALED_MIST S1 entry
+- `mister_all_kpa` kPa, [0.9-3.0], def 1.8 — S2 escalation (all zones)
+- `mister_engage_delay_s` s, [0-120], def 0 — dwell before S1
+- `mister_all_delay_s` s, [0-300], def 0 — dwell before S2
 
-**Per-zone VPD targets (crop-driven via `fn_zone_vpd_targets`, planner can rebalance):**
-- `vpd_target_south` kPa, [0.3-2.5], def 1.5 — mister zone priority (south)
-- `vpd_target_west` kPa, [0.3-2.5], def 1.5 — mister zone priority (west)
-- `vpd_target_east` kPa, [0.3-2.5], def 1.5 — mister zone priority (east)
-- `vpd_target_center` kPa, [0.3-2.5], def 1.5 — mister zone priority (center)
+**Mister pulse + budget:**
+- `mister_pulse_on_s` s, [30-90], def 60 — mister burst duration
+- `mister_pulse_gap_s` s, [10-60], def 45 — evaporation dwell; 15-20s dry, 45s humid
+- `mister_water_budget_gal` gal/d, [200-500], def 500 — daily water cap
+- `mister_vpd_weight` ×, [1.0-3.0], def 1.5 — driest-zone-first weighting
 
-**Mister engagement thresholds:**
-- `mister_engage_kpa` kPa, [0.6-2.5], def 1.2 — SEALED_MIST S1 entry ★
-- `mister_all_kpa` kPa, [0.9-3.0], def 1.8 — S2 escalation (all zones) ★
-- `mister_engage_delay_s` s, [0-120], def 0 — dwell before S1 engages
-- `mister_all_delay_s` s, [0-300], def 0 — dwell before S2 escalates
+**VPD state-machine + sealed-vent coordination (hot-dry-day oscillation):**
+- `vpd_watch_dwell_s` s, [30-120], def 60 — dwell in VPD_WATCH before sealing
+- `mist_vent_close_lead_s` s, [0-60], def 15 — vent closes before misters start
+- `mist_max_closed_vent_s` s, [120-900], def 600 — max sealed time → THERMAL_RELIEF
+- `mist_vent_reopen_delay_s` s, [0-120], def 45 — vent held closed after misting
+- `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration
 
-**Mister pulse + budget (mostly [no RB] — silent-push risk):**
-- `mister_pulse_on_s` s, [30-90], def 60 — mister burst duration [no RB] ★
-- `mister_pulse_gap_s` s, [10-60], def 45 — evaporation dwell; 15-20s dry, 45s humid [no RB] ★
-- `mister_water_budget_gal` gal/d, [200-500], def 500 — daily water limit [no RB] ★
-- `mister_vpd_weight` ×, [1.0-3.0], def 1.5 — driest-zone-first weighting ★
-- `mister_on_s`, `mister_off_s`, `mister_all_on_s`, `mister_all_off_s` — low-level pulse timers [no RB]; prefer pulse_on/gap above
-- `mister_max_runtime_min` min — per-cycle runtime cap
-- `mister_center_penalty` factor, def 0.8 — center zone deprioritization
-- `east_adjacency_factor` factor, def 0.3 — east → south/center boost when east stressed
+**Fog (AquaFog XE 2000 — 7× mister; firmware-gated by RH/temp/time window):**
+- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.4 — VPD above band to trigger; lower = more fog
+- `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle
+- `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles
 
-**VPD state-machine + sealed-vent coordination (hot-dry-day oscillation control):**
-- `vpd_watch_dwell_s` s, [30-120], def 60 — dwell in VPD_WATCH before sealing ★
-- `mist_vent_close_lead_s` s, [0-60], def 15 — vent closes before misters start ★
-- `mist_max_closed_vent_s` s, [120-900], def 600 — max sealed time; after this, THERMAL_RELIEF ★
-- `mist_vent_reopen_delay_s` s, [0-120], def 45 — vent held closed after misting ★
-- `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration ★
-
-**Fog (AquaFog XE 2000 — 7× mister effectiveness, firmware-gated by RH/temp/time window):**
-- `fog_escalation_kpa` kPa Δ, [0.2-0.8], def 0.4 — VPD above band to trigger fog; lower = more fog ★
-- `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle ★
-- `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles ★
-- `fog_burst_min` min — per-burst duration cap [no RB]
-- `fog_rh_ceiling_pct` %, def 90 — fog blocked above this indoor RH
-- `fog_min_temp_f` °F, def 40 — fog blocked below this temp
-- `fog_time_window_start`, `fog_time_window_end` hour-of-day — firmware-enforced window (default 07:00-17:00)
-
-**Vent + fan + relay timing (anti-chatter):**
-- `min_vent_on_s` s, [30-300], def 60 — min vent open duration ★
-- `min_vent_off_s` s, [30-300], def 60 — min vent closed duration ★
-- `min_heat_on_s` s, [60-300], def 120 — min heater on (ignition protection) ★
-- `min_heat_off_s` s, [120-600], def 300 — min gap between heater cycles ★
-- `min_fan_on_s`, `min_fan_off_s` s — fan relay anti-chatter
-- `lead_rotate_s` s — fan-lead rotation interval
-- `fan_burst_min`, `vent_bypass_min` min — burst / bypass timers
+**Vent + heat timing (anti-chatter):**
+- `min_vent_on_s` s, [30-300], def 60 — min vent open duration
+- `min_vent_off_s` s, [30-300], def 60 — min vent closed duration
+- `min_heat_on_s` s, [60-300], def 120 — min heater on (ignition protection)
+- `min_heat_off_s` s, [120-600], def 300 — min gap between heater cycles
 
 **Economiser (outdoor-air coupling):**
-- `enthalpy_open` kJ/kg Δ, [-5 to 0], def -2 — vent opens when outdoor enthalpy better by this much ★
-- `enthalpy_close` kJ/kg Δ, [0 to +5], def 1 — vent closes when outdoor enthalpy worse ★
-- `site_pressure_hpa` hPa — barometric pressure for enthalpy calc (~825 at 5090 ft)
-
-**Irrigation — wall zone (7 params, crop-owned; planner rarely touches):**
-- `irrig_wall_start_hour`, `irrig_wall_start_min` — schedule start
-- `irrig_wall_duration_min` min — irrigation runtime
-- `irrig_wall_fert_duration_min` min — fertigation segment within duration
-- `irrig_wall_fert_every_n` cycles — every-N-cycle fert cadence
-- `irrig_wall_flush_min` min — post-fert flush
-- `irrig_wall_interval_days` days — days between cycles
-
-**Irrigation — center zone (7 params, mirrors wall):**
-- `irrig_center_start_hour`, `irrig_center_start_min`
-- `irrig_center_duration_min`, `irrig_center_fert_duration_min`, `irrig_center_fert_every_n`
-- `irrig_center_flush_min`, `irrig_center_interval_days`
-
-**VPD boost (extends irrigation duration on high-VPD stress):**
-- `irrig_vpd_boost_pct` %, def 20 — extend duration by this % when stress exceeded
-- `irrig_vpd_boost_threshold_hrs` h — consecutive-hour threshold before boost
-
-**Grow lights (DLI-driven auto mode via `sw_gl_auto_mode`):**
-- `gl_dli_target` mol/m²/d — daily light integral target
-- `gl_lux_threshold` lux — natural-light threshold below which supplement engages
-- `gl_sunrise_hour`, `gl_sunset_hour` — manual mode daily window
-
-**Switches (binary, 0.0 / 1.0):**
-- `sw_economiser_enabled` — enthalpy-based vent coupling
-- `sw_fog_closes_vent` — firmware invariant, always 1.0 in current architecture
-- `sw_gl_auto_mode` — DLI-driven grow-light control
-- `sw_irrigation_enabled` — master irrigation enable
-- `sw_irrigation_wall_enabled`, `sw_irrigation_center_enabled` — per-zone
-- `sw_irrigation_weather_skip` — skip on rainy-forecast days
-- `sw_occupancy_inhibit` — pause equipment when presence detected
-- `sw_summer_vent_enabled` — summer thermal-driven vent preference gate (sprint-15); default ON ★
+- `enthalpy_open` kJ/kg Δ — vent opens when outdoor enthalpy better by this much
+- `enthalpy_close` kJ/kg Δ — vent closes when outdoor enthalpy worse
 
 **Summer thermal-driven vent gate (sprint-15 — short-circuits VPD-seal when outdoor is cooler+drier):**
-- `vent_prefer_temp_delta_f` °F, [2-15], def 5 — outdoor must be ≥ N°F cooler than indoor ★
-- `vent_prefer_dp_delta_f` °F, [2-15], def 5 — outdoor dewpoint must be ≥ N°F below indoor dewpoint ★
-- `outdoor_staleness_max_s` s, [60-1800], def 300 — max outdoor reading age before gate disables
-- `summer_vent_min_runtime_s` s, [60-600], def 180 — min VENTILATE dwell after gate fires
+- `sw_summer_vent_enabled` — master switch; default ON
+- `vent_prefer_temp_delta_f` °F, [2-15], def 5 — outdoor must be ≥ N°F cooler than indoor
+- `vent_prefer_dp_delta_f` °F, [2-15], def 5 — outdoor dewpoint ≥ N°F below indoor DP
 
-**Firmware-internal, readback-only (no push path):**
-- `fallback_window_s` — sensor staleness → firmware reboot threshold
-- `outdoor_temp_f` — live Tempest temp (readback from `cfg_outdoor_temp_f`)
-- `outdoor_dewpoint_f` — live Tempest dewpoint (readback from `cfg_outdoor_dewpoint_f`)
+**Phase-2 dwell gate (whipsaw reduction, shadow-bake phase):**
+- `sw_dwell_gate_enabled` — master switch; default OFF (flip only after replay+shadow validation)
+- `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions
+
+### Tier 2 escape hatch
+
+If diagnosis calls for a tier-2 param (per-zone VPD rebalance, irrigation
+schedule change, safety rail adjust, occupancy inhibit, fog window shift,
+economiser site pressure, fan-lead rotation, etc.) name it in your
+reasoning and push via `set_tunable`/`set_plan` — the registry will
+validate and the dispatcher will route. Do not push params absent from
+the registry; they will be rejected.
 
 ### Data Quality
 
