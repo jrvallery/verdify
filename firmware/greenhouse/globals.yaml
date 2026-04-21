@@ -824,6 +824,36 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  # ─── Sprint-15: summer thermal-driven vent gate tunables ──────────
+  # Operator-tunable parameters for the new gate that pre-empts
+  # VPD-seal entry when outdoor air is cooler+drier than indoor.
+  # Defaults match the spec; clamps live in controls.yaml /setpoints.
+  # See docs/firmware-sprint-15-summer-vent-spec.md.
+  - id: sw_summer_vent_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'true'    # ON by default — sealing is wrong in summer
+
+  - id: vent_prefer_temp_delta_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
+
+  - id: vent_prefer_dp_delta_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
+
+  - id: outdoor_staleness_max_s
+    type: int
+    restore_value: no
+    initial_value: '300'     # 5 min — Tempest typically updates every 3 min
+
+  - id: summer_vent_min_runtime_s
+    type: int
+    restore_value: no
+    initial_value: '180'
+
   # ─── Occupancy-based mist inhibit ───
   - id: greenhouse_occupied
     type: bool

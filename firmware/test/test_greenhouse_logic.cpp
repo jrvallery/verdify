@@ -31,11 +31,18 @@ struct TestEntry { const char* name; void (*fn)(); };
 static std::vector<TestEntry> test_registry;
 
 static SensorInputs make_inputs(float temp, float vpd, float rh = 60.0f) {
+    // Sprint-15: outdoor data defaults to STALE so the new summer-vent
+    // gate is OFF by default in unit tests (outdoor_data_age_s above the
+    // 300-s default outdoor_staleness_max_s). Sprint-15 gate tests
+    // override outdoor_* explicitly. This keeps the existing 80+ tests'
+    // behavior unchanged.
     return { .temp_f = temp, .vpd_kpa = vpd, .rh_pct = rh,
              .dew_point_f = temp - 10.0f, .outdoor_rh_pct = 30.0f,
              .enthalpy_delta = -5.0f,
              .vpd_south = vpd, .vpd_west = vpd, .vpd_east = vpd,
-             .local_hour = 12, .occupied = false };
+             .local_hour = 12, .occupied = false,
+             .outdoor_temp_f = NAN, .outdoor_dewpoint_f = NAN,
+             .outdoor_data_age_s = 9999u };
 }
 
 // Sprint-11: default_setpoints() now returns PERMISSIVE wide defaults
@@ -1306,6 +1313,197 @@ TEST(s12_narrow_band_floor_guard) {
     // And resolve_equipment produces a valid output.
     auto out = resolve_equipment(m, make_inputs(70.25f, 0.9f), sp, s, true);
     (void)out;
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-15 — Summer thermal-driven vent gate
+//   The gate pre-empts vpd_wants_seal when ALL of:
+//     - sw_summer_vent_enabled
+//     - outdoor_data_age_s < outdoor_staleness_max_s
+//     - outdoor_temp_f < indoor_temp_f - vent_prefer_temp_delta_f
+//     - outdoor_dewpoint_f < indoor_dewpoint_f - vent_prefer_dp_delta_f
+//     - indoor_temp_f > temp_low + temp_hysteresis
+//   Result: state machine falls through to VENTILATE instead of
+//   SEALED_MIST. state.override_summer_vent and OverrideFlags
+//   .summer_vent_active are set true.
+// ═══════════════════════════════════════════════════════════════════
+
+// Helper: builds an indoor-hot-and-humid scenario where vpd_wants_seal
+// would otherwise fire AND seal is not blocked by safety_max_seal_margin
+// (so the gate-inactive tests actually exercise the SEALED_MIST path).
+// Use 85°F — well above interior cooling target (~75) but below
+// safety_max(95) - seal_margin(5) = 90. Tests then dial outdoor_* to
+// flip the gate on or off.
+static SensorInputs s15_indoor_stressed() {
+    SensorInputs in = make_inputs(85.0f, 1.5f, 65.0f);
+    in.dew_point_f = 72.0f;  // ~consistent with 85°F + 65% RH
+    return in;
+}
+
+static Setpoints s15_band() {
+    Setpoints sp = band_setpoints();  // narrow band 65-78°F, vpd 0.8-1.4 kPa
+    // Defaults already include sw_summer_vent_enabled=true, deltas=5,
+    // outdoor_staleness_max_s=300 from default_setpoints().
+    return sp;
+}
+
+TEST(s15_gate_fires_when_outdoor_cooler_and_drier) {
+    // Indoor 91°F / DP 76. Outdoor 77°F / DP 35 (cooler by 14°F, drier
+    // by 41°F DP). Gate should fire and pre-empt VPD-seal even though
+    // vpd_watch_timer is mature.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;  // mature dwell — would otherwise SEAL
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 30u;  // fresh
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(s.override_summer_vent);
+    auto f = evaluate_overrides(in, sp, s, m);
+    ASSERT_TRUE(f.summer_vent_active);
+    PASS();
+}
+
+TEST(s15_gate_inactive_when_outdoor_warmer) {
+    // Outdoor at indoor temp — cooler check fails — gate inactive,
+    // existing SEALED_MIST path runs.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 91.0f;       // not cooler
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 30u;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_FALSE(s.override_summer_vent);
+    PASS();
+}
+
+TEST(s15_gate_inactive_when_outdoor_humid) {
+    // Outdoor cooler but outdoor DP is HIGHER than indoor DP — venting
+    // would import humidity. Gate stays off.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;       // cooler
+    in.outdoor_dewpoint_f = 80.0f;   // higher DP than indoor 76
+    in.outdoor_data_age_s = 30u;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_FALSE(s.override_summer_vent);
+    PASS();
+}
+
+TEST(s15_gate_inactive_when_outdoor_data_stale) {
+    // Conditions otherwise favorable, but outdoor data is older than
+    // outdoor_staleness_max_s. Fail-safe: don't trust stale data.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 9999u;   // way past 300s default
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_FALSE(s.override_summer_vent);
+    PASS();
+}
+
+TEST(s15_gate_inactive_when_switch_off) {
+    // Operator toggle — gate disabled regardless of conditions.
+    auto sp = s15_band();
+    sp.sw_summer_vent_enabled = false;
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 30u;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_FALSE(s.override_summer_vent);
+    PASS();
+}
+
+TEST(s15_gate_inactive_when_indoor_cool) {
+    // Indoor temp is at or below temp_low + temp_hysteresis — no
+    // cooling demand, don't vent into a cold night.
+    auto sp = s15_band();          // temp_low=65, temp_hysteresis=1.5 → threshold 66.5
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    SensorInputs in = make_inputs(66.0f, 1.5f, 65.0f);
+    in.dew_point_f = 60.0f;
+    in.outdoor_temp_f = 50.0f;       // outdoor cooler than indoor
+    in.outdoor_dewpoint_f = 30.0f;
+    in.outdoor_data_age_s = 30u;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_FALSE(s.override_summer_vent);
+    PASS();
+}
+
+TEST(s15_safety_cool_still_pre_empts_gate) {
+    // Indoor at safety_max — SAFETY_COOL must fire regardless of
+    // gate; safety rails are above the gate in priority.
+    auto sp = s15_band();            // safety_max=95
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    SensorInputs in = make_inputs(96.0f, 1.5f, 65.0f);
+    in.dew_point_f = 80.0f;
+    in.outdoor_temp_f = 77.0f;       // gate would otherwise fire
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 30u;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_COOL);
+    PASS();
+}
+
+TEST(s15_thermal_relief_still_pre_empts_gate) {
+    // In-progress THERMAL_RELIEF burst — must complete regardless of gate.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.mode_prev = THERMAL_RELIEF;
+    s.relief_timer_ms = 30000;       // 30s into the 90s burst
+    s.vpd_watch_timer_ms = 60000;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 30u;
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, THERMAL_RELIEF);
+    PASS();
+}
+
+TEST(s15_integration_today_1300_data) {
+    // Integration: replay today's 13:00 MDT scenario — indoor 91°F /
+    // 65% RH (DP ~76°F), outdoor 77°F / 8% RH (DP ~17°F), vpd_watch
+    // mature. Pre-sprint-15 firmware sealed; sprint-15 gate must
+    // pre-empt and route to VENTILATE.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;    // mature dwell
+
+    SensorInputs in = make_inputs(91.0f, 1.5f, 65.0f);
+    in.dew_point_f = 76.0f;
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 17.0f;   // 8% RH at 77°F → ~17°F DP
+    in.outdoor_data_age_s = 60u;     // fresh (Tempest pulls every 3 min)
+
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(s.override_summer_vent);
+
+    // Equipment: vent open, lead fan on, fog OFF (don't humidify dry air).
+    auto out = resolve_equipment(m, in, sp, s, /*lead_is_fan1=*/true);
+    ASSERT_TRUE(out.vent);
+    ASSERT_TRUE(out.fan1);
+    ASSERT_FALSE(out.fog);
     PASS();
 }
 

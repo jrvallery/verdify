@@ -48,6 +48,13 @@ struct SensorInputs {
     float vpd_east;
     int   local_hour;       // 0-23, from SNTP
     bool  occupied;         // greenhouse occupancy (from Sentinel)
+    // Sprint-15: outdoor readings used by the summer-vent gate.
+    // outdoor_temp_f + outdoor_dewpoint_f drive the cooler+drier comparator.
+    // outdoor_data_age_s is the staleness check (when source goes silent we
+    // fall back to the existing decision cascade).
+    float    outdoor_temp_f;        // outdoor air temperature (°F, from Tempest via /setpoints)
+    float    outdoor_dewpoint_f;    // outdoor dewpoint (°F, computed from temp+RH at caller)
+    uint32_t outdoor_data_age_s;    // seconds since last outdoor reading update
 };
 
 // ── Setpoints (band + planner tunables + firmware config) ──
@@ -89,6 +96,19 @@ struct Setpoints {
     // the one dispatcher-pushed band (temp_low/temp_high/vpd_low/vpd_high
     // above). Day/night phasing is the dispatcher's job — firmware does
     // not model temporal modes. See feedback_band_architecture memory.
+    // Sprint-15: summer thermal-driven vent preference gate.
+    // When sw_summer_vent_enabled AND outdoor temp is at least
+    // vent_prefer_temp_delta_f below indoor AND outdoor dewpoint is at
+    // least vent_prefer_dp_delta_f below indoor dewpoint AND outdoor
+    // data is fresher than outdoor_staleness_max_s, the gate pre-empts
+    // VPD-seal entry and falls through to VENTILATE. Safety rails,
+    // THERMAL_RELIEF, and DEHUM_VENT remain untouched. See
+    // docs/firmware-sprint-15-summer-vent-spec.md.
+    bool     sw_summer_vent_enabled;       // master enable; default true
+    float    vent_prefer_temp_delta_f;     // outdoor must be ≥ this much cooler (°F)
+    float    vent_prefer_dp_delta_f;       // outdoor DP must be ≥ this much lower (°F)
+    uint32_t outdoor_staleness_max_s;      // gate disables when outdoor data older than this (s)
+    uint32_t summer_vent_min_runtime_s;    // min VENTILATE dwell after gate fires (s; reserved)
 };
 
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
@@ -119,6 +139,11 @@ struct ControlState {
     // gas-valve rapid cycling in the hysteresis band between the two
     // thresholds. Managed by determine_mode; read by resolve_equipment.
     bool heat2_latched;
+    // Sprint-15: telemetry flag — set true on each cycle the summer-vent
+    // gate is actively suppressing a VPD-seal entry. Read by
+    // evaluate_overrides() and surfaced via OverrideFlags. No persisted
+    // timer; freshly evaluated each cycle.
+    bool override_summer_vent;
 };
 
 struct RelayOutputs {
@@ -143,6 +168,7 @@ struct OverrideFlags {
     bool relief_cycle_breaker;       // seal wanted but relief_cycle_count maxed → forced VENTILATE
     bool seal_blocked_temp;          // seal wanted but within 5°F of safety_max
     bool vpd_dry_override;           // firmware sealed for VPD safety without planner dwell
+    bool summer_vent_active;         // sprint-15 gate suppressed a VPD-seal in favor of VENTILATE
 };
 
 // ── Saturating addition (prevents uint32_t overflow at 49.7 days) ──
@@ -174,7 +200,16 @@ inline Setpoints default_setpoints() {
         .occupancy_inhibit = false, .econ_block = false,
         .vent_latch_timeout_ms = 1800000u,
         .safety_max_seal_margin_f = 5.0f,
-        .econ_heat_margin_f = 5.0f
+        .econ_heat_margin_f = 5.0f,
+        // Sprint-15: summer-vent gate defaults. Master enable ON by
+        // default — pre-sprint-15 firmware sealed against its own
+        // best heat sink in summer; explicit operator opt-out is the
+        // safer default. Thresholds matched to spec defaults.
+        .sw_summer_vent_enabled = true,
+        .vent_prefer_temp_delta_f = 5.0f,
+        .vent_prefer_dp_delta_f = 5.0f,
+        .outdoor_staleness_max_s = 300u,
+        .summer_vent_min_runtime_s = 180u
     };
 }
 
@@ -263,6 +298,12 @@ inline void validate_setpoints(Setpoints& sp) {
                                         std::min(uint32_t(7200000), sp.vent_latch_timeout_ms));
     sp.safety_max_seal_margin_f = std::max(1.0f, std::min(15.0f, sp.safety_max_seal_margin_f));
     sp.econ_heat_margin_f       = std::max(1.0f, std::min(15.0f, sp.econ_heat_margin_f));
+
+    // --- sprint-15: summer-vent gate clamps (match spec ranges) ---
+    sp.vent_prefer_temp_delta_f = std::max(2.0f, std::min(15.0f, sp.vent_prefer_temp_delta_f));
+    sp.vent_prefer_dp_delta_f   = std::max(2.0f, std::min(15.0f, sp.vent_prefer_dp_delta_f));
+    sp.outdoor_staleness_max_s  = std::max(uint32_t(60), std::min(uint32_t(1800), sp.outdoor_staleness_max_s));
+    sp.summer_vent_min_runtime_s = std::max(uint32_t(60), std::min(uint32_t(600), sp.summer_vent_min_runtime_s));
 }
 
 inline ControlState initial_state() {
@@ -274,6 +315,7 @@ inline ControlState initial_state() {
         .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
         .relief_cycle_count = 0, .vent_latch_timer_ms = 0,
         .dry_override_active = false,
-        .heat2_latched = false
+        .heat2_latched = false,
+        .override_summer_vent = false
     };
 }

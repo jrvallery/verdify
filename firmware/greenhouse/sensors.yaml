@@ -1666,6 +1666,114 @@ sensor:
       if (!id(cfg_first_pull_ok)) return NAN;
       return (float)id(fog_time_window_end);
 
+  # ─── Sprint-15: summer thermal-driven vent gate readbacks ─────────
+  # 5 tunable readbacks + 2 live outdoor readings firmware compares
+  # against. Names slugify to slugs declared in the coordinator
+  # CFG_READBACK_MAP (commit e91f31e). All gated on cfg_first_pull_ok
+  # like sprint-14 cfg_* sensors.
+
+  - platform: template
+    id: cfg_vent_prefer_temp_delta_f
+    name: "Cfg • Vent Prefer Temp Delta (F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vent_prefer_temp_delta_f);
+
+  - platform: template
+    id: cfg_vent_prefer_dp_delta_f
+    name: "Cfg • Vent Prefer DP Delta (F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(vent_prefer_dp_delta_f);
+
+  - platform: template
+    id: cfg_outdoor_staleness_max_s
+    name: "Cfg • Outdoor Staleness Max (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(outdoor_staleness_max_s);
+
+  - platform: template
+    id: cfg_summer_vent_min_runtime_s
+    name: "Cfg • Summer Vent Min Runtime (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(summer_vent_min_runtime_s);
+
+  # cfg_summer_vent_enabled — switch readback as a float (0.0/1.0) so
+  # the existing setpoint_snapshot pipe handles it like other switch
+  # tunables. Name has no • bullet so the slug is cfg_summer_vent_enabled
+  # (matches the coordinator CFG_READBACK_MAP entry exactly).
+  - platform: template
+    id: cfg_summer_vent_enabled
+    name: "Cfg Summer Vent Enabled"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(sw_summer_vent_enabled) ? 1.0f : 0.0f;
+
+  # Live outdoor readings (firmware exposes the values it's actually
+  # comparing). Useful for Iris to see whether the gate is data-poor
+  # or data-rich. Gated on cfg_first_pull_ok like the rest.
+  - platform: template
+    id: cfg_outdoor_temp_f
+    name: "Cfg • Outdoor Temp (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(pulled_outdoor_temp_f);
+
+  - platform: template
+    id: cfg_outdoor_dewpoint_f
+    name: "Cfg • Outdoor Dewpoint (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      // Recompute outdoor DP here from pulled_outdoor_temp_f + RH so
+      // the readback reflects the same value SensorInputs uses.
+      float Tf = id(pulled_outdoor_temp_f);
+      float RH = id(pulled_outdoor_rh_pct);
+      if (isnan(Tf) || isnan(RH) || RH <= 0.0f) return NAN;
+      float Tc = (Tf - 32.0f) * (5.0f / 9.0f);
+      float gamma = (17.27f * Tc) / (237.7f + Tc) + log(RH / 100.0f);
+      float dp_c = (237.7f * gamma) / (17.27f - gamma);
+      return dp_c * (9.0f / 5.0f) + 32.0f;
+
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template
     id: mister_vpd_delta
