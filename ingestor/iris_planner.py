@@ -281,6 +281,18 @@ sw_* toggle, zone-specific VPD target rebalance, etc.).
 - `sw_irrigation_wall_enabled`, `sw_irrigation_center_enabled` — per-zone
 - `sw_irrigation_weather_skip` — skip on rainy-forecast days
 - `sw_occupancy_inhibit` — pause equipment when presence detected
+- `sw_summer_vent_enabled` — summer thermal-driven vent preference gate (sprint-15); default ON ★
+
+**Summer thermal-driven vent gate (sprint-15 — short-circuits VPD-seal when outdoor is cooler+drier):**
+- `vent_prefer_temp_delta_f` °F, [2-15], def 5 — outdoor must be ≥ N°F cooler than indoor ★
+- `vent_prefer_dp_delta_f` °F, [2-15], def 5 — outdoor dewpoint must be ≥ N°F below indoor dewpoint ★
+- `outdoor_staleness_max_s` s, [60-1800], def 300 — max outdoor reading age before gate disables
+- `summer_vent_min_runtime_s` s, [60-600], def 180 — min VENTILATE dwell after gate fires
+
+**Firmware-internal, readback-only (no push path):**
+- `fallback_window_s` — sensor staleness → firmware reboot threshold
+- `outdoor_temp_f` — live Tempest temp (readback from `cfg_outdoor_temp_f`)
+- `outdoor_dewpoint_f` — live Tempest dewpoint (readback from `cfg_outdoor_dewpoint_f`)
 
 ### Data Quality
 

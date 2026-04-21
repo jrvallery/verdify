@@ -62,6 +62,10 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Firmware-internal, readback-only (no SETPOINT_MAP route) — present
         # in entity_map.CFG_READBACK_MAP so SetpointSnapshot writes validate.
         "fallback_window_s",
+        # Sprint-15: live outdoor readings (Tempest via HA → ESPHome template
+        # sensor → firmware global). Readback-only; never pushed.
+        "outdoor_temp_f",
+        "outdoor_dewpoint_f",
         # Economiser
         "enthalpy_open",
         "enthalpy_close",
@@ -114,6 +118,14 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "fog_min_temp_f",
         "fog_time_window_start",
         "fog_time_window_end",
+        # Sprint-15: summer thermal-driven vent preference gate.
+        # Outdoor-cooler-and-drier heuristic that short-circuits VPD-seal
+        # precedence in determine_mode(), falling through to VENTILATE when
+        # active. See docs/firmware-sprint-15-summer-vent-spec.md.
+        "vent_prefer_temp_delta_f",
+        "vent_prefer_dp_delta_f",
+        "outdoor_staleness_max_s",
+        "summer_vent_min_runtime_s",
     }
 )
 
@@ -129,6 +141,9 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         "sw_irrigation_center_enabled",
         "sw_irrigation_weather_skip",
         "sw_occupancy_inhibit",
+        # Sprint-15: summer vent master enable. ON by default (firmware
+        # behavior today is wrong in summer; explicit opt-out is safer).
+        "sw_summer_vent_enabled",
         # NOTE: sw_mister_closes_vent exists as an ESP32 switch (firmware
         # tunables.yaml line 1069) and as a CFG readback, but is NOT in
         # SETPOINT_MAP today — dispatcher can't push it. Not adding here

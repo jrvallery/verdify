@@ -95,6 +95,20 @@ Symptom: overnight 4/18 4-hour stretch with temp at 61.9-62.2°F even though hea
 | `mister_engage_kpa` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_engage_kpa` | `Setpoints.mister_engage_kpa` | SEALED_MIST S1 entry threshold | `cfg_mister_engage_kpa` | 1.2 | [0.6, 2.5] | planner | immediate |
 | `mister_all_kpa` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_all_kpa` | `Setpoints.mister_all_kpa` | SEALED_MIST S2 escalation threshold | `cfg_mister_all_kpa` | 1.8 | [0.9, 3.0] | planner | immediate |
 
+## Summer thermal-driven vent gate (sprint-15, 5 tunables + 2 readback-only) — FULLY SPEC'D
+
+See `docs/firmware-sprint-15-summer-vent-spec.md` for design rationale. Gate fires in `determine_mode()` above VPD-seal precedence when outdoor is cooler + drier than indoor and outdoor data is fresh.
+
+| name | type | emitted via | table | entity_id (HA) | FW struct field | FW use site | cfg_* readback | default | range | authority | push path |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `sw_summer_vent_enabled` | switch | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `switch.summer_vent_enabled` | `Setpoints.sw_summer_vent_enabled` | `greenhouse_logic.h::determine_mode()` master enable for summer-vent gate | `cfg_summer_vent_enabled` | 1 (on) | {0, 1} | operator (opt-out; winter) | immediate |
+| `vent_prefer_temp_delta_f` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `number.vent_prefer_temp_delta_f` | `Setpoints.vent_prefer_temp_delta_f` | gate: `outdoor_temp_f < indoor_temp_f - delta` | `cfg_vent_prefer_temp_delta_f` | 5.0°F | [2, 15] | planner | immediate |
+| `vent_prefer_dp_delta_f` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `number.vent_prefer_dp_delta_f` | `Setpoints.vent_prefer_dp_delta_f` | gate: `outdoor_dewpoint_f < indoor_dewpoint_f - delta` | `cfg_vent_prefer_dp_delta_f` | 5.0°F | [2, 15] | planner | immediate |
+| `outdoor_staleness_max_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `number.outdoor_staleness_max_s` | `Setpoints.outdoor_staleness_max_s` | gate: disables when outdoor reading > N seconds old | `cfg_outdoor_staleness_max_s` | 300 s | [60, 1800] | operator | immediate |
+| `summer_vent_min_runtime_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `number.summer_vent_min_runtime_s` | `Setpoints.summer_vent_min_runtime_s` | VENTILATE min dwell after gate fires (anti-flap near threshold) | `cfg_summer_vent_min_runtime_s` | 180 s | [60, 600] | operator | immediate |
+| `outdoor_temp_f` | num (ro) | — (firmware-internal) | — | — | `SensorInputs.outdoor_temp_f` | input to gate; Tempest → HA → ESPHome template sensor | `cfg_outdoor_temp_f` | n/a (live) | n/a | Tempest | readback only |
+| `outdoor_dewpoint_f` | num (ro) | — (firmware-internal) | — | — | `SensorInputs.outdoor_dewpoint_f` | input to gate; computed from Tempest temp + RH | `cfg_outdoor_dewpoint_f` | n/a (live) | n/a | Tempest | readback only |
+
 ## Remaining tunables — TBD (stub rows to fill in during the week)
 
 The remaining ~50 tunables are organized below by category. Each needs the full row treatment. **Default values, ranges, FW use sites, and cfg_* readback presence will be filled in week of 2026-04-20.**

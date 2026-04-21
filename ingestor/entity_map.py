@@ -260,6 +260,13 @@ SETPOINT_MAP: dict[str, str] = {
     "fog_min_temp__f_": "fog_min_temp_f",
     "fog_window_start__hr_": "fog_time_window_start",
     "fog_window_end__hr_": "fog_time_window_end",
+    # Sprint-15: summer thermal-driven vent preference gate.
+    # 4 numerics + 1 switch. See docs/firmware-sprint-15-summer-vent-spec.md.
+    "vent_prefer_temp_delta__f_": "vent_prefer_temp_delta_f",
+    "vent_prefer_dp_delta__f_": "vent_prefer_dp_delta_f",
+    "outdoor_staleness_max__s_": "outdoor_staleness_max_s",
+    "summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
+    "summer_vent_enabled": "sw_summer_vent_enabled",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -371,6 +378,17 @@ CFG_READBACK_MAP: dict[str, str] = {
     "mister_center_penalty": "mister_center_penalty",
     # Mister vent coordination
     "sw_mister_closes_vent": "sw_mister_closes_vent",
+    # Sprint-15: summer thermal-driven vent readbacks.
+    # 5 tunable readbacks (matching SETPOINT_MAP above) + 2 live outdoor
+    # readings (firmware exposes the Tempest-sourced values it's comparing).
+    # See docs/firmware-sprint-15-summer-vent-spec.md.
+    "cfg___vent_prefer_temp_delta__f_": "vent_prefer_temp_delta_f",
+    "cfg___vent_prefer_dp_delta__f_": "vent_prefer_dp_delta_f",
+    "cfg___outdoor_staleness_max__s_": "outdoor_staleness_max_s",
+    "cfg___summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
+    "cfg_summer_vent_enabled": "sw_summer_vent_enabled",
+    "cfg___outdoor_temp___f_": "outdoor_temp_f",
+    "cfg___outdoor_dewpoint___f_": "outdoor_dewpoint_f",
 }
 
 # ──────────────────────────────────────────────────────────────
