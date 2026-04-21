@@ -109,6 +109,16 @@ struct Setpoints {
     float    vent_prefer_dp_delta_f;       // outdoor DP must be ≥ this much lower (°F)
     uint32_t outdoor_staleness_max_s;      // gate disables when outdoor data older than this (s)
     uint32_t summer_vent_min_runtime_s;    // min VENTILATE dwell after gate fires (s; reserved)
+    // Phase-2 (firmware stabilization plan): mode-transition dwell gate.
+    // When sw_dwell_gate_enabled is true, non-safety mode transitions are
+    // held for at least dwell_gate_ms after the last accepted transition.
+    // Safety rails, R2-3 dry override, and vpd_min_safe rescue preempt the
+    // dwell. Projected 80% reduction in whipsaw events (Explore B: 59 mode
+    // changes in 2h on 2026-04-17 stress window). Default OFF for shadow-
+    // mode bake; operator / planner flips to ON after 14d of replay +
+    // shadow validation.
+    bool     sw_dwell_gate_enabled;
+    uint32_t dwell_gate_ms;                // default 300000 (5 min)
 };
 
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
@@ -150,6 +160,13 @@ struct ControlState {
     // a benign literal on initial_state so consumers can safely publish
     // before determine_mode has run.
     const char* last_mode_reason;
+    // Phase-2: monotonic tick count (ms, saturating) at which the most
+    // recent mode transition was accepted. Drives the dwell gate —
+    // new mode proposals within dwell_gate_ms of this timestamp are
+    // held (unless safety preempts). Updated by determine_mode on each
+    // non-held transition. Initialized to 0 which means "already past
+    // dwell at boot" so the first real decision isn't gated.
+    uint32_t last_transition_tick_ms;
 };
 
 struct RelayOutputs {
@@ -193,7 +210,7 @@ inline Setpoints default_setpoints() {
         .temp_high = 95.0f, .temp_low = 40.0f,    // wide — dispatcher narrows
         .vpd_high = 2.80f,  .vpd_low = 0.35f,      // wide — dispatcher narrows
         .bias_cool = 0.0f, .bias_heat = 0.0f,
-        .vpd_hysteresis = 0.3f, .temp_hysteresis = 1.5f, .heat_hysteresis = 1.0f,
+        .vpd_hysteresis = 0.3f, .temp_hysteresis = 2.0f, .heat_hysteresis = 1.0f,  // Phase-2: temp hyst 1.5→2.0 widens cooling dead zone
         .dH2 = 5.0f, .dC2 = 3.0f,
         .safety_max = 100.0f, .safety_min = 35.0f,
         .vpd_max_safe = 3.0f, .vpd_min_safe = 0.3f,
@@ -219,7 +236,11 @@ inline Setpoints default_setpoints() {
         // flipped false on any dispatcher push jitter, intermittently
         // disabling the gate.
         .outdoor_staleness_max_s = 600u,
-        .summer_vent_min_runtime_s = 180u
+        .summer_vent_min_runtime_s = 180u,
+        // Phase-2 dwell gate. Default OFF (shadow-mode bake before flipping
+        // to active). 5-min dwell projected to reduce whipsaw 80%.
+        .sw_dwell_gate_enabled = false,
+        .dwell_gate_ms = 300000u
     };
 }
 
@@ -316,6 +337,11 @@ inline void validate_setpoints(Setpoints& sp) {
     // cadence disqualifies the gate on every jitter tick).
     sp.outdoor_staleness_max_s  = std::max(uint32_t(120), std::min(uint32_t(1800), sp.outdoor_staleness_max_s));
     sp.summer_vent_min_runtime_s = std::max(uint32_t(60), std::min(uint32_t(600), sp.summer_vent_min_runtime_s));
+
+    // --- Phase-2 dwell gate clamp ---
+    // 60s floor (shorter than control-cycle cadence makes the gate useless),
+    // 1800s (30-min) ceiling (longer than sealed_max_ms would starve exits).
+    sp.dwell_gate_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.dwell_gate_ms));
 }
 
 inline ControlState initial_state() {
@@ -329,6 +355,7 @@ inline ControlState initial_state() {
         .dry_override_active = false,
         .heat2_latched = false,
         .override_summer_vent = false,
-        .last_mode_reason = "init"
+        .last_mode_reason = "init",
+        .last_transition_tick_ms = 0
     };
 }

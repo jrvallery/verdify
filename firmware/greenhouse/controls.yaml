@@ -392,7 +392,10 @@ interval:
               .vent_prefer_temp_delta_f = id(vent_prefer_temp_delta_f),
               .vent_prefer_dp_delta_f = id(vent_prefer_dp_delta_f),
               .outdoor_staleness_max_s = (uint32_t)id(outdoor_staleness_max_s),
-              .summer_vent_min_runtime_s = (uint32_t)id(summer_vent_min_runtime_s)
+              .summer_vent_min_runtime_s = (uint32_t)id(summer_vent_min_runtime_s),
+              // Phase-2 dwell gate.
+              .sw_dwell_gate_enabled = id(sw_dwell_gate_enabled),
+              .dwell_gate_ms = (uint32_t)id(dwell_gate_ms)
           };
 
           validate_setpoints(setpts);
@@ -1440,6 +1443,9 @@ interval:
                     if(key == "outdoor_staleness_max_s"){ int v = ci((int)val, 120, 1800); if(id(outdoor_staleness_max_s) != v){ id(outdoor_staleness_max_s) = v; id(num_outdoor_staleness_max).publish_state(v); applied++; }}  // sprint-15.1 fix 3: floor raised 60→120 (below dispatcher cadence disables the gate)
                     if(key == "summer_vent_min_runtime_s"){ int v = ci((int)val, 60, 600); if(id(summer_vent_min_runtime_s) != v){ id(summer_vent_min_runtime_s) = v; id(num_summer_vent_min_runtime).publish_state(v); applied++; }}
                     if(key == "sw_summer_vent_enabled"){ bool v = val > 0.5f; if(id(sw_summer_vent_enabled) != v){ id(sw_summer_vent_enabled) = v; id(sw_summer_vent_enabled_switch).publish_state(v); applied++; }}
+                    // Phase-2 dwell gate tunables. Defaults: gate OFF, 5-min hold.
+                    if(key == "sw_dwell_gate_enabled"){ bool v = val > 0.5f; if(id(sw_dwell_gate_enabled) != v){ id(sw_dwell_gate_enabled) = v; id(sw_dwell_gate_enabled_switch).publish_state(v); applied++; }}
+                    if(key == "dwell_gate_ms"){ int v = ci((int)val, 60000, 1800000); if(id(dwell_gate_ms) != v){ id(dwell_gate_ms) = v; id(num_dwell_gate_ms).publish_state(v); applied++; }}
                   }
                   if(applied > 0){
                     ESP_LOGI("plan","Applied %d setpoint(s) from pull", applied);

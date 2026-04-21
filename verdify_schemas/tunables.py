@@ -126,6 +126,8 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "vent_prefer_dp_delta_f",
         "outdoor_staleness_max_s",
         "summer_vent_min_runtime_s",
+        # Phase-2 dwell gate (plan firmware stabilization).
+        "dwell_gate_ms",
     }
 )
 
@@ -150,6 +152,8 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         # (tunables.yaml sw_mister_closes_vent); operator can push
         # per-greenhouse via dispatcher.
         "sw_mister_closes_vent",
+        # Phase-2 dwell gate master switch.
+        "sw_dwell_gate_enabled",
     }
 )
 

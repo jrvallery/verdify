@@ -633,6 +633,20 @@ number:
           id(summer_vent_min_runtime_s) = v;
           id(num_summer_vent_min_runtime).publish_state(v);
 
+  # ─── Phase-2 dwell gate tunable (plan firmware stabilization) ──────
+  - platform: template
+    id: num_dwell_gate_ms
+    name: "Dwell Gate (ms)"
+    min_value: 60000
+    max_value: 1800000
+    step: 30000
+    lambda: "return id(dwell_gate_ms);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 60000) v = 60000; if(v > 1800000) v = 1800000;
+          id(dwell_gate_ms) = v;
+          id(num_dwell_gate_ms).publish_state(v);
+
   - platform: template
     id: num_mist_vent_reopen_delay
     name: "Mist Vent Reopen Delay (s)"
@@ -1243,6 +1257,24 @@ switch:
       - lambda: |
           id(sw_summer_vent_enabled) = false;
           id(sw_summer_vent_enabled_switch).publish_state(false);
+
+  # Phase-2 dwell gate master switch. Default OFF (shadow-mode bake).
+  # After 14d of replay + shadow validation per plan Phase 2 gate,
+  # planner flips this to ON to activate the 5-min mode-dwell hold.
+  - platform: template
+    id: sw_dwell_gate_enabled_switch
+    name: "Dwell Gate Enabled"
+    icon: "mdi:timer-lock"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(sw_dwell_gate_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(sw_dwell_gate_enabled) = true;
+          id(sw_dwell_gate_enabled_switch).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(sw_dwell_gate_enabled) = false;
+          id(sw_dwell_gate_enabled_switch).publish_state(false);
 
 # ─── IRRIGATION MANUAL TRIGGER BUTTONS ────────────────────────────────────────
 button:

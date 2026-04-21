@@ -1621,6 +1621,108 @@ TEST(s15_1_mode_reason_idle_default) {
     PASS();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Phase-2 dwell gate — 5-min hold on non-safety transitions.
+// See plan at .claude-agents/iris-dev/plans/yo-iris-dev-you-help-humming-stonebraker.md
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(phase2_dwell_gate_off_by_default) {
+    // Default: sw_dwell_gate_enabled=false → no hold, current behavior
+    // preserved. This test ensures the feature flag works — if the default
+    // flipped on, this test would catch it and force review.
+    auto sp = band_setpoints();
+    ASSERT_TRUE(!sp.sw_dwell_gate_enabled);
+    PASS();
+}
+
+TEST(phase2_dwell_gate_holds_normal_transition) {
+    // With dwell ON, a mode transition that would fire gets held for
+    // dwell_gate_ms. Safety preempts — but this is a non-safety case.
+    auto sp = band_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;  // 5 min
+
+    auto s = initial_state();
+    s.mode = IDLE;
+    s.mode_prev = IDLE;
+    // Pretend a transition JUST happened (dwell timer = 0 → in dwell window).
+    s.last_transition_tick_ms = 0;
+
+    // Step 1: fire a cooling transition. Temp crosses Thigh.
+    // band_setpoints: temp_high=82, bias_cool=0, band 65-82, interior ~69-79.
+    // 85°F indoor is well past Thigh_interior+bias_cool=79.
+    Mode m1 = determine_mode(make_inputs(85.0f, 1.0f), sp, s, 5000);
+    // Gate should hold — last_transition_tick_ms (0) + dt_ms (5000) is still
+    // far below dwell_gate_ms (300000). So mode stays IDLE and reason = dwell_hold.
+    ASSERT_EQ(m1, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "dwell_hold");
+
+    // Step 2: after dwell expires (advance 5 min + 1s of dt), same stimulus
+    // now lets the transition through.
+    s.last_transition_tick_ms = 301000;  // past 300000
+    Mode m2 = determine_mode(make_inputs(85.0f, 1.0f), sp, s, 5000);
+    ASSERT_EQ(m2, VENTILATE);
+    PASS();
+}
+
+TEST(phase2_dwell_gate_safety_preempts) {
+    // Safety must always fire immediately, dwell or no dwell.
+    auto sp = band_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;
+
+    auto s = initial_state();
+    s.mode = IDLE;
+    s.mode_prev = IDLE;
+    s.last_transition_tick_ms = 0;  // in dwell
+
+    // Force temp at safety_max → SAFETY_COOL must fire despite dwell.
+    Mode m = determine_mode(make_inputs(sp.safety_max + 0.5f, 1.0f), sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_COOL);
+    PASS();
+}
+
+TEST(phase2_dwell_gate_dry_override_preempts) {
+    // R2-3: plant damage outranks dwell. VPD > vpd_max_safe forces SEAL
+    // even if dwell would otherwise hold the transition.
+    auto sp = band_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;
+
+    auto s = initial_state();
+    s.mode = IDLE;
+    s.mode_prev = IDLE;
+    s.last_transition_tick_ms = 0;  // in dwell
+
+    // Indoor 75°F (in band), but VPD 3.5 > vpd_max_safe (3.0) — R2-3 fires.
+    // The R2-3 override is the "dry_override_active" preempt reason.
+    Mode m = determine_mode(make_inputs(75.0f, 3.5f), sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    PASS();
+}
+
+TEST(phase2_dwell_gate_tracks_ticks_when_off) {
+    // Even with gate OFF, last_transition_tick_ms must still accumulate
+    // so that when the gate is flipped ON later (live operation), the
+    // first transition has correct dwell accounting. Shadow mode requires
+    // this so we don't mis-count when flipping on.
+    auto sp = band_setpoints();
+    sp.sw_dwell_gate_enabled = false;  // OFF
+
+    auto s = initial_state();
+    s.mode = IDLE;
+    s.mode_prev = IDLE;
+    s.last_transition_tick_ms = 0;
+
+    // Stable conditions, mode stays IDLE. Tick count should advance.
+    determine_mode(make_inputs(72.0f, 0.9f), sp, s, 60000);
+    ASSERT_EQ(s.last_transition_tick_ms, 60000u);
+
+    determine_mode(make_inputs(72.0f, 0.9f), sp, s, 60000);
+    ASSERT_EQ(s.last_transition_tick_ms, 120000u);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis + OBS-1e\n");

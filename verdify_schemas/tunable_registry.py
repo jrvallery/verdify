@@ -222,6 +222,35 @@ REGISTRY: dict[str, TunableDef] = {
         tier=1,
         notes="Sprint-15.1 fix 6: default 300→180. Clamp ceiling tightened 60→600 so planner can't walk past 10 min.",
     ),
+    # ── Phase-2 dwell gate ───────────────────────────────────────────
+    "sw_dwell_gate_enabled": TunableDef(
+        name="sw_dwell_gate_enabled",
+        kind="switch",
+        default=0,
+        esp_object_id="dwell_gate_enabled",
+        cfg_readback_object_id=None,  # switch; state in equipment_state
+        push_owner="planner",
+        planner_pushable=True,
+        tier=1,
+        notes="Master switch for Phase-2 mode-dwell gate. Default OFF for "
+        "shadow-mode bake. Flip to ON after 14d replay+shadow validation.",
+    ),
+    "dwell_gate_ms": TunableDef(
+        name="dwell_gate_ms",
+        kind="numeric",
+        min=60000,
+        max=1800000,
+        default=300000,
+        fw_clamp_lo=60000,
+        fw_clamp_hi=1800000,
+        esp_object_id="dwell_gate_ms",
+        cfg_readback_object_id=None,
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Dwell hold duration. Default 5 min. Safety rails + R2-3 "
+        "dry override + vpd_min_safe rescue preempt unconditionally.",
+    ),
     "fog_escalation_kpa": TunableDef(
         name="fog_escalation_kpa",
         kind="numeric",
