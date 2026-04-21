@@ -399,6 +399,20 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg_summer_vent_enabled": "sw_summer_vent_enabled",
     "cfg___outdoor_temp___f_": "outdoor_temp_f",
     "cfg___outdoor_dewpoint___f_": "outdoor_dewpoint_f",
+    # Phase 1c: 10 fire-and-forget tunable readbacks. Dispatcher pushed
+    # these but firmware never echoed — alert_monitor couldn't verify
+    # landings. Same "Cfg • Foo Bar (unit)" → cfg___foo_bar__unit_
+    # slug pattern as sprint-15 block above.
+    "cfg___mister_pulse_on__s_": "mister_pulse_on_s",
+    "cfg___mister_pulse_gap__s_": "mister_pulse_gap_s",
+    "cfg___mister_water_budget__gal_": "mister_water_budget_gal",
+    "cfg___mister_vpd_weight": "mister_vpd_weight",
+    "cfg___vpd_watch_dwell__s_": "vpd_watch_dwell_s",
+    "cfg___mist_vent_close_lead__s_": "mist_vent_close_lead_s",
+    "cfg___mist_max_closed_vent__s_": "mist_max_closed_vent_s",
+    "cfg___mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
+    "cfg___mist_thermal_relief__s_": "mist_thermal_relief_s",
+    "cfg___fog_escalation__kpa_": "fog_escalation_kpa",
 }
 
 # ──────────────────────────────────────────────────────────────
