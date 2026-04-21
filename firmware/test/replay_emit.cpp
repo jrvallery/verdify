@@ -23,6 +23,7 @@
 #include "greenhouse_logic.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -118,6 +119,18 @@ int main(int argc, char** argv) {
         sp.vpd_high = parse_float(get("sp_vpd_high"), 0.6f);
         sp.bias_cool = parse_float(get("sp_bias_cool"), 5.0f);
         sp.bias_heat = 3.0f;
+        // Phase-2 preview hook: DWELL_ENABLED=1 env var flips the dwell-gate
+        // master switch + bumps temp_hysteresis to 2.0°F (the two bundled
+        // Phase-2 knobs). Default off — run with flag on to see projected
+        // whipsaw reduction against the same corpus/same setpoints.
+        static const bool dwell_preview_on = []{
+            const char* e = std::getenv("DWELL_ENABLED");
+            return e && *e && *e != '0';
+        }();
+        if (dwell_preview_on) {
+            sp.sw_dwell_gate_enabled = true;
+            sp.temp_hysteresis = 2.0f;
+        }
         // validate_setpoints applies firmware clamps
         validate_setpoints(sp);
 
