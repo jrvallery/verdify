@@ -210,7 +210,7 @@ inline Setpoints default_setpoints() {
         .temp_high = 95.0f, .temp_low = 40.0f,    // wide — dispatcher narrows
         .vpd_high = 2.80f,  .vpd_low = 0.35f,      // wide — dispatcher narrows
         .bias_cool = 0.0f, .bias_heat = 0.0f,
-        .vpd_hysteresis = 0.3f, .temp_hysteresis = 2.0f, .heat_hysteresis = 1.0f,  // Phase-2: temp hyst 1.5→2.0 widens cooling dead zone
+        .vpd_hysteresis = 0.3f, .temp_hysteresis = 1.5f, .heat_hysteresis = 1.0f,  // Phase-2: push temp_hysteresis=2.0 via dispatcher at sw_dwell_gate_enabled flip
         .dH2 = 5.0f, .dC2 = 3.0f,
         .safety_max = 100.0f, .safety_min = 35.0f,
         .vpd_max_safe = 3.0f, .vpd_min_safe = 0.3f,
