@@ -144,6 +144,12 @@ struct ControlState {
     // evaluate_overrides() and surfaced via OverrideFlags. No persisted
     // timer; freshly evaluated each cycle.
     bool override_summer_vent;
+    // Sprint-15.1 fix 8: which branch of determine_mode() chose the
+    // current mode. Short string literal — no heap allocation. Read by
+    // controls.yaml for the `gh_mode_reason` text sensor. Defaults to
+    // a benign literal on initial_state so consumers can safely publish
+    // before determine_mode has run.
+    const char* last_mode_reason;
 };
 
 struct RelayOutputs {
@@ -208,7 +214,11 @@ inline Setpoints default_setpoints() {
         .sw_summer_vent_enabled = true,
         .vent_prefer_temp_delta_f = 5.0f,
         .vent_prefer_dp_delta_f = 5.0f,
-        .outdoor_staleness_max_s = 300u,
+        // Sprint-15.1 fix 3: raised from 300s → 600s (2× dispatcher
+        // cadence). Pre-15.1 at exactly 300s the staleness comparison
+        // flipped false on any dispatcher push jitter, intermittently
+        // disabling the gate.
+        .outdoor_staleness_max_s = 600u,
         .summer_vent_min_runtime_s = 180u
     };
 }
@@ -302,7 +312,9 @@ inline void validate_setpoints(Setpoints& sp) {
     // --- sprint-15: summer-vent gate clamps (match spec ranges) ---
     sp.vent_prefer_temp_delta_f = std::max(2.0f, std::min(15.0f, sp.vent_prefer_temp_delta_f));
     sp.vent_prefer_dp_delta_f   = std::max(2.0f, std::min(15.0f, sp.vent_prefer_dp_delta_f));
-    sp.outdoor_staleness_max_s  = std::max(uint32_t(60), std::min(uint32_t(1800), sp.outdoor_staleness_max_s));
+    // Sprint-15.1 fix 3: floor raised 60→120s (anything below dispatcher
+    // cadence disqualifies the gate on every jitter tick).
+    sp.outdoor_staleness_max_s  = std::max(uint32_t(120), std::min(uint32_t(1800), sp.outdoor_staleness_max_s));
     sp.summer_vent_min_runtime_s = std::max(uint32_t(60), std::min(uint32_t(600), sp.summer_vent_min_runtime_s));
 }
 
@@ -316,6 +328,7 @@ inline ControlState initial_state() {
         .relief_cycle_count = 0, .vent_latch_timer_ms = 0,
         .dry_override_active = false,
         .heat2_latched = false,
-        .override_summer_vent = false
+        .override_summer_vent = false,
+        .last_mode_reason = "init"
     };
 }

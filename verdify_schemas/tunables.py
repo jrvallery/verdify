@@ -144,10 +144,12 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         # Sprint-15: summer vent master enable. ON by default (firmware
         # behavior today is wrong in summer; explicit opt-out is safer).
         "sw_summer_vent_enabled",
-        # NOTE: sw_mister_closes_vent exists as an ESP32 switch (firmware
-        # tunables.yaml line 1069) and as a CFG readback, but is NOT in
-        # SETPOINT_MAP today — dispatcher can't push it. Not adding here
-        # until the routing gap is closed; see Sprint 21 follow-up.
+        # Sprint-15.1 fix 7: sprint-21 routing gap closed. Gates the
+        # vent-close interlock for misters in controls.yaml block 12.
+        # Default is whatever the firmware global initializes to
+        # (tunables.yaml sw_mister_closes_vent); operator can push
+        # per-greenhouse via dispatcher.
+        "sw_mister_closes_vent",
     }
 )
 

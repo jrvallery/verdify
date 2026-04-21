@@ -192,6 +192,17 @@ inline Mode determine_mode(
     // Falls through to existing VENTILATE path. Safety rails, THERMAL_RELIEF,
     // and DEHUM_VENT all still pre-empt this gate (they're checked first).
     // See docs/firmware-sprint-15-summer-vent-spec.md.
+    //
+    // Sprint-15.1 fix 2: gate now pre-empts BOTH new seal entries AND
+    // ongoing sealed cycles. Pre-15.1 the gate only set vpd_wants_seal=false
+    // which didn't affect the was_sealed sticky path (around line 258) —
+    // so once firmware was in SEALED_MIST for even one cycle (stale
+    // outdoor data, dwell just matured, etc.), the gate was toothless
+    // until normal exit conditions fired. Matches the observed
+    // 2026-04-20 23:20 → 05:30 MDT whipsaw. The `was_sealed` branch
+    // below now also sees vent_preferred semantics: we clean up the
+    // sealed state (mirror of the vpd_below_exit exit path) and force
+    // was_sealed=false so the cascade falls through to VENTILATE.
     state.override_summer_vent = false;
     {
         const bool outdoor_data_fresh = (in.outdoor_data_age_s < sp.outdoor_staleness_max_s);
@@ -203,21 +214,38 @@ inline Mode determine_mode(
                                      && outdoor_cooler
                                      && outdoor_drier_dp
                                      && temp_above_band;
-        if (vent_preferred && vpd_wants_seal) {
-            // Pre-empt the seal — fall through to the temperature-driven
-            // VENTILATE branch below. Telemetry flag is read by
-            // evaluate_overrides() and surfaced as override_events.
+        if (vent_preferred && (vpd_wants_seal || was_sealed)) {
+            // Pre-empt the seal — clear entry dwell AND clean up ongoing
+            // sealed state. Telemetry flag is read by evaluate_overrides()
+            // and surfaced via active_overrides = "summer_vent".
             vpd_wants_seal = false;
             state.override_summer_vent = true;
+            if (was_sealed) {
+                // Mirror the vpd_below_exit cleanup (was_sealed → IDLE/VENT
+                // exit path) so the normal cascade treats this like a
+                // clean seal exit. Needed because the was_sealed branch
+                // below doesn't consult vpd_wants_seal.
+                state.sealed_timer_ms = 0;
+                state.vpd_watch_timer_ms = 0;
+                state.relief_cycle_count = 0;
+                state.vent_latch_timer_ms = 0;
+                state.mist_stage = MIST_WATCH;
+                state.mist_stage_timer_ms = 0;
+                was_sealed = false;  // force normal-cascade path
+            }
         }
     }
 
     // ── Priority-ordered mode determination ──
     Mode mode = IDLE;
     bool relief_just_expired = false;
+    // Sprint-15.1 fix 8: track which branch chose the current mode so we
+    // can RCA gate/seal/idle decisions post-hoc via gh_mode_reason.
+    state.last_mode_reason = "idle_default";
 
     if (safety_cool) {
         mode = SAFETY_COOL;
+        state.last_mode_reason = "safety_cool";
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;
         state.vpd_watch_timer_ms = 0;   // sprint-8: match "suspended during safety" comment
@@ -225,6 +253,7 @@ inline Mode determine_mode(
         state.vent_latch_timer_ms = 0;  // FW-8
     } else if (safety_heat) {
         mode = SAFETY_HEAT;
+        state.last_mode_reason = "safety_heat";
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;      // sprint-8 P1#5: match SAFETY_COOL
         state.vpd_watch_timer_ms = 0;   // sprint-8: match SAFETY_COOL
@@ -241,6 +270,7 @@ inline Mode determine_mode(
             else state.relief_cycle_count = 0;
         } else {
             mode = THERMAL_RELIEF;
+            state.last_mode_reason = "thermal_relief";
         }
     }
 
@@ -251,6 +281,7 @@ inline Mode determine_mode(
             // Exit sealed if: VPD resolved, sealed too long, OR someone is present
             if (vpd_below_exit || moisture_blocked) {
                 mode = needs_cooling ? VENTILATE : IDLE;
+                state.last_mode_reason = "seal_exit";
                 state.sealed_timer_ms = 0;
                 state.vpd_watch_timer_ms = 0;
                 state.relief_cycle_count = 0;
@@ -260,9 +291,11 @@ inline Mode determine_mode(
             } else if (state.sealed_timer_ms >= sp.sealed_max_ms
                        || in.temp_f >= (sp.safety_max - sp.safety_max_seal_margin_f)) {  // FW-7: bail if too hot
                 mode = THERMAL_RELIEF;
+                state.last_mode_reason = "thermal_relief_forced";
                 state.relief_timer_ms = 0;
             } else {
                 mode = SEALED_MIST;
+                state.last_mode_reason = "seal_continue";
                 state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
             }
         // R2-6: Gate seal entry by relief cycle count AND occupancy
@@ -272,6 +305,7 @@ inline Mode determine_mode(
                    && state.relief_cycle_count < sp.max_relief_cycles
                    && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f)) {
             mode = SEALED_MIST;
+            state.last_mode_reason = "seal_enter";
             state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
             state.mist_stage_timer_ms = 0;
@@ -279,6 +313,7 @@ inline Mode determine_mode(
         } else if (vpd_wants_seal && state.relief_cycle_count >= sp.max_relief_cycles) {
             // R2-6: Exceeded max consecutive sealed→relief. Force vent to break cycle.
             mode = VENTILATE;
+            state.last_mode_reason = "relief_cycle_breaker";
             // FW-8: Timeout — if latched past vent_latch_timeout_ms (sprint-10
             // 0.4b: tunable; default 30 min) with VPD still above band, retry.
             state.vent_latch_timer_ms = sat_add(state.vent_latch_timer_ms, dt_ms);
@@ -288,13 +323,22 @@ inline Mode determine_mode(
             }
         } else if (vpd_too_low_enter) {
             mode = DEHUM_VENT;
+            state.last_mode_reason = "vpd_too_low";
         } else if (was_dehum && !vpd_dehum_exit && !sp.econ_block) {
             // R2-8: Sticky dehum respects econ_block changes mid-cycle
             mode = DEHUM_VENT;
+            state.last_mode_reason = "dehum_continue";
         } else if (needs_cooling) {
             mode = VENTILATE;
+            // If sprint-15 gate pre-empted a seal this cycle, mark the
+            // reason accordingly so observers can distinguish thermal
+            // vent from gate-driven vent.
+            state.last_mode_reason = state.override_summer_vent
+                ? "summer_vent_preempt"
+                : "temp_vent";
         } else {
             mode = IDLE;
+            state.last_mode_reason = "idle_default";
         }
     }
 
@@ -324,6 +368,9 @@ inline Mode determine_mode(
 
         if (in.vpd_kpa > sp.vpd_max_safe && can_seal_for_dryness) {
             mode = SEALED_MIST;
+            // Sprint-15.1 fix 8: tag this path distinctly so gh_mode_reason
+            // shows "dry_override" rather than the prior branch's reason.
+            state.last_mode_reason = "dry_override";
             // sprint-8 P0#1/P0#2: only seed "new seal" state when we weren't
             // already in SEALED_MIST. Otherwise:
             //   - resetting mist_stage would demote MIST_S2/MIST_FOG to
@@ -359,6 +406,7 @@ inline Mode determine_mode(
                 state.mist_stage_timer_ms = 0;
             }
             mode = DEHUM_VENT;
+            state.last_mode_reason = "vpd_min_safe_rescue";  // sprint-15.1 fix 8
         }
         // else econ_block=true → stay in current mode; policy choice
         // documented in backlog (P3#15 still open).
