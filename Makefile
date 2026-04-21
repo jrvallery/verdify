@@ -62,6 +62,12 @@ firmware-replay: ## Phase-0: dual-ref diff of firmware mode/relay decisions betw
 	fi
 	bash scripts/firmware-replay-diff.sh "$(OLD)" "$(NEW)"
 
+firmware-dwell-preview: ## Phase-2: replay corpus with dwell-gate ON vs OFF, quantify whipsaw reduction
+	test -f firmware/test/data/replay_overrides.csv \
+	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_emit test/replay_emit.cpp
+	bash scripts/firmware-dwell-preview.sh
+
 replay-corpus-refresh: ## Refresh the replay corpus .csv.gz from live DB + validate no regression
 	@bash -c '\
 		set -euo pipefail; \
