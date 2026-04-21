@@ -319,6 +319,30 @@ interval:
           auto sntp_now = id(sntp_time).now();
           int local_hour = sntp_now.is_valid() ? sntp_now.hour : 12;
 
+          // Sprint-15: outdoor temp + dewpoint feed the summer-vent gate.
+          // Sources:
+          //   - outdoor_temp_f from `pulled_outdoor_temp_f` (set by /setpoints
+          //     handler from the Tempest-relayed value in the dispatcher payload)
+          //   - outdoor_rh_pct from `pulled_outdoor_rh_pct` (same source)
+          //   - outdoor_data_age_s from `pulled_data_age_s` (incremented in
+          //     section 13 status loop, reset to 0 on each pull)
+          // Outdoor dewpoint computed from temp+RH using the standard
+          // Magnus formula (matches the indoor dewpoint sensor convention).
+          // If either reading is NaN, force outdoor_data_age_s to a stale
+          // sentinel so the gate fails safe (disabled).
+          float outdoorT = id(pulled_outdoor_temp_f);
+          float outdoorRH = id(pulled_outdoor_rh_pct);
+          float outdoor_dp = NAN;
+          if (!isnan(outdoorT) && !isnan(outdoorRH) && outdoorRH > 0.0f) {
+              // Magnus: a=17.27, b=237.7°C; convert °F → °C → DP °C → DP °F.
+              float Tc = (outdoorT - 32.0f) * (5.0f / 9.0f);
+              float gamma = (17.27f * Tc) / (237.7f + Tc) + log(outdoorRH / 100.0f);
+              float dp_c = (237.7f * gamma) / (17.27f - gamma);
+              outdoor_dp = dp_c * (9.0f / 5.0f) + 32.0f;
+          }
+          uint32_t outdoor_age = (isnan(outdoorT) || isnan(outdoorRH))
+                               ? uint32_t(99999) : id(pulled_data_age_s);
+
           SensorInputs sensor_in = {
               .temp_f = Tin, .vpd_kpa = VPD, .rh_pct = RHin,
               .dew_point_f = isnan(id(dewpoint_avg).state) ? Tin - 10.0f : id(dewpoint_avg).state,
@@ -328,7 +352,10 @@ interval:
               .vpd_west = id(vpd_west).state,
               .vpd_east = id(vpd_east).state,
               .local_hour = local_hour,
-              .occupied = id(greenhouse_occupied)
+              .occupied = id(greenhouse_occupied),
+              .outdoor_temp_f = outdoorT,
+              .outdoor_dewpoint_f = outdoor_dp,
+              .outdoor_data_age_s = outdoor_age
           };
 
           Setpoints setpts = {
@@ -359,7 +386,13 @@ interval:
               // the pre-sprint-10 hardcoded constants):
               .vent_latch_timeout_ms = 1800000u,
               .safety_max_seal_margin_f = 5.0f,
-              .econ_heat_margin_f = 5.0f
+              .econ_heat_margin_f = 5.0f,
+              // sprint-15: summer thermal-driven vent gate.
+              .sw_summer_vent_enabled = id(sw_summer_vent_enabled),
+              .vent_prefer_temp_delta_f = id(vent_prefer_temp_delta_f),
+              .vent_prefer_dp_delta_f = id(vent_prefer_dp_delta_f),
+              .outdoor_staleness_max_s = (uint32_t)id(outdoor_staleness_max_s),
+              .summer_vent_min_runtime_s = (uint32_t)id(summer_vent_min_runtime_s)
           };
 
           validate_setpoints(setpts);
@@ -1348,6 +1381,13 @@ interval:
                     if(key == "mister_vpd_weight"){ val = cf(val, 0.5, 5.0); if(fabs(id(mister_vpd_weight) - val) > 0.01f){ id(mister_vpd_weight) = val; id(num_mister_vpd_weight).publish_state(val); applied++; }}
                     if(key == "outdoor_temp"){ id(pulled_outdoor_temp_f) = val; id(pulled_data_age_s) = 0; ESP_LOGI("plan","Outdoor temp: %.1f°F (from DB)", val); }
                     if(key == "outdoor_rh"){ id(pulled_outdoor_rh_pct) = val; id(pulled_data_age_s) = 0; ESP_LOGI("plan","Outdoor RH: %.0f%% (from DB)", val); }
+                    // Sprint-15: summer thermal-driven vent gate tunables.
+                    // Slugs match SETPOINT_MAP entries from coordinator e91f31e.
+                    if(key == "vent_prefer_temp_delta_f"){ val = cf(val, 2, 15); if(fabs(id(vent_prefer_temp_delta_f) - val) > 0.01f){ id(vent_prefer_temp_delta_f) = val; id(num_vent_prefer_temp_delta).publish_state(val); applied++; }}
+                    if(key == "vent_prefer_dp_delta_f"){ val = cf(val, 2, 15); if(fabs(id(vent_prefer_dp_delta_f) - val) > 0.01f){ id(vent_prefer_dp_delta_f) = val; id(num_vent_prefer_dp_delta).publish_state(val); applied++; }}
+                    if(key == "outdoor_staleness_max_s"){ int v = ci((int)val, 60, 1800); if(id(outdoor_staleness_max_s) != v){ id(outdoor_staleness_max_s) = v; id(num_outdoor_staleness_max).publish_state(v); applied++; }}
+                    if(key == "summer_vent_min_runtime_s"){ int v = ci((int)val, 60, 600); if(id(summer_vent_min_runtime_s) != v){ id(summer_vent_min_runtime_s) = v; id(num_summer_vent_min_runtime).publish_state(v); applied++; }}
+                    if(key == "sw_summer_vent_enabled"){ bool v = val > 0.5f; if(id(sw_summer_vent_enabled) != v){ id(sw_summer_vent_enabled) = v; id(sw_summer_vent_enabled_switch).publish_state(v); applied++; }}
                   }
                   if(applied > 0){
                     ESP_LOGI("plan","Applied %d setpoint(s) from pull", applied);

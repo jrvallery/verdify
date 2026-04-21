@@ -177,6 +177,41 @@ inline Mode determine_mode(
     }
     bool vpd_wants_seal = vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
 
+    // ── Sprint-15: summer thermal-driven vent preference gate ──
+    // When the screen-door intake is open in summer, outdoor-air exchange
+    // is a real heat sink. Pre-sprint-15 logic prioritized VPD-seal over
+    // thermal-vent unconditionally; on hot dry days (today: indoor 91°F /
+    // 65% RH, outdoor 77°F / 8% RH) that sealed the greenhouse against its
+    // own best cooling. The gate pre-empts vpd_wants_seal when:
+    //   1. operator hasn't disabled the feature
+    //   2. outdoor reading is fresh
+    //   3. outdoor air is at least vent_prefer_temp_delta_f cooler
+    //   4. outdoor dewpoint is at least vent_prefer_dp_delta_f lower
+    //   5. indoor temp is above the heating-target hysteresis (otherwise
+    //      we'd vent into a cold night)
+    // Falls through to existing VENTILATE path. Safety rails, THERMAL_RELIEF,
+    // and DEHUM_VENT all still pre-empt this gate (they're checked first).
+    // See docs/firmware-sprint-15-summer-vent-spec.md.
+    state.override_summer_vent = false;
+    {
+        const bool outdoor_data_fresh = (in.outdoor_data_age_s < sp.outdoor_staleness_max_s);
+        const bool outdoor_cooler     = (in.outdoor_temp_f      < (in.temp_f      - sp.vent_prefer_temp_delta_f));
+        const bool outdoor_drier_dp   = (in.outdoor_dewpoint_f  < (in.dew_point_f - sp.vent_prefer_dp_delta_f));
+        const bool temp_above_band    = (in.temp_f > (sp.temp_low + sp.temp_hysteresis));
+        const bool vent_preferred     = sp.sw_summer_vent_enabled
+                                     && outdoor_data_fresh
+                                     && outdoor_cooler
+                                     && outdoor_drier_dp
+                                     && temp_above_band;
+        if (vent_preferred && vpd_wants_seal) {
+            // Pre-empt the seal — fall through to the temperature-driven
+            // VENTILATE branch below. Telemetry flag is read by
+            // evaluate_overrides() and surfaced as override_events.
+            vpd_wants_seal = false;
+            state.override_summer_vent = true;
+        }
+    }
+
     // ── Priority-ordered mode determination ──
     Mode mode = IDLE;
     bool relief_just_expired = false;
@@ -448,6 +483,13 @@ inline OverrideFlags evaluate_overrides(
     // dwell timer in the same cycle it fires, so `!vpd_wants_seal` is
     // false by the time evaluate_overrides() sees state.
     f.vpd_dry_override = state.dry_override_active;
+
+    // Sprint-15: summer-vent gate active. Set by determine_mode() when the
+    // outdoor-cooler-and-drier comparator pre-empted a VPD-seal entry.
+    // Same reason as vpd_dry_override above: the gate consumes
+    // vpd_wants_seal in the same cycle, so reconstruction post-hoc would
+    // miss the firing.
+    f.summer_vent_active = state.override_summer_vent;
 
     (void)HV;  // reserved for future hysteresis-sensitive gates
     return f;

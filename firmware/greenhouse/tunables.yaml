@@ -581,6 +581,58 @@ number:
           id(fog_escalation_kpa) = x;
           id(num_fog_escalation_kpa).publish_state(x);
 
+  # ─── Sprint-15: summer thermal-driven vent gate tunables ───────────
+  # Operator-tunable. Spec: docs/firmware-sprint-15-summer-vent-spec.md.
+  - platform: template
+    id: num_vent_prefer_temp_delta
+    name: "Vent Prefer Temp Delta (F)"
+    min_value: 2
+    max_value: 15
+    step: 0.5
+    lambda: "return id(vent_prefer_temp_delta_f);"
+    set_action:
+      - lambda: |
+          id(vent_prefer_temp_delta_f) = x;
+          id(num_vent_prefer_temp_delta).publish_state(x);
+
+  - platform: template
+    id: num_vent_prefer_dp_delta
+    name: "Vent Prefer DP Delta (F)"
+    min_value: 2
+    max_value: 15
+    step: 0.5
+    lambda: "return id(vent_prefer_dp_delta_f);"
+    set_action:
+      - lambda: |
+          id(vent_prefer_dp_delta_f) = x;
+          id(num_vent_prefer_dp_delta).publish_state(x);
+
+  - platform: template
+    id: num_outdoor_staleness_max
+    name: "Outdoor Staleness Max (s)"
+    min_value: 60
+    max_value: 1800
+    step: 30
+    lambda: "return id(outdoor_staleness_max_s);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 60) v = 60; if(v > 1800) v = 1800;
+          id(outdoor_staleness_max_s) = v;
+          id(num_outdoor_staleness_max).publish_state(v);
+
+  - platform: template
+    id: num_summer_vent_min_runtime
+    name: "Summer Vent Min Runtime (s)"
+    min_value: 60
+    max_value: 600
+    step: 30
+    lambda: "return id(summer_vent_min_runtime_s);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 60) v = 60; if(v > 600) v = 600;
+          id(summer_vent_min_runtime_s) = v;
+          id(num_summer_vent_min_runtime).publish_state(v);
+
   - platform: template
     id: num_mist_vent_reopen_delay
     name: "Mist Vent Reopen Delay (s)"
@@ -1172,6 +1224,25 @@ switch:
       - lambda: |
           id(occupancy_inhibit_enabled) = false;
           id(sw_occupancy_inhibit).publish_state(false);
+
+  # Sprint-15: master enable for the summer thermal-driven vent gate.
+  # Default ON (firmware behavior is wrong in summer without it; explicit
+  # opt-out is the safer default). Operator can disable in winter or
+  # when the screen door is closed via this switch.
+  - platform: template
+    id: sw_summer_vent_enabled_switch
+    name: "Summer Vent Enabled"
+    icon: "mdi:home-thermometer"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(sw_summer_vent_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(sw_summer_vent_enabled) = true;
+          id(sw_summer_vent_enabled_switch).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(sw_summer_vent_enabled) = false;
+          id(sw_summer_vent_enabled_switch).publish_state(false);
 
 # ─── IRRIGATION MANUAL TRIGGER BUTTONS ────────────────────────────────────────
 button:
