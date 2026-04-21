@@ -1774,6 +1774,106 @@ sensor:
       float dp_c = (237.7f * gamma) / (17.27f - gamma);
       return dp_c * (9.0f / 5.0f) + 32.0f;
 
+  # ─── Phase 1c: fire-and-forget tunable readbacks ──────────────────
+  # 10 cfg_* sensors closing the "dispatcher pushes but firmware never
+  # echoes" gap for mister pulse, VPD-primary, and fog-escalation
+  # tunables. Gated on cfg_first_pull_ok like every other cfg_*.
+
+  - platform: template
+    id: cfg_mister_pulse_on_s
+    name: "Cfg • Mister Pulse On (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mister_pulse_on_s);
+
+  - platform: template
+    id: cfg_mister_pulse_gap_s
+    name: "Cfg • Mister Pulse Gap (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mister_pulse_gap_s);
+
+  - platform: template
+    id: cfg_mister_water_budget_gal
+    name: "Cfg • Mister Water Budget (gal)"
+    unit_of_measurement: "gal"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(mister_water_budget_gal);
+
+  - platform: template
+    id: cfg_mister_vpd_weight
+    name: "Cfg • Mister VPD Weight"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(mister_vpd_weight);
+
+  - platform: template
+    id: cfg_mist_vent_close_lead_s
+    name: "Cfg • Mist Vent Close Lead (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mist_vent_close_lead_s);
+
+  - platform: template
+    id: cfg_mist_max_closed_vent_s
+    name: "Cfg • Mist Max Closed Vent (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mist_max_closed_vent_s);
+
+  - platform: template
+    id: cfg_mist_vent_reopen_delay_s
+    name: "Cfg • Mist Vent Reopen Delay (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mist_vent_reopen_delay_s);
+
+  - platform: template
+    id: cfg_mist_thermal_relief_s
+    name: "Cfg • Mist Thermal Relief (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mist_thermal_relief_s);
+
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template
     id: mister_vpd_delta
