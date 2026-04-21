@@ -415,6 +415,25 @@ interval:
           if(willFan2 && !id(fan2_rly)->state)   id(cnt_fan2_today) += 1;
           if(willVent && !id(vent_rly)->state)    id(cnt_vent_today) += 1;
 
+          /**************** 11a — VENT-CLOSE INTERLOCK (sprint-15.1) **************/
+          // Fog + misters must wait for vent to physically close. Pre-sprint-15.1,
+          // 74% of fog-on-time and 12% of mister-on-time had vent still open
+          // (set_relay respects per-relay min_on timers but has no cross-relay
+          // ordering). Reading `vent_rly->state` gives the ACTUAL physical state,
+          // so even if firmware has already set willVent=false this cycle, we
+          // suppress moisture until the actuator reports closed.
+          //
+          // Operator toggles:
+          //   - sw_fog_closes_vent (`fog_closes_vent`, default true) gates fog
+          //   - sw_mister_closes_vent (`mister_closes_vent`, default false)
+          //     gates misters. Pre-15.1 the mister switch had no dispatcher
+          //     route (sprint-21 follow-up) — fix 7 closes that gap so
+          //     operators have per-device granularity.
+          const bool vent_is_open = id(vent_rly)->state;
+          if (id(fog_closes_vent) && vent_is_open) {
+              willFog = false;
+          }
+
           /**************** 11 — APPLY RELAY OUTPUTS ******************************/
           set_relay(R[0], willHeat1);
           set_relay(R[1], willHeat2);
@@ -434,7 +453,27 @@ interval:
             float west_vpd  = id(vpd_west).state;
             float east_vpd  = id(vpd_east).state;
             float avg_vpd   = VPD;
-            bool humidity_demand = (mode == SEALED_MIST);
+
+            // Sprint-15.1 fix 5: vent-close interlock for misters. Same
+            // physics as fog (block 11a) — atomizers ejecting moisture
+            // while vent is open leaks most of the humidity. Pre-15.1,
+            // 12% of mister-on-time had vent open (Study 4). Operator
+            // controls via `sw_mister_closes_vent` (separate from fog so
+            // per-device granularity). `vent_is_open` is in scope from
+            // block 11a above.
+            const bool mister_vent_ok = !id(mister_closes_vent) || !vent_is_open;
+            bool humidity_demand = (mode == SEALED_MIST) && mister_vent_ok;
+
+            // If misters WERE firing but vent just opened, kill the zone
+            // drivers immediately so we don't wait for the pulse timer.
+            if (!mister_vent_ok && id(mister_pulse_zone) > 0) {
+                id(south_wall_mister).turn_off();
+                id(west_wall_mister).turn_off();
+                id(center_mister).turn_off();
+                id(mister_pulse_zone) = 0;
+                id(mister_pulse_timer_ms) = 0;
+                ESP_LOGI("interlock","Mister suppressed — vent still open");
+            }
 
             // Defensive: zero the engage-delay timers on SEALED_MIST rising edge.
             // The mister_blocked branch intentionally preserves them (fast
@@ -775,8 +814,21 @@ interval:
             if(of.relief_cycle_breaker)      add("relief_cycle_breaker");
             if(of.seal_blocked_temp)         add("seal_blocked_temp");
             if(of.vpd_dry_override)          add("vpd_dry_override");
+            // Sprint-15.1 fix 1: wire the sprint-15 gate flag into
+            // active_overrides. Pre-fix the gate was invisible — no way to
+            // tell whether it was firing. Short tag "summer_vent" matches
+            // what ingestor override_events routing expects.
+            if(of.summer_vent_active)        add("summer_vent");
             obuf[n] = '\0';
             id(gh_overrides).publish_state(n > 0 ? obuf : "none");
+          }
+
+          // Sprint-15.1 fix 8: publish mode_reason. The literal is owned
+          // by determine_mode() (short static C string, no heap). Guard
+          // against nullptr so an unknown branch never crashes the publish.
+          {
+            const char* reason = ctl_state.last_mode_reason;
+            id(gh_mode_reason).publish_state(reason ? reason : "unknown");
           }
 
           /*** OBS-3 — Relief-cycle state exposure (Sprint 18) ***/
@@ -1385,7 +1437,7 @@ interval:
                     // Slugs match SETPOINT_MAP entries from coordinator e91f31e.
                     if(key == "vent_prefer_temp_delta_f"){ val = cf(val, 2, 15); if(fabs(id(vent_prefer_temp_delta_f) - val) > 0.01f){ id(vent_prefer_temp_delta_f) = val; id(num_vent_prefer_temp_delta).publish_state(val); applied++; }}
                     if(key == "vent_prefer_dp_delta_f"){ val = cf(val, 2, 15); if(fabs(id(vent_prefer_dp_delta_f) - val) > 0.01f){ id(vent_prefer_dp_delta_f) = val; id(num_vent_prefer_dp_delta).publish_state(val); applied++; }}
-                    if(key == "outdoor_staleness_max_s"){ int v = ci((int)val, 60, 1800); if(id(outdoor_staleness_max_s) != v){ id(outdoor_staleness_max_s) = v; id(num_outdoor_staleness_max).publish_state(v); applied++; }}
+                    if(key == "outdoor_staleness_max_s"){ int v = ci((int)val, 120, 1800); if(id(outdoor_staleness_max_s) != v){ id(outdoor_staleness_max_s) = v; id(num_outdoor_staleness_max).publish_state(v); applied++; }}  // sprint-15.1 fix 3: floor raised 60→120 (below dispatcher cadence disables the gate)
                     if(key == "summer_vent_min_runtime_s"){ int v = ci((int)val, 60, 600); if(id(summer_vent_min_runtime_s) != v){ id(summer_vent_min_runtime_s) = v; id(num_summer_vent_min_runtime).publish_state(v); applied++; }}
                     if(key == "sw_summer_vent_enabled"){ bool v = val > 0.5f; if(id(sw_summer_vent_enabled) != v){ id(sw_summer_vent_enabled) = v; id(sw_summer_vent_enabled_switch).publish_state(v); applied++; }}
                   }

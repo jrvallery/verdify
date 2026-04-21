@@ -154,6 +154,12 @@ STATE_MAP: dict[str, str] = {
     # or "none"). Ingestor also diffs transitions and writes one row per
     # start event to the override_events table.
     "active_overrides": "overrides_active",
+    # Sprint-15.1 fix 8: diagnostic trace — which branch of
+    # determine_mode() chose the current mode. Lets post-hoc queries
+    # distinguish `summer_vent_preempt` from `temp_vent` from
+    # `seal_enter` etc. Populated by controls.yaml from
+    # ctl_state.last_mode_reason on every cycle.
+    "mode_reason": "mode_reason",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -230,6 +236,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Switches (boolean, tracked as 0.0/1.0)
     "economiser_enabled": "sw_economiser_enabled",
     "fog_closes_vent": "sw_fog_closes_vent",
+    "mister_closes_vent": "sw_mister_closes_vent",  # sprint-15.1 fix 7: closes sprint-21 follow-up routing gap
     "gl_auto_mode": "sw_gl_auto_mode",
     "irrigation_enabled": "sw_irrigation_enabled",
     "irrigation_wall_enabled": "sw_irrigation_wall_enabled",

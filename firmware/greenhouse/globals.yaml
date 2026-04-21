@@ -326,7 +326,7 @@ globals:
   - id: min_heat_off_s
     type: int
     restore_value: no
-    initial_value: '300'
+    initial_value: '180'     # sprint-15.1 fix 6: lowered 300→180s. Study 2/6 showed 54% of heat1 off-phases pinned at the 300s rail; per-night σ 1.22°F drops to ~0.7°F at 180s without stressing the igniter cooldown.
   - id: min_fan_on_s
     type: int
     restore_value: no
@@ -847,7 +847,7 @@ globals:
   - id: outdoor_staleness_max_s
     type: int
     restore_value: no
-    initial_value: '300'     # 5 min — Tempest typically updates every 3 min
+    initial_value: '600'     # sprint-15.1: 10 min — 2× dispatcher cadence, covers push jitter
 
   - id: summer_vent_min_runtime_s
     type: int

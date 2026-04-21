@@ -78,6 +78,15 @@ text_sensor:
     entity_category: diagnostic
     update_interval: 5s
 
+  # Sprint-15.1 fix 8: which branch of determine_mode() chose the current
+  # mode. Diagnostic-only — used to RCA gate/seal/idle decisions post-hoc.
+  # Updated by controls.yaml after each determine_mode() call.
+  - platform: template
+    id: gh_mode_reason
+    name: "Mode Reason"
+    entity_category: diagnostic
+    update_interval: 5s
+
   - platform: template
     id: ts_lead_fan
     name: "Lead Fan"

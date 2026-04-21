@@ -11,6 +11,7 @@
 #include <cassert>
 #include <vector>
 #include <cmath>
+#include <string>
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -1504,6 +1505,119 @@ TEST(s15_integration_today_1300_data) {
     ASSERT_TRUE(out.vent);
     ASSERT_TRUE(out.fan1);
     ASSERT_FALSE(out.fog);
+    PASS();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sprint-15.1 hotfix — 8 fixes surfaced by overnight observation
+//   Fix 2 (gate unseals ongoing SEAL): new test s15_1_gate_unseals_was_sealed
+//   Fix 3 (staleness default 600s):    new test s15_1_gate_off_at_new_stale_300_600
+//   Fix 8 (mode_reason trace):         new tests s15_1_mode_reason_seal_enter,
+//                                                s15_1_mode_reason_summer_vent_preempt,
+//                                                s15_1_mode_reason_idle_default
+// ═══════════════════════════════════════════════════════════════════
+
+TEST(s15_1_gate_unseals_was_sealed_cycle) {
+    // Regression for the P0 bug that caused the 2026-04-20 overnight
+    // whipsaw. Pre-15.1: gate set vpd_wants_seal=false but the
+    // was_sealed sticky path (line 250 in determine_mode) still held
+    // SEALED_MIST across cycles. Post-15.1: gate clears sealed state
+    // and forces was_sealed=false so the cascade falls through to
+    // VENTILATE.
+    auto sp = s15_band();
+    auto s = initial_state();
+    // Start mid-seal: prev=SEALED_MIST, timer mid-cycle, mist_stage
+    // advanced — plausible state the firmware could be in when outdoor
+    // conditions become favorable.
+    s.mode_prev = SEALED_MIST;
+    s.sealed_timer_ms = 120000;      // 2 min into the 10-min seal window
+    s.vpd_watch_timer_ms = 60000;
+    s.mist_stage = MIST_S2;
+    s.mist_stage_timer_ms = 90000;
+    s.relief_cycle_count = 1;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;       // 14°F cooler than indoor 85
+    in.outdoor_dewpoint_f = 35.0f;   // 37°F drier DP
+    in.outdoor_data_age_s = 30u;     // fresh
+
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(s.override_summer_vent);
+    // Gate must have cleaned up sealed state.
+    ASSERT_EQ(s.sealed_timer_ms, 0u);
+    ASSERT_EQ(s.vpd_watch_timer_ms, 0u);
+    ASSERT_EQ(s.mist_stage, MIST_WATCH);
+    ASSERT_EQ(s.mist_stage_timer_ms, 0u);
+    ASSERT_EQ(s.relief_cycle_count, 0u);
+    PASS();
+}
+
+TEST(s15_1_gate_fresh_at_400s_with_default_600) {
+    // Regression for fix 3: default outdoor_staleness_max_s raised
+    // 300 → 600 so dispatcher push jitter past 300s doesn't disable
+    // the gate. With default (600) and age 400s, gate should still fire.
+    auto sp = s15_band();             // sp.outdoor_staleness_max_s=600 default
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 400u;    // past the OLD 300s threshold, under new 600s
+
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(s.override_summer_vent);
+    PASS();
+}
+
+TEST(s15_1_mode_reason_seal_enter) {
+    // Fix 8: mode_reason is set by every branch of determine_mode().
+    // Plain seal entry should tag "seal_enter".
+    auto sp = band_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;    // mature dwell
+    // vpd above interior-eff vpd_high_eff (= 1.25) but safe margin ok
+    Mode m = determine_mode(make_inputs(80.0f, 1.5f), sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_TRUE(s.last_mode_reason != nullptr);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "seal_enter");
+    PASS();
+}
+
+TEST(s15_1_mode_reason_summer_vent_preempt) {
+    // Fix 8: when the sprint-15 gate fires and falls through to
+    // VENTILATE, mode_reason should tag "summer_vent_preempt", not the
+    // plain "temp_vent" a cooling-only mode would produce.
+    auto sp = s15_band();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = 60000;    // dwell mature — would have sealed
+    auto in = s15_indoor_stressed();
+    in.outdoor_temp_f = 77.0f;
+    in.outdoor_dewpoint_f = 35.0f;
+    in.outdoor_data_age_s = 30u;
+
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(s.override_summer_vent);
+    ASSERT_TRUE(s.last_mode_reason != nullptr);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "summer_vent_preempt");
+    PASS();
+}
+
+TEST(s15_1_mode_reason_idle_default) {
+    // Fix 8: when nothing is wanted — in band, no sealing, no cooling,
+    // no safety — the default IDLE path should tag "idle_default". This
+    // gives us the diagnostic query "how often are we IDLE during
+    // stress windows" which Study 5 flagged at 40 % pre-hotfix.
+    auto sp = band_setpoints();
+    auto s = initial_state();
+    // 72°F is inside the 65-82°F band and VPD 0.9 is inside 0.8-1.4.
+    // Sprint-12 interior target: Tlow_interior=68.25, Thigh_interior=74.75.
+    // Comfortably in the middle — no seal, no vent, no dehum, no safety.
+    Mode m = determine_mode(make_inputs(72.0f, 0.9f), sp, s, 5000);
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(s.last_mode_reason != nullptr);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "idle_default");
     PASS();
 }
 
