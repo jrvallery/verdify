@@ -63,3 +63,39 @@ See `docs/BACKLOG.md` for the cycle index. Per-agent backlogs in `docs/backlog/{
 - `make test` — required; 1 pre-existing flaky timeout (`test_dew_point_risk_computes`) is tolerated, everything else must pass.
 - `make firmware-check` — required for `firmware` agent only.
 - For UI/site changes, verify render locally; type-checks and tests don't catch visual regressions.
+
+## Firmware freeze rules (Phase 0 stabilization)
+
+Post-2026-04-21 incident (sprint-15/15.1 fix-it-forward spiral producing repeated regressions). Background + full plan at `.claude-agents/iris-dev/plans/yo-iris-dev-you-help-humming-stonebraker.md`. These rules apply to every agent and every change to `firmware/lib/**`, `firmware/greenhouse/**`, `verdify_schemas/**`, `ingestor/entity_map.py`, or `mcp/server.py`.
+
+1. **No firmware OTA deploy while any `severity ∈ {critical, high}` alert is open.** `make firmware-deploy` preflight queries the alerts table and aborts. Override requires operator sign-off in PR body.
+
+2. **≤1 firmware OTA per calendar week** during rewrite phases (Phase 2-3 of the plan). Tunable pushes via `set_tunable` / `set_plan` are exempt but logged. Counter resets Monday 00:00 MDT.
+
+3. **48-hour bake minimum** between firmware OTA deploys. `make firmware-deploy` preflight checks `firmware/artifacts/last-good.ota.bin` mtime. "Bake" = the new binary runs 48 hours without the sensor-health sweep flagging critical alerts.
+
+4. **No sprint numbers.** Every change is PR-scoped and must carry replay-diff output + invariant-suite result + unit-test delta as artifacts in the PR description. Don't create `sprint-N.M` docs.
+
+5. **Stress-window freeze.** If outdoor_temp > 85°F forecast for the next 24 hours, no firmware deploys. Don't fix while it's on fire.
+
+6. **Every new tunable needs a `cfg_*` readback.** CI job `no-new-fire-and-forget` enforces this on PRs touching `firmware/greenhouse/tunables.yaml`. Fire-and-forget tunables are silent-push-corruption risks.
+
+7. **Schema changes require explicit restart documentation.** If a PR touches `verdify_schemas/**`, `ingestor/entity_map.py`, or `mcp/server.py`, the PR body must mention which services need to bounce post-merge (`verdify-mcp`, `verdify-ingestor`). CI job `service-restart-drift-guard` enforces this. Observed need from the 2026-04-21 MCP staleness incident.
+
+8. **Every firmware PR must show a replay-diff.** CI job `firmware-replay-diff` runs `scripts/firmware-replay-diff.sh` against merge-base. Default `THRESHOLD_PCT=0` means zero mode/relay divergence allowed. Intentional divergence (e.g. Phase 2 dwell-gate rollout) requires coordinator approval + explicit `THRESHOLD_PCT` override in the PR.
+
+9. **Required PR artifacts** for firmware changes:
+   - Replay diff output (`make firmware-replay OLD=<base> NEW=HEAD`)
+   - Invariant-suite output (`make firmware-invariants`)
+   - Unit-test delta (`make test-firmware`)
+   - Coordinator (iris-dev) independent replay reproduction
+   - Iris planner concurrence brief for any interface-level change
+
+Coordinator approves merge only when all three reviewers (firmware agent, coordinator, iris) agree. Then 48-hour wait before OTA.
+
+## Testing infrastructure (phase-0 deliverables)
+
+- `make firmware-invariants` — runs the 15 bulletproof invariants (`firmware/test/invariants.h`) against the replay corpus. First breach fails.
+- `make firmware-replay OLD=<ref> NEW=<ref>` — dual-worktree diff of firmware mode/relay decisions. Default THRESHOLD_PCT=0.
+- `make replay-corpus-refresh` — pulls a fresh CSV from live DB, archives the prior corpus, validates no >5% size regression.
+- `scripts/export-replay-overrides.sh` — CSV export includes outdoor sensors, equipment_state, mode_reason (sprint-15.1+).

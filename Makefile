@@ -48,6 +48,20 @@ test-replay-overrides: ## Validate evaluate_overrides() against full history + s
 	bash scripts/export-replay-overrides.sh
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp && ./test/replay_overrides test/data/replay_overrides.csv
 
+firmware-invariants: ## Phase-0: run 15 invariants from invariants.h against the replay corpus (pass = bulletproof gate green)
+	test -f firmware/test/data/replay_overrides.csv \
+	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_invariants test/replay_invariants.cpp
+	./firmware/test/replay_invariants firmware/test/data/replay_overrides.csv
+
+firmware-replay: ## Phase-0: dual-ref diff of firmware mode/relay decisions between OLD and NEW git refs
+	@if [ -z "$(OLD)" ] || [ -z "$(NEW)" ]; then \
+	    echo "Usage: make firmware-replay OLD=<ref> NEW=<ref>"; \
+	    echo "       (e.g. OLD=HEAD~5 NEW=HEAD)"; \
+	    exit 2; \
+	fi
+	bash scripts/firmware-replay-diff.sh "$(OLD)" "$(NEW)"
+
 replay-corpus-refresh: ## Refresh the replay corpus .csv.gz from live DB + validate no regression
 	@bash -c '\
 		set -euo pipefail; \
