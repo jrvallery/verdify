@@ -115,11 +115,17 @@ if [ "${worst_on:-0}" -gt "$INVARIANT_6_THRESHOLD" ]; then
   echo "  ✗ Worst-hour (${worst_on}) exceeds invariant #6 threshold (${INVARIANT_6_THRESHOLD}) — gate design flaw"
   exit 1
 fi
-if awk -v r="$reduction_pct" 'BEGIN{exit !(r+0 < 30)}'; then
-  echo "  ✗ <30% reduction — gate is essentially inert; investigate dwell_gate_ms or safety-preempt list"
+# The overall reduction is dominated by quiet hours (where the gate has
+# nothing to reduce). The signal that matters is worst-hour reduction —
+# that's where whipsaw lives. Require ≥30% worst-hour improvement.
+worst_red_pct=$(awk -v a="$worst_off" -v b="${worst_on:-0}" 'BEGIN{
+  if (a == 0) print "0"; else printf "%.1f", (a-b)*100.0/a
+}')
+if awk -v r="$worst_red_pct" 'BEGIN{exit !(r+0 < 30)}'; then
+  echo "  ✗ Worst-hour reduction ${worst_red_pct}% < 30% — gate not preventing whipsaw peaks"
   exit 1
 fi
-echo "  ✓ Worst-hour stays below invariant #6 threshold; dwell gate active"
+echo "  ✓ Worst-hour reduction ${worst_red_pct}%, stays below invariant #6 threshold"
 echo ""
 echo "  Note: on short corpora dominated by quiet hours, the average reduction"
 echo "  under-represents what the gate does during stress windows. Run again"
