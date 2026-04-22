@@ -1701,6 +1701,55 @@ TEST(phase2_dwell_gate_dry_override_preempts) {
     PASS();
 }
 
+TEST(phase2_dwell_gate_thermal_relief_entry_preempts) {
+    // THERMAL_RELIEF is transient-by-design (relief_duration_ms, default 90s).
+    // Dwell gate MUST NOT block entry to relief — a sealed_timer ≥ sealed_max_ms
+    // is the firmware asking for an intervention now. Live 2026-04-21 trial
+    // showed holding the entry path bumps relief_cycle_count via repeated
+    // relief_timer expiry cycles and trips the max_relief_cycles breaker
+    // faster than with gate off.
+    auto sp = band_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;  // 5-min dwell
+    sp.sealed_max_ms = 1000;    // tiny for test
+
+    auto s = initial_state();
+    s.mode = SEALED_MIST;
+    s.mode_prev = SEALED_MIST;
+    s.last_transition_tick_ms = 0;    // in dwell
+    s.sealed_timer_ms = 2000;         // past sealed_max
+    s.mist_stage = MIST_S1;
+
+    // VPD still wants seal (high), temp in band. Firmware wants THERMAL_RELIEF.
+    // Dwell must NOT hold the seal → relief transition.
+    Mode m = determine_mode(make_inputs(78.0f, 2.5f), sp, s, 5000);
+    ASSERT_EQ(m, THERMAL_RELIEF);
+    PASS();
+}
+
+TEST(phase2_dwell_gate_thermal_relief_exit_preempts) {
+    // When in THERMAL_RELIEF, the relief_duration timer governs exit.
+    // Dwell MUST NOT hold the exit — holding means firmware re-enters the
+    // in_thermal_relief branch and bumps relief_cycle_count every
+    // relief_duration_ms. Exit must be free.
+    auto sp = band_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;      // 5-min dwell
+    sp.relief_duration_ms = 90000;  // 90s relief duration (default)
+
+    auto s = initial_state();
+    s.mode = THERMAL_RELIEF;
+    s.mode_prev = THERMAL_RELIEF;
+    s.last_transition_tick_ms = 0;  // in dwell
+    s.relief_timer_ms = 95000;      // past relief_duration → expire this tick
+
+    // After expiry the firmware re-evaluates. VPD now ok (above vpd_low, below
+    // vpd_high) → should IDLE out of relief. Dwell must NOT hold back in relief.
+    Mode m = determine_mode(make_inputs(72.0f, 1.0f), sp, s, 5000);
+    ASSERT_TRUE(m != THERMAL_RELIEF);
+    PASS();
+}
+
 TEST(phase2_dwell_gate_tracks_ticks_when_off) {
     // Even with gate OFF, last_transition_tick_ms must still accumulate
     // so that when the gate is flipped ON later (live operation), the

@@ -432,9 +432,21 @@ inline Mode determine_mode(
     // transition" accumulator. Each cycle: += dt_ms if mode unchanged,
     // reset to 0 when we accept a new transition.
     {
+        // THERMAL_RELIEF is transient-by-design (relief_timer cap, default
+        // 90s). Holding it past its designed duration makes the firmware
+        // re-enter the in_thermal_relief branch every tick, bumping
+        // relief_cycle_count once per relief_duration window and tripping
+        // the max_relief_cycles breaker faster than it would without the
+        // gate. Both directions (into AND out of THERMAL_RELIEF) must
+        // bypass dwell so relief runs its designed course.
+        // Learned 2026-04-21 19:14-19:50 live trial; see plan Phase 2.
+        const bool transient_relief =
+            (mode == THERMAL_RELIEF) || (state.mode_prev == THERMAL_RELIEF);
+
         const bool safety_preempts_dwell =
             (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) ||
             (mode == SENSOR_FAULT) ||
+            transient_relief ||
             state.dry_override_active ||
             (in.vpd_kpa < sp.vpd_min_safe);
 
