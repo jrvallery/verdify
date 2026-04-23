@@ -158,9 +158,11 @@ jobs:
           test -f firmware/test/data/replay_overrides.csv \
             || gunzip -k firmware/test/data/replay_overrides.csv.gz
       - name: Run replay diff (PR HEAD vs merge-base)
-        # THRESHOLD_PCT=0 => any mode/relay divergence blocks the PR.
-        # Phase 2+ may raise this during intentional rollouts; coordinator
-        # marks that in the PR body and CI operator sets the env var.
+        # THRESHOLD_PCT=0 default => any mode/relay divergence blocks the PR.
+        # Per CLAUDE.md rule 8: intentional divergence (e.g. Phase 2 dwell-gate
+        # rollout, PR-A fog threshold lowering) requires coordinator approval
+        # + explicit threshold override. Override marker must appear in PR body
+        # as `REPLAY_DIFF_THRESHOLD_PCT: <N>` on its own line; CI parses it.
         run: |
           set +e
           BASE=$(git merge-base HEAD origin/${{ github.base_ref }})
@@ -176,7 +178,12 @@ jobs:
             echo "No firmware-logic diff in PR; skipping replay diff"
             exit 0
           fi
-          THRESHOLD_PCT=${THRESHOLD_PCT:-0} bash scripts/firmware-replay-diff.sh "$BASE" HEAD
+          # Parse PR body for threshold override
+          PR_BODY=$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH")
+          OVERRIDE=$(printf '%s' "$PR_BODY" | grep -oE '^REPLAY_DIFF_THRESHOLD_PCT:[[:space:]]*[0-9]+' | awk -F: '{gsub(/[[:space:]]/,"",$2); print $2}' | head -1)
+          THRESHOLD_PCT="${OVERRIDE:-${THRESHOLD_PCT:-0}}"
+          echo "Using THRESHOLD_PCT=$THRESHOLD_PCT"
+          THRESHOLD_PCT="$THRESHOLD_PCT" bash scripts/firmware-replay-diff.sh "$BASE" HEAD
 
   no-new-fire-and-forget:
     name: No new tunables without readback

@@ -679,11 +679,16 @@ inline RelayOutputs resolve_equipment(
             bool needs_both = in.temp_f > (Thigh + sp.dC2);
             if (lead_is_fan1) { out.fan1 = true; out.fan2 = needs_both; }
             else              { out.fan2 = true; out.fan1 = needs_both; }
-            // FW-9b: VPD emergency — fire fog even while venting.
-            // Only fog is forced here; misters aren't reachable in
-            // VENTILATE mode because mist_stage is reset to MIST_WATCH
-            // in determine_mode outside SEALED_MIST.
-            if (in.vpd_kpa > sp.vpd_max_safe && !moisture_blocked_by_occupancy(in, sp)) {
+            // FW-9b (PR-A lowered): fire fog concurrently with vent when VPD
+            // is above band. Original FW-9b only fired at vpd > vpd_max_safe
+            // (3.0 kPa — safety territory); data from 2026-04-16..23 showed
+            // 653 min (38% of VENTILATE time) had VPD above band with fog off.
+            // New trigger matches SEAL path's fog-stage threshold for symmetry:
+            //     vpd > vpd_high_eff + fog_escalation_kpa  (~2.2 kPa default)
+            // Only fog is forced here; misters aren't reachable in VENTILATE
+            // because mist_stage resets to MIST_WATCH in determine_mode outside
+            // SEALED_MIST (Phase-3 voting-coordinator work will address that).
+            if (in.vpd_kpa > (vpd_high_eff + sp.fog_escalation_kpa) && !moisture_blocked_by_occupancy(in, sp)) {
                 out.fog = fog_permitted(in, sp);
             }
             break;
