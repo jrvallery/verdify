@@ -620,7 +620,13 @@ TEST(fw8_relief_latch_timeout) {
 }
 
 TEST(fw9b_ventilate_fog_on_vpd_emergency) {
-    // When VPD > vpd_max_safe during VENTILATE, fog should fire (full battery)
+    // PR-A: fog trigger in VENTILATE lowered from sp.vpd_max_safe (3.0) to
+    // vpd_high_eff + sp.fog_escalation_kpa. With default_setpoints
+    // (vpd_high=2.80, vpd_low=0.35) vpd_high_eff=2.19, + fog_escalation_kpa
+    // 0.4 = 2.59 trigger. VPD 3.2 still fires (well above), 2.5 does not
+    // (still just below 2.59). Behavior with DEFAULT setpoints preserved —
+    // the PR-A change matters only when band is narrowed via dispatcher push
+    // (see fw9b_ventilate_fog_production_band test below).
     auto sp = default_setpoints();
     sp.vpd_max_safe = 3.0f;
     sp.fog_rh_ceiling = 90.0f;
@@ -628,14 +634,44 @@ TEST(fw9b_ventilate_fog_on_vpd_emergency) {
     sp.fog_window_start = 7;
     sp.fog_window_end = 17;
     auto s = initial_state();
-    // 85°F, VPD 3.2 (above vpd_max_safe), 25% RH, hour 14 (in fog window)
+    // 85°F, VPD 3.2 (above trigger 2.59), 25% RH, hour 14 (in fog window)
     auto in = make_inputs(85.0f, 3.2f, 25.0f);
     auto out = resolve_equipment(VENTILATE, in, sp, s, true);
     ASSERT_TRUE(out.fog);   // Fog should be ON
     ASSERT_TRUE(out.vent);  // Vent still open (VENTILATE mode)
     ASSERT_TRUE(out.fan1);  // Fans running
-    // VPD at 2.5 (below vpd_max_safe) — no fog
+    // VPD at 2.5 (below trigger 2.59) — no fog
     in = make_inputs(85.0f, 2.5f, 35.0f);
+    out = resolve_equipment(VENTILATE, in, sp, s, true);
+    ASSERT_FALSE(out.fog);
+    PASS();
+}
+
+TEST(fw9b_ventilate_fog_production_band) {
+    // PR-A: with production-like narrow band (vpd_high=1.2), the lowered
+    // fog trigger changes behavior materially. Old code: fog in VENTILATE
+    // only at vpd > vpd_max_safe (3.0). New code: fog at vpd > vpd_high_eff
+    // + fog_escalation_kpa = 1.05 + 0.4 = 1.45. So VPD 1.8 (above band)
+    // now fires fog where it previously did not — closes the 38%/week
+    // concurrent-gap window measured in the 7-day planner-push corpus.
+    auto sp = default_setpoints();
+    sp.vpd_high = 1.2f;              // narrow production band
+    sp.vpd_low  = 0.6f;
+    sp.vpd_max_safe = 3.0f;           // safety threshold unchanged
+    sp.fog_escalation_kpa = 0.4f;
+    sp.fog_rh_ceiling = 90.0f;
+    sp.fog_min_temp = 55.0f;
+    sp.fog_window_start = 7;
+    sp.fog_window_end = 17;
+    auto s = initial_state();
+    // 85°F, VPD 1.8 (above band, below OLD vpd_max_safe 3.0), hour 14
+    // OLD BEHAVIOR: fog off (vpd < 3.0). NEW BEHAVIOR: fog on (vpd > 1.45).
+    auto in = make_inputs(85.0f, 1.8f, 40.0f);
+    auto out = resolve_equipment(VENTILATE, in, sp, s, true);
+    ASSERT_TRUE(out.fog);   // Fog fires at band-exceedance, not at safety
+    ASSERT_TRUE(out.vent);  // Concurrent vent+fog — the whole point of PR-A
+    // VPD 1.3 (just above band top, below trigger 1.45) — fog off
+    in = make_inputs(85.0f, 1.3f, 45.0f);
     out = resolve_equipment(VENTILATE, in, sp, s, true);
     ASSERT_FALSE(out.fog);
     PASS();
