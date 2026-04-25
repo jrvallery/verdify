@@ -76,6 +76,19 @@ SELECT json_build_object(
   'flow_gpm', round(flow_gpm::numeric,2), 'water_total_gal', round(water_total_gal::numeric,0)
 ) FROM climate ORDER BY ts DESC LIMIT 1;
 "
+
+# Outdoor freshness — Tempest UPDATEs outdoor_* onto recent climate rows, so
+# MAX(ts) WHERE outdoor_temp_f IS NOT NULL ≈ last successful Tempest sync.
+# Lets the planner see whether outdoor inputs are stale before trusting them.
+$DB -c "
+SELECT 'OUTDOOR FRESHNESS: outdoor_data_age_s=' ||
+       COALESCE(extract(epoch FROM now() - MAX(ts))::int::text, 'NULL') ||
+       ' (>300s = stale, planner should de-weight outdoor signals)'
+FROM climate
+WHERE outdoor_temp_f IS NOT NULL
+  AND ts > now() - interval '30 minutes';
+" 2>/dev/null
+
 # Dynamic zone ranking with context
 $DB -c "SELECT 'ZONE VPD (current): ' || string_agg(z || '=' || v, ', ' ORDER BY v DESC)
 FROM (SELECT unnest(ARRAY['north','south','east','west']) AS z,

@@ -827,9 +827,33 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
              ORDER BY ts DESC LIMIT 1
             """
         )
+        # OBS-3 cooldown (Tier 2b): firmware_relief_ceiling and
+        # firmware_vent_latched flap rapidly when the metric oscillates near
+        # threshold during stress windows. After a recent auto-resolve, hold
+        # off re-firing for 10 min so the alert log + Slack don't accumulate
+        # the same incident as 17+ separate rows/day. The auto-resolve loop
+        # below still clears genuinely-cleared alerts on the same monitor pass.
+        relief_recent_resolve = await conn.fetchval(
+            """
+            SELECT 1 FROM alert_log
+             WHERE alert_type = 'firmware_relief_ceiling'
+               AND disposition = 'resolved'
+               AND resolved_at > now() - interval '10 minutes'
+             LIMIT 1
+            """
+        )
+        latch_recent_resolve = await conn.fetchval(
+            """
+            SELECT 1 FROM alert_log
+             WHERE alert_type = 'firmware_vent_latched'
+               AND disposition = 'resolved'
+               AND resolved_at > now() - interval '10 minutes'
+             LIMIT 1
+            """
+        )
         if obs3_row:
             relief = obs3_row["relief_cycle_count"]
-            if relief is not None and relief >= 2:
+            if relief is not None and relief >= 2 and not relief_recent_resolve:
                 # Warning at ceiling-1 (nearing); critical at ceiling (3) or beyond.
                 severity = "critical" if relief >= 3 else "warning"
                 alerts.append(
@@ -850,7 +874,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
             latch = obs3_row["vent_latch_timer_s"]
-            if latch is not None and latch >= 600:
+            if latch is not None and latch >= 600 and not latch_recent_resolve:
                 # Warning at 10 min latched; critical at 20 min (schema max 1800s).
                 severity = "critical" if latch >= 1200 else "warning"
                 alerts.append(
