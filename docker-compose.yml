@@ -82,6 +82,12 @@ services:
       # default "no renderer" placeholder image).
       GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      # Grafana's own concurrent-renders limit. Default is 30 but
+      # something in the OSS image effectively rate-limits much
+      # earlier — explicitly bumping this and the in-flight cap
+      # so the renderer's MAX_CONCURRENCY can actually run at full
+      # speed for a homepage burst.
+      GF_RENDERING_CONCURRENT_RENDER_REQUEST_LIMIT: "30"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -119,7 +125,12 @@ services:
       # RAM cost of running all 8 concurrently.
       RENDERING_MODE: clustered
       RENDERING_CLUSTERING_MODE: browser
-      RENDERING_CLUSTERING_MAX_CONCURRENCY: "3"
+      # Per-render is ~6s solo but climbs to 20s under N=8 concurrent
+      # because the host CPU saturates. Pair this with the nginx
+      # render-cache (60s TTL) and the client-side concurrency=2
+      # queue to keep response times reasonable: cache hits are
+      # instant, fresh renders happen in parallel-of-4 max.
+      RENDERING_CLUSTERING_MAX_CONCURRENCY: "4"
       RENDERING_CLUSTERING_TIMEOUT: "30"
     networks:
       - verdify-internal
