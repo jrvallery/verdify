@@ -13,14 +13,24 @@ trigger invocations, building up operational memory over time.
 import json
 import logging
 import subprocess
+import time
 import urllib.error
 import urllib.request
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from config import OPENCLAW_SESSION_KEY, OPENCLAW_TOKEN, OPENCLAW_URL
+from config import (
+    ENABLE_LOCAL_PLANNER,
+    OPENCLAW_LOCAL_AGENT_ID,
+    OPENCLAW_LOCAL_SESSION_KEY,
+    OPENCLAW_OPUS_AGENT_ID,
+    OPENCLAW_OPUS_SESSION_KEY,
+    OPENCLAW_TOKEN,
+    OPENCLAW_URL,
+)
 
 log = logging.getLogger("iris_planner")
 
@@ -117,6 +127,17 @@ The skills/ copy is an agent-host mirror kept in sync by deploy.)
 is the bottleneck, which stress type dominates) → DECIDE (apply lessons, then forecast) →
 ACT (set_tunable for immediate, set_plan for 72h waypoints) → REPORT (Slack brief).
 
+### Recent firmware behavior (read once, then assume)
+
+The control logic you're tuning was changed in late April 2026. These are
+**shipped** and the running firmware (`2026.4.26.x`) reflects them — do not
+reason about pre-change behavior.
+
+- **PR-A (2026-04-25): VENTILATE fog trigger lowered** to `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today). Concurrent vent+fog is now intentional during hot-dry stress; fog no longer waits for the safety ceiling. `fog_escalation_kpa` (default 0.5) is the primary knob — lower = more aggressive fog inside VENTILATE.
+- **PR #35 (2026-04-22): THERMAL_RELIEF preempts the dwell gate.** When you flip `sw_dwell_gate_enabled` ON, the gate holds non-safety modes for `dwell_gate_ms` (default 5 min) but does NOT bind THERMAL_RELIEF — its 90s heat-flush still fires. SAFETY_COOL, SAFETY_HEAT, SENSOR_FAULT also preempt.
+- **Phase 1c (2026-04-22): cfg_* readbacks** are now flowing. Every Tier 1 tunable you push has a firmware-side echo into `setpoint_snapshot` so push-corruption is detectable. `setpoint_confirmation_monitor` alerts if the ESP32 doesn't confirm within 5 min.
+- **Phase 2 dwell gate is shipped but currently OFF** in production (`sw_dwell_gate_enabled=0`). Replay validates the gate eliminates ~70% of mode-class transitions in stress windows. Flip ON when whipsaw is the dominant pattern in the current hour's transition log.
+
 ### Decision Precedence
 
 1. **Safety** — never zero safety rails, respect condensation/disease gates
@@ -212,7 +233,7 @@ operator-owned) see `docs/tunable-cascade.md` or read the registry.
 - `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration
 
 **Fog (AquaFog XE 2000 — 7× mister; firmware-gated by RH/temp/time window):**
-- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.4 — VPD above band to trigger; lower = more fog
+- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.5 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
 - `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle
 - `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles
 
@@ -231,9 +252,9 @@ operator-owned) see `docs/tunable-cascade.md` or read the registry.
 - `vent_prefer_temp_delta_f` °F, [2-15], def 5 — outdoor must be ≥ N°F cooler than indoor
 - `vent_prefer_dp_delta_f` °F, [2-15], def 5 — outdoor dewpoint ≥ N°F below indoor DP
 
-**Phase-2 dwell gate (whipsaw reduction, shadow-bake phase):**
-- `sw_dwell_gate_enabled` — master switch; default OFF (flip only after replay+shadow validation)
-- `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions
+**Phase-2 dwell gate (whipsaw reduction; firmware shipped, currently OFF in production):**
+- `sw_dwell_gate_enabled` — master switch; firmware is shipped (default OFF). PR #35 (2026-04-22) made THERMAL_RELIEF exempt from the gate so the 90s heat-flush behavior is preserved when you flip the switch. Safe to enable on hot-dry days when whipsaw shows in the recent transition log; revert if relief_cycle_count climbs.
+- `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions. Does NOT bind THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, or SENSOR_FAULT — those preempt the gate.
 
 ### Tier 2 escape hatch
 
@@ -658,30 +679,64 @@ def gather_context() -> str:
 # ── Gateway delivery ─────────────────────────────────────────────
 
 
-def send_to_iris(event_type: str, label: str, context: str | None = None) -> dict:
+def send_to_iris(
+    event_type: str,
+    label: str,
+    context: str | None = None,
+    instance: PlannerInstance = "opus",
+) -> dict:
     """Send a planning event to Iris's planner session via OpenClaw gateway.
 
     Args:
         event_type: One of SUNRISE, SUNSET, TRANSITION, FORECAST, DEVIATION
         label: Human-readable event label (e.g. "Peak stress", deviation details)
         context: Pre-gathered context string. If None, runs gather-plan-context.sh.
+        instance: 'opus' (cloud Claude — default) or 'local' (gemma-host).
+            Routes via session-key suffix and X-Planner-Instance header.
 
     Returns:
-        Sprint 24.6 (F14): a result dict the caller writes to plan_delivery_log.
-        Keys: delivered (bool), event_type, event_label, session_key, wake_mode,
-        gateway_status (int|None), gateway_body (str, truncated to 2k chars).
-        `delivered=True` means gateway returned 2xx; it does NOT mean Iris
-        wrote a plan (that's verified separately by planning_heartbeat's
-        30-min pass).
+        Result dict the caller writes to plan_delivery_log. Keys: delivered,
+        event_type, event_label, session_key, wake_mode, gateway_status,
+        gateway_body, trigger_id, instance.
+
+        `delivered=True` means gateway returned 2xx — it does NOT mean Iris
+        wrote a plan (verified separately by planning_heartbeat's 30-min pass).
+
+        `gateway_status` semantics:
+          0    — bare exception (Iris host down or network reset; see body)
+          200  — gateway accepted; Iris woken
+          4xx/5xx — gateway-level rejection
+          None — request never attempted (caller short-circuit)
+
+        `trigger_id` is a uuid4 generated per-call; mirrored into
+        plan_delivery_log.trigger_id for SLA + audit correlation. Sent on the
+        wire as X-Trigger-Id; MCP write tools (set_plan, set_tunable) extract
+        it and stamp plan_journal / setpoint_changes.
     """
+    trigger_id = str(uuid.uuid4())
+    # Per-instance routing (contract v1.4 §2.G): map opus|local to the
+    # OpenClaw agentId + sessionKey pair. Until local Iris is provisioned
+    # (ENABLE_LOCAL_PLANNER=false), fall the actual delivery back to opus
+    # but keep `instance` in the result so plan_delivery_log records the
+    # routing decision that WOULD have been made — once local is ready,
+    # flipping the env var activates the real routing without code change.
+    routed_instance = instance if (instance == "opus" or ENABLE_LOCAL_PLANNER) else "opus"
+    if routed_instance == "local":
+        agent_id = OPENCLAW_LOCAL_AGENT_ID
+        session_key = OPENCLAW_LOCAL_SESSION_KEY
+    else:
+        agent_id = OPENCLAW_OPUS_AGENT_ID
+        session_key = OPENCLAW_OPUS_SESSION_KEY
     result = {
         "delivered": False,
         "event_type": event_type,
         "event_label": label,
-        "session_key": OPENCLAW_SESSION_KEY,
+        "session_key": session_key,
         "wake_mode": None,
         "gateway_status": None,
         "gateway_body": None,
+        "trigger_id": trigger_id,
+        "instance": instance,
     }
 
     if context is None:
@@ -693,7 +748,24 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
         result["gateway_body"] = f"unknown event_type: {event_type}"
         return result
 
-    message = builder(context, label)
+    message = builder(context, label, instance)
+
+    # Contract v1.4 §2.A — embed trigger_id + instance in the per-cycle
+    # message body so Iris can pass them as kwargs to set_plan() and
+    # set_tunable(). Stamping these on the writes lets us correlate
+    # plan_journal ↔ plan_delivery_log by uuid (not 2h time-window) and
+    # filter "all plans from opus" vs "all plans from local". Banner sits
+    # AFTER the cached preamble so prompt-cache breakpoints stay clean.
+    audit_banner = (
+        "\n\n---\n"
+        f"**Audit headers** — pass these to `set_plan` and `set_tunable` so the\n"
+        f"plan-journal and setpoint-changes rows record which trigger and which\n"
+        f"planner instance produced them.\n\n"
+        f"- `trigger_id={trigger_id}`\n"
+        f"- `planner_instance={instance!r}`\n"
+        f"---\n\n"
+    )
+    message = message + audit_banner
 
     # If Iris's agent-host playbook is missing, prepend a warning so she
     # knows detailed tuning guidance isn't available this cycle and flags
@@ -720,8 +792,8 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
 
     payload = {
         "message": message,
-        "agentId": "iris-planner",
-        "sessionKey": OPENCLAW_SESSION_KEY,
+        "agentId": agent_id,
+        "sessionKey": session_key,
         "wakeMode": result["wake_mode"],
         "deliver": False,
     }
@@ -734,28 +806,78 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
         headers={
             "Authorization": f"Bearer {OPENCLAW_TOKEN}",
             "Content-Type": "application/json",
+            # Contract v1.4 §2.A — propagate to MCP tool context so
+            # plan_journal / setpoint_changes writes can stamp the
+            # originating trigger and the planner instance.
+            "X-Trigger-Id": trigger_id,
+            "X-Planner-Instance": instance,
+            "X-Planner-Type": event_type,
         },
         method="POST",
     )
 
+    # Sprint 25 (Fix 2): structured request/response logging so the
+    # NULL-gateway_status pattern is queryable. Pre-fix, bare-exception
+    # paths (Connection refused / reset) left `gateway_status` NULL —
+    # indistinguishable in plan_delivery_log from "row never reached
+    # gateway_status assignment." Post-fix, gateway_status=0 means
+    # "no HTTP response received" (Iris's host down or restarting),
+    # so SLA monitors and ops queries can split that from real 4xx/5xx.
+    t_start = time.monotonic()
+    payload_bytes = len(data)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             status = resp.getcode()
             body = resp.read().decode("utf-8", errors="replace")
+            elapsed_ms = int((time.monotonic() - t_start) * 1000)
             result["gateway_status"] = status
             result["gateway_body"] = body[:2000]
             if status < 300:
-                log.info("Iris planner: %s/%s delivered (status %d)", event_type, label, status)
+                log.info(
+                    "Iris planner: %s/%s delivered (status=%d, elapsed=%dms, payload=%dB)",
+                    event_type,
+                    label,
+                    status,
+                    elapsed_ms,
+                    payload_bytes,
+                )
                 result["delivered"] = True
             else:
-                log.error("Iris planner: %s/%s rejected (status %d): %s", event_type, label, status, body[:200])
+                log.error(
+                    "Iris planner: %s/%s rejected (status=%d, elapsed=%dms): %s",
+                    event_type,
+                    label,
+                    status,
+                    elapsed_ms,
+                    body[:200],
+                )
     except urllib.error.HTTPError as e:
+        elapsed_ms = int((time.monotonic() - t_start) * 1000)
         body_s = e.read().decode(errors="replace")[:2000]
-        log.error("Iris planner HTTP error: %s %s — %d %s", event_type, label, e.code, body_s[:200])
+        log.error(
+            "Iris planner HTTP error: %s/%s — status=%d elapsed=%dms body=%s",
+            event_type,
+            label,
+            e.code,
+            elapsed_ms,
+            body_s[:200],
+        )
         result["gateway_status"] = e.code
         result["gateway_body"] = body_s
     except Exception as e:
-        log.error("Iris planner delivery failed: %s %s — %s", event_type, label, e)
+        elapsed_ms = int((time.monotonic() - t_start) * 1000)
+        # Distinguish "no HTTP response" from "no attempt logged" — set
+        # status=0 so plan_delivery_log queries can identify host-down
+        # / network-reset cases without hunting through journalctl.
+        log.error(
+            "Iris planner delivery failed: %s/%s — exception=%s elapsed=%dms err=%s",
+            event_type,
+            label,
+            type(e).__name__,
+            elapsed_ms,
+            e,
+        )
+        result["gateway_status"] = 0
         result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
 
     return result

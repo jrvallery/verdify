@@ -243,10 +243,21 @@ async def get_setpoints() -> str:
 
 
 @mcp.tool()
-async def set_tunable(parameter: str, value: float, reason: str = "iris-manual") -> str:
+async def set_tunable(
+    parameter: str,
+    value: float,
+    reason: str = "iris-manual",
+    trigger_id: str | None = None,
+    planner_instance: str | None = None,
+) -> str:
     """Push a single Tier 1 tunable to the ESP32 immediately.
     The dispatcher will apply it within 5 minutes.
-    Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')"""
+    Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')
+
+    trigger_id, planner_instance: optional contract v1.4 audit fields.
+    Pass through from the trigger banner shown at the bottom of every
+    planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
+    Stamped onto plan_journal so SLA monitors can correlate by uuid."""
     TIER1 = {
         "vpd_hysteresis",
         "vpd_watch_dwell_s",
@@ -306,6 +317,20 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
     # plan_id format `iris-oneshot-<YYYYMMDD-HHMM>` lets the next set_plan
     # call (which deactivates older plans) distinguish iris tactical pushes
     # from automatic SUNRISE/SUNSET plans and preserve them across boundaries.
+    # Contract v1.4 §2.C — stamp audit metadata into setpoint_plan.reason
+    # text so the trigger and instance survive on the row even though
+    # setpoint_plan has no dedicated columns yet. Searchable via
+    # `WHERE reason LIKE '%trigger=<uuid>%'`.
+    audit_suffix_parts = []
+    if trigger_id:
+        audit_suffix_parts.append(f"trigger={trigger_id}")
+    if planner_instance:
+        audit_suffix_parts.append(f"instance={planner_instance}")
+    if audit_suffix_parts:
+        reason_with_audit = f"{reason} [{' '.join(audit_suffix_parts)}]"
+    else:
+        reason_with_audit = reason
+
     conn = await _db()
     try:
         now_mdt = datetime.now(ZoneInfo("America/Denver"))
@@ -320,15 +345,17 @@ async def set_tunable(parameter: str, value: float, reason: str = "iris-manual")
             parameter,
             value,
             plan_id,
-            reason,
+            reason_with_audit,
         )
         return json.dumps(
             {
                 "ok": True,
                 "parameter": parameter,
                 "value": value,
-                "reason": reason,
+                "reason": reason_with_audit,
                 "plan_id": plan_id,
+                "trigger_id": trigger_id,
+                "planner_instance": planner_instance,
                 "note": (
                     "Written to setpoint_plan as a one-shot waypoint at now(). "
                     "Dispatcher pushes to ESP32 within 5 minutes and this value "
@@ -435,7 +462,13 @@ async def query(sql: str) -> str:
 
 @mcp.tool()
 async def set_plan(
-    plan_id: str, hypothesis: str, transitions: str, experiment: str = "", expected_outcome: str = ""
+    plan_id: str,
+    hypothesis: str,
+    transitions: str,
+    experiment: str = "",
+    expected_outcome: str = "",
+    trigger_id: str | None = None,
+    planner_instance: str | None = None,
 ) -> str:
     """Write a 72-hour setpoint plan with multiple time-based waypoints.
     Deactivates all existing future waypoints, writes new ones, and logs a plan journal entry.
@@ -448,7 +481,12 @@ async def set_plan(
         plan_journal.hypothesis_structured for structured downstream rendering.
     transitions: JSON array of objects: [{"ts": "ISO8601-with-TZ", "params": {"param": value, ...}, "reason": "..."}]
     experiment: optional one-line experiment description
-    expected_outcome: optional measurable prediction"""
+    expected_outcome: optional measurable prediction
+    trigger_id, planner_instance: optional contract v1.4 audit fields. Pass
+        through from the audit-headers banner shown at the bottom of every
+        planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
+        Stamped onto plan_journal so SLA monitors and audit queries can
+        correlate plans to deliveries by uuid (not 2h time-window fallback)."""
     # Sprint 20: validate the whole envelope through Plan schema before any DB writes.
     # This rejects unknown tunables, inverted temp/VPD bands, non-monotonic transitions,
     # bad plan_id format, timezone-naive timestamps, etc. — at the MCP boundary, so
@@ -518,16 +556,22 @@ async def set_plan(
 
         # Write journal entry — structured JSONB column populated only if
         # the PlanHypothesisStructured block was present AND valid.
+        # Contract v1.4 §2.C — stamp planner_instance + trigger_id when the
+        # caller passed them through from the prompt's audit-headers banner.
+        # Both columns nullable; NULL means "pre-v1.4 path or operator
+        # injection that didn't carry headers."
         await conn.execute(
             """INSERT INTO plan_journal
                  (plan_id, created_at, hypothesis, experiment, expected_outcome,
-                  hypothesis_structured, greenhouse_id)
-               VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery')""",
+                  hypothesis_structured, greenhouse_id, planner_instance, trigger_id)
+               VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)""",
             plan.plan_id,
             plan.hypothesis,
             plan.experiment,
             plan.expected_outcome,
             structured_payload,
+            planner_instance,
+            trigger_id,
         )
 
         # Sprint 20 Phase 6: drop a trigger file so verdify-plan-publish.path
@@ -550,6 +594,8 @@ async def set_plan(
             "transitions": len(plan.transitions),
             "rows_written": rows_written,
             "structured_hypothesis": structured_payload is not None,
+            "trigger_id": trigger_id,
+            "planner_instance": planner_instance,
             "note": "Dispatcher will execute waypoints on schedule. Old future waypoints deactivated.",
         }
         if structured_warning:

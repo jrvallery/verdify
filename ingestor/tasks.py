@@ -13,6 +13,7 @@ import logging
 import sys
 import urllib.error
 import urllib.request
+import uuid
 from datetime import UTC, datetime
 from datetime import timedelta as _td
 from zoneinfo import ZoneInfo
@@ -2166,6 +2167,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
 from astral import LocationInfo
 from astral.sun import sun as _sun
 from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
+from planner_routing import (
+    SeverityContext,
+    classify_severity,
+    pick_instance,
+)
 
 _LOCATION = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
 _DENVER = ZoneInfo("America/Denver")
@@ -2268,13 +2274,18 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
         log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
         return
     explicit_status = result.get("status")
+    # Contract v1.4 §2.D — both columns now populated on every INSERT so
+    # correlation queries can match deliveries to plans by uuid (not
+    # just the 2h time-window fallback in _resolve_delivery_log).
+    trigger_id = result.get("trigger_id")
+    instance = result.get("instance")
     async with pool.acquire() as conn:
         if explicit_status:
             await conn.execute(
                 """
                 INSERT INTO plan_delivery_log
-                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status, trigger_id, instance)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9)
                 """,
                 row["event_type"],
                 row["event_label"],
@@ -2283,13 +2294,15 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
                 row["gateway_status"],
                 row["gateway_body"],
                 explicit_status,
+                trigger_id,
+                instance,
             )
         else:
             await conn.execute(
                 """
                 INSERT INTO plan_delivery_log
-                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, trigger_id, instance)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
                 """,
                 row["event_type"],
                 row["event_label"],
@@ -2297,10 +2310,18 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
                 row["wake_mode"],
                 row["gateway_status"],
                 row["gateway_body"],
+                trigger_id,
+                instance,
             )
 
 
-async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, context: str) -> None:
+async def _deliver_and_log(
+    pool: asyncpg.Pool,
+    event_type: str,
+    label: str,
+    context: str,
+    instance: str = "opus",
+) -> None:
     """Call send_to_iris in the executor and persist the outcome to
     plan_delivery_log. Called from every milestone/forecast/deviation path
     so F14 correlation is complete regardless of trigger source.
@@ -2318,7 +2339,9 @@ async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, cont
             label,
         )
         # Write a stub plan_delivery_log row so the outage is visible in
-        # operational queries alongside successful deliveries.
+        # operational queries alongside successful deliveries. Generate a
+        # trigger_id even for the sentinel path so context-gather failures
+        # are countable and individually traceable.
         stub_result = {
             "delivered": False,
             "event_type": event_type,
@@ -2328,12 +2351,20 @@ async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, cont
             "gateway_status": None,
             "gateway_body": "context_gather_failed",
             "status": "delivery_failed",
+            "trigger_id": str(uuid.uuid4()),
+            "instance": instance,
         }
         await _log_plan_delivery(pool, stub_result)
         return
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+    # Threaded executor + kwargs: use a lambda so `instance` propagates
+    # through to send_to_iris cleanly (run_in_executor doesn't accept
+    # kwargs directly).
+    result = await loop.run_in_executor(
+        None,
+        lambda: send_to_iris(event_type, label, context, instance=instance),
+    )
     await _log_plan_delivery(pool, result)
 
 
@@ -2402,10 +2433,15 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
 
             log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
 
-            # Gather context and send to Iris (blocking — runs in executor)
+            # Gather context and send to Iris (blocking — runs in executor).
+            # SUNRISE/SUNSET/MIDNIGHT always route to opus per contract;
+            # TRANSITION routes to local. classify_severity is a no-op for
+            # those types so SeverityContext stays default.
             loop = asyncio.get_event_loop()
             context = await loop.run_in_executor(None, gather_context)
-            await _deliver_and_log(pool, event_type, label, context)
+            severity = classify_severity(event_type, SeverityContext())
+            instance = pick_instance(event_type, severity)
+            await _deliver_and_log(pool, event_type, label, context, instance=instance)
 
     # ── 3. Check for forecast changes ──
     global _last_forecast_fetch
@@ -2418,7 +2454,19 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("New forecast detected (fetched_at=%s), notifying Iris", latest_fetch)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await _deliver_and_log(pool, "FORECAST", "New forecast data", context)
+                # Severity inputs from latest forecast vs previous (Δvpd, Δtemp).
+                # Until those deltas are wired in here, classify_severity returns
+                # 'minor' so FORECAST routes to local — the cheap peer handles
+                # routine forecast refreshes; opus only fires on majors.
+                severity = classify_severity("FORECAST", SeverityContext())
+                instance = pick_instance("FORECAST", severity)
+                await _deliver_and_log(
+                    pool,
+                    "FORECAST",
+                    "New forecast data",
+                    context,
+                    instance=instance,
+                )
             _last_forecast_fetch = latest_fetch
 
     # ── 4. Check for deviations (route to Iris instead of trigger file) ──
@@ -2436,7 +2484,24 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("Deviation trigger found, routing to Iris: %s", reason)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await _deliver_and_log(pool, "DEVIATION", deviations_str, context)
+                # Pull severity hints from the trigger payload if present.
+                # max_abs_deviation comes from alert_monitor's deviation
+                # writer (alert_monitor stamps it on the trigger when the
+                # band excursion exceeds 0.15 normalized). Falling back to
+                # 'minor' routes to local; majors escalate to opus.
+                severity_ctx = SeverityContext(
+                    max_abs_deviation=trigger_data.get("max_abs_deviation"),
+                    consecutive_deviation_cycles=trigger_data.get("consecutive_cycles"),
+                )
+                severity = classify_severity("DEVIATION", severity_ctx)
+                instance = pick_instance("DEVIATION", severity)
+                await _deliver_and_log(
+                    pool,
+                    "DEVIATION",
+                    deviations_str,
+                    context,
+                    instance=instance,
+                )
 
                 trigger_file.unlink(missing_ok=True)
             except Exception as e:

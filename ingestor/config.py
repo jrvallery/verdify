@@ -60,6 +60,18 @@ OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent
 # as a fallback when new code calls legacy send_to_iris paths.
 OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_OPUS_SESSION_KEY)
 
+# Feature gate for the local Iris peer. When true, planner_routing.pick_instance
+# is consulted as the source of truth and FORECAST/TRANSITION/HEARTBEAT may be
+# routed to the local session. When false (default), routing decisions are
+# computed and stamped onto plan_delivery_log.instance for audit, but the
+# actual delivery is forced to opus so we don't black-hole sends to a
+# nonexistent local session.
+ENABLE_LOCAL_PLANNER = os.environ.get("ENABLE_LOCAL_PLANNER", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+
 # ── Greenhouse ────────────────────────────────────────────────────
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")
 LATITUDE = float(os.environ.get("LATITUDE", "40.1672"))
