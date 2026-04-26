@@ -431,7 +431,21 @@ binary_sensor:
       // Also includes fog_rly in the valve list — the fog generator uses
       // water and was previously missing, causing a separate false-positive
       // class whenever fog fired without a mister in parallel.
+      //
+      // 2026-04-26 update: 30s grace was insufficient. Production data shows
+      // pipe-network bleed-down lasting 1m 40s – 2m on this hardware (fog
+      // line + drip + mister manifold all flow through the same meter).
+      // 7 false leak alerts in 24h — every mister pulse triggered one.
+      // Two changes:
+      //   1. Grace bumped 30s → 120s (covers observed bleed-down + margin)
+      //   2. Added 60s persistence debounce: flow must stay above 0.1 gpm
+      //      for 60 consecutive seconds AFTER grace expires before firing.
+      //      Real leaks persist indefinitely; bleed-down trails to zero.
+      // Combined: false leak requires >120s grace + >60s sustained flow,
+      // total 3-min minimum cycle. A real leak hits this in 3 min and
+      // alerts; a bleed-down resolves before either threshold trips.
       static uint32_t last_valve_on_ms = 0;
+      static uint32_t flow_above_thresh_since_ms = 0;
       uint32_t now_ms = millis();
       bool any_valve = id(wall_drips).state || id(center_drips).state
                     || id(south_wall_mister).state || id(west_wall_mister).state
@@ -440,10 +454,64 @@ binary_sensor:
                     || id(fog_rly).state;
       if(any_valve) last_valve_on_ms = now_ms;
       float flow = id(water_flow_rate).state;
-      if(isnan(flow) || flow < 0.1) return false;
-      if(any_valve) return false;
-      if(now_ms - last_valve_on_ms < 30000) return false;  // 30 s bleed-down grace
+      if(isnan(flow) || flow < 0.1) {
+          flow_above_thresh_since_ms = 0;       // reset persist clock — flow gone
+          return false;
+      }
+      if(any_valve) {
+          flow_above_thresh_since_ms = 0;       // valve open, expected flow
+          return false;
+      }
+      if(now_ms - last_valve_on_ms < 120000) {  // 120 s bleed-down grace
+          flow_above_thresh_since_ms = 0;       // still inside grace window
+          return false;
+      }
+      // Past grace, no valve, flow > 0.1 gpm — start the persist clock.
+      if(flow_above_thresh_since_ms == 0) {
+          flow_above_thresh_since_ms = now_ms;
+      }
+      // Require 60s of sustained flow before declaring leak.
+      if(now_ms - flow_above_thresh_since_ms < 60000) return false;
       return true;
+
+  # ─── Heap pressure watchdogs (added 2026-04-26) ──────────────
+  # Background: 4 reboots in 4 hours after the 09313b2 OTA — Task WDT
+  # ×3 plus 1 Guru/Panic. Heap floor dropped to 20.6 KB right before
+  # the panic (healthy floor ~38-44 KB free). Memory pressure was
+  # the immediate trigger. We need an alarm that fires BEFORE the
+  # device crashes so we can disconnect the cause (or schedule a
+  # restart) instead of getting surprised by a coredump.
+  #
+  # Two thresholds:
+  #   - warning (<25 KB sustained 2 min) → planner backs off pushes;
+  #     ingestor escalates to alert_log.warning.
+  #   - critical (<15 KB instantaneous)  → fire immediately;
+  #     within ~10 s of typical pre-panic readings.
+  - platform: template
+    id: bs_heap_pressure_warning
+    name: "Heap Pressure Warning"
+    device_class: problem
+    lambda: |-
+      static uint32_t below_thresh_since_ms = 0;
+      uint32_t now_ms = millis();
+      float heap_kb = esp_get_free_heap_size() / 1024.0f;
+      if (heap_kb < 25.0f) {
+          if (below_thresh_since_ms == 0) below_thresh_since_ms = now_ms;
+          if (now_ms - below_thresh_since_ms > 120000) return true;
+      } else {
+          below_thresh_since_ms = 0;
+      }
+      return false;
+
+  - platform: template
+    id: bs_heap_pressure_critical
+    name: "Heap Pressure Critical"
+    device_class: problem
+    lambda: |-
+      // Instantaneous — no debounce. <15 KB is panic-adjacent territory
+      // (observed pre-panic floor 20.6 KB; safety margin at 15 KB).
+      float heap_kb = esp_get_free_heap_size() / 1024.0f;
+      return heap_kb < 15.0f;
 
 # ───────────────────── DASHBOARD BUTTONS ─────────────────────
 button:
