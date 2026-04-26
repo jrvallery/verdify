@@ -77,6 +77,11 @@ services:
       GF_UNIFIED_ALERTING_ENABLED: "false"
       # Hide branding
       GF_HIDE_VERSION: "true"
+      # Image renderer — points at the grafana-renderer sidecar so
+      # `/render/d-solo/...` produces real PNGs (instead of Grafana's
+      # default "no renderer" placeholder image).
+      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -93,6 +98,22 @@ services:
       - "traefik.docker.network=verdify-proxy"
 
   # ── Grafana Proxy (injects CSS to hide branding) ────────────
+  # ── Grafana Image Renderer ──────────────────────────────────
+  # Headless Chromium service used by Grafana's `/render/d-solo/...`
+  # endpoint to produce static PNGs. Used by the verdify.ai mobile
+  # path to swap iframes for images on iOS Safari (which OOM-crashes
+  # under the memory pressure of multiple live Grafana panels).
+  grafana-renderer:
+    image: grafana/grafana-image-renderer:latest
+    container_name: verdify-grafana-renderer
+    environment:
+      ENABLE_METRICS: "true"
+      HTTP_PORT: "8081"
+      LOG_LEVEL: warn
+    networks:
+      - verdify-internal
+    restart: unless-stopped
+
   grafana-proxy:
     image: nginx:alpine
     container_name: verdify-grafana-proxy
