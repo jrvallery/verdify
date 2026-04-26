@@ -110,6 +110,17 @@ services:
       ENABLE_METRICS: "true"
       HTTP_PORT: "8081"
       LOG_LEVEL: warn
+      # Default mode is single-browser, which serializes all renders.
+      # The verdify.ai homepage fires 8 panels at once on iOS — without
+      # clustered mode they hit "Too many rendering requests" (429) and
+      # most return broken images. Clustered mode spawns up to MAX
+      # browser instances in parallel; 3 is enough headroom for the 8
+      # panels (the IO-fired requests stagger naturally) without the
+      # RAM cost of running all 8 concurrently.
+      RENDERING_MODE: clustered
+      RENDERING_CLUSTERING_MODE: browser
+      RENDERING_CLUSTERING_MAX_CONCURRENCY: "3"
+      RENDERING_CLUSTERING_TIMEOUT: "30"
     networks:
       - verdify-internal
     restart: unless-stopped
