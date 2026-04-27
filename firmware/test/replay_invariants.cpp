@@ -123,13 +123,12 @@ int main(int argc, char** argv) {
     Header h;
     h.parse(line);
 
-    // Required columns for the invariant suite
+    // Required input columns for the invariant suite. Firmware outputs are
+    // computed by this harness from greenhouse_logic.h so the gate validates
+    // the candidate firmware, not whatever historical firmware happened to
+    // emit at that timestamp.
     const char* required[] = {
-        "ts", "temp_avg", "vpd_avg", "rh_avg", "occupied",
-        "greenhouse_state", "mode_reason",
-        "eq_fog", "eq_vent", "eq_fan1", "eq_fan2",
-        "eq_heat1", "eq_heat2",
-        "eq_mister_south", "eq_mister_west", "eq_mister_center"
+        "ts", "temp_avg", "vpd_avg", "rh_avg", "occupied"
     };
     for (auto name : required) {
         if (h.of(name) == SIZE_MAX) {
@@ -139,10 +138,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Canonical setpoints we'll apply uniformly. In a future revision, pull
-    // from setpoint_snapshot as-of-ts, but for Phase-0 invariant check the
-    // current band is representative.
     invariants::Runner runner;
+    ControlState state = initial_state();
+    uint64_t last_ts_unix = 0;
     long rows = 0;
     while (std::getline(f, line)) {
         std::vector<std::string> cols;
@@ -174,39 +172,123 @@ int main(int argc, char** argv) {
         r.outdoor_data_age_s = parse_int  (get("outdoor_data_age_s"), -1);
         r.solar_w_m2         = parse_float(get("solar_irradiance_w_m2"), 0.0f);
 
-        // Canonical setpoints — the band the firmware is currently configured with.
-        // Derived from recent setpoint_snapshot. Phase-1 will load these per-row
-        // from a time-aligned setpoints CSV for higher fidelity.
-        r.temp_low  = parse_float(get("sp_temp_low"),  62.4f);
-        r.temp_high = parse_float(get("sp_temp_high"), 66.4f);
-        r.vpd_low   = parse_float(get("sp_vpd_low"),   0.3f);
-        r.vpd_high  = parse_float(get("sp_vpd_high"),  0.6f);
-        r.temp_hysteresis = parse_float(get("sp_vpd_hysteresis"), 1.5f); /* legacy name reused */
-        r.vpd_hysteresis  = parse_float(get("sp_vpd_hysteresis"), 0.3f);
-        r.vpd_max_safe    = 2.5f;
-        r.vpd_min_safe    = 0.3f;
-        r.safety_max      = 100.0f;
-        r.safety_min      = 35.0f;
-        r.bias_heat       = 3.0f;
-        r.bias_cool       = parse_float(get("sp_bias_cool"), 5.0f);
-        r.sealed_max_ms   = 600000u;       // 10 min
-        r.relief_duration_ms = 90000u;     // 90 s
-        r.outdoor_staleness_max_s = 600u;  // post-sprint-15.1
-
-        r.greenhouse_state = get("greenhouse_state");
-        r.mode_reason      = get("mode_reason");
-
-        r.eq_fog  = parse_int(get("eq_fog"),  0);
-        r.eq_vent = parse_int(get("eq_vent"), 0);
-        r.eq_fan1 = parse_int(get("eq_fan1"), 0);
-        r.eq_fan2 = parse_int(get("eq_fan2"), 0);
-        r.eq_heat1 = parse_int(get("eq_heat1"), 0);
-        r.eq_heat2 = parse_int(get("eq_heat2"), 0);
-        r.eq_mister_south  = parse_int(get("eq_mister_south"),  0);
-        r.eq_mister_west   = parse_int(get("eq_mister_west"),   0);
-        r.eq_mister_center = parse_int(get("eq_mister_center"), 0);
-
         r.occupied = parse_bool(get("occupied"), false);
+
+        Setpoints sp = default_setpoints();
+        auto assign_positive_float = [&](const std::string& name, float& field) {
+            float value = parse_float(get(name), NAN);
+            if (!std::isnan(value) && value > 0.0f) field = value;
+        };
+        auto assign_float = [&](const std::string& name, float& field) {
+            float value = parse_float(get(name), NAN);
+            if (!std::isnan(value)) field = value;
+        };
+        assign_positive_float("sp_temp_low", sp.temp_low);
+        assign_positive_float("sp_temp_high", sp.temp_high);
+        assign_positive_float("sp_vpd_low", sp.vpd_low);
+        assign_positive_float("sp_vpd_high", sp.vpd_high);
+        assign_float("sp_bias_cool", sp.bias_cool);
+        assign_float("sp_bias_heat", sp.bias_heat);
+        assign_positive_float("sp_vpd_hysteresis", sp.vpd_hysteresis);
+        assign_positive_float("sp_temp_hysteresis", sp.temp_hysteresis);
+        assign_positive_float("sp_safety_max", sp.safety_max);
+        assign_positive_float("sp_safety_min", sp.safety_min);
+        assign_positive_float("sp_vpd_max_safe", sp.vpd_max_safe);
+        assign_positive_float("sp_vpd_min_safe", sp.vpd_min_safe);
+        assign_positive_float("sp_fog_escalation_kpa", sp.fog_escalation_kpa);
+        assign_positive_float("sp_fog_rh_ceiling", sp.fog_rh_ceiling);
+        assign_positive_float("sp_fog_min_temp", sp.fog_min_temp);
+        float watch_dwell_s = parse_float(get("sp_watch_dwell_s"), NAN);
+        if (!std::isnan(watch_dwell_s) && watch_dwell_s > 0.0f) {
+            sp.vpd_watch_dwell_ms = (uint32_t)(watch_dwell_s * 1000.0f);
+        }
+        float mist_backoff_s = parse_float(get("sp_mist_backoff_s"), NAN);
+        if (!std::isnan(mist_backoff_s) && mist_backoff_s > 0.0f) {
+            sp.mist_backoff_ms = (uint32_t)(mist_backoff_s * 1000.0f);
+        }
+        float mist_s2_delay_s = parse_float(get("sp_mist_s2_delay_s"), NAN);
+        if (!std::isnan(mist_s2_delay_s) && mist_s2_delay_s > 0.0f) {
+            sp.mist_s2_delay_ms = (uint32_t)(mist_s2_delay_s * 1000.0f);
+        }
+        sp.sw_fsm_controller_enabled = parse_bool(
+            get("sp_sw_fsm_controller_enabled"),
+            sp.sw_fsm_controller_enabled
+        );
+        const char* force_fsm = std::getenv("REPLAY_INVARIANTS_FORCE_FSM");
+        if (!force_fsm || *force_fsm != '0') {
+            sp.sw_fsm_controller_enabled = true;
+        }
+        validate_setpoints(sp);
+
+        r.temp_low  = sp.temp_low;
+        r.temp_high = sp.temp_high;
+        r.vpd_low   = sp.vpd_low;
+        r.vpd_high  = sp.vpd_high;
+        r.temp_hysteresis = sp.temp_hysteresis;
+        r.vpd_hysteresis  = sp.vpd_hysteresis;
+        r.vpd_max_safe    = sp.vpd_max_safe;
+        r.vpd_min_safe    = sp.vpd_min_safe;
+        r.safety_max      = sp.safety_max;
+        r.safety_min      = sp.safety_min;
+        r.bias_heat       = sp.bias_heat;
+        r.bias_cool       = sp.bias_cool;
+        r.fog_escalation_kpa = sp.fog_escalation_kpa;
+        r.fog_rh_ceiling  = sp.fog_rh_ceiling;
+        r.fog_min_temp    = sp.fog_min_temp;
+        r.sealed_max_ms   = sp.sealed_max_ms;
+        r.relief_duration_ms = sp.relief_duration_ms;
+        r.outdoor_staleness_max_s = sp.outdoor_staleness_max_s;
+
+        SensorInputs in{};
+        in.temp_f = r.temp_f;
+        in.rh_pct = r.rh_pct;
+        in.vpd_kpa = r.vpd_kpa;
+        in.dew_point_f = r.dew_point_f;
+        in.outdoor_rh_pct = r.outdoor_rh_pct;
+        in.enthalpy_delta = parse_float(get("enthalpy_delta"), -5.0f);
+        in.vpd_south = r.vpd_kpa;
+        in.vpd_west = r.vpd_kpa;
+        in.vpd_east = r.vpd_kpa;
+        in.local_hour = r.local_hour;
+        in.occupied = r.occupied;
+        in.outdoor_temp_f = r.outdoor_temp_f;
+        in.outdoor_dewpoint_f = r.outdoor_dewpoint_f;
+        in.outdoor_data_age_s = (r.outdoor_data_age_s < 0)
+            ? 99999u
+            : (uint32_t)r.outdoor_data_age_s;
+
+        uint64_t delta_s = (last_ts_unix > 0 && r.ts_unix_s > last_ts_unix)
+            ? r.ts_unix_s - last_ts_unix
+            : 60;
+        if (delta_s > 600) {
+            state = initial_state();
+            runner = invariants::Runner{};
+            delta_s = 60;
+        }
+        if (delta_s > UINT32_MAX / 1000ULL) delta_s = UINT32_MAX / 1000ULL;
+        const uint32_t dt_ms = (uint32_t)(delta_s * 1000ULL);
+        last_ts_unix = r.ts_unix_s;
+
+        Mode mode = determine_mode(in, sp, state, dt_ms);
+        RelayOutputs out = resolve_equipment(mode, in, sp, state, true);
+        if (mode == SEALED_MIST) {
+            r.greenhouse_state = std::string("SEALED_MIST_") + MIST_NAMES[(int)state.mist_stage];
+        } else {
+            r.greenhouse_state = MODE_NAMES[(int)mode];
+        }
+        r.mode_reason = state.last_mode_reason ? state.last_mode_reason : "";
+        r.vent_mist_assist_active = state.vent_mist_assist_active;
+
+        r.eq_fog = out.fog ? 1 : 0;
+        r.eq_vent = out.vent ? 1 : 0;
+        r.eq_fan1 = out.fan1 ? 1 : 0;
+        r.eq_fan2 = out.fan2 ? 1 : 0;
+        r.eq_heat1 = out.heat1 ? 1 : 0;
+        r.eq_heat2 = out.heat2 ? 1 : 0;
+        const bool any_mister = (mode == SEALED_MIST) || state.vent_mist_assist_active;
+        r.eq_mister_south = any_mister ? 1 : 0;
+        r.eq_mister_west = (mode == SEALED_MIST && state.mist_stage >= MIST_S2) ? 1 : 0;
+        r.eq_mister_center = (mode == SEALED_MIST && state.mist_stage >= MIST_S2) ? 1 : 0;
 
         runner.run(r, stats_report);
         rows++;

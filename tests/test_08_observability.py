@@ -9,10 +9,13 @@ change" gate per the fleet DoD.
 
 import subprocess
 import sys
+from pathlib import Path
 
 from conftest import db_query
 
 sys.path.insert(0, "/srv/verdify/ingestor")
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestSchema:
@@ -71,6 +74,90 @@ class TestDispatcherWiring:
         assert "'esp32_push_failed'" in body, (
             "Exhausted ESP32 push retries must INSERT alert_log alert_type='esp32_push_failed' (Tier 1 #4)"
         )
+
+
+class TestHeapPressureObservability:
+    """Heap-pressure firmware sensors must become live DB alerts."""
+
+    def test_firmware_declares_heap_pressure_problem_sensors(self):
+        body = (REPO_ROOT / "firmware/greenhouse.yaml").read_text()
+        assert "id: bs_heap_pressure_warning" in body
+        assert 'name: "Heap Pressure Warning"' in body
+        assert "id: bs_heap_pressure_critical" in body
+        assert 'name: "Heap Pressure Critical"' in body
+        assert "Heap pressure WARNING" in body
+        assert "Heap pressure CRITICAL" in body
+
+    def test_entity_map_routes_heap_pressure_binary_sensors(self):
+        body = (REPO_ROOT / "ingestor/entity_map.py").read_text()
+        assert '"heap_pressure_warning": "heap_pressure_warning"' in body
+        assert '"heap_pressure_critical": "heap_pressure_critical"' in body
+
+    def test_alert_monitor_checks_heap_pressure_state(self):
+        body = (REPO_ROOT / "ingestor/tasks.py").read_text()
+        assert "'heap_pressure_warning', 'heap_pressure_critical'" in body
+        assert "ORDER BY equipment, ts DESC, state ASC" in body
+        assert "SELECT heap_bytes, ts" in body
+        assert '"alert_type": "heap_pressure_warning"' in body
+        assert '"alert_type": "heap_pressure_critical"' in body
+        assert '"sensor_id": "equipment.heap_pressure_critical"' in body
+
+    def test_alert_monitor_refreshes_existing_alert_payloads(self):
+        body = (REPO_ROOT / "ingestor/tasks.py").read_text()
+        assert "alert refresh skipped" in body
+        assert "threshold_value=$5" in body
+        assert "Same-severity updates intentionally stay quiet" in body
+
+    def test_vpd_stress_alert_requires_recent_active_stress(self):
+        body = (REPO_ROOT / "ingestor/tasks.py").read_text()
+        assert "recent_high_fraction" in body
+        assert "last 15m" in body
+        assert 'float(row["recent_high_fraction"] or 0.0) >= 0.5' in body
+
+
+class TestV2ControlDiagnostics:
+    """Controller v2 timers and assist flags must be observable."""
+
+    def test_migration_094_applied(self):
+        cols = db_query(
+            "SELECT string_agg(column_name, ',' ORDER BY column_name) "
+            "FROM information_schema.columns "
+            "WHERE table_name='diagnostics' AND column_name IN ("
+            "'sealed_timer_s','vpd_watch_timer_s','mist_backoff_timer_s','vent_mist_assist_active')"
+        )
+        assert cols == "mist_backoff_timer_s,sealed_timer_s,vent_mist_assist_active,vpd_watch_timer_s"
+
+    def test_firmware_declares_v2_diagnostic_sensors(self):
+        body = (REPO_ROOT / "firmware/greenhouse/sensors.yaml").read_text()
+        assert "id: ctl_sealed_timer_s" in body
+        assert "id: ctl_vpd_watch_timer_s" in body
+        assert "id: ctl_mist_backoff_timer_s" in body
+        assert "id: ctl_vent_mist_assist_active" in body
+
+    def test_controls_publishes_v2_diagnostics_and_assist_override(self):
+        body = (REPO_ROOT / "firmware/greenhouse/controls.yaml").read_text()
+        assert "ctl_state.vent_mist_assist_active" in body
+        assert 'add("vent_mist_assist")' in body
+        assert 'add("fog_heat_assist")' in body
+        assert "id(ctl_mist_backoff_timer_s).publish_state(" in body
+        assert "id(ctl_vent_mist_assist_active).publish_state(" in body
+
+    def test_entity_map_and_ingestor_route_v2_diagnostics(self):
+        entity_map = (REPO_ROOT / "ingestor/entity_map.py").read_text()
+        ingestor = (REPO_ROOT / "ingestor/ingestor.py").read_text()
+        for col in ("sealed_timer_s", "vpd_watch_timer_s", "mist_backoff_timer_s", "vent_mist_assist_active"):
+            assert f'"{col}": "{col}"' in entity_map
+            assert col in ingestor
+
+
+class TestFirmwareCheckTargets:
+    """Firmware validation should cover both the worktree and live deploy source."""
+
+    def test_makefile_has_worktree_firmware_compile_target(self):
+        body = (REPO_ROOT / "Makefile").read_text()
+        assert "firmware-check-worktree:" in body
+        assert "$(ESPHOME) compile firmware/greenhouse.yaml" in body
+        assert "firmware-check-all: firmware-check-worktree firmware-check" in body
 
 
 class TestSprint18Wiring:
@@ -227,19 +314,19 @@ class TestProbeStalenessWiring:
 class TestOverrideEventsWiring:
     """OBS-1e (Sprint 16): firmware override event emission end-to-end wiring."""
 
-    TYPES_PATH = "/srv/verdify/firmware/lib/greenhouse_types.h"
-    LOGIC_PATH = "/srv/verdify/firmware/lib/greenhouse_logic.h"
-    HARDWARE_PATH = "/srv/verdify/firmware/greenhouse/hardware.yaml"
-    CONTROLS_PATH = "/srv/verdify/firmware/greenhouse/controls.yaml"
-    ENTITY_MAP_PATH = "/srv/verdify/ingestor/entity_map.py"
-    INGESTOR_PATH = "/srv/verdify/ingestor/ingestor.py"
+    TYPES_PATH = REPO_ROOT / "firmware/lib/greenhouse_types.h"
+    LOGIC_PATH = REPO_ROOT / "firmware/lib/greenhouse_logic.h"
+    HARDWARE_PATH = REPO_ROOT / "firmware/greenhouse/hardware.yaml"
+    CONTROLS_PATH = REPO_ROOT / "firmware/greenhouse/controls.yaml"
+    ENTITY_MAP_PATH = REPO_ROOT / "ingestor/entity_map.py"
+    INGESTOR_PATH = REPO_ROOT / "ingestor/ingestor.py"
 
     @staticmethod
-    def _read(path: str) -> str:
+    def _read(path: Path) -> str:
         with open(path) as f:
             return f.read()
 
-    def test_override_flags_struct_has_seven_fields(self):
+    def test_override_flags_struct_has_expected_fields(self):
         body = self._read(self.TYPES_PATH)
         assert "struct OverrideFlags" in body, "OverrideFlags struct missing"
         required = [
@@ -250,6 +337,9 @@ class TestOverrideEventsWiring:
             "relief_cycle_breaker",
             "seal_blocked_temp",
             "vpd_dry_override",
+            "summer_vent_active",
+            "vent_mist_assist",
+            "fog_heat_assist",
         ]
         for field in required:
             assert field in body, f"OverrideFlags missing field: {field}"
@@ -333,6 +423,13 @@ class TestSetpointConfirmation:
         assert int(result2.stdout.strip() or "0") >= 1, (
             "ingestor.py must register setpoint_confirmation_monitor in TASKS list"
         )
+
+    def test_confirmation_monitor_ignores_superseded_rows(self):
+        body = Path("/srv/verdify/ingestor/tasks.py").read_text()
+        assert "auto-resolved: superseded by newer setpoint" in body
+        assert "newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)" in body
+        assert "AND NOT EXISTS (" in body
+        assert "newer.ts > sc.ts" in body
 
 
 class TestForecastPageGeneration:

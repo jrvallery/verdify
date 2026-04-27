@@ -71,6 +71,278 @@ inline bool fog_permitted(const SensorInputs& in, const Setpoints& sp) noexcept 
         && fog_hour_in_window(in.local_hour, sp.fog_window_start, sp.fog_window_end);
 }
 
+// Controller v2 clamps VPD hysteresis against the actual band width. The
+// legacy cascade allows hyst_vpd_kpa=0.4 with a 0.8-1.2 band, which makes
+// SEALED_MIST exit only below 0.7 kPa. That turns normal high-VPD periods
+// into timeout/backoff loops instead of band compliance.
+inline float v2_vpd_hysteresis(const Setpoints& sp) noexcept {
+    const float vpd_width = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float requested = std::max(0.05f, sp.vpd_hysteresis);
+    const float cap = std::max(0.05f, vpd_width * 0.33f);
+    return std::min(requested, cap);
+}
+
+// Controller v2: band-first FSM.
+//
+// Policy: safety rails still preempt everything, but normal control prioritizes
+// temp-band compliance, then VPD-band compliance. Failed sealed humidification
+// enters a timed backoff instead of forcing VENTILATE. Venting is selected only
+// for cooling/dehum/outdoor-exchange cases where it serves the active demand.
+inline Mode determine_mode_v2(
+    const SensorInputs& in,
+    const Setpoints& sp,
+    ControlState& state,
+    uint32_t dt_ms
+) {
+    if (state.sentinel != STATE_SENTINEL) {
+        state = initial_state();
+    }
+    state.vent_mist_assist_active = false;
+
+    if (!sensors_plausible(in)) {
+        state.mode = SENSOR_FAULT;
+        state.mist_stage = MIST_WATCH;
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.mist_stage_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
+        state.last_mode_reason = "v2_sensor_fault";
+        return SENSOR_FAULT;
+    }
+
+    const Mode prev = state.mode_prev;
+    const float temp_low = sp.temp_low + sp.bias_heat;
+    const float temp_high = sp.temp_high + sp.bias_cool;
+    const float HV = v2_vpd_hysteresis(sp);
+
+    const bool safety_cool = in.temp_f >= sp.safety_max;
+    const bool safety_heat = in.temp_f <= sp.safety_min;
+    const bool was_cooling = (prev == VENTILATE) || (prev == THERMAL_RELIEF);
+    const bool outdoor_cold_for_vent =
+        std::isfinite(in.outdoor_temp_f) && in.outdoor_temp_f < (sp.temp_low - 10.0f);
+    const float cooling_exit_hysteresis =
+        outdoor_cold_for_vent ? std::max(sp.temp_hysteresis, 3.0f) : sp.temp_hysteresis;
+    const bool needs_cooling = was_cooling
+        ? in.temp_f > (temp_high - cooling_exit_hysteresis)
+        : in.temp_f > temp_high;
+    const bool temp_too_low = in.temp_f < temp_low;
+
+    const bool vpd_high = in.vpd_kpa > sp.vpd_high;
+    const bool vpd_high_resolved = in.vpd_kpa <= (sp.vpd_high - HV);
+    const bool cold_dehum_allowed =
+        !outdoor_cold_for_vent || in.temp_f > (sp.temp_low + std::max(2.0f, sp.temp_hysteresis));
+    const bool vpd_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block && cold_dehum_allowed;
+    const bool vpd_dehum_exit = in.vpd_kpa >= sp.vpd_low || !cold_dehum_allowed;
+    const bool was_dehum = prev == DEHUM_VENT;
+    const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
+
+    {
+        const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+        const float heat_target = sp.temp_low + band_width * 0.25f + sp.bias_heat;
+        if (in.temp_f < (heat_target - sp.dH2)) {
+            state.heat2_latched = true;
+        } else if (in.temp_f >= (heat_target + sp.heat_hysteresis)) {
+            state.heat2_latched = false;
+        }
+    }
+
+    if (vpd_high && !safety_cool && !safety_heat) {
+        state.vpd_watch_timer_ms = sat_add(state.vpd_watch_timer_ms, dt_ms);
+    } else if (!vpd_high) {
+        state.vpd_watch_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+    }
+    const bool humidify_ready = vpd_high && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
+
+    if (state.mist_backoff_timer_ms > 0) {
+        if (!vpd_high) {
+            state.mist_backoff_timer_ms = 0;
+            state.relief_cycle_count = 0;
+        } else if (state.mist_backoff_timer_ms >= sp.mist_backoff_ms) {
+            state.mist_backoff_timer_ms = 0;
+        } else {
+            state.mist_backoff_timer_ms = sat_add(state.mist_backoff_timer_ms, dt_ms);
+        }
+    }
+
+    state.override_summer_vent = false;
+    {
+        const bool outdoor_data_fresh = in.outdoor_data_age_s < sp.outdoor_staleness_max_s;
+        const bool outdoor_cooler = in.outdoor_temp_f < (in.temp_f - sp.vent_prefer_temp_delta_f);
+        const bool outdoor_drier_dp = in.outdoor_dewpoint_f < (in.dew_point_f - sp.vent_prefer_dp_delta_f);
+        state.override_summer_vent = sp.sw_summer_vent_enabled
+                                  && outdoor_data_fresh
+                                  && outdoor_cooler
+                                  && outdoor_drier_dp
+                                  && needs_cooling
+                                  && humidify_ready;
+    }
+
+    Mode mode = IDLE;
+    state.dry_override_active = false;
+    state.last_mode_reason = "v2_idle";
+
+    if (safety_cool) {
+        mode = SAFETY_COOL;
+        state.last_mode_reason = "v2_safety_cool";
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
+    } else if (safety_heat) {
+        mode = SAFETY_HEAT;
+        state.last_mode_reason = "v2_safety_heat";
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
+    } else if (prev == SEALED_MIST) {
+        state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
+        if (vpd_high_resolved || moisture_blocked) {
+            mode = needs_cooling ? VENTILATE : IDLE;
+            state.last_mode_reason = moisture_blocked ? "v2_moisture_blocked" : "v2_humidify_resolved";
+            state.sealed_timer_ms = 0;
+            state.vpd_watch_timer_ms = 0;
+            state.relief_cycle_count = 0;
+            state.vent_latch_timer_ms = 0;
+            state.mist_backoff_timer_ms = 0;
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else if (needs_cooling || in.temp_f >= (sp.safety_max - sp.safety_max_seal_margin_f)) {
+            mode = VENTILATE;
+            state.last_mode_reason = "v2_temp_preempts_humidify";
+            state.sealed_timer_ms = 0;
+            state.vent_latch_timer_ms = 0;
+            state.mist_backoff_timer_ms = 0;
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
+            mode = IDLE;
+            state.last_mode_reason = "v2_mist_backoff";
+            state.relief_cycle_count = sat_add(state.relief_cycle_count, 1);
+            state.sealed_timer_ms = 0;
+            state.relief_timer_ms = 0;
+            state.vent_latch_timer_ms = 0;
+            state.mist_backoff_timer_ms = dt_ms;
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else {
+            mode = SEALED_MIST;
+            state.last_mode_reason = "v2_humidify_continue";
+        }
+    } else if (needs_cooling) {
+        mode = VENTILATE;
+        state.last_mode_reason = state.override_summer_vent ? "v2_summer_vent" : "v2_temp_high";
+        state.sealed_timer_ms = 0;
+    } else if (vpd_low_enter) {
+        mode = DEHUM_VENT;
+        state.last_mode_reason = "v2_vpd_low";
+        state.sealed_timer_ms = 0;
+    } else if (was_dehum && !vpd_dehum_exit && !sp.econ_block) {
+        mode = DEHUM_VENT;
+        state.last_mode_reason = "v2_dehum_continue";
+        state.sealed_timer_ms = 0;
+    } else if (state.mist_backoff_timer_ms > 0) {
+        mode = IDLE;
+        state.last_mode_reason = "v2_mist_backoff";
+        state.sealed_timer_ms = 0;
+    } else if (humidify_ready
+               && !moisture_blocked
+               && !temp_too_low
+               && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f)) {
+        mode = SEALED_MIST;
+        state.last_mode_reason = "v2_humidify_enter";
+        state.sealed_timer_ms = dt_ms;
+        state.mist_stage = MIST_S1;
+        state.mist_stage_timer_ms = 0;
+        state.vent_latch_timer_ms = 0;
+    } else {
+        mode = IDLE;
+        state.last_mode_reason = temp_too_low ? "v2_temp_low_idle_heat" : "v2_idle";
+        state.sealed_timer_ms = 0;
+    }
+
+    {
+        const bool safety_preempts_dwell =
+            (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) || (mode == SENSOR_FAULT);
+        const bool mode_would_change = mode != state.mode_prev;
+        const bool in_dwell = state.last_transition_tick_ms < sp.dwell_gate_ms;
+        if (sp.sw_dwell_gate_enabled && mode_would_change && in_dwell && !safety_preempts_dwell) {
+            mode = state.mode_prev;
+            state.last_mode_reason = "v2_dwell_hold";
+        }
+        if (mode != state.mode_prev) {
+            state.last_transition_tick_ms = 0;
+        } else {
+            state.last_transition_tick_ms = sat_add(state.last_transition_tick_ms, dt_ms);
+        }
+    }
+
+    if (mode == SEALED_MIST) {
+        state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);
+        switch (state.mist_stage) {
+            case MIST_WATCH:
+                state.mist_stage = MIST_S1;
+                state.mist_stage_timer_ms = 0;
+                break;
+            case MIST_S1:
+                if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms && in.vpd_kpa > sp.vpd_high) {
+                    state.mist_stage = MIST_S2;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            case MIST_S2: {
+                const bool fog_gated = !fog_permitted(in, sp) || moisture_blocked;
+                if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
+                    state.mist_stage = MIST_FOG;
+                    state.mist_stage_timer_ms = 0;
+                } else if (vpd_high_resolved) {
+                    state.mist_stage = MIST_S1;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            }
+            case MIST_FOG:
+                if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
+                    state.mist_stage = MIST_S2;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            default:
+                state.mist_stage = MIST_WATCH;
+                state.mist_stage_timer_ms = 0;
+                break;
+        }
+    } else if (state.mist_stage != MIST_WATCH) {
+        state.mist_stage = MIST_WATCH;
+        state.mist_stage_timer_ms = 0;
+    }
+
+    state.vent_mist_assist_active =
+        (mode == VENTILATE)
+        && humidify_ready
+        && !moisture_blocked
+        && !safety_cool
+        && !safety_heat
+        && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f);
+
+    state.mode = mode;
+    state.mode_prev = mode;
+    return mode;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // determine_mode()
 // ═══════════════════════════════════════════════════════════════════
@@ -80,10 +352,15 @@ inline Mode determine_mode(
     ControlState& state,
     uint32_t dt_ms
 ) {
+    if (sp.sw_fsm_controller_enabled) {
+        return determine_mode_v2(in, sp, state, dt_ms);
+    }
+
     // ── Sentinel check — detect state corruption ──
     if (state.sentinel != STATE_SENTINEL) {
         state = initial_state();
     }
+    state.vent_mist_assist_active = false;
 
     // ── R2-4: Plausibility guard ──
     if (!sensors_plausible(in)) {
@@ -98,6 +375,9 @@ inline Mode determine_mode(
         state.vpd_watch_timer_ms = 0;
         state.mist_stage_timer_ms = 0;
         state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
         return SENSOR_FAULT;
     }
 
@@ -596,6 +876,24 @@ inline OverrideFlags evaluate_overrides(
     // vpd_wants_seal in the same cycle, so reconstruction post-hoc would
     // miss the firing.
     f.summer_vent_active = state.override_summer_vent;
+    f.vent_mist_assist = state.vent_mist_assist_active;
+
+    // Controller v2 cold/dry assist: in SEALED_MIST_FOG, fog may run while
+    // heat holds the temp band. Recompute the resolve_equipment() intent so
+    // active_overrides makes the overlap explicit without mutating state.
+    const float temp_band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    const float heat_target = sp.temp_low + temp_band_width * 0.25f + sp.bias_heat;
+    const bool heat_suppressed_by_upper_band = in.temp_f >= sp.temp_high;
+    const bool heat1_would_run =
+        !heat_suppressed_by_upper_band
+        && in.temp_f < (heat_target + sp.heat_hysteresis);
+    const bool heat2_would_run = !heat_suppressed_by_upper_band && state.heat2_latched;
+    const bool fog_would_run =
+        (mode == SEALED_MIST)
+        && (state.mist_stage == MIST_FOG)
+        && fog_permitted(in, sp)
+        && !moisture_blocked;
+    f.fog_heat_assist = fog_would_run && (heat1_would_run || heat2_would_run);
 
     (void)HV;  // reserved for future hysteresis-sensitive gates
     return f;
@@ -624,10 +922,12 @@ inline RelayOutputs resolve_equipment(
     const float vpd_low_eff  = sp.vpd_low  + vpd_width * 0.25f;
     const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
 
-    bool needs_heating_s1 = in.temp_f < (Tlow + sp.heat_hysteresis);
+    const bool heat_suppressed_by_upper_band = in.temp_f >= sp.temp_high;
+    bool needs_heating_s1 = !heat_suppressed_by_upper_band
+                          && in.temp_f < (Tlow + sp.heat_hysteresis);
     // Sprint-9 P1#7: S2 is latched (see determine_mode). Reading the latch
     // instead of recomputing the threshold gives us the hysteresis band.
-    bool needs_heating_s2 = state.heat2_latched;
+    bool needs_heating_s2 = !heat_suppressed_by_upper_band && state.heat2_latched;
 
     RelayOutputs out = {false, false, false, false, false, false};
 

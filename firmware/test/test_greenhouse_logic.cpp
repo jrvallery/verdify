@@ -1808,6 +1808,177 @@ TEST(phase2_dwell_gate_tracks_ticks_when_off) {
     PASS();
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Controller v2: band-first FSM
+// ═══════════════════════════════════════════════════════════════
+
+static Setpoints fsm_v2_setpoints() {
+    auto sp = default_setpoints();
+    sp.sw_fsm_controller_enabled = true;
+    sp.temp_low = 72.0f;
+    sp.temp_high = 78.0f;
+    sp.vpd_low = 0.8f;
+    sp.vpd_high = 1.2f;
+    sp.vpd_hysteresis = 0.4f;
+    sp.vpd_watch_dwell_ms = 5000;
+    sp.sealed_max_ms = 120000;
+    sp.mist_backoff_ms = 600000;
+    sp.safety_max = 100.0f;
+    sp.safety_min = 40.0f;
+    return sp;
+}
+
+TEST(fsm_v2_relief_exhausted_does_not_force_cold_vent) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.relief_cycle_count = 3;
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+
+    // This mirrors the live failure: cool greenhouse, cold outdoor air, VPD
+    // still above the narrow band. V2 must not turn actuator protection into
+    // forced ventilation.
+    Mode m = determine_mode(make_inputs(66.0f, 1.4f), sp, s, 5000);
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_temp_low_idle_heat");
+    PASS();
+}
+
+TEST(fsm_v2_sealed_timeout_enters_backoff_not_relief) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.mode = SEALED_MIST;
+    s.mode_prev = SEALED_MIST;
+    s.sealed_timer_ms = sp.sealed_max_ms;
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+    s.mist_stage = MIST_S1;
+
+    Mode m = determine_mode(make_inputs(74.0f, 1.5f), sp, s, 5000);
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_mist_backoff");
+    ASSERT_TRUE(s.mist_backoff_timer_ms > 0);
+    ASSERT_TRUE(s.relief_cycle_count > 0);
+    PASS();
+}
+
+TEST(fsm_v2_temp_band_preempts_humidification) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+
+    Mode m = determine_mode(make_inputs(82.0f, 1.6f), sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_temp_high");
+    ASSERT_TRUE(s.vent_mist_assist_active);
+    PASS();
+}
+
+TEST(fsm_v2_safety_cool_does_not_set_vent_mist_assist) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+
+    Mode m = determine_mode(make_inputs(101.0f, 1.8f), sp, s, 5000);
+    ASSERT_EQ(m, SAFETY_COOL);
+    ASSERT_FALSE(s.vent_mist_assist_active);
+    PASS();
+}
+
+TEST(fsm_v2_vpd_hysteresis_is_band_width_limited) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.mode = SEALED_MIST;
+    s.mode_prev = SEALED_MIST;
+    s.sealed_timer_ms = 30000;
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+    s.mist_stage = MIST_S1;
+
+    // Legacy effective exit with hyst=0.4 and high=1.2 was ~0.7 kPa.
+    // V2 caps hysteresis to band width, so 1.0 is resolved enough.
+    Mode m = determine_mode(make_inputs(74.0f, 1.0f), sp, s, 5000);
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_humidify_resolved");
+    PASS();
+}
+
+TEST(fsm_v2_retries_after_backoff_window) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+    s.mist_backoff_timer_ms = sp.mist_backoff_ms;
+
+    Mode m = determine_mode(make_inputs(74.0f, 1.5f), sp, s, 5000);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_humidify_enter");
+    PASS();
+}
+
+TEST(fsm_v2_cold_dehum_requires_temp_headroom) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(sp.temp_low + 1.0f, sp.vpd_low - 0.3f);
+    in.outdoor_temp_f = sp.temp_low - 20.0f;
+
+    Mode m = determine_mode(in, sp, s, 60000);
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_idle");
+    PASS();
+}
+
+TEST(fsm_v2_cold_dehum_allowed_with_temp_headroom) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(sp.temp_low + 3.0f, sp.vpd_low - 0.3f);
+    in.outdoor_temp_f = sp.temp_low - 20.0f;
+
+    Mode m = determine_mode(in, sp, s, 60000);
+    ASSERT_EQ(m, DEHUM_VENT);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_vpd_low");
+    PASS();
+}
+
+TEST(fsm_v2_heat_suppressed_at_upper_band) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.heat2_latched = true;
+
+    auto out = resolve_equipment(IDLE, make_inputs(sp.temp_high, 0.9f), sp, s, true);
+    ASSERT_FALSE(out.heat1);
+    ASSERT_FALSE(out.heat2);
+    PASS();
+}
+
+TEST(fsm_v2_allows_fog_heat_assist_when_cold_dry) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.mode = SEALED_MIST;
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.heat2_latched = true;
+
+    auto in = make_inputs(sp.temp_low + 1.0f, sp.vpd_high + 0.4f, 55.0f);
+    auto out = resolve_equipment(SEALED_MIST, in, sp, s, true);
+
+    ASSERT_TRUE(out.heat1);
+    ASSERT_TRUE(out.heat2);
+    ASSERT_TRUE(out.fog);
+    PASS();
+}
+
+TEST(obs1e_fog_heat_assist_flag_fires) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    s.mode = SEALED_MIST;
+    s.mode_prev = SEALED_MIST;
+    s.mist_stage = MIST_FOG;
+    s.heat2_latched = true;
+
+    auto in = make_inputs(sp.temp_low + 1.0f, sp.vpd_high + 0.4f, 55.0f);
+    auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
+
+    ASSERT_TRUE(f.fog_heat_assist);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis + OBS-1e\n");

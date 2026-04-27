@@ -12,8 +12,8 @@
 substitutions:
   # Fallback for manual `esphome compile greenhouse.yaml` invocations.
   # `make firmware-deploy` overrides this at build time with
-  # `-s fw_version YYYY.M.D.{short-sha}` so diagnostics.firmware_version
-  # uniquely identifies each deploy's commit (sprint-5 / FW-V1).
+  # `-s fw_version YYYY.M.D.HHMM.{short-sha}` so diagnostics.firmware_version
+  # uniquely identifies each dirty OTA build, not just each commit.
   fw_version: "2026.4.15.1"
 
 esphome:
@@ -145,7 +145,11 @@ wifi:
 
 captive_portal:
 
-web_server:
+# Disabled 2026-04-27: ESPHome web_server keeps several TCP sockets and
+# response buffers alive on a controller that is already seeing heap-pressure
+# reboots. HA API, MQTT logs, OTA, and the ingestor provide the operational
+# surfaces we actually use; browser access is not worth the RAM cost.
+# web_server:
 
 # ────────────────────────────── HTTP Client ─────────────────────────────────
 # Used by grow light switches to call HA REST API (Lutron bridge)
@@ -173,6 +177,9 @@ logger:
 api:
   id: ha_api
   reboot_timeout: 0s      # never auto‑reboot if HA disconnects
+  # Keep the historical connection ceiling. HA, ingestor, and operational
+  # tooling all reconnect after OTA; lowering this risks starving the
+  # encrypted API path exactly when we need telemetry most.
   max_connections: 20
   encryption:
     key: !secret api_encryption_key
@@ -491,6 +498,12 @@ binary_sensor:
     id: bs_heap_pressure_warning
     name: "Heap Pressure Warning"
     device_class: problem
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGW("heap", "Heap pressure WARNING: free=%.1f kB min=%.1f kB",
+                     esp_get_free_heap_size() / 1024.0f,
+                     esp_get_minimum_free_heap_size() / 1024.0f);
     lambda: |-
       static uint32_t below_thresh_since_ms = 0;
       uint32_t now_ms = millis();
@@ -507,6 +520,12 @@ binary_sensor:
     id: bs_heap_pressure_critical
     name: "Heap Pressure Critical"
     device_class: problem
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGE("heap", "Heap pressure CRITICAL: free=%.1f kB min=%.1f kB",
+                     esp_get_free_heap_size() / 1024.0f,
+                     esp_get_minimum_free_heap_size() / 1024.0f);
     lambda: |-
       // Instantaneous — no debounce. <15 KB is panic-adjacent territory
       // (observed pre-panic floor 20.6 KB; safety margin at 15 KB).

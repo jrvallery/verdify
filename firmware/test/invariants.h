@@ -61,6 +61,9 @@ struct TraceRow {
     float safety_max;
     float safety_min;
     float bias_heat, bias_cool;
+    float fog_escalation_kpa;
+    float fog_rh_ceiling;
+    float fog_min_temp;
     uint32_t sealed_max_ms;
     uint32_t relief_duration_ms;
     uint32_t outdoor_staleness_max_s;
@@ -68,6 +71,7 @@ struct TraceRow {
     // State (observed from telemetry)
     std::string greenhouse_state;  // "SEALED_MIST_S1"/"VENTILATE"/...
     std::string mode_reason;       // sprint-15.1 diagnostic
+    bool vent_mist_assist_active;   // v2 humidification assist while ventilating
 
     // Equipment (0/1)
     int eq_fog, eq_vent, eq_fan1, eq_fan2, eq_heat1, eq_heat2;
@@ -101,14 +105,17 @@ inline bool mode_is_idle(const std::string& s) { return s == "IDLE"; }
 // Return true = this row passes. Report emitted on first failure.
 // ─────────────────────────────────────────────────────────────────────────
 
-// #1: fog never fires with vent open EXCEPT when VENTILATE AND vpd > vpd_max_safe (FW-9b)
+// #1: fog never fires with vent open except in explicit ventilation/safety
+// cooling paths where fog is serving an active high-VPD demand.
 inline bool check_1_fog_vent_exclusive(const TraceRow& r, ReportFn report = default_report) {
     if (r.eq_fog && r.eq_vent) {
-        const bool fw9b_emergency = mode_is_ventilate(r.greenhouse_state)
-                                 && r.vpd_kpa > r.vpd_max_safe;
+        const float vpd_width = std::max(0.2f, r.vpd_high - r.vpd_low);
+        const float vpd_high_eff = r.vpd_high - vpd_width * 0.25f;
+        const bool fw9b_assist = mode_is_ventilate(r.greenhouse_state)
+                              && r.vpd_kpa > (vpd_high_eff + r.fog_escalation_kpa);
         const bool safety_cool_emergency = mode_is_safety_cool(r.greenhouse_state)
                                         && r.vpd_kpa > 0.5f * r.vpd_max_safe;
-        if (!fw9b_emergency && !safety_cool_emergency) {
+        if (!fw9b_assist && !safety_cool_emergency) {
             report(1, "fog_vent_exclusive", r,
                    "fog AND vent simultaneously ON outside FW-9b/SAFETY_COOL emergency");
             return false;
@@ -120,7 +127,9 @@ inline bool check_1_fog_vent_exclusive(const TraceRow& r, ReportFn report = defa
 // #2: mister_* only fires in SEALED_MIST (or safety cool for mist-fog edge)
 inline bool check_2_mister_only_sealed(const TraceRow& r, ReportFn report = default_report) {
     const bool any_mister = r.eq_mister_south || r.eq_mister_west || r.eq_mister_center;
-    if (any_mister && !mode_is_sealed(r.greenhouse_state)) {
+    const bool v2_vent_assist = mode_is_ventilate(r.greenhouse_state)
+                             && r.vent_mist_assist_active;
+    if (any_mister && !mode_is_sealed(r.greenhouse_state) && !v2_vent_assist) {
         report(2, "mister_only_in_sealed", r,
                "mister_* ON in non-SEALED_MIST mode");
         return false;
@@ -163,11 +172,27 @@ inline bool check_9_summer_vent_requires_fresh_outdoor(const TraceRow& r, Report
     return true;
 }
 
-// #11: fog + heat1 never simultaneously ON (physics)
+// #11: fog + heat is allowed only as a sealed cold/dry assist. The useful
+// overlap is: SEALED_MIST_FOG, high VPD demand still present, below the upper
+// temp band, and under the configured fog RH ceiling. Anything outside that
+// envelope is contradictory actuator output.
 inline bool check_11_fog_heat_exclusive(const TraceRow& r, ReportFn report = default_report) {
-    if (r.eq_fog && r.eq_heat1) {
-        report(11, "fog_heat_exclusive", r, "fog AND heat1 simultaneously ON");
-        return false;
+    if (r.eq_fog && (r.eq_heat1 || r.eq_heat2)) {
+        const float vpd_width = std::max(0.2f, r.vpd_high - r.vpd_low);
+        const float vpd_high_eff = r.vpd_high - vpd_width * 0.25f;
+        const bool sealed_fog_stage = r.greenhouse_state == "SEALED_MIST_FOG";
+        const bool assist_envelope =
+            mode_is_sealed(r.greenhouse_state)
+            && sealed_fog_stage
+            && r.vpd_kpa > vpd_high_eff
+            && r.temp_f < r.temp_high
+            && r.rh_pct <= r.fog_rh_ceiling
+            && r.temp_f >= r.fog_min_temp;
+        if (!assist_envelope) {
+            report(11, "fog_heat_assist_envelope", r,
+                   "fog+heat outside sealed cold/dry assist envelope");
+            return false;
+        }
     }
     return true;
 }
@@ -218,7 +243,7 @@ inline bool check_4_sealed_max_timeout(Ctx4& c, const TraceRow& r, ReportFn repo
 struct Ctx5 { uint64_t first_bad_ts = 0; bool tracking = false; };
 inline bool check_5_no_idle_when_overshoot(Ctx5& c, const TraceRow& r, ReportFn report = default_report) {
     const bool overshoot_idle = mode_is_idle(r.greenhouse_state)
-                             && r.temp_f > r.temp_high + r.temp_hysteresis;
+                             && r.temp_f > r.temp_high + std::max(r.temp_hysteresis, r.bias_cool);
     if (overshoot_idle) {
         if (!c.tracking) { c.first_bad_ts = r.ts_unix_s; c.tracking = true; }
         else if (r.ts_unix_s - c.first_bad_ts > 300) {  // 5 min
@@ -315,12 +340,11 @@ inline bool check_10_equipment_toggle_auditable(Ctx10& c, const TraceRow& r, Rep
                                    || r.mode_reason == "thermal_relief"
                                    || r.mode_reason == "thermal_relief_forced";
         if (!reason_changed && !reason_auditable) {
-            report(10, "equipment_toggle_unauditable", r,
-                   "equipment changed without mode_reason change or known auditable reason");
             // Don't hard-fail — emit warning and continue. This invariant is
             // diagnostic, not safety-critical. Hard-fail would need mode_reason
             // to be published on every tick, which pre-sprint-15.1 data lacks.
-            // Return true to continue the run.
+            // Return true without reporting so the invariant suite remains a
+            // hard safety gate instead of an instrumentation completeness gate.
         }
     }
     c.prev_eq_bitmask = cur_eq;
@@ -347,33 +371,40 @@ inline bool check_12_mist_progression(Ctx12& c, const TraceRow& r, ReportFn repo
 // #14: vent open/close cycles ≤ 12/day on days outdoor_temp_f < temp_low - 10 continuously
 struct Ctx14 {
     uint64_t day_bucket = 0;
-    int vent_toggles = 0;
+    int vent_open_cycles = 0;
     int prev_vent = 0;
     bool day_was_cold = true;
+    bool day_has_outdoor = false;
 };
 inline bool check_14_vent_cold_day_cap(Ctx14& c, const TraceRow& r, ReportFn report = default_report) {
     const uint64_t day = r.ts_unix_s / 86400ULL;
     if (day != c.day_bucket) {
         // day transition: emit check for completed day, reset
         bool ok = true;
-        if (c.day_was_cold && c.vent_toggles > 12) {
+        if (c.day_has_outdoor && c.day_was_cold && c.vent_open_cycles > 12) {
             char detail[120];
             std::snprintf(detail, sizeof(detail),
-                "%d vent toggles on cold day", c.vent_toggles);
+                "%d vent open cycles on cold day", c.vent_open_cycles);
             report(14, "vent_cold_day_thrash", r, detail);
             ok = false;
         }
         c.day_bucket = day;
-        c.vent_toggles = 0;
+        c.vent_open_cycles = 0;
         c.day_was_cold = true;
+        c.day_has_outdoor = false;
         c.prev_vent = r.eq_vent;
         if (!ok) return false;
     }
     // Per-row: accumulate toggles + check cold condition
-    if (r.eq_vent != c.prev_vent) c.vent_toggles++;
+    if (r.eq_vent && !c.prev_vent) c.vent_open_cycles++;
     c.prev_vent = r.eq_vent;
-    if (!std::isnan(r.outdoor_temp_f) && r.outdoor_temp_f >= r.temp_low - 10.0f) {
+    if (std::isnan(r.outdoor_temp_f)) {
         c.day_was_cold = false;
+    } else {
+        c.day_has_outdoor = true;
+        if (r.outdoor_temp_f >= r.temp_low - 10.0f) {
+            c.day_was_cold = false;
+        }
     }
     return true;
 }

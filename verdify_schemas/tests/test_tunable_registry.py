@@ -105,10 +105,12 @@ class TestDriftGuard:
         bidirectional assertion on.
         """
         # Resolve ingestor module; same idiom as test_tunables.py
-        for p in (
-            "/srv/verdify/ingestor",
-            str(REPO_ROOT / "ingestor"),
-            "/mnt/iris/verdify/ingestor",
+        for p in reversed(
+            (
+                str(REPO_ROOT / "ingestor"),
+                "/srv/verdify/ingestor",
+                "/mnt/iris/verdify/ingestor",
+            )
         ):
             if p not in sys.path:
                 sys.path.insert(0, p)
@@ -128,10 +130,12 @@ class TestDriftGuard:
         """Every REGISTRY entry with a non-None cfg_readback_object_id must
         appear in entity_map.CFG_READBACK_MAP.
         """
-        for p in (
-            "/srv/verdify/ingestor",
-            str(REPO_ROOT / "ingestor"),
-            "/mnt/iris/verdify/ingestor",
+        for p in reversed(
+            (
+                str(REPO_ROOT / "ingestor"),
+                "/srv/verdify/ingestor",
+                "/mnt/iris/verdify/ingestor",
+            )
         ):
             if p not in sys.path:
                 sys.path.insert(0, p)

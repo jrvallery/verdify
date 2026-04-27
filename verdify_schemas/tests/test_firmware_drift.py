@@ -1,6 +1,6 @@
 """Firmware ↔ entity_map drift guard.
 
-Parses every ESPHome YAML in /srv/verdify/firmware/greenhouse/ to extract
+Parses the worktree ESPHome YAML to extract
 the universe of declared entity `id:` values, then asserts every key in
 the ingestor's entity_map dicts (CLIMATE_MAP, SETPOINT_MAP, DIAGNOSTIC_MAP,
 EQUIPMENT_*, STATE_MAP, CFG_READBACK_MAP, DAILY_ACCUM_MAP) corresponds to
@@ -27,7 +27,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-YAML_DIR = Path("/srv/verdify/firmware/greenhouse")
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+YAML_DIRS = [
+    REPO_ROOT / "firmware" / "greenhouse",
+    Path("/srv/verdify/firmware/greenhouse"),
+]
+ROOT_YAMLS = [
+    REPO_ROOT / "firmware" / "greenhouse.yaml",
+    Path("/srv/verdify/firmware/greenhouse.yaml"),
+]
 PLATFORMS = ("sensor", "binary_sensor", "switch", "number", "text_sensor", "select", "button")
 
 # ESPHome YAML uses !secret etc. — register no-op constructors so safe_load works.
@@ -67,10 +75,13 @@ def _firmware_entity_ids() -> set[str]:
         ESPHome's exact algorithm depends on platform & character class)
       - the C++ `id:` (last-resort match for entities used internally)
     """
-    if not YAML_DIR.exists():
-        return set()
     ids: set[str] = set()
-    for yf in sorted(YAML_DIR.glob("*.yaml")):
+    yaml_files: list[Path] = []
+    for yd in YAML_DIRS:
+        if yd.exists():
+            yaml_files.extend(sorted(yd.glob("*.yaml")))
+    yaml_files.extend(yf for yf in ROOT_YAMLS if yf.exists())
+    for yf in yaml_files:
         try:
             data = yaml.safe_load(yf.read_text())
         except yaml.YAMLError:
@@ -93,7 +104,10 @@ def _firmware_entity_ids() -> set[str]:
     return ids
 
 
-pytestmark = pytest.mark.skipif(not YAML_DIR.exists(), reason="firmware YAML directory not available")
+pytestmark = pytest.mark.skipif(
+    not any(p.exists() for p in [*YAML_DIRS, *ROOT_YAMLS]),
+    reason="firmware YAML not available",
+)
 
 
 @pytest.fixture(scope="module")
@@ -109,7 +123,7 @@ def entity_map():
     """Resolve entity_map from VM compat path or repo-relative."""
     here = Path(__file__).resolve()
     repo_root = here.parent.parent.parent
-    for p in ("/srv/verdify/ingestor", str(repo_root / "ingestor"), "/mnt/iris/verdify/ingestor"):
+    for p in reversed((str(repo_root / "ingestor"), "/srv/verdify/ingestor", "/mnt/iris/verdify/ingestor")):
         if p not in sys.path:
             sys.path.insert(0, p)
     try:
@@ -157,24 +171,9 @@ KNOWN_PRE_EXISTING_DRIFT: dict[str, set[str]] = {
         # the equipment_state event-stream pattern; they map to internal
         # logic signals, not published binary_sensors. To remove: audit
         # each, drop those the dispatcher no longer writes.
-        "economiser_blocked",
-        "fan_1_running",
-        "fan_2_running",
-        "fan_burst_active",
-        "fog_burst_active",
-        "fog_running",
-        "heat_1_running",
-        "heat_2_running",
-        "leak_detected",
-        "mister_budget_exceeded",
-        "mister_running",
         "occupancy_active",
-        "sntp_status",
-        "vent_bypass_active",
-        "vent_open",
         "vent_running",
         "vpd_emergency",
-        "water_flowing",
     },
     "DAILY_ACCUM_MAP": {
         # Drip runtime sensors removed from firmware in Sprint 18 redesign;

@@ -44,21 +44,6 @@ fi
 #   greenhouse_state      — for invariant #6 transition counting
 docker exec verdify-timescaledb psql -U verdify -d verdify -c "
 COPY (
-    WITH occ AS (
-        SELECT ts, (value = 'occupied') AS occ
-        FROM system_state WHERE entity = 'occupancy' ORDER BY ts
-    ),
-    modestate AS (
-        -- forward-fill greenhouse_state and mode_reason at each climate ts
-        SELECT ts, entity, value FROM system_state
-        WHERE entity IN ('greenhouse_state','mode_reason')
-    ),
-    eqstate AS (
-        -- forward-fill equipment state as 0/1 at each climate ts
-        SELECT ts, equipment, state::int AS on FROM equipment_state
-        WHERE equipment IN ('fog','vent','fan1','fan2','heat1','heat2',
-                            'mister_south','mister_west','mister_center')
-    )
     SELECT
         c.ts,
         c.temp_avg, c.vpd_avg, c.rh_avg,
@@ -66,48 +51,281 @@ COPY (
         COALESCE(c.enthalpy_delta, -5) AS enthalpy_delta,
         -- Phase-0 additions: outdoor sensor suite
         c.outdoor_temp_f,
+        CASE
+            WHEN c.outdoor_temp_f IS NULL
+              OR c.outdoor_rh_pct IS NULL
+              OR c.outdoor_rh_pct <= 0 THEN NULL
+            ELSE (
+                (
+                    243.04 * (
+                        ln(c.outdoor_rh_pct / 100.0)
+                        + (
+                            17.625 * ((c.outdoor_temp_f - 32.0) * 5.0 / 9.0)
+                        ) / (
+                            243.04 + ((c.outdoor_temp_f - 32.0) * 5.0 / 9.0)
+                        )
+                    )
+                ) / (
+                    17.625 - (
+                        ln(c.outdoor_rh_pct / 100.0)
+                        + (
+                            17.625 * ((c.outdoor_temp_f - 32.0) * 5.0 / 9.0)
+                        ) / (
+                            243.04 + ((c.outdoor_temp_f - 32.0) * 5.0 / 9.0)
+                        )
+                    )
+                )
+            ) * 9.0 / 5.0 + 32.0
+        END AS outdoor_dewpoint_f,
         -- Computed indoor dewpoint (Magnus); NULL if inputs missing
         c.dew_point AS indoor_dew_point,
         -- Tempest solar (W/m²); often NULL overnight
         c.solar_irradiance_w_m2,
-        -- Placeholder: outdoor_data_age_s isn't tracked in climate directly.
-        -- We reconstruct by looking at age of most-recent outdoor push to
-        -- pulled_outdoor_temp_f via setpoint_changes (source='plan' or 'band').
-        -- For replay simplicity, set 0 when outdoor_temp_f is fresh (same ts),
-        -- else NULL (invariants will treat NULL as 'stale' / gate-ineligible).
         CASE WHEN c.outdoor_temp_f IS NULL THEN NULL
-             ELSE EXTRACT(EPOCH FROM (c.ts - (
-                SELECT max(sc.ts) FROM setpoint_changes sc
-                WHERE sc.parameter = 'outdoor_temp' AND sc.ts <= c.ts
-             )))::int END AS outdoor_data_age_s,
-        -- Legacy setpoint placeholders kept so existing replay_overrides.cpp parses
-        NULL::float AS sp_temp_high, NULL::float AS sp_temp_low,
-        NULL::float AS sp_vpd_high, NULL::float AS sp_vpd_low,
-        0.0::float AS sp_bias_cool,
-        NULL::float AS sp_vpd_hysteresis,
-        NULL::float AS sp_watch_dwell_s,
-        COALESCE(
-            (SELECT o.occ FROM occ o WHERE o.ts <= c.ts ORDER BY o.ts DESC LIMIT 1),
-            false
-        ) AS occupied,
+             ELSE EXTRACT(EPOCH FROM (c.ts - outdoor_sp.ts))::int END AS outdoor_data_age_s,
+        -- Setpoints forward-filled from dispatcher snapshots.
+        sp_temp_high.value AS sp_temp_high,
+        sp_temp_low.value AS sp_temp_low,
+        sp_vpd_high.value AS sp_vpd_high,
+        sp_vpd_low.value AS sp_vpd_low,
+        sp_bias_cool.value AS sp_bias_cool,
+        sp_vpd_hysteresis.value AS sp_vpd_hysteresis,
+        sp_watch_dwell.value AS sp_watch_dwell_s,
+        sp_bias_heat.value AS sp_bias_heat,
+        sp_temp_hysteresis.value AS sp_temp_hysteresis,
+        sp_safety_max.value AS sp_safety_max,
+        sp_safety_min.value AS sp_safety_min,
+        sp_vpd_max_safe.value AS sp_vpd_max_safe,
+        sp_vpd_min_safe.value AS sp_vpd_min_safe,
+        sp_fog_escalation.value AS sp_fog_escalation_kpa,
+        sp_sw_fsm.value AS sp_sw_fsm_controller_enabled,
+        sp_mist_backoff.value AS sp_mist_backoff_s,
+        sp_mist_s2_delay.value AS sp_mist_s2_delay_s,
+        COALESCE(occ.occupied, false) AS occupied,
         -- Phase-0: greenhouse_state + mode_reason (forward-filled)
-        (SELECT m.value FROM modestate m
-         WHERE m.entity='greenhouse_state' AND m.ts <= c.ts
-         ORDER BY m.ts DESC LIMIT 1) AS greenhouse_state,
-        (SELECT m.value FROM modestate m
-         WHERE m.entity='mode_reason' AND m.ts <= c.ts
-         ORDER BY m.ts DESC LIMIT 1) AS mode_reason,
+        greenhouse_state.value AS greenhouse_state,
+        mode_reason.value AS mode_reason,
         -- Phase-0: equipment state bitmask (one column per relay)
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='fog' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_fog,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='vent' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_vent,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='fan1' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_fan1,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='fan2' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_fan2,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='heat1' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_heat1,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='heat2' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_heat2,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='mister_south' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_mister_south,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='mister_west' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_mister_west,
-        COALESCE((SELECT e.on FROM eqstate e WHERE e.equipment='mister_center' AND e.ts<=c.ts ORDER BY e.ts DESC LIMIT 1), 0) AS eq_mister_center
+        COALESCE(eq_fog.on, 0) AS eq_fog,
+        COALESCE(eq_vent.on, 0) AS eq_vent,
+        COALESCE(eq_fan1.on, 0) AS eq_fan1,
+        COALESCE(eq_fan2.on, 0) AS eq_fan2,
+        COALESCE(eq_heat1.on, 0) AS eq_heat1,
+        COALESCE(eq_heat2.on, 0) AS eq_heat2,
+        COALESCE(eq_mister_south.on, 0) AS eq_mister_south,
+        COALESCE(eq_mister_west.on, 0) AS eq_mister_west,
+        COALESCE(eq_mister_center.on, 0) AS eq_mister_center
     FROM climate c
+    LEFT JOIN LATERAL (
+        SELECT (value = 'occupied') AS occupied
+        FROM system_state
+        WHERE entity = 'occupancy' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) occ ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM system_state
+        WHERE entity = 'greenhouse_state' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) greenhouse_state ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM system_state
+        WHERE entity = 'mode_reason' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) mode_reason ON true
+    LEFT JOIN LATERAL (
+        SELECT ts
+        FROM setpoint_changes
+        WHERE parameter = 'outdoor_temp' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) outdoor_sp ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'temp_high' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_temp_high ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'temp_low' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_temp_low ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'vpd_high' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_vpd_high ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'vpd_low' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_vpd_low ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'bias_cool' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_bias_cool ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'bias_heat' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_bias_heat ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'vpd_hysteresis' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_vpd_hysteresis ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'temp_hysteresis' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_temp_hysteresis ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'vpd_watch_dwell_s' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_watch_dwell ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'safety_max' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_safety_max ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'safety_min' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_safety_min ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'safety_vpd_max' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_vpd_max_safe ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'safety_vpd_min' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_vpd_min_safe ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'fog_escalation_kpa' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_fog_escalation ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'sw_fsm_controller_enabled' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_sw_fsm ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'mist_backoff_s' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_mist_backoff ON true
+    LEFT JOIN LATERAL (
+        SELECT value
+        FROM setpoint_snapshot
+        WHERE parameter = 'mister_all_delay_s' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) sp_mist_s2_delay ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'fog' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_fog ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'vent' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_vent ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'fan1' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_fan1 ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'fan2' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_fan2 ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'heat1' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_heat1 ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'heat2' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_heat2 ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'mister_south' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_mister_south ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'mister_west' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_mister_west ON true
+    LEFT JOIN LATERAL (
+        SELECT state::int AS on
+        FROM equipment_state
+        WHERE equipment = 'mister_center' AND ts <= c.ts
+        ORDER BY ts DESC
+        LIMIT 1
+    ) eq_mister_center ON true
     WHERE ${WHERE}
     ORDER BY c.ts
 ) TO STDOUT WITH (FORMAT csv, DELIMITER E'\t', HEADER, NULL '')

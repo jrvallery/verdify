@@ -319,7 +319,7 @@ REGISTRY: dict[str, TunableDef] = {
         kind="numeric",
         min=30,
         max=900,
-        default=300,
+        default=45,
         fw_clamp_lo=30,
         fw_clamp_hi=900,
         esp_object_id="mister_engage_delay__s_",
@@ -327,7 +327,7 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="Legacy duty-cycle delay. Phase 1c may add cfg_* readback.",
+        notes="Delay before first v2 mister pulse during a sealed or vent-assist moisture cycle.",
     ),
     "mister_all_delay_s": TunableDef(
         name="mister_all_delay_s",
@@ -1274,6 +1274,34 @@ REGISTRY: dict[str, TunableDef] = {
         tier=2,
         notes="Dwell hold duration. Default 5 min. Safety rails + R2-3 "
         "dry override + vpd_min_safe rescue preempt unconditionally.",
+    ),
+    "sw_fsm_controller_enabled": TunableDef(
+        name="sw_fsm_controller_enabled",
+        kind="switch",
+        default=0,
+        esp_object_id="fsm_controller_enabled",
+        cfg_readback_object_id="cfg_fsm_controller_enabled",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=1,
+        notes="Master switch for controller v2 band-first FSM. Default OFF so "
+        "legacy firmware remains the rollback path.",
+    ),
+    "mist_backoff_s": TunableDef(
+        name="mist_backoff_s",
+        kind="numeric",
+        min=60,
+        max=3600,
+        default=600,
+        fw_clamp_lo=60,
+        fw_clamp_hi=3600,
+        esp_object_id="mist_backoff__s_",
+        cfg_readback_object_id="cfg___mist_backoff__s_",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=1,
+        notes="Controller v2 lockout after sealed humidification times out. "
+        "Suppresses another SEALED_MIST attempt without forcing venting.",
     ),
     "fog_escalation_kpa": TunableDef(
         name="fog_escalation_kpa",

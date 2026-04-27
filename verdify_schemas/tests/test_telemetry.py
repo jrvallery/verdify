@@ -73,6 +73,10 @@ class TestDiagnostics:
             active_probe_count=4,
             relief_cycle_count=0,
             vent_latch_timer_s=0,
+            sealed_timer_s=0,
+            vpd_watch_timer_s=60,
+            mist_backoff_timer_s=0,
+            vent_mist_assist_active=0,
         )
         assert d.active_probe_count == 4
 
@@ -87,6 +91,10 @@ class TestDiagnostics:
     def test_rejects_vent_latch_above_1800(self):
         with pytest.raises(ValidationError):
             Diagnostics(ts=NOW, vent_latch_timer_s=5000)
+
+    def test_rejects_vent_mist_assist_above_one(self):
+        with pytest.raises(ValidationError):
+            Diagnostics(ts=NOW, vent_mist_assist_active=2)
 
 
 class TestEquipmentStateEvent:

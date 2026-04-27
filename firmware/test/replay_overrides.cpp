@@ -28,10 +28,17 @@
 #include <fstream>
 #include <sstream>
 #include <array>
+#include <unordered_map>
+#include <ctime>
 
 static float parse_float(const std::string& s, float def = 0.0f) {
     if (s.empty() || s == "\\N" || s == "NULL") return def;
     try { return std::stof(s); } catch (...) { return def; }
+}
+
+static bool parse_bool(const std::string& s, bool def = false) {
+    if (s.empty() || s == "\\N" || s == "NULL") return def;
+    return s == "t" || s == "true" || s == "1";
 }
 
 static int parse_hour(const std::string& ts) {
@@ -44,6 +51,17 @@ static std::string parse_date(const std::string& ts) {
     return ts.substr(0, 10);
 }
 
+static uint64_t parse_ts_unix(const std::string& s) {
+    if (s.size() < 19) return 0;
+    struct tm tm{};
+    if (sscanf(s.c_str(), "%d-%d-%d %d:%d:%d",
+               &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+               &tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 6) return 0;
+    tm.tm_year -= 1900;
+    tm.tm_mon -= 1;
+    return (uint64_t)timegm(&tm);
+}
+
 enum OverrideIdx {
     OF_OCCUPANCY = 0,
     OF_FOG_RH,
@@ -52,6 +70,7 @@ enum OverrideIdx {
     OF_RELIEF_BREAKER,
     OF_SEAL_BLOCKED_TEMP,
     OF_VPD_DRY_OVERRIDE,
+    OF_FOG_HEAT_ASSIST,
     OF_COUNT
 };
 
@@ -63,6 +82,18 @@ static const char* OVERRIDE_NAMES[OF_COUNT] = {
     "relief_cycle_breaker",
     "seal_blocked_temp",
     "vpd_dry_override",
+    "fog_heat_assist",
+};
+
+static const char* OVERRIDE_SHORT_NAMES[OF_COUNT] = {
+    "occ",
+    "fRH",
+    "fT",
+    "fW",
+    "rlf",
+    "sBT",
+    "VdO",
+    "FgHt",
 };
 
 struct FlagEvent {
@@ -71,6 +102,20 @@ struct FlagEvent {
     float temp_f;
     float vpd_kpa;
     float rh_pct;
+};
+
+struct Header {
+    std::unordered_map<std::string, size_t> idx;
+    void parse(const std::string& line) {
+        std::istringstream ss(line);
+        std::string col;
+        size_t i = 0;
+        while (std::getline(ss, col, '\t')) idx[col] = i++;
+    }
+    size_t of(const std::string& name) const {
+        auto it = idx.find(name);
+        return it == idx.end() ? SIZE_MAX : it->second;
+    }
 };
 
 struct Stats {
@@ -102,12 +147,22 @@ int main(int argc, char* argv[]) {
     }
 
     std::string header;
-    std::getline(file, header);  // discard
+    std::getline(file, header);
+    Header h;
+    h.parse(header);
+    const char* required[] = {"ts", "temp_avg", "vpd_avg", "rh_avg", "occupied"};
+    for (auto name : required) {
+        if (h.of(name) == SIZE_MAX) {
+            fprintf(stderr, "Missing required column: %s\n", name);
+            return 2;
+        }
+    }
 
     ControlState state = initial_state();
     Stats stats;
     std::string line;
     std::string last_ts;
+    uint64_t last_ts_unix = 0;
 
     while (std::getline(file, line)) {
         std::vector<std::string> c;
@@ -116,21 +171,28 @@ int main(int argc, char* argv[]) {
             std::string cell;
             while (std::getline(ss, cell, '\t')) c.push_back(cell);
         }
-        if (c.size() < 14) continue;
+        auto get = [&](const std::string& name, const std::string& def = "") -> std::string {
+            size_t i = h.of(name);
+            return (i == SIZE_MAX || i >= c.size()) ? def : c[i];
+        };
 
-        const std::string& ts = c[0];
+        const std::string ts = get("ts");
         SensorInputs in{};
-        in.temp_f = parse_float(c[1], 70.0f);
-        in.vpd_kpa = parse_float(c[2], 1.0f);
-        in.rh_pct = parse_float(c[3], 60.0f);
-        in.outdoor_rh_pct = parse_float(c[4], 30.0f);
-        in.enthalpy_delta = parse_float(c[5], -5.0f);
-        in.dew_point_f = in.temp_f - 10.0f;
+        in.temp_f = parse_float(get("temp_avg"), 70.0f);
+        in.vpd_kpa = parse_float(get("vpd_avg"), 1.0f);
+        in.rh_pct = parse_float(get("rh_avg"), 60.0f);
+        in.outdoor_rh_pct = parse_float(get("outdoor_rh_pct"), 30.0f);
+        in.enthalpy_delta = parse_float(get("enthalpy_delta"), -5.0f);
+        in.dew_point_f = parse_float(get("indoor_dew_point"), in.temp_f - 10.0f);
         in.vpd_south = in.vpd_kpa;
         in.vpd_west = in.vpd_kpa;
         in.vpd_east = in.vpd_kpa;
         in.local_hour = parse_hour(ts);
-        in.occupied = (c[13] == "t" || c[13] == "true" || c[13] == "1");
+        in.occupied = parse_bool(get("occupied"), false);
+        in.outdoor_temp_f = parse_float(get("outdoor_temp_f"), NAN);
+        in.outdoor_dewpoint_f = parse_float(get("outdoor_dewpoint_f"), NAN);
+        float outdoor_age_s = parse_float(get("outdoor_data_age_s"), -1.0f);
+        in.outdoor_data_age_s = outdoor_age_s < 0.0f ? 99999u : (uint32_t)outdoor_age_s;
 
         // Skip implausible rows (missing sensor data early in history)
         if (in.temp_f < -10.0f || in.temp_f > 140.0f) continue;
@@ -143,24 +205,49 @@ int main(int argc, char* argv[]) {
         // occupancy_blocks_moisture path matches the deployed system.
         sp.occupancy_inhibit = true;
         float v;
-        if ((v = parse_float(c[6]))  > 0) sp.temp_high      = v;
-        if ((v = parse_float(c[7]))  > 0) sp.temp_low       = v;
-        if ((v = parse_float(c[8]))  > 0) sp.vpd_high       = v;
-        if ((v = parse_float(c[9]))  > 0) sp.vpd_low        = v;
-        sp.bias_cool = parse_float(c[10], 0.0f);
-        if ((v = parse_float(c[11])) > 0) sp.vpd_hysteresis = v;
-        if ((v = parse_float(c[12])) > 0) sp.vpd_watch_dwell_ms = (uint32_t)(v * 1000);
+        if ((v = parse_float(get("sp_temp_high")))  > 0) sp.temp_high = v;
+        if ((v = parse_float(get("sp_temp_low")))  > 0) sp.temp_low = v;
+        if ((v = parse_float(get("sp_vpd_high")))  > 0) sp.vpd_high = v;
+        if ((v = parse_float(get("sp_vpd_low")))  > 0) sp.vpd_low = v;
+        sp.bias_cool = parse_float(get("sp_bias_cool"), sp.bias_cool);
+        sp.bias_heat = parse_float(get("sp_bias_heat"), sp.bias_heat);
+        if ((v = parse_float(get("sp_vpd_hysteresis"))) > 0) sp.vpd_hysteresis = v;
+        if ((v = parse_float(get("sp_temp_hysteresis"))) > 0) sp.temp_hysteresis = v;
+        if ((v = parse_float(get("sp_watch_dwell_s"))) > 0) sp.vpd_watch_dwell_ms = (uint32_t)(v * 1000);
+        if ((v = parse_float(get("sp_safety_max"))) > 0) sp.safety_max = v;
+        if ((v = parse_float(get("sp_safety_min"))) > 0) sp.safety_min = v;
+        if ((v = parse_float(get("sp_vpd_max_safe"))) > 0) sp.vpd_max_safe = v;
+        if ((v = parse_float(get("sp_vpd_min_safe"))) > 0) sp.vpd_min_safe = v;
+        if ((v = parse_float(get("sp_fog_escalation_kpa"))) > 0) sp.fog_escalation_kpa = v;
+        if ((v = parse_float(get("sp_mist_backoff_s"))) > 0) sp.mist_backoff_ms = (uint32_t)(v * 1000);
+        if ((v = parse_float(get("sp_mist_s2_delay_s"))) > 0) sp.mist_s2_delay_ms = (uint32_t)(v * 1000);
+        sp.sw_fsm_controller_enabled = parse_bool(
+            get("sp_sw_fsm_controller_enabled"),
+            sp.sw_fsm_controller_enabled
+        );
         validate_setpoints(sp);
 
+        uint64_t ts_unix = parse_ts_unix(ts);
+        uint64_t delta_s = (last_ts_unix > 0 && ts_unix > last_ts_unix)
+            ? ts_unix - last_ts_unix
+            : 60;
+        if (delta_s > 600) {
+            state = initial_state();
+            delta_s = 60;
+        }
+        if (delta_s > UINT32_MAX / 1000ULL) delta_s = UINT32_MAX / 1000ULL;
+        const uint32_t dt_ms = (uint32_t)(delta_s * 1000ULL);
+        last_ts_unix = ts_unix;
+
         // Forward-simulate determine_mode() so ControlState evolves correctly
-        Mode mode = determine_mode(in, sp, state, 60000);  // 60s per row
+        Mode mode = determine_mode(in, sp, state, dt_ms);
 
         // Now evaluate_overrides() against the reconstructed state
         OverrideFlags f = evaluate_overrides(in, sp, state, mode);
         bool flags[OF_COUNT] = {
             f.occupancy_blocks_moisture, f.fog_gate_rh, f.fog_gate_temp,
             f.fog_gate_window, f.relief_cycle_breaker, f.seal_blocked_temp,
-            f.vpd_dry_override,
+            f.vpd_dry_override, f.fog_heat_assist,
         };
 
         // Bookkeeping
@@ -253,32 +340,32 @@ int main(int argc, char* argv[]) {
                   for (int v : b.second) sb += v;
                   return sa > sb;
               });
-    printf("  %-12s %5s %5s %5s %5s %5s %5s %5s  total\n",
-           "date", "occ", "fRH", "fT", "fW", "rlf", "sBT", "VdO");
+    printf("  %-12s", "date");
+    for (int i = 0; i < OF_COUNT; i++) printf(" %5s", OVERRIDE_SHORT_NAMES[i]);
+    printf("  total\n");
     int shown = 0;
     for (auto& d : stats.daily) {
         int tot = 0; for (int v : d.second) tot += v;
         if (tot == 0) continue;
-        printf("  %-12s %5d %5d %5d %5d %5d %5d %5d  %5d\n",
-               d.first.c_str(),
-               d.second[0], d.second[1], d.second[2], d.second[3],
-               d.second[4], d.second[5], d.second[6], tot);
+        printf("  %-12s", d.first.c_str());
+        for (int i = 0; i < OF_COUNT; i++) printf(" %5d", d.second[i]);
+        printf("  %5d\n", tot);
         if (++shown >= 10) break;
     }
 
     printf("\nDays 2026-04-13 → 2026-04-17 (96h review window):\n");
-    printf("  %-12s %5s %5s %5s %5s %5s %5s %5s  total\n",
-           "date", "occ", "fRH", "fT", "fW", "rlf", "sBT", "VdO");
+    printf("  %-12s", "date");
+    for (int i = 0; i < OF_COUNT; i++) printf(" %5s", OVERRIDE_SHORT_NAMES[i]);
+    printf("  total\n");
     // Re-sort by date ascending for the review window
     std::sort(stats.daily.begin(), stats.daily.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& d : stats.daily) {
         if (d.first < "2026-04-13" || d.first > "2026-04-17") continue;
         int tot = 0; for (int v : d.second) tot += v;
-        printf("  %-12s %5d %5d %5d %5d %5d %5d %5d  %5d\n",
-               d.first.c_str(),
-               d.second[0], d.second[1], d.second[2], d.second[3],
-               d.second[4], d.second[5], d.second[6], tot);
+        printf("  %-12s", d.first.c_str());
+        for (int i = 0; i < OF_COUNT; i++) printf(" %5d", d.second[i]);
+        printf("  %5d\n", tot);
     }
 
     // ── Synthetic self-test: prove every flag's code path is live ──
@@ -377,6 +464,18 @@ int main(int argc, char* argv[]) {
                f.vpd_dry_override ? "✓" : "✗ BUG",
                MODE_NAMES[m], p.st.dry_override_active ? "yes" : "no");
         if (!f.vpd_dry_override) self_test_failures++;
+    }
+    // fog_heat_assist
+    {
+        auto p = mk();
+        p.mode = SEALED_MIST;
+        p.st.mist_stage = MIST_FOG;
+        p.st.heat2_latched = true;
+        p.in.temp_f = p.sp.temp_low + 1.0f;
+        p.in.vpd_kpa = p.sp.vpd_high + 0.4f;
+        p.in.rh_pct = 55.0f;
+        auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
+        report("fog_heat_assist", f.fog_heat_assist);
     }
 
     printf("\n═══════════════════════════════════════════════════════════════\n");
