@@ -197,13 +197,14 @@
                 "value": 15
               }
             ]
-          }
+          },
+          "unit": "short"
         }
       }
     },
     {
       "id": 15,
-      "type": "stat",
+      "type": "table",
       "title": "Last Reset",
       "gridPos": {
         "h": 4,
@@ -213,7 +214,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT reset_reason FROM diagnostics WHERE reset_reason IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "rawSql": "SELECT COALESCE((SELECT reset_reason FROM diagnostics WHERE reset_reason IS NOT NULL ORDER BY ts DESC LIMIT 1), 'none') AS reset_reason",
           "refId": "A",
           "format": "table",
           "datasource": {
@@ -221,7 +222,13 @@
             "type": "grafana-postgresql-datasource"
           }
         }
-      ]
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 16,
@@ -272,8 +279,10 @@
           "custom": {
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
-          }
+            "spanNulls": true,
+            "lineWidth": 1
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {
@@ -341,8 +350,10 @@
           "custom": {
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
-          }
+            "spanNulls": true,
+            "lineWidth": 1
+          },
+          "unit": "fahrenheit"
         }
       },
       "options": {
@@ -385,8 +396,10 @@
             "fillOpacity": 40,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
-          }
+            "spanNulls": true,
+            "lineWidth": 1
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {
@@ -421,7 +434,10 @@
             "type": "grafana-postgresql-datasource"
           }
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {}
+      }
     },
     {
       "id": 45,
@@ -452,6 +468,9 @@
           "scheme": "RdYlGn",
           "reverse": true
         }
+      },
+      "fieldConfig": {
+        "defaults": {}
       }
     },
     {
@@ -1408,7 +1427,8 @@
             "fillOpacity": 10,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "lineWidth": 1
           }
         },
         "overrides": [
@@ -1700,12 +1720,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT * FROM fn_forecast_correction('temp_f', 24)",
+          "rawSql": "SELECT now() AS time, avg_error AS \"Forecast bias (\u00b0F)\" FROM fn_forecast_correction('temp_f', 24)",
           "refId": "A"
         }
       ],
       "title": "Forecast Bias (temp)",
-      "type": "timeseries"
+      "type": "stat"
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
@@ -1750,7 +1770,8 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {

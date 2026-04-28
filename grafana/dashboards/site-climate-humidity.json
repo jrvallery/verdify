@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-humidity",
-  "title": "Site: Climate \u2014 Humidity",
+  "title": "Site: Climate — Humidity",
   "editable": true,
   "panels": [
     {
@@ -421,7 +421,7 @@
           "refId": "A"
         }
       ],
-      "title": "VPD Heatmap (Hour \u00d7 Day)",
+      "title": "VPD Heatmap (Hour × Day)",
       "type": "heatmap"
     },
     {
@@ -772,7 +772,7 @@
         },
         "showValue": "always",
         "text": {},
-        "xField": "time"
+        "xField": "Zone"
       },
       "targets": [
         {
@@ -783,7 +783,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='center'\n) s\n",
+          "rawSql": "\nSELECT zone AS \"Zone\", avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_center'\n) s\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -851,17 +851,17 @@
       "targets": [
         {
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_south_h * 60 AS \"South (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_south_h > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_mister_south_h * 60 AS \"South (min)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_south_h > 0 ORDER BY date",
           "refId": "A"
         },
         {
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_west_h * 60 AS \"West (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_west_h > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_mister_west_h * 60 AS \"West (min)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_west_h > 0 ORDER BY date",
           "refId": "B"
         },
         {
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_center_h * 60 AS \"Center (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_center_h > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_mister_center_h * 60 AS \"Center (min)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_center_h > 0 ORDER BY date",
           "refId": "C"
         }
       ],

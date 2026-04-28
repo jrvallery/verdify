@@ -8,7 +8,7 @@ None.
 
 ## Next up (candidates)
 
-- [ ] **Scorecard endpoint + page.** `fn_planner_scorecard()` data isn't exposed via the public API or rendered on the site. Add `GET /api/v1/scorecard?date=` (with `response_model=`) and a Quartz page that renders the last 7 days. Coordinates with `genai`'s scorecard schema work.
+- [x] **Scorecard endpoint.** `GET /api/v1/scorecard?date=` is live-backed and returns the shared `ScorecardResponse` typed projection. The Grafana planning-quality dashboard now renders the scorecard evidence; a Quartz scorecard-history page can remain a future content enhancement.
 - [ ] **Harvest + treatment UI in vault.** `Harvest` / `Treatment` rows now exist in DB (coordinator added schemas Sprint 22). No vault page renders them. Add `vault-harvest-writer.py` + `vault-treatment-writer.py` following the daily/crop writer pattern.
 - [ ] **Vault image handling.** `ImageObservation` schema shipped Sprint 22 but no renderer shows images on crop pages. Add thumbnail gallery + latest-photo frontmatter.
 - [ ] **API pagination + filtering.** `/api/v1/crops` returns everything; as crop count grows this won't scale. Add `?limit=`/`?offset=` + `?stage=` / `?zone=` filters with proper response model updates.

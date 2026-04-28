@@ -310,7 +310,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
           "refId": "A"
         }
       ],
@@ -845,7 +845,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cost_electric) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_electric), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -881,7 +881,8 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {

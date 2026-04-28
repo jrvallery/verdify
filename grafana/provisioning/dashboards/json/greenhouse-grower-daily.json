@@ -1228,7 +1228,8 @@
           "min": 0,
           "max": 100,
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },
@@ -1302,7 +1303,8 @@
         "defaults": {
           "unit": "\u00b0F",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [

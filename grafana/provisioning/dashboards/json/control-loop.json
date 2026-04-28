@@ -270,7 +270,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -1234,7 +1235,7 @@
             {
               "refId": "B",
               "format": "time_series",
-              "rawSql": "SELECT $__time(date::timestamptz), runtime_fog_min AS \"value\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fog_min IS NOT NULL\nORDER BY date",
+              "rawSql": "SELECT $__time(date::timestamptz), runtime_fog_min AS \"value\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_fog_min IS NOT NULL\nORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1252,7 +1253,8 @@
                 "showPoints": "never",
                 "spanNulls": true,
                 "axisPlacement": "auto"
-              }
+              },
+              "unit": "pressurekpa"
             },
             "overrides": [
               {

@@ -38,7 +38,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION timescaledb; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION timescaledb; Type: COMMENT; Schema: -; Owner:
 --
 
 COMMENT ON EXTENSION timescaledb IS 'Enables scalable inserts and complex queries for time-series data (Community Edition)';
@@ -52,7 +52,7 @@ CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner:
 --
 
 COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access methods';
@@ -65,10 +65,10 @@ COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access met
 CREATE FUNCTION public.compute_enthalpy(temp_f double precision, rh_pct double precision, pressure_hpa double precision) RETURNS double precision
     LANGUAGE sql IMMUTABLE
     AS $$
-  SELECT CASE 
+  SELECT CASE
     WHEN temp_f IS NULL OR rh_pct IS NULL THEN NULL
     ELSE
-      1.006 * ((temp_f - 32) * 5.0/9.0) + 
+      1.006 * ((temp_f - 32) * 5.0/9.0) +
       (0.622 * (0.6108 * exp(17.27 * ((temp_f-32)*5.0/9.0) / (((temp_f-32)*5.0/9.0) + 237.3)) * rh_pct / 100.0 * 10.0)
        / (COALESCE(pressure_hpa, 840) - 0.6108 * exp(17.27 * ((temp_f-32)*5.0/9.0) / (((temp_f-32)*5.0/9.0) + 237.3)) * rh_pct / 100.0 * 10.0))
       * (2501.0 + 1.84 * ((temp_f-32)*5.0/9.0))
@@ -768,46 +768,41 @@ COMMENT ON FUNCTION public.fn_period_summary(start_date date, end_date date) IS 
 -- Name: fn_planner_scorecard(date); Type: FUNCTION; Schema: public; Owner: verdify
 --
 
-CREATE FUNCTION public.fn_planner_scorecard(target_date date DEFAULT CURRENT_DATE) RETURNS TABLE(metric text, value text)
-    LANGUAGE sql STABLE
+CREATE FUNCTION public.fn_planner_scorecard(p_date date DEFAULT CURRENT_DATE) RETURNS TABLE(metric text, value numeric)
+    LANGUAGE plpgsql STABLE
     AS $$
-    SELECT 'planner_score'::text,       planner_score::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'compliance_pct',            compliance_pct::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'total_stress_h',            total_stress_h::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'heat_stress_h',             heat_stress_h::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'cold_stress_h',             cold_stress_h::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'vpd_high_stress_h',         vpd_high_stress_h::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'vpd_low_stress_h',          vpd_low_stress_h::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'cost_total',                cost_total::text FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'cost_per_stress_hour',      COALESCE(cost_per_stress_hour::text, 'perfect') FROM v_planner_performance WHERE date = target_date
-    UNION ALL
-    SELECT 'dp_margin_min_f',           COALESCE(min_margin_f::text, 'n/a') FROM v_dew_point_risk WHERE date = target_date
-    UNION ALL
-    SELECT 'dp_risk_hours',             COALESCE(risk_hours::text, '0') FROM v_dew_point_risk WHERE date = target_date
-    UNION ALL
-    SELECT '7d_avg_score',              ROUND(AVG(planner_score)::numeric, 1)::text
-        FROM v_planner_performance WHERE date BETWEEN target_date - 6 AND target_date
-    UNION ALL
-    SELECT '7d_avg_stress',             ROUND(AVG(total_stress_h)::numeric, 1)::text
-        FROM v_planner_performance WHERE date BETWEEN target_date - 6 AND target_date
-    UNION ALL
-    SELECT '7d_avg_cost',               ROUND(AVG(cost_total)::numeric, 2)::text
-        FROM v_planner_performance WHERE date BETWEEN target_date - 6 AND target_date
-    UNION ALL
-    SELECT '7d_avg_dp_risk',            ROUND(COALESCE(AVG(risk_hours), 0)::numeric, 1)::text
-        FROM v_dew_point_risk WHERE date BETWEEN target_date - 6 AND target_date;
+BEGIN
+    RETURN QUERY
+    SELECT 'planner_score'::text, k.planner_score FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'compliance_pct', k.compliance_pct FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'temp_compliance_pct', k.temp_compliance_pct FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'vpd_compliance_pct', k.vpd_compliance_pct FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'total_stress_h', k.total_stress_h FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'heat_stress_h', k.heat_stress_h FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'cold_stress_h', k.cold_stress_h FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'vpd_high_stress_h', k.vpd_high_stress_h FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'vpd_low_stress_h', k.vpd_low_stress_h FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'kwh', k.kwh FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'therms', k.therms FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'water_gal', k.water_gal FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'mister_water_gal', k.mister_water_gal FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'cost_electric', k.cost_electric FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'cost_gas', k.cost_gas FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'cost_water', k.cost_water FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'cost_total', k.cost_total FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'dp_margin_min_f', k.dp_margin_min_f FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT 'dp_risk_hours', k.dp_risk_hours FROM v_daily_kpi k WHERE k.date = p_date
+    UNION ALL SELECT '7d_avg_score', round(avg(k.planner_score), 1) FROM v_daily_kpi k WHERE k.date BETWEEN p_date - 7 AND p_date - 1
+    UNION ALL SELECT '7d_avg_compliance', round(avg(k.compliance_pct), 1) FROM v_daily_kpi k WHERE k.date BETWEEN p_date - 7 AND p_date - 1
+    UNION ALL SELECT '7d_avg_cost', round(avg(k.cost_total), 2) FROM v_daily_kpi k WHERE k.date BETWEEN p_date - 7 AND p_date - 1
+    UNION ALL SELECT '7d_avg_kwh', round(avg(k.kwh), 1) FROM v_daily_kpi k WHERE k.date BETWEEN p_date - 7 AND p_date - 1
+    UNION ALL SELECT '7d_avg_therms', round(avg(k.therms), 3) FROM v_daily_kpi k WHERE k.date BETWEEN p_date - 7 AND p_date - 1
+    UNION ALL SELECT '7d_avg_water_gal', round(avg(k.water_gal), 0) FROM v_daily_kpi k WHERE k.date BETWEEN p_date - 7 AND p_date - 1;
+END;
 $$;
 
 
-ALTER FUNCTION public.fn_planner_scorecard(target_date date) OWNER TO verdify;
+ALTER FUNCTION public.fn_planner_scorecard(p_date date) OWNER TO verdify;
 
 --
 -- Name: fn_similar_observations(integer, integer); Type: FUNCTION; Schema: public; Owner: verdify
@@ -842,12 +837,12 @@ DECLARE
     hour_angle float;
 BEGIN
     doy := EXTRACT(doy FROM target_ts AT TIME ZONE 'America/Denver');
-    local_hour := EXTRACT(hour FROM target_ts AT TIME ZONE 'America/Denver') 
+    local_hour := EXTRACT(hour FROM target_ts AT TIME ZONE 'America/Denver')
                 + EXTRACT(minute FROM target_ts AT TIME ZONE 'America/Denver') / 60.0;
     decl := ASIN(0.39795 * COS(RADIANS(0.98563 * (doy - 173))));
     hour_angle := RADIANS(15.0 * (local_hour - 13.0));
     RETURN DEGREES(ASIN(
-        SIN(lat_rad) * SIN(decl) + 
+        SIN(lat_rad) * SIN(decl) +
         COS(lat_rad) * COS(decl) * COS(hour_angle)
     ));
 END;
@@ -972,15 +967,15 @@ DECLARE
     day_vpd_min FLOAT := 0.80;
     day_vpd_max FLOAT := 1.60;
 BEGIN
-    local_hour := EXTRACT(HOUR FROM target_ts AT TIME ZONE 'America/Denver') 
+    local_hour := EXTRACT(HOUR FROM target_ts AT TIME ZONE 'America/Denver')
                 + EXTRACT(MINUTE FROM target_ts AT TIME ZONE 'America/Denver') / 60.0;
-    
+
     -- Solar factor with 2-hour thermal lag
     -- Solar noon at 12:83, but greenhouse peaks at ~14:83 (2:50 PM) due to thermal mass
     -- The building takes ~2 hours to reach equilibrium after solar peak
     sun_factor := GREATEST(0, COS((local_hour - 14.5) * PI() / 14.0));
     sun_factor := sun_factor * sun_factor;
-    
+
     RETURN QUERY SELECT
         (night_temp_min + (day_temp_min - night_temp_min) * sun_factor)::float,
         (night_temp_max + (day_temp_max - night_temp_max) * sun_factor)::float,
@@ -12925,7 +12920,12 @@ CREATE TABLE public.daily_summary (
     notes text,
     greenhouse_id text DEFAULT 'vallery'::text,
     min_dp_margin_f double precision,
-    dp_risk_hours double precision
+    dp_risk_hours double precision,
+    cycles_mister_south integer,
+    cycles_mister_west integer,
+    cycles_mister_center integer,
+    cycles_drip_wall integer,
+    cycles_drip_center integer
 );
 
 
@@ -14193,6 +14193,72 @@ COMMENT ON VIEW public.v_dew_point_risk IS 'Indoor condensation risk: dew point 
 
 
 --
+-- Name: v_cycle_count_audit; Type: VIEW; Schema: public; Owner: verdify
+--
+
+CREATE VIEW public.v_cycle_count_audit AS
+ WITH equipment_edges AS (
+         SELECT (date_trunc('day'::text, (e_1.ts AT TIME ZONE 'America/Denver'::text)))::date AS date,
+            e_1.equipment,
+            count(*) FILTER (WHERE ((e_1.state IS TRUE) AND (COALESCE(e_1.lag_state, false) IS FALSE))) AS equipment_cycles
+           FROM ( SELECT equipment_state.ts,
+                    equipment_state.equipment,
+                    equipment_state.state,
+                    lag(equipment_state.state) OVER (PARTITION BY equipment_state.equipment, (date_trunc('day'::text, (equipment_state.ts AT TIME ZONE 'America/Denver'::text))) ORDER BY equipment_state.ts) AS lag_state
+                   FROM public.equipment_state
+                  WHERE (equipment_state.equipment = ANY (ARRAY['mister_south'::text, 'mister_west'::text, 'mister_center'::text, 'drip_wall'::text, 'drip_center'::text]))) e_1
+          GROUP BY ((date_trunc('day'::text, (e_1.ts AT TIME ZONE 'America/Denver'::text)))::date), e_1.equipment
+        ), firmware_cycles AS (
+         SELECT daily_summary.date,
+            'mister_south'::text AS equipment,
+            daily_summary.cycles_mister_south AS firmware_cycles
+           FROM public.daily_summary
+        UNION ALL
+         SELECT daily_summary.date,
+            'mister_west'::text AS text,
+            daily_summary.cycles_mister_west
+           FROM public.daily_summary
+        UNION ALL
+         SELECT daily_summary.date,
+            'mister_center'::text AS text,
+            daily_summary.cycles_mister_center
+           FROM public.daily_summary
+        UNION ALL
+         SELECT daily_summary.date,
+            'drip_wall'::text AS text,
+            daily_summary.cycles_drip_wall
+           FROM public.daily_summary
+        UNION ALL
+         SELECT daily_summary.date,
+            'drip_center'::text AS text,
+            daily_summary.cycles_drip_center
+           FROM public.daily_summary
+        )
+ SELECT f.date,
+    f.equipment,
+    f.firmware_cycles,
+    COALESCE(e.equipment_cycles, (0)::bigint) AS equipment_cycles,
+    (f.firmware_cycles - (COALESCE(e.equipment_cycles, (0)::bigint))::integer) AS cycle_delta,
+        CASE
+            WHEN (f.firmware_cycles IS NULL) THEN 'missing_firmware_counter'::text
+            WHEN (GREATEST(f.firmware_cycles, (COALESCE(e.equipment_cycles, (0)::bigint))::integer) = 0) THEN 'ok'::text
+            WHEN (((abs((f.firmware_cycles - (COALESCE(e.equipment_cycles, (0)::bigint))::integer)))::numeric / (GREATEST(f.firmware_cycles, (COALESCE(e.equipment_cycles, (0)::bigint))::integer))::numeric) > 0.05) THEN 'warn'::text
+            ELSE 'ok'::text
+        END AS audit_status
+   FROM (firmware_cycles f
+     LEFT JOIN equipment_edges e ON (((e.date = f.date) AND (e.equipment = f.equipment))));
+
+
+ALTER VIEW public.v_cycle_count_audit OWNER TO verdify;
+
+--
+-- Name: VIEW v_cycle_count_audit; Type: COMMENT; Schema: public; Owner: verdify
+--
+
+COMMENT ON VIEW public.v_cycle_count_audit IS 'Compares firmware per-zone mister/drip cycle counters against equipment_state rising-edge counts; >5% divergence is warn.';
+
+
+--
 -- Name: v_dif; Type: VIEW; Schema: public; Owner: verdify
 --
 
@@ -15396,6 +15462,52 @@ CREATE VIEW public.v_plan_comparison AS
 ALTER VIEW public.v_plan_comparison OWNER TO verdify;
 
 --
+-- Name: v_daily_kpi; Type: VIEW; Schema: public; Owner: verdify
+--
+
+CREATE VIEW public.v_daily_kpi AS
+ SELECT date,
+    round((COALESCE(compliance_pct, (0)::double precision))::numeric, 1) AS compliance_pct,
+    round((COALESCE(temp_compliance_pct, (0)::double precision))::numeric, 1) AS temp_compliance_pct,
+    round((COALESCE(vpd_compliance_pct, (0)::double precision))::numeric, 1) AS vpd_compliance_pct,
+    round((COALESCE(stress_hours_heat, (0)::double precision))::numeric, 2) AS heat_stress_h,
+    round((COALESCE(stress_hours_cold, (0)::double precision))::numeric, 2) AS cold_stress_h,
+    round((COALESCE(stress_hours_vpd_high, (0)::double precision))::numeric, 2) AS vpd_high_stress_h,
+    round((COALESCE(stress_hours_vpd_low, (0)::double precision))::numeric, 2) AS vpd_low_stress_h,
+    round(((((COALESCE(stress_hours_heat, (0)::double precision) + COALESCE(stress_hours_cold, (0)::double precision)) + COALESCE(stress_hours_vpd_high, (0)::double precision)) + COALESCE(stress_hours_vpd_low, (0)::double precision)))::numeric, 2) AS total_stress_h,
+    round((COALESCE(kwh_estimated, kwh_total, (0)::double precision))::numeric, 2) AS kwh,
+    round((COALESCE(therms_estimated, gas_used_therms, (0)::double precision))::numeric, 3) AS therms,
+    round((COALESCE(water_used_gal, (0)::double precision))::numeric, 0) AS water_gal,
+    round((COALESCE(mister_water_gal, (0)::double precision))::numeric, 0) AS mister_water_gal,
+    round((COALESCE(cost_electric, (0)::double precision))::numeric, 2) AS cost_electric,
+    round((COALESCE(cost_gas, (0)::double precision))::numeric, 2) AS cost_gas,
+    round((COALESCE(cost_water, (0)::double precision))::numeric, 2) AS cost_water,
+    round((COALESCE(cost_total, (0)::double precision))::numeric, 2) AS cost_total,
+    round((temp_min)::numeric, 1) AS temp_min,
+    round((temp_max)::numeric, 1) AS temp_max,
+    round((temp_avg)::numeric, 1) AS temp_avg,
+    round((vpd_min)::numeric, 2) AS vpd_min,
+    round((vpd_max)::numeric, 2) AS vpd_max,
+    round((vpd_avg)::numeric, 2) AS vpd_avg,
+    round((dli_final)::numeric, 1) AS dli,
+    round((min_dp_margin_f)::numeric, 1) AS dp_margin_min_f,
+    round((COALESCE(dp_risk_hours, (0)::double precision))::numeric, 1) AS dp_risk_hours,
+    round((((COALESCE(compliance_pct, (0)::double precision) / (100.0)::double precision) * (80)::double precision) + (GREATEST((0)::double precision, ((1.0)::double precision - LEAST((COALESCE(cost_total, (0)::double precision) / (15.0)::double precision), (1.0)::double precision))) * (20)::double precision))::numeric, 1) AS planner_score
+   FROM public.daily_summary
+  WHERE (date IS NOT NULL)
+  ORDER BY date;
+
+
+ALTER VIEW public.v_daily_kpi OWNER TO verdify;
+
+--
+-- Name: VIEW v_daily_kpi; Type: COMMENT; Schema: public; Owner: verdify
+--
+
+COMMENT ON VIEW public.v_daily_kpi IS 'Daily KPI projection consumed by fn_planner_scorecard and planner/API scorecard contracts.';
+
+
+--
 -- Name: v_planner_performance; Type: VIEW; Schema: public; Owner: verdify
 --
 
@@ -15407,6 +15519,9 @@ CREATE VIEW public.v_planner_performance AS
             COALESCE(daily_summary.stress_hours_vpd_high, (0)::double precision) AS vpd_high_stress_h,
             COALESCE(daily_summary.stress_hours_vpd_low, (0)::double precision) AS vpd_low_stress_h,
             (((COALESCE(daily_summary.stress_hours_heat, (0)::double precision) + COALESCE(daily_summary.stress_hours_cold, (0)::double precision)) + COALESCE(daily_summary.stress_hours_vpd_high, (0)::double precision)) + COALESCE(daily_summary.stress_hours_vpd_low, (0)::double precision)) AS total_stress_h,
+            COALESCE(daily_summary.compliance_pct, (0)::double precision) AS compliance_pct,
+            COALESCE(daily_summary.temp_compliance_pct, (0)::double precision) AS temp_compliance_pct,
+            COALESCE(daily_summary.vpd_compliance_pct, (0)::double precision) AS vpd_compliance_pct,
             COALESCE(daily_summary.cost_total, (0)::double precision) AS cost_total,
             COALESCE(daily_summary.cost_electric, (0)::double precision) AS cost_electric,
             COALESCE(daily_summary.cost_gas, (0)::double precision) AS cost_gas,
@@ -15420,7 +15535,9 @@ CREATE VIEW public.v_planner_performance AS
     vpd_high_stress_h,
     vpd_low_stress_h,
     total_stress_h,
-    round(((((1.0)::double precision - LEAST((total_stress_h / (24.0)::double precision), (1.0)::double precision)) * (100)::double precision))::numeric, 1) AS compliance_pct,
+    round((compliance_pct)::numeric, 1) AS compliance_pct,
+    round((temp_compliance_pct)::numeric, 1) AS temp_compliance_pct,
+    round((vpd_compliance_pct)::numeric, 1) AS vpd_compliance_pct,
     cost_total,
     cost_electric,
     cost_gas,
@@ -15429,7 +15546,7 @@ CREATE VIEW public.v_planner_performance AS
             WHEN (total_stress_h > (0)::double precision) THEN round(((cost_total / total_stress_h))::numeric, 2)
             ELSE NULL::numeric
         END AS cost_per_stress_hour,
-    round((((((1.0)::double precision - LEAST((total_stress_h / (24.0)::double precision), (1.0)::double precision)) * (80)::double precision) + (GREATEST((0)::double precision, ((1.0)::double precision - LEAST((cost_total / (15.0)::double precision), (1.0)::double precision))) * (20)::double precision)))::numeric, 1) AS planner_score
+    round(((((compliance_pct / (100.0)::double precision) * (80)::double precision) + (GREATEST((0)::double precision, ((1.0)::double precision - LEAST((cost_total / (15.0)::double precision), (1.0)::double precision))) * (20)::double precision)))::numeric, 1) AS planner_score
    FROM daily;
 
 
@@ -27830,4 +27947,3 @@ ALTER TABLE ONLY public.weather_forecast
 --
 
 \unrestrict avIDWS4kbhJ5xjUbwTNNVnQDYT9mkmaSnXLPSqCNfadCGA6jaOTd4SQ6syfCQ9L
-

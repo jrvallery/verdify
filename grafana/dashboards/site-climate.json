@@ -187,7 +187,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m\u00b2"
+              "options": "Solar W/m²"
             },
             "properties": [
               {
@@ -537,7 +537,7 @@
           "format": "time_series",
           "rawQuery": true,
           "refId": "J",
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
         },
         {
           "datasource": {
@@ -1155,7 +1155,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1273,7 +1273,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(kwh_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(kwh_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -1297,7 +1297,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Estimated kWh from equipment runtimes \u00d7 rated wattages"
+      "description": "Estimated kWh from equipment runtimes × rated wattages"
     },
     {
       "id": 106,
@@ -1319,7 +1319,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(therms_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(therms_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -1364,7 +1364,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(water_used_gal) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(water_used_gal), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -1796,7 +1796,7 @@
           "refId": "A"
         }
       ],
-      "title": "VPD Heatmap (Hour \u00d7 Day)",
+      "title": "VPD Heatmap (Hour × Day)",
       "type": "heatmap"
     },
     {
@@ -1814,7 +1814,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "\u00b0F",
+            "axisLabel": "°F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,

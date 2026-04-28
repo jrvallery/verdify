@@ -759,7 +759,8 @@
             "fillOpacity": 60,
             "gradientMode": "scheme",
             "showPoints": "never",
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           },
           "thresholds": {
             "mode": "absolute",
@@ -826,7 +827,8 @@
             "stacking": {
               "mode": "normal"
             },
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           },
           "unit": "h"
         },
@@ -1023,7 +1025,10 @@
             }
           ],
           "title": "State Durations Today",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {}
+          }
         },
         {
           "datasource": {
@@ -1052,7 +1057,10 @@
             }
           ],
           "title": "Stress Hours Today",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {}
+          }
         }
       ],
       "title": "State Machine & Stress",

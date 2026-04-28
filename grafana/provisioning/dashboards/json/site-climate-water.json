@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-water",
-  "title": "Site: Climate \u2014 Water",
+  "title": "Site: Climate — Water",
   "editable": true,
   "panels": [
     {
@@ -23,7 +23,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cost_water) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_water), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -47,7 +47,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Water cost = gallons used \u00d7 $0.00484/gal"
+      "description": "Water cost = gallons used × $0.00484/gal"
     },
     {
       "id": 7,
@@ -69,7 +69,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(water_used_gal) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(water_used_gal), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -114,7 +114,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -626,7 +626,7 @@
         },
         "showValue": "always",
         "text": {},
-        "xField": "time"
+        "xField": "Zone"
       },
       "targets": [
         {
@@ -637,7 +637,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='center'\n) s\n",
+          "rawSql": "\nSELECT zone AS \"Zone\", avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_center'\n) s\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -700,17 +700,17 @@
       "targets": [
         {
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_south_h * 60 AS \"South (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_south_h > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_mister_south_h * 60 AS \"South (min)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_south_h > 0 ORDER BY date",
           "refId": "A"
         },
         {
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_west_h * 60 AS \"West (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_west_h > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_mister_west_h * 60 AS \"West (min)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_west_h > 0 ORDER BY date",
           "refId": "B"
         },
         {
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_center_h * 60 AS \"Center (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_center_h > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_mister_center_h * 60 AS \"Center (min)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_center_h > 0 ORDER BY date",
           "refId": "C"
         }
       ],
@@ -920,7 +920,7 @@
               }
             ]
           },
-          "unit": "\u00b5S/cm"
+          "unit": "µS/cm"
         }
       },
       "gridPos": {
@@ -948,11 +948,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (\u00b5S/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (µS/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
           "refId": "A"
         }
       ],
-      "title": "Soil EC \u2014 South 1",
+      "title": "Soil EC — South 1",
       "type": "timeseries"
     },
     {
@@ -1004,6 +1004,180 @@
       ],
       "title": "South 1 Moisture",
       "type": "stat"
+    },
+    {
+      "id": 218,
+      "type": "timeseries",
+      "title": "Soil Moisture vs VPD",
+      "description": "Root-zone moisture plotted against atmospheric demand. VPD is scaled to percent-like units (kPa × 25) so drawdown can be visually compared on one axis.",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 38
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), soil_moisture_south_1 AS \"South 1 moisture\" FROM climate WHERE $__timeFilter(ts) AND soil_moisture_south_1 IS NOT NULL ORDER BY ts",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), soil_moisture_south_2 AS \"South 2 moisture\" FROM climate WHERE $__timeFilter(ts) AND soil_moisture_south_2 IS NOT NULL ORDER BY ts",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), soil_moisture_west AS \"West moisture\" FROM climate WHERE $__timeFilter(ts) AND soil_moisture_west IS NOT NULL ORDER BY ts",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), vpd_avg * 25.0 AS \"VPD x25\" FROM climate WHERE $__timeFilter(ts) AND vpd_avg IS NOT NULL ORDER BY ts",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "moisture %, VPD x25",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South 1 moisture"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South 2 moisture"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West moisture"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2CC0C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD x25"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ],
   "annotations": {
@@ -1011,5 +1185,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "version": 2
 }

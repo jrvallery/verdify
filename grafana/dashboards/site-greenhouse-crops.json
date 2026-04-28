@@ -1,6 +1,6 @@
 {
   "uid": "site-greenhouse-crops",
-  "title": "Site: Greenhouse \u2014 Crops",
+  "title": "Site: Greenhouse — Crops",
   "editable": true,
   "panels": [
     {
@@ -687,7 +687,7 @@
               }
             ]
           },
-          "unit": "\u00b5S/cm"
+          "unit": "µS/cm"
         }
       },
       "gridPos": {
@@ -715,11 +715,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (\u00b5S/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (µS/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
           "refId": "A"
         }
       ],
-      "title": "Soil EC \u2014 South 1",
+      "title": "Soil EC — South 1",
       "type": "timeseries"
     },
     {
@@ -787,7 +787,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "mol/m\u00b2/day",
+            "axisLabel": "mol/m²/day",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1054,7 +1054,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_grow_light_min > 0\nORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_grow_light_min > 0\nORDER BY date",
           "refId": "A"
         }
       ],

@@ -2235,7 +2235,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "linear"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -2613,7 +2614,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "linear"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -3064,7 +3066,8 @@
                 "fillOpacity": 60,
                 "showPoints": "never",
                 "spanNulls": false
-              }
+              },
+              "unit": "currencyUSD"
             },
             "overrides": [
               {

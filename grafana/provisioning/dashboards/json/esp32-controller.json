@@ -262,7 +262,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "short"
         },
         "overrides": []
       },
@@ -305,7 +306,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -364,7 +366,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never",
             "fillOpacity": 10
-          }
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {
@@ -517,7 +520,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -560,7 +564,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "h"
         },
         "overrides": []
       },
@@ -603,7 +608,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "h"
         },
         "overrides": []
       },
@@ -672,7 +678,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -778,7 +785,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -914,7 +922,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never",
             "fillOpacity": 10
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -1077,7 +1086,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "h"
         },
         "overrides": []
       },
@@ -1123,7 +1133,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "h"
         },
         "overrides": []
       },
@@ -1199,7 +1210,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -1387,7 +1399,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -1439,7 +1452,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -1550,7 +1564,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "short"
         },
         "overrides": []
       },
@@ -1590,7 +1605,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": []
       },

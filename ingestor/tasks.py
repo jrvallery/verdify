@@ -1978,8 +1978,10 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
                 cycles_fan1=$14, cycles_fan2=$15, cycles_heat1=$16, cycles_heat2=$17,
                 cycles_fog=$18, cycles_vent=$19,
                 cycles_grow_light=$20,
-                kwh_estimated=$21, therms_estimated=$22,
-                cost_electric=$23, cost_gas=$24, cost_water=$25, cost_total=$26
+                cycles_mister_south=$21, cycles_mister_west=$22, cycles_mister_center=$23,
+                cycles_drip_wall=$24, cycles_drip_center=$25,
+                kwh_estimated=$26, therms_estimated=$27,
+                cost_electric=$28, cost_gas=$29, cost_water=$30, cost_total=$31
             WHERE date = $1
         """,
             yesterday,
@@ -2002,6 +2004,11 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
             rt.get("fog", (0, 0))[1],
             rt.get("vent", (0, 0))[1],
             rt.get("grow_light_main", (0, 0))[1] + rt.get("grow_light_grow", (0, 0))[1],
+            rt.get("mister_south", (0, 0))[1],
+            rt.get("mister_west", (0, 0))[1],
+            rt.get("mister_center", (0, 0))[1],
+            rt.get("drip_wall", (0, 0))[1],
+            rt.get("drip_center", (0, 0))[1],
             round(kwh, 2),
             round(therms, 3),
             ce,

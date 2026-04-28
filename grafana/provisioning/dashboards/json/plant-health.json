@@ -397,7 +397,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -726,7 +727,8 @@
               }
             }
           ],
-          "custom": {}
+          "custom": {},
+          "unit": "short"
         },
         "overrides": []
       },
@@ -975,7 +977,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), MAX(gdd_cumulative) AS \"GDD\"\nFROM v_gdd\nWHERE $__timeFilter(date::timestamptz)\nGROUP BY 1\nORDER BY 1",
+          "rawSql": "SELECT $__time(date::timestamptz), MAX(gdd_cumulative) AS \"GDD\"\nFROM v_gdd\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nGROUP BY 1\nORDER BY 1",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1171,7 +1173,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), dif AS \"DIF\"\nFROM v_dif\nWHERE $__timeFilter(date::timestamptz)\nORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), dif AS \"DIF\"\nFROM v_dif\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1803,7 +1805,7 @@
             {
               "refId": "B",
               "format": "time_series",
-              "rawSql": "SELECT\n  $__time(date::timestamptz),\n  dli_final AS \"DLI (mol/m\u00b2)\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND dli_final IS NOT NULL\nORDER BY date",
+              "rawSql": "SELECT\n  $__time(date::timestamptz),\n  dli_final AS \"DLI (mol/m\u00b2)\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND dli_final IS NOT NULL\nORDER BY date",
               "alias": "Sensor DLI (deprecated)",
               "datasource": {
                 "uid": "verdify-tsdb",
@@ -1966,7 +1968,8 @@
                     "value": null
                   }
                 ]
-              }
+              },
+              "unit": "currencyUSD"
             },
             "overrides": [
               {
@@ -2094,7 +2097,8 @@
                     "value": null
                   }
                 ]
-              }
+              },
+              "unit": "percent"
             },
             "overrides": [
               {
@@ -2194,7 +2198,7 @@
             {
               "refId": "A",
               "format": "time_series",
-              "rawSql": "SELECT $__time(date::timestamptz), MAX(gdd_cumulative) AS \"GDD\"\nFROM v_gdd\nWHERE $__timeFilter(date::timestamptz)\nGROUP BY 1\nORDER BY 1",
+              "rawSql": "SELECT $__time(date::timestamptz), MAX(gdd_cumulative) AS \"GDD\"\nFROM v_gdd\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nGROUP BY 1\nORDER BY 1",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -2259,7 +2263,7 @@
             {
               "refId": "A",
               "format": "time_series",
-              "rawSql": "SELECT $__time(date::timestamptz), dif AS \"DIF\"\nFROM v_dif\nWHERE $__timeFilter(date::timestamptz)\nORDER BY date",
+              "rawSql": "SELECT $__time(date::timestamptz), dif AS \"DIF\"\nFROM v_dif\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -2419,7 +2423,7 @@
             {
               "refId": "A",
               "format": "time_series",
-              "rawSql": "SELECT $__time(date::timestamptz), gal_per_mol_dli AS \"gal/mol\" FROM v_water_efficiency WHERE $__timeFilter(date::timestamptz) ORDER BY date",
+              "rawSql": "SELECT $__time(date::timestamptz), gal_per_mol_dli AS \"gal/mol\" FROM v_water_efficiency WHERE $__timeFilter((date::timestamptz + interval '12 hours')) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"

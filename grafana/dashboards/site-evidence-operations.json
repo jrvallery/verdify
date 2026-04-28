@@ -1,6 +1,6 @@
 {
   "uid": "site-evidence-operations",
-  "title": "Site: Evidence \u2014 Operations",
+  "title": "Site: Evidence — Operations",
   "editable": true,
   "panels": [
     {
@@ -177,7 +177,39 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "UNKNOWN",
+                  "color": "red"
+                },
+                "0": {
+                  "text": "IDLE",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "VENT",
+                  "color": "blue"
+                },
+                "2": {
+                  "text": "COOL",
+                  "color": "blue"
+                },
+                "3": {
+                  "text": "HEAT",
+                  "color": "orange"
+                },
+                "4": {
+                  "text": "FOG",
+                  "color": "purple"
+                }
+              }
+            }
+          ],
+          "unit": "none"
         },
         "overrides": []
       },
@@ -196,7 +228,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1",
+          "rawSql": "SELECT now() AS time, CASE value WHEN 'IDLE' THEN 0 WHEN 'VENT' THEN 1 WHEN 'COOL' THEN 2 WHEN 'HEAT' THEN 3 WHEN 'FOG' THEN 4 ELSE -1 END AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1",
           "refId": "A"
         }
       ],
@@ -559,7 +591,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT planned_ts AS time, CASE WHEN compliant THEN 1 ELSE 0 END AS \"Compliant\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
+          "rawSql": "SELECT planned_ts AS time, CASE WHEN plan_achieved THEN 1 ELSE 0 END AS \"Compliant\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -587,7 +619,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT planned_ts AS time, delta AS \"Delta\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
+          "rawSql": "SELECT planned_ts AS time, overshoot AS \"Overshoot\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
           "refId": "B",
           "sql": {
             "columns": [
@@ -728,7 +760,9 @@
         "y": 22
       },
       "id": 14,
-      "options": {},
+      "options": {
+        "showHeader": true
+      },
       "targets": [
         {
           "datasource": {
@@ -736,12 +770,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT plan_id FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1",
+          "rawSql": "SELECT plan_id, created_at FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1",
           "refId": "A"
         }
       ],
       "title": "Active Plan",
-      "type": "stat"
+      "type": "table"
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",

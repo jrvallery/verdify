@@ -299,7 +299,8 @@
         "defaults": {
           "custom": {
             "fillOpacity": 10,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           },
           "max": 100,
           "min": 0,
@@ -347,7 +348,8 @@
         "defaults": {
           "custom": {
             "fillOpacity": 10,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           },
           "unit": "fahrenheit"
         }
@@ -393,7 +395,8 @@
         "defaults": {
           "custom": {
             "fillOpacity": 10,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           },
           "unit": "\u00b5S/cm"
         }
@@ -453,7 +456,8 @@
         "defaults": {
           "unit": "pressurekpa",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },

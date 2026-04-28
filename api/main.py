@@ -12,9 +12,11 @@ import json
 import os
 import sys
 from contextlib import asynccontextmanager
+from datetime import date
+from typing import Annotated
 
 import asyncpg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 
@@ -52,6 +54,7 @@ from verdify_schemas import (  # noqa: E402
     ZoneDetail,
     ZoneListItem,
 )
+from verdify_schemas.mcp_responses import ScorecardResponse  # noqa: E402
 
 # ── DB Connection ──
 
@@ -93,6 +96,7 @@ app = FastAPI(
 # (API, MCP crops tool, vault-crop-writer, planner) shares the same shape.
 
 DEFAULT_GREENHOUSE = "vallery"
+
 
 # ── Setpoints (ESP32 pulls this every 5 min) ──
 
@@ -320,6 +324,8 @@ async def list_crops(
     zone: str | None = None,
     stage: str | None = None,
     active: bool = True,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
     query = "SELECT c.*, (SELECT ROUND(AVG(o.health_score)::numeric, 2) FROM observations o WHERE o.crop_id = c.id AND o.health_score IS NOT NULL AND o.ts > now() - interval '7 days') AS latest_health FROM crops c WHERE c.is_active = $1 AND c.greenhouse_id = $2"
     params = [active, greenhouse_id]
@@ -332,7 +338,8 @@ async def list_crops(
         query += f" AND c.stage = ${idx}"
         params.append(stage)
         idx += 1
-    query += " ORDER BY c.zone, c.position"
+    query += f" ORDER BY c.zone, c.position LIMIT ${idx} OFFSET ${idx + 1}"
+    params.extend([limit, offset])
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
@@ -661,6 +668,17 @@ async def status():
         "observations": obs_count,
         "latest_climate_ts": latest,
     }
+
+
+@app.get("/api/v1/scorecard", response_model=ScorecardResponse)
+async def planner_scorecard(scorecard_date: Annotated[date | None, Query(alias="date")] = None):
+    """Planner scorecard metrics for a given date, defaulting to today."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT metric, value FROM fn_planner_scorecard(COALESCE($1::date, CURRENT_DATE)) ORDER BY metric",
+            scorecard_date,
+        )
+    return ScorecardResponse.from_metric_rows(rows)
 
 
 # ═══════════════════════════════════════════════════════════════════════

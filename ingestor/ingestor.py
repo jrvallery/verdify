@@ -457,12 +457,21 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
         return
 
     fairness = d.get("mister_fairness_overrides_today")
+    zone_cycles = {
+        "cycles_mister_south": d.get("cycles_mister_south"),
+        "cycles_mister_west": d.get("cycles_mister_west"),
+        "cycles_mister_center": d.get("cycles_mister_center"),
+        "cycles_drip_wall": d.get("cycles_drip_wall"),
+        "cycles_drip_center": d.get("cycles_drip_center"),
+    }
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO daily_summary (
                 date,
                 cycles_fan1, cycles_fan2, cycles_heat1, cycles_heat2,
                 cycles_fog, cycles_vent, cycles_dehum, cycles_safety_dehum,
+                cycles_mister_south, cycles_mister_west, cycles_mister_center,
+                cycles_drip_wall, cycles_drip_center,
                 runtime_fan1_min, runtime_fan2_min, runtime_heat1_min, runtime_heat2_min,
                 runtime_fog_min, runtime_vent_min,
                 runtime_mister_south_h, runtime_mister_west_h, runtime_mister_center_h,
@@ -471,7 +480,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9,
                 $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22
+                $19, $20, $21, $22, $23, $24, $25, $26, $27
             ) ON CONFLICT (date) DO UPDATE SET
                 cycles_fan1 = EXCLUDED.cycles_fan1,
                 cycles_fan2 = EXCLUDED.cycles_fan2,
@@ -481,6 +490,11 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
                 cycles_vent = EXCLUDED.cycles_vent,
                 cycles_dehum = EXCLUDED.cycles_dehum,
                 cycles_safety_dehum = EXCLUDED.cycles_safety_dehum,
+                cycles_mister_south = EXCLUDED.cycles_mister_south,
+                cycles_mister_west = EXCLUDED.cycles_mister_west,
+                cycles_mister_center = EXCLUDED.cycles_mister_center,
+                cycles_drip_wall = EXCLUDED.cycles_drip_wall,
+                cycles_drip_center = EXCLUDED.cycles_drip_center,
                 runtime_fan1_min = EXCLUDED.runtime_fan1_min,
                 runtime_fan2_min = EXCLUDED.runtime_fan2_min,
                 runtime_heat1_min = EXCLUDED.runtime_heat1_min,
@@ -505,6 +519,11 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
             int(d.get("cycles_vent") or 0),
             int(d.get("cycles_dehum") or 0),
             int(d.get("cycles_safety_dehum") or 0),
+            int(zone_cycles["cycles_mister_south"]) if zone_cycles["cycles_mister_south"] is not None else None,
+            int(zone_cycles["cycles_mister_west"]) if zone_cycles["cycles_mister_west"] is not None else None,
+            int(zone_cycles["cycles_mister_center"]) if zone_cycles["cycles_mister_center"] is not None else None,
+            int(zone_cycles["cycles_drip_wall"]) if zone_cycles["cycles_drip_wall"] is not None else None,
+            int(zone_cycles["cycles_drip_center"]) if zone_cycles["cycles_drip_center"] is not None else None,
             d.get("runtime_fan1_min"),
             d.get("runtime_fan2_min"),
             d.get("runtime_heat1_min"),

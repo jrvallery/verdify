@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-controller",
-  "title": "Site: Climate \u2014 Controller",
+  "title": "Site: Climate — Controller",
   "editable": true,
   "panels": [
     {
@@ -128,7 +128,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT temp_case AS \"\u00b0F\" FROM climate WHERE temp_case IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "rawSql": "SELECT temp_case AS \"°F\" FROM climate WHERE temp_case IS NOT NULL ORDER BY ts DESC LIMIT 1",
           "refId": "A",
           "format": "table",
           "datasource": {
@@ -139,7 +139,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "°F",
           "thresholds": {
             "steps": [
               {
@@ -203,7 +203,7 @@
     },
     {
       "id": 15,
-      "type": "stat",
+      "type": "table",
       "title": "Last Reset",
       "gridPos": {
         "h": 4,
@@ -213,7 +213,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT reset_reason FROM diagnostics WHERE reset_reason IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "rawSql": "SELECT COALESCE((SELECT reset_reason FROM diagnostics WHERE reset_reason IS NOT NULL ORDER BY ts DESC LIMIT 1), 'none') AS reset_reason",
           "refId": "A",
           "format": "table",
           "datasource": {
@@ -221,7 +221,10 @@
             "type": "grafana-postgresql-datasource"
           }
         }
-      ]
+      ],
+      "options": {
+        "showHeader": true
+      }
     },
     {
       "id": 16,
@@ -300,7 +303,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(ts), temp_case AS \"Case Temp (\u00b0F)\" FROM climate WHERE $__timeFilter(ts) AND temp_case IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), temp_case AS \"Case Temp (°F)\" FROM climate WHERE $__timeFilter(ts) AND temp_case IS NOT NULL ORDER BY ts",
           "refId": "A",
           "format": "time_series",
           "datasource": {
@@ -426,7 +429,7 @@
     {
       "id": 45,
       "type": "heatmap",
-      "title": "Oscillation Heatmap (param \u00d7 hour)",
+      "title": "Oscillation Heatmap (param × hour)",
       "gridPos": {
         "h": 8,
         "w": 18,
@@ -657,7 +660,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m\u00b2"
+              "options": "Solar W/m²"
             },
             "properties": [
               {
@@ -938,7 +941,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "J"
         },
         {
@@ -1383,7 +1386,7 @@
     {
       "id": 210,
       "type": "timeseries",
-      "title": "Enthalpy Delta (Outdoor \u2212 Indoor)",
+      "title": "Enthalpy Delta (Outdoor − Indoor)",
       "gridPos": {
         "h": 10,
         "w": 12,
@@ -1392,7 +1395,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(ts), enthalpy_delta AS \"\u0394H (kJ/kg)\" FROM climate WHERE $__timeFilter(ts) AND enthalpy_delta IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), enthalpy_delta AS \"ΔH (kJ/kg)\" FROM climate WHERE $__timeFilter(ts) AND enthalpy_delta IS NOT NULL ORDER BY ts",
           "refId": "A",
           "format": "time_series",
           "datasource": {
@@ -1415,7 +1418,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "\u0394H (kJ/kg)"
+              "options": "ΔH (kJ/kg)"
             },
             "properties": [
               {
@@ -1700,12 +1703,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT * FROM fn_forecast_correction('temp_f', 24)",
+          "rawSql": "SELECT now() AS time, avg_error AS \"Forecast bias (°F)\" FROM fn_forecast_correction('temp_f', 24)",
           "refId": "A"
         }
       ],
       "title": "Forecast Bias (temp)",
-      "type": "timeseries"
+      "type": "stat"
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",

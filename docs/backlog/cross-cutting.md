@@ -6,7 +6,7 @@ Coordinator-owned queue. Items that span 2+ agent scopes, touch shared territory
 
 - [ ] **Per-alert-type discriminated union for `AlertEnvelope`.** Requested by `ingestor`. Split the single flat shape into a discriminated union keyed by `alert_type` so each alert's `details` gets a dedicated model.
 - [ ] **Migrate `verdify_schemas.crops.ObservationAction.data` union to also accept `HarvestCreate` / `TreatmentCreate`.** (Already done in Sprint 23; verify after merge.)
-- [ ] **Scorecard typed projection** (requested by `genai` + `web`). One schema; replace the `{metric: value}` dict returned by `fn_planner_scorecard`.
+- [x] **Scorecard typed projection** (requested by `genai` + `web`). `ScorecardResponse` is the shared typed shape; migration 096 and `db/schema.sql` now match the live 25-metric numeric `fn_planner_scorecard()`, and `/api/v1/scorecard` returns that schema.
 
 ## Migrations
 
@@ -17,7 +17,7 @@ Coordinator-owned queue. Items that span 2+ agent scopes, touch shared territory
 
 - [ ] Secret Manager migration (Sprint 10 B10.5 from SaaS backlog) — credentials move from `.env` to Secret Manager refs. Touches every service.
 - [ ] Flaky `test_dew_point_risk_computes`. Pre-existing; times out after 15 s on the `docker exec` path. Either increase timeout in `conftest.py` or switch the test to asyncpg.
-- [ ] Grafana dashboard audit. 54 dashboards; some stale. Either retire a dedicated `observability` agent or run an ephemeral sweep.
+- [x] Grafana dashboard audit. 55 live dashboards / 904 panels were swept on 2026-04-28; JSON changes are committed with the web/runtime reconciliation.
 
 ## CI / tooling
 

@@ -187,7 +187,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "string"
         }
       },
       "options": {},
@@ -220,7 +221,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "string"
         }
       },
       "options": {},
@@ -425,17 +427,17 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_south_h * 60 AS \"South (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_south_h > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_south_h * 60 AS \"South (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_south_h > 0 ORDER BY date",
           "refId": "A",
           "format": "time_series"
         },
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_west_h * 60 AS \"West (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_west_h > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_west_h * 60 AS \"West (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_west_h > 0 ORDER BY date",
           "refId": "B",
           "format": "time_series"
         },
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_center_h * 60 AS \"Center (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_mister_center_h > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_mister_center_h * 60 AS \"Center (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_center_h > 0 ORDER BY date",
           "refId": "C",
           "format": "time_series"
         }
@@ -486,12 +488,12 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_drip_wall_h * 60 AS \"Wall Drip (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_drip_wall_h > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_drip_wall_h * 60 AS \"Wall Drip (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_drip_wall_h > 0 ORDER BY date",
           "refId": "A",
           "format": "time_series"
         },
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_drip_center_h * 60 AS \"Center Drip (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND runtime_drip_center_h > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_drip_center_h * 60 AS \"Center Drip (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_drip_center_h > 0 ORDER BY date",
           "refId": "B",
           "format": "time_series"
         }
@@ -664,7 +666,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(date::timestamptz), cost_water AS \"Water Cost ($)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_water > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), cost_water AS \"Water Cost ($)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND cost_water > 0 ORDER BY date",
           "refId": "A",
           "format": "time_series"
         }

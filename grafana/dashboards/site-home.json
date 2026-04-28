@@ -331,7 +331,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m\u00b2"
+              "options": "Solar W/m²"
             },
             "properties": [
               {
@@ -681,7 +681,7 @@
           "format": "time_series",
           "rawQuery": true,
           "refId": "J",
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
         },
         {
           "datasource": {
@@ -1292,7 +1292,7 @@
               },
               {
                 "id": "unit",
-                "value": "mol/m\u00b2"
+                "value": "mol/m²"
               }
             ]
           },
@@ -1325,7 +1325,7 @@
               },
               {
                 "id": "unit",
-                "value": "mol/m\u00b2"
+                "value": "mol/m²"
               }
             ]
           },
@@ -1607,7 +1607,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1727,7 +1727,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), cost_electric AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_electric AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "A"
         },
         {
@@ -1736,7 +1736,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), cost_gas AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_gas AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "B"
         },
         {
@@ -1745,7 +1745,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), cost_water AS \"Water\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_water AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "C"
         }
       ],
@@ -1791,7 +1791,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar (W/m\u00b2)"
+              "options": "Solar (W/m²)"
             },
             "properties": [
               {
@@ -1844,7 +1844,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
           "refId": "B"
         }
       ],

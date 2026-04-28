@@ -267,7 +267,8 @@
                 "value": 2
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -783,7 +784,8 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {}
+          "custom": {},
+          "unit": "currencyUSD"
         }
       },
       "options": {
@@ -921,7 +923,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "smooth"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -1071,7 +1074,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "smooth"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -1514,8 +1518,10 @@
             "fillOpacity": 10,
             "lineWidth": 2,
             "barMaxWidth": 20,
-            "showPoints": "never"
-          }
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {

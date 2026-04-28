@@ -99,7 +99,9 @@
         "y": 1
       },
       "id": 3,
-      "options": {},
+      "options": {
+        "showHeader": true
+      },
       "targets": [
         {
           "datasource": {
@@ -107,12 +109,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT plan_id FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1",
+          "rawSql": "SELECT plan_id, created_at FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1",
           "refId": "A"
         }
       ],
       "title": "Active Plan",
-      "type": "stat"
+      "type": "table"
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
@@ -345,7 +347,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m\u00b2"
+              "options": "Solar W/m²"
             },
             "properties": [
               {
@@ -695,7 +697,7 @@
           "format": "time_series",
           "rawQuery": true,
           "refId": "J",
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
         },
         {
           "datasource": {
