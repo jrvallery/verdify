@@ -1921,6 +1921,44 @@ TEST(fsm_v2_temp_band_preempts_humidification) {
     PASS();
 }
 
+TEST(fsm_v2_cooling_enters_at_raw_temp_high) {
+    auto sp = fsm_v2_setpoints();
+    sp.bias_cool = 2.0f;  // legacy offset must not move v2 outside the band
+    auto s = initial_state();
+
+    Mode m = determine_mode(make_inputs(sp.temp_high + 0.1f, 0.9f), sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_temp_high");
+    PASS();
+}
+
+TEST(fsm_v2_cold_outdoor_cooling_entry_uses_band_margin) {
+    auto sp = fsm_v2_setpoints();  // 6°F band => v2 cooling margin = 1.5°F
+    sp.dC2 = 3.0f;
+    auto s = initial_state();
+
+    auto moderate = make_inputs(sp.temp_high + 0.5f, 0.9f);
+    moderate.outdoor_temp_f = sp.temp_low - 11.0f;
+    ASSERT_EQ(determine_mode(moderate, sp, s, 5000), IDLE);
+
+    auto hot = make_inputs(sp.temp_high + v2_cool_stage2_delta_f(sp) + 0.1f, 0.9f);
+    hot.outdoor_temp_f = sp.temp_low - 11.0f;
+    ASSERT_EQ(determine_mode(hot, sp, s, 5000), VENTILATE);
+    PASS();
+}
+
+TEST(fsm_v2_cooling_stage2_is_band_scaled) {
+    auto sp = fsm_v2_setpoints();  // 6°F band => v2 S2 fan delta = 1.5°F
+    sp.dC2 = 3.0f;                 // legacy margin would wait until 81°F
+    auto s = initial_state();
+
+    auto out = resolve_equipment(VENTILATE, make_inputs(sp.temp_high + 1.6f, 1.4f), sp, s, true);
+    ASSERT_TRUE(out.vent);
+    ASSERT_TRUE(out.fan1);
+    ASSERT_TRUE(out.fan2);
+    PASS();
+}
+
 TEST(fsm_v2_safety_cool_does_not_set_vent_mist_assist) {
     auto sp = fsm_v2_setpoints();
     auto s = initial_state();

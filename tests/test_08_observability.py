@@ -122,11 +122,22 @@ class TestHeapPressureObservability:
     def test_alert_monitor_checks_heap_pressure_state(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
         assert "'heap_pressure_warning', 'heap_pressure_critical'" in body
-        assert "ORDER BY equipment, ts DESC, state ASC" in body
+        assert "recent_true" in body
+        assert "critical_logs_30m" in body
         assert "SELECT heap_bytes, ts" in body
         assert '"alert_type": "heap_pressure_warning"' in body
         assert '"alert_type": "heap_pressure_critical"' in body
         assert '"sensor_id": "equipment.heap_pressure_critical"' in body
+
+    def test_greenhouse_state_refresh_registered(self):
+        body = (REPO_ROOT / "ingestor/tasks.py").read_text()
+        migration = (REPO_ROOT / "db/migrations/098-greenhouse-state-refresh.sql").read_text()
+        assert "refresh_greenhouse_state" in body
+        assert "CREATE OR REPLACE FUNCTION refresh_greenhouse_state" in migration
+        assert "CREATE OR REPLACE VIEW v_greenhouse_state" in migration
+        assert "interval '14 days'" in migration
+        assert "Compatibility no-op" in migration
+        assert "ORDER BY equipment, ts DESC, state ASC" in migration
 
     def test_alert_monitor_refreshes_existing_alert_payloads(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
@@ -505,6 +516,27 @@ class TestSetpointConfirmation:
         assert int(result2.stdout.strip() or "0") >= 1, (
             "ingestor.py must register setpoint_confirmation_monitor in TASKS list"
         )
+
+    def test_late_phase_tunables_have_cfg_readbacks(self):
+        entity_map = _repo_entity_map()
+        sensors_source = (REPO_ROOT / "firmware" / "greenhouse" / "sensors.yaml").read_text()
+        expected = {
+            "mister_engage_delay_s",
+            "mister_all_delay_s",
+            "min_fog_on_s",
+            "min_fog_off_s",
+            "sw_dwell_gate_enabled",
+            "dwell_gate_ms",
+        }
+        assert expected <= set(entity_map.CFG_READBACK_MAP.values())
+        for param in expected:
+            assert param in sensors_source
+
+    def test_mister_selection_uses_zone_temp_stress(self):
+        controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
+        assert "zone_temp_stress" in controls_source
+        assert "target_temp_high_f" in controls_source
+        assert "east_temp" in controls_source
 
     def test_confirmation_monitor_ignores_superseded_rows(self):
         body = Path("/srv/verdify/ingestor/tasks.py").read_text()

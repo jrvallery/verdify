@@ -19,7 +19,7 @@ enum Mode {
     SAFETY_HEAT,      // temp <= safety_min → vent closed, both heaters
     SEALED_MIST,      // VPD > band ceiling → vent closed, fans off, misters pulsing
     THERMAL_RELIEF,   // sealed too long → mandatory vent burst for heat dump
-    VENTILATE,        // temp > temp_high + bias_cool → vent open, fans on
+    VENTILATE,        // temp above cooling threshold → vent open, fans on
     DEHUM_VENT,       // VPD < vpd_low → vent open for humidity dump
     IDLE              // everything in band → vent closed, no active equipment
 };

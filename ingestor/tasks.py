@@ -242,6 +242,7 @@ async def matview_refresh(pool: asyncpg.Pool) -> None:
     async with pool.acquire() as conn:
         await conn.execute("SELECT refresh_relay_stuck(0, '{}'::jsonb)")
         await conn.execute("SELECT refresh_climate_merged(0, '{}'::jsonb)")
+        await conn.execute("SELECT refresh_greenhouse_state(0, '{}'::jsonb)")
     log.debug("Materialized views refreshed")
 
 
@@ -1178,10 +1179,39 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # same lifecycle and Slack path as the other system-owned alerts.
         heap_rows = await conn.fetch(
             """
-            SELECT DISTINCT ON (equipment) equipment, state, ts
+            SELECT equipment,
+                   (array_agg(state ORDER BY ts DESC, state ASC))[1] AS latest_state,
+                   max(ts) AS latest_ts,
+                   bool_or(state) FILTER (WHERE ts > now() - interval '30 minutes') AS recent_true,
+                   max(ts) FILTER (WHERE state) AS last_true_ts
               FROM equipment_state
              WHERE equipment IN ('heap_pressure_warning', 'heap_pressure_critical')
-             ORDER BY equipment, ts DESC, state ASC
+             GROUP BY equipment
+            """
+        )
+        heap_log = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (
+                       WHERE message ILIKE '%Heap pressure CRITICAL%'
+                   ) AS critical_logs,
+                   max(ts) FILTER (
+                       WHERE message ILIKE '%Heap pressure CRITICAL%'
+                   ) AS last_critical_ts,
+                   (array_agg(message ORDER BY ts DESC) FILTER (
+                       WHERE message ILIKE '%Heap pressure CRITICAL%'
+                   ))[1] AS last_critical_message,
+                   count(*) FILTER (
+                       WHERE message ILIKE '%Heap pressure WARNING%'
+                   ) AS warning_logs,
+                   max(ts) FILTER (
+                       WHERE message ILIKE '%Heap pressure WARNING%'
+                   ) AS last_warning_ts,
+                   (array_agg(message ORDER BY ts DESC) FILTER (
+                       WHERE message ILIKE '%Heap pressure WARNING%'
+                   ))[1] AS last_warning_message
+              FROM esp32_logs
+             WHERE ts > now() - interval '30 minutes'
+               AND message ILIKE '%Heap pressure%'
             """
         )
         heap_diag = await conn.fetchrow(
@@ -1197,21 +1227,30 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         heap_critical = heap_state.get("heap_pressure_critical")
         heap_warning = heap_state.get("heap_pressure_warning")
         heap_bytes = float(heap_diag["heap_bytes"]) if heap_diag and heap_diag["heap_bytes"] is not None else None
-        critical_active = bool(heap_critical and heap_critical["state"])
-        warning_active = bool(heap_warning and heap_warning["state"])
+        critical_logs = int(heap_log["critical_logs"] or 0) if heap_log else 0
+        warning_logs = int(heap_log["warning_logs"] or 0) if heap_log else 0
+        critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
+        warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
         if heap_bytes is not None:
             # The binary sensors and diagnostics can arrive at the same second;
-            # the latest numeric heap sample is the tie-breaker so resolved
-            # heap-pressure alerts do not stick open on event ordering alone.
+            # a recent true event still matters even if a same-second false
+            # event or later diagnostic sample recovered. Alert on the
+            # transient for 30 min, then let the normal lifecycle resolve it.
             if heap_bytes < 15.0:
                 critical_active = True
                 warning_active = False
-            elif heap_bytes < 30.0:
+            elif heap_bytes < 30.0 and not critical_active:
                 critical_active = False
                 warning_active = True
-            elif heap_diag and heap_critical and heap_diag["ts"] >= heap_critical["ts"]:
+            elif not critical_active and heap_diag and heap_critical and heap_diag["ts"] >= heap_critical["latest_ts"]:
                 critical_active = False
-            if heap_bytes >= 35.0 and heap_diag and heap_warning and heap_diag["ts"] >= heap_warning["ts"]:
+            if (
+                heap_bytes >= 35.0
+                and not warning_active
+                and heap_diag
+                and heap_warning
+                and heap_diag["ts"] >= heap_warning["latest_ts"]
+            ):
                 warning_active = False
         if critical_active:
             alerts.append(
@@ -1224,9 +1263,17 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "message": "ESP32 heap pressure critical: free heap dropped below firmware critical threshold",
                     "details": {
                         "equipment": "heap_pressure_critical",
-                        "equipment_ts": heap_critical["ts"].isoformat() if heap_critical else None,
+                        "equipment_ts": heap_critical["latest_ts"].isoformat() if heap_critical else None,
+                        "last_true_ts": heap_critical["last_true_ts"].isoformat()
+                        if heap_critical and heap_critical["last_true_ts"]
+                        else None,
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
+                        "critical_logs_30m": critical_logs,
+                        "last_critical_log_ts": heap_log["last_critical_ts"].isoformat()
+                        if heap_log and heap_log["last_critical_ts"]
+                        else None,
+                        "last_critical_log_message": heap_log["last_critical_message"] if heap_log else None,
                     },
                     "metric_value": heap_bytes,
                     "threshold_value": 15.0,
@@ -1243,9 +1290,17 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "message": "ESP32 heap pressure warning: free heap stayed below firmware warning threshold",
                     "details": {
                         "equipment": "heap_pressure_warning",
-                        "equipment_ts": heap_warning["ts"].isoformat() if heap_warning else None,
+                        "equipment_ts": heap_warning["latest_ts"].isoformat() if heap_warning else None,
+                        "last_true_ts": heap_warning["last_true_ts"].isoformat()
+                        if heap_warning and heap_warning["last_true_ts"]
+                        else None,
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
+                        "warning_logs_30m": warning_logs,
+                        "last_warning_log_ts": heap_log["last_warning_ts"].isoformat()
+                        if heap_log and heap_log["last_warning_ts"]
+                        else None,
+                        "last_warning_log_message": heap_log["last_warning_message"] if heap_log else None,
                     },
                     "metric_value": heap_bytes,
                     "threshold_value": 30.0,

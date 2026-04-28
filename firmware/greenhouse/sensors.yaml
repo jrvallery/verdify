@@ -1662,6 +1662,18 @@ sensor:
       return (float)id(vpd_watch_dwell_s);
 
   - platform: template
+    id: cfg_mister_engage_delay_s
+    name: "Cfg • Mister Engage Delay (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mister_engage_delay_s);
+
+  - platform: template
     id: cfg_mister_all_delay_s
     name: "Cfg • Mister All Delay (s)"
     unit_of_measurement: "s"
@@ -1672,6 +1684,30 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return (float)id(mister_all_delay_s);
+
+  - platform: template
+    id: cfg_min_fog_on_s
+    name: "Cfg • Min Fog On (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(min_fog_on_s);
+
+  - platform: template
+    id: cfg_min_fog_off_s
+    name: "Cfg • Min Fog Off (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(min_fog_off_s);
 
   - platform: template
     id: cfg_fog_escalation_kpa
@@ -1848,6 +1884,29 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(sw_fsm_controller_enabled) ? 1.0f : 0.0f;
+
+  - platform: template
+    id: cfg_dwell_gate_enabled
+    name: "Cfg Dwell Gate Enabled"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(sw_dwell_gate_enabled) ? 1.0f : 0.0f;
+
+  - platform: template
+    id: cfg_dwell_gate_ms
+    name: "Cfg Dwell Gate Ms"
+    unit_of_measurement: "ms"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(dwell_gate_ms);
 
   - platform: template
     id: cfg_mist_backoff_s
