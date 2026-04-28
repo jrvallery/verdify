@@ -399,6 +399,12 @@ class TestProbeStalenessWiring:
             "DIAGNOSTIC_MAP must route active_probe_count to the diagnostics column"
         )
 
+    def test_sensor_health_allows_startup_probe_settling(self):
+        body = (REPO_ROOT / "scripts" / "sensor-health-sweep.sh").read_text()
+        assert "uptime_s::text" in body
+        assert "STARTUP_SETTLING" in body
+        assert "startup settling" in body
+
     def test_ingestor_writes_active_probe_count(self):
         body = self._read(self.INGESTOR_PATH)
         assert "active_probe_count" in body, "ingestor diagnostics INSERT must include active_probe_count"

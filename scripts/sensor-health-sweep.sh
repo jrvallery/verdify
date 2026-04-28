@@ -108,15 +108,21 @@ fi
 # but persistent < 4 is worth investigating.
 section "Active probe count (zone aggregation health)"
 
-PROBE_COUNT=$($DB "SELECT active_probe_count FROM diagnostics WHERE active_probe_count IS NOT NULL AND ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null | tr -d ' ')
-if [[ -z "$PROBE_COUNT" ]]; then
+PROBE_ROW=$($DB "SELECT active_probe_count || '|' || COALESCE(uptime_s::text, '?') FROM diagnostics WHERE active_probe_count IS NOT NULL AND ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null | tr -d ' ')
+if [[ -z "$PROBE_ROW" ]]; then
     warn "No active_probe_count reading in last 5 min (firmware may predate FW-10)"
-elif [[ "$PROBE_COUNT" -eq 4 ]]; then
-    pass "4/4 zone probes active"
-elif [[ "$PROBE_COUNT" -ge 2 ]]; then
-    warn "Only $PROBE_COUNT/4 zone probes active — aggregates are a partial view"
 else
-    fail "Only $PROBE_COUNT/4 zone probes active — aggregates untrustworthy"
+    IFS='|' read -r PROBE_COUNT PROBE_UPTIME <<< "$PROBE_ROW"
+    STARTUP_SETTLING=$(awk -v u="$PROBE_UPTIME" 'BEGIN { print (u != "?" && u < 120) ? 1 : 0 }')
+    if [[ "$PROBE_COUNT" -eq 4 ]]; then
+        pass "4/4 zone probes active"
+    elif [[ "$STARTUP_SETTLING" -eq 1 ]]; then
+        warn "Only $PROBE_COUNT/4 zone probes active at uptime ${PROBE_UPTIME}s — startup settling"
+    elif [[ "$PROBE_COUNT" -ge 2 ]]; then
+        warn "Only $PROBE_COUNT/4 zone probes active — aggregates are a partial view"
+    else
+        fail "Only $PROBE_COUNT/4 zone probes active — aggregates untrustworthy"
+    fi
 fi
 
 # ── 3. ESP32 DIAGNOSTICS ───────────────────────────────────────────
