@@ -28,7 +28,7 @@ const explorerOpts = {
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [],
+  afterBody: [Component.GrafanaEmbeds()],
   footer: Component.Footer({
     links: {
       "Home": "/",

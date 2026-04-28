@@ -81,6 +81,9 @@ firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
+site-doctor: ## Audit verdify.ai source, build output, and Grafana embeds
+	$(PYTHON) scripts/site-doctor.py
+
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
 	@FW_VERSION="$$(date +%Y.%-m.%-d).$$(git rev-parse --short HEAD)"; \

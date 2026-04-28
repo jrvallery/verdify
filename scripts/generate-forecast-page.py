@@ -16,6 +16,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from datetime import UTC, datetime
+from html import escape
 from pathlib import Path
 
 sys.path.insert(0, "/mnt/iris/verdify")
@@ -24,6 +25,19 @@ import yaml  # noqa: E402
 from verdify_schemas import ForecastHour, ForecastVaultFrontmatter  # noqa: E402
 
 OUT_PATH = Path("/mnt/iris/verdify-vault/website/forecast/index.md")
+
+
+def _data_table(rows: list[tuple[str, str, str]]) -> str:
+    if not rows:
+        return '<div class="metric-grid">\n  <div class="metric-card"><strong>No data</strong><p>No rows available.</p></div>\n</div>'
+    lines = ['<div class="data-table">']
+    for title, meta, body in rows:
+        lines.append(
+            f'  <div class="data-row"><strong>{escape(str(title))}</strong>'
+            f"<span>{escape(str(meta))}</span><p>{escape(str(body))}</p></div>"
+        )
+    lines.append("</div>")
+    return "\n".join(lines)
 
 
 def psql(sql: str, timeout: int = 45) -> list[list[str]]:
@@ -178,15 +192,15 @@ def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations
         "",
     ]
     if bias:
-        lines.append("| Parameter | Avg error | Samples | Interpretation |")
-        lines.append("|---|---|---|---|")
         interp = {
             "temp_f": "Open-Meteo under/over-predicts temp",
             "rh_pct": "Open-Meteo under/over-predicts RH",
             "solar_w_m2": "Open-Meteo under/over-predicts solar radiation",
         }
+        rows = []
         for p, (err, n) in bias.items():
-            lines.append(f"| `{p}` | {err} | {n} | {interp.get(p, '')} |")
+            rows.append((p, f"avg error {err}; {n} samples", interp.get(p, "")))
+        lines.append(_data_table(rows))
     else:
         lines.append("*No bias correction available — not enough observation/forecast overlap yet.*")
 
@@ -195,32 +209,37 @@ def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations
             "",
             "## Hourly — next 72 h",
             "",
-            "| Time (MDT) | °F | RH% | VPD | Solar W/m² | Cloud% | Wind mph | Precip% |",
-            "|---|---|---|---|---|---|---|---|",
         ]
     )
+    hourly_rows = []
     for h in hours:
         ts_local = h.ts.astimezone().strftime("%m-%d %H:%M")
-        lines.append(
-            f"| {ts_local} | {h.temp_f or '—'} | {h.rh_pct or '—'} | {h.vpd_kpa or '—'} "
-            f"| {h.solar_w_m2 or '—'} | {h.cloud_cover_pct or '—'} "
-            f"| {h.wind_speed_mph or '—'} | {h.precip_prob_pct or '—'} |"
+        hourly_rows.append(
+            (
+                ts_local,
+                f"{h.temp_f or '—'}°F; RH {h.rh_pct or '—'}%; VPD {h.vpd_kpa or '—'} kPa",
+                f"Solar {h.solar_w_m2 or '—'} W/m²; cloud {h.cloud_cover_pct or '—'}%; wind {h.wind_speed_mph or '—'} mph; precip {h.precip_prob_pct or '—'}%.",
+            )
         )
+    lines.append(_data_table(hourly_rows))
 
     lines.extend(
         [
             "",
             "## Days 4–7 outlook",
             "",
-            "| Day | Low °F | High °F | RH min | Precip max | VPD avg | Cloud avg |",
-            "|---|---|---|---|---|---|---|",
         ]
     )
+    daily_rows = []
     for d in daily:
-        lines.append(
-            f"| {d['day']} | {d['low']} | {d['high']} | {d['rh_min']}% "
-            f"| {d['precip_max']}% | {d['vpd_avg']} | {d['cloud_avg']}% |"
+        daily_rows.append(
+            (
+                d["day"],
+                f"{d['low']}–{d['high']}°F; RH min {d['rh_min']}%",
+                f"Precip max {d['precip_max']}%; VPD avg {d['vpd_avg']} kPa; cloud avg {d['cloud_avg']}%.",
+            )
         )
+    lines.append(_data_table(daily_rows))
 
     lines.extend(
         [
@@ -230,15 +249,17 @@ def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations
             "Last 10 deviations where observed outdoor conditions diverged far enough from the "
             "latest forecast to trigger a replan.",
             "",
-            "| Time | Parameter | Observed | Forecast | Delta |",
-            "|---|---|---|---|---|",
         ]
     )
     if deviations:
+        rows = []
         for d in deviations:
-            lines.append(f"| {d[0]} | `{d[1]}` | {d[2]} | {d[3]} | {d[4]} |")
+            rows.append((d[0], d[1], f"Observed {d[2]}; forecast {d[3]}; delta {d[4]}."))
+        lines.append(_data_table(rows))
     else:
-        lines.append("| — | *No triggered deviations in the recent log.* | | | |")
+        lines.append(
+            '<div class="metric-grid">\n  <div class="metric-card"><strong>No recent deviations</strong><p>No triggered deviations in the recent log.</p></div>\n</div>'
+        )
 
     lines.append("")
     return "\n".join(lines)

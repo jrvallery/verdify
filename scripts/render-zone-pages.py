@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -31,6 +32,18 @@ DEFAULT_OUT = Path("/mnt/iris/verdify-vault/website/greenhouse/zones")
 DSN = os.environ.get(
     "VERDIFY_DSN",
     f"postgresql://verdify:{os.environ.get('POSTGRES_PASSWORD', 'verdify_tsdb_2026')}@127.0.0.1:5432/verdify",
+)
+AUTO_BLOCK_RE = re.compile(
+    r"(?P<start>(?:\[//\]: # \(auto-render:start (?P<markdown_name>[-a-z0-9_]+)\)|"
+    r"<!-- auto-render:start (?P<html_name>[-a-z0-9_]+) -->|"
+    r'<span data-auto-render="start (?P<span_name>[-a-z0-9_]+)"></span>|'
+    r'<div class="auto-render-marker" data-auto-render="start (?P<div_name>[-a-z0-9_]+)"></div>)\n)'
+    r".*?"
+    r"(?P<end>\n(?:\[//\]: # \(auto-render:end [-a-z0-9_]+\)|"
+    r"<!-- auto-render:end [-a-z0-9_]+ -->|"
+    r'<span data-auto-render="end [-a-z0-9_]+"></span>|'
+    r'<div class="auto-render-marker" data-auto-render="end [-a-z0-9_]+"></div>))',
+    re.DOTALL,
 )
 
 
@@ -52,74 +65,139 @@ class ZoneFrontmatter(VaultFrontmatter):
 
 def _render_shelves_table(shelves: list[dict]) -> str:
     if not shelves:
-        return "_No shelves defined for this zone._"
-    lines = ["| Shelf | Kind | Tier | Position scheme |", "|---|---|---|---|"]
+        return _empty_card("No shelves", "No shelves defined for this zone.")
+    lines = ['<div class="metric-grid">']
     for s in sorted(shelves, key=lambda x: (x.get("tier") or -1, x.get("slug") or "")):
+        tier = s.get("tier") if s.get("tier") is not None else "—"
         lines.append(
-            f"| {s.get('name') or s.get('slug')} | {s['kind']} | {s.get('tier') if s.get('tier') is not None else '—'} | `{s.get('position_scheme') or '—'}` |"
+            _metric_card(
+                s.get("name") or s.get("slug"),
+                f"Kind: {s['kind']}; Tier: {tier}; Position scheme: <code>{s.get('position_scheme') or '—'}</code>",
+            )
         )
+    lines.append("</div>")
     return "\n".join(lines)
 
 
 def _render_equipment_table(equipment: list[dict]) -> str:
     if not equipment:
-        return "_No equipment assigned to this zone._"
-    lines = [
-        "| Equipment | Kind | Model | Watts | Cost/hr |",
-        "|---|---|---|---|---|",
-    ]
+        return _empty_card("No equipment", "No equipment assigned to this zone.")
+    lines = ['<div class="metric-grid">']
     for e in sorted(equipment, key=lambda x: (x["kind"], x["slug"])):
         watts = f"{e['watts']:.0f}W" if e.get("watts") else "—"
         cost = f"${e['cost_per_hour_usd']:.3f}" if e.get("cost_per_hour_usd") else "—"
-        lines.append(f"| `{e['slug']}` ({e['name']}) | {e['kind']} | {e.get('model') or '—'} | {watts} | {cost} |")
+        lines.append(
+            _metric_card(
+                f"<code>{e['slug']}</code> ({e['name']})",
+                f"Kind: {e['kind']}; Model: {e.get('model') or '—'}; Watts: {watts}; Cost/hr: {cost}",
+            )
+        )
+    lines.append("</div>")
     return "\n".join(lines)
 
 
 def _render_sensors_table(sensors: list[dict]) -> str:
     if not sensors:
-        return "_No sensors assigned to this zone._"
-    lines = ["| Sensor | Kind | Protocol | Model | Addr |", "|---|---|---|---|---|"]
+        return _empty_card("No sensors", "No sensors assigned to this zone.")
+    lines = ['<div class="metric-grid">']
     for s in sorted(sensors, key=lambda x: x["slug"]):
         addr = s.get("modbus_addr") or s.get("gpio_pin") or "—"
-        lines.append(f"| `{s['slug']}` | {s['kind']} | {s['protocol']} | {s.get('model') or '—'} | {addr} |")
+        lines.append(
+            _metric_card(
+                f"<code>{s['slug']}</code>",
+                f"Kind: {s['kind']}; Protocol: {s['protocol']}; Model: {s.get('model') or '—'}; Addr: {addr}",
+            )
+        )
+    lines.append("</div>")
     return "\n".join(lines)
 
 
 def _render_water_systems_table(water_systems: list[dict]) -> str:
     if not water_systems:
-        return "_No water systems in this zone._"
-    lines = [
-        "| System | Kind | Heads | Nozzles | Mount | Fert |",
-        "|---|---|---|---|---|---|",
-    ]
+        return _empty_card("No water systems", "No water systems in this zone.")
+    lines = ['<div class="metric-grid">']
     for w in sorted(water_systems, key=lambda x: (x["kind"], x["slug"])):
         lines.append(
-            f"| `{w['slug']}` ({w['name']}) | {w['kind']} | "
-            f"{w.get('head_count') or '—'} | {w.get('nozzle_count') or '—'} | "
-            f"{w.get('mount') or '—'} | {'yes' if w.get('is_fert_path') else 'no'} |"
+            _metric_card(
+                f"<code>{w['slug']}</code> ({w['name']})",
+                f"Kind: {w['kind']}; Heads: {w.get('head_count') or '—'}; Nozzles: {w.get('nozzle_count') or '—'}; Mount: {w.get('mount') or '—'}; Fert: {'yes' if w.get('is_fert_path') else 'no'}",
+            )
         )
+    lines.append("</div>")
     return "\n".join(lines)
 
 
 def _render_current_crops_table(crops: list[dict]) -> str:
     if not crops:
-        return "_No active crops in this zone._"
-    lines = [
-        "| Position | Crop | Stage | Planted | Days in place |",
-        "|---|---|---|---|---|",
-    ]
+        return _empty_card("No active crops", "No active crops in this zone.")
+    lines = ['<div class="data-table">']
     for c in sorted(crops, key=lambda x: x["position_label"]):
         if not c.get("is_occupied"):
             continue
+        crop_name = f"{c['crop_name']}{' (' + c['crop_variety'] + ')' if c.get('crop_variety') else ''}"
         lines.append(
-            f"| `{c['position_label']}` | {c['crop_name']}"
-            f"{' (' + c['crop_variety'] + ')' if c.get('crop_variety') else ''} "
-            f"| {c.get('crop_stage') or '—'} | {c.get('crop_planted_date') or '—'} "
-            f"| {c.get('crop_days_in_place') or 0} |"
+            f'  <div class="data-row"><strong><code>{c["position_label"]}</code></strong>'
+            f"<span>{crop_name} · {c.get('crop_stage') or '—'}</span>"
+            f"<p>Planted {c.get('crop_planted_date') or '—'}; {c.get('crop_days_in_place') or 0} days in place.</p></div>"
         )
-    if len(lines) == 2:  # no occupied rows appended
-        return "_No active crops in this zone._"
+    if len(lines) == 1:
+        return _empty_card("No active crops", "No active crops in this zone.")
+    lines.append("</div>")
     return "\n".join(lines)
+
+
+def _metric_card(title: str | None, body: str) -> str:
+    return f'  <div class="metric-card"><strong>{title or "—"}</strong><p>{body}</p></div>'
+
+
+def _empty_card(title: str, body: str) -> str:
+    return f'<div class="metric-grid">\n  <div class="metric-card"><strong>{title}</strong><p>{body}</p></div>\n</div>'
+
+
+def _render_zone_profile_cards(d: dict, zone_slug: str, status: str, position_scheme: str | None) -> str:
+    cards = [
+        (d["zone_name"], f"Slug <code>{zone_slug}</code>; status {status}."),
+        (d.get("orientation") or "—", f"Sensor Modbus addr {d.get('sensor_modbus_addr') or '—'}."),
+        ((str(d["peak_temp_f"]) + "°F") if d.get("peak_temp_f") else "—", "Recorded/known peak temperature."),
+        (
+            str(d.get("active_crops_fk_count") or 0),
+            f"Active crop records. Position scheme: <code>{position_scheme or '—'}</code>.",
+        ),
+    ]
+    lines = ['<div class="metric-grid">']
+    for title, body in cards:
+        lines.append(_metric_card(title, body))
+    lines.append("</div>")
+    return "\n".join(lines)
+
+
+def _replace_auto_blocks(existing: str, blocks: dict[str, str]) -> tuple[str, list[str], list[str]]:
+    """Replace generated blocks in an existing hybrid page."""
+    replaced: list[str] = []
+
+    def repl(match: re.Match[str]) -> str:
+        name = (
+            match.group("markdown_name")
+            or match.group("html_name")
+            or match.group("span_name")
+            or match.group("div_name")
+        )
+        if name not in blocks:
+            return match.group(0)
+        replaced.append(name)
+        return _auto_block(name, blocks[name])
+
+    updated = AUTO_BLOCK_RE.sub(repl, existing)
+    missing = [name for name in blocks if name not in replaced]
+    return updated, replaced, missing
+
+
+def _auto_block(name: str, body: str) -> str:
+    return (
+        f'<div class="auto-render-marker" data-auto-render="start {name}"></div>\n'
+        f"{body}\n"
+        f'<div class="auto-render-marker" data-auto-render="end {name}"></div>'
+    )
 
 
 def _yaml_dumps(fm: dict) -> str:
@@ -129,7 +207,7 @@ def _yaml_dumps(fm: dict) -> str:
     return yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip()
 
 
-async def render_zone(conn: asyncpg.Connection, zone_slug: str) -> tuple[str, str] | None:
+async def render_zone(conn: asyncpg.Connection, zone_slug: str) -> tuple[str, str, dict[str, str]] | None:
     """Return (filename, markdown_body) for the zone, or None if not found."""
     row = await conn.fetchrow(
         "SELECT * FROM v_zone_full WHERE greenhouse_id = 'vallery' AND zone_slug = $1",
@@ -169,6 +247,15 @@ async def render_zone(conn: asyncpg.Connection, zone_slug: str) -> tuple[str, st
     )
     fm_yaml = _yaml_dumps(fm.model_dump(exclude_none=True))
 
+    blocks = {
+        "current-plantings": _render_current_crops_table(plantings_list),
+        "shelves": _render_shelves_table(d["shelves"]),
+        "sensors": _render_sensors_table(d["sensors"]),
+        "equipment": _render_equipment_table(d["equipment"]),
+        "water-systems": _render_water_systems_table(d["water_systems"]),
+        "zone-profile": _render_zone_profile_cards(d, zone_slug, status, position_scheme),
+    }
+
     body = f"""# {d["zone_name"]}
 
 > Rendered from DB: zones + shelves + positions + sensors + equipment + water_systems.
@@ -177,40 +264,31 @@ async def render_zone(conn: asyncpg.Connection, zone_slug: str) -> tuple[str, st
 
 ## Current Plantings
 
-{_render_current_crops_table(plantings_list)}
+{_auto_block("current-plantings", blocks["current-plantings"])}
 
 ## Shelves
 
-{_render_shelves_table(d["shelves"])}
+{_auto_block("shelves", blocks["shelves"])}
 
 ## Sensors
 
-{_render_sensors_table(d["sensors"])}
+{_auto_block("sensors", blocks["sensors"])}
 
 ## Equipment
 
-{_render_equipment_table(d["equipment"])}
+{_auto_block("equipment", blocks["equipment"])}
 
 ## Water Systems
 
-{_render_water_systems_table(d["water_systems"])}
+{_auto_block("water-systems", blocks["water-systems"])}
 
 ## Zone Profile
 
-| Field | Value |
-|---|---|
-| Slug | `{zone_slug}` |
-| Name | {d["zone_name"]} |
-| Orientation | {d.get("orientation") or "—"} |
-| Status | {status} |
-| Sensor Modbus addr | {d.get("sensor_modbus_addr") or "—"} |
-| Peak temperature | {(str(d["peak_temp_f"]) + "°F") if d.get("peak_temp_f") else "—"} |
-| Position scheme | `{position_scheme or "—"}` |
-| Active crops (FK) | {d.get("active_crops_fk_count") or 0} |
+{_auto_block("zone-profile", blocks["zone-profile"])}
 """
 
     rendered = f"---\n{fm_yaml}\n---\n\n{body}"
-    return f"{zone_slug}.md", rendered
+    return f"{zone_slug}.md", rendered, blocks
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -233,17 +311,23 @@ async def run(args: argparse.Namespace) -> int:
             if result is None:
                 print(f"  SKIP {slug}: not found in v_zone_full")
                 continue
-            filename, content = result
+            filename, content, blocks = result
             target = out_dir / filename
             existing = target.read_text() if target.exists() else ""
+            mode = "full page"
+            if existing and not args.replace_page and "auto-render" in existing:
+                content, replaced, missing = _replace_auto_blocks(existing, blocks)
+                mode = f"{len(replaced)} block(s)"
+                if missing:
+                    print(f"  WARN {filename}: missing auto-render block(s): {', '.join(missing)}")
             if existing == content:
                 print(f"  UNCHANGED  {filename}")
                 continue
             if args.dry_run:
-                print(f"  WOULD WRITE  {filename} ({len(content)} chars, {content.count('\n')} lines)")
+                print(f"  WOULD WRITE  {filename} ({mode}; {len(content)} chars, {content.count('\n')} lines)")
             else:
                 target.write_text(content)
-                print(f"  WROTE  {filename}")
+                print(f"  WROTE  {filename} ({mode})")
             changes += 1
 
         print(f"\n{'Would change' if args.dry_run else 'Changed'} {changes} zone page(s)")
@@ -257,6 +341,9 @@ def main() -> None:
     p.add_argument("--zone", help="Render only this zone slug (default: all active zones)")
     p.add_argument("--out", default=str(DEFAULT_OUT), help="Output directory")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--replace-page", action="store_true", help="Overwrite the whole page instead of updating auto-render blocks"
+    )
     args = p.parse_args()
     sys.exit(asyncio.run(run(args)))
 

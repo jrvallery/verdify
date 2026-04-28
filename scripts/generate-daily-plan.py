@@ -20,6 +20,7 @@ import json
 import subprocess
 import sys
 from datetime import date, datetime
+from html import escape
 from pathlib import Path
 
 import yaml
@@ -291,6 +292,31 @@ PARAM_SHORT = {
 }
 
 
+def data_table(rows: list[tuple[str, str, str]]) -> str:
+    if not rows:
+        return '<div class="metric-grid">\n  <div class="metric-card"><strong>No data</strong><p>No rows available.</p></div>\n</div>'
+    lines = ['<div class="data-table">']
+    for title, meta, body in rows:
+        lines.append(
+            f'  <div class="data-row"><strong>{escape(str(title))}</strong>'
+            f"<span>{escape(str(meta))}</span><p>{escape(str(body))}</p></div>"
+        )
+    lines.append("</div>")
+    return "\n".join(lines)
+
+
+def metric_grid(cards: list[tuple[str, str]]) -> str:
+    if not cards:
+        return '<div class="metric-grid">\n  <div class="metric-card"><strong>No data</strong><p>No values available.</p></div>\n</div>'
+    lines = ['<div class="metric-grid">']
+    for title, body in cards:
+        lines.append(
+            f'  <div class="metric-card"><strong>{escape(str(title))}</strong><p>{escape(str(body))}</p></div>'
+        )
+    lines.append("</div>")
+    return "\n".join(lines)
+
+
 def _render_structured_hypothesis(s: dict) -> list[str]:
     """Render PlanHypothesisStructured JSON into a Conditions / Stress Windows /
     Rationale markdown block. Silent no-op if a section is missing."""
@@ -300,13 +326,15 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
         lines.append("")
         lines.append("**Conditions (structured)**")
         lines.append("")
-        lines.append("| Outdoor peak °F | RH min % | Solar peak W/m² | Avg cloud % |")
-        lines.append("|---|---|---|---|")
         lines.append(
-            f"| {conds.get('outdoor_temp_peak_f', '?')} "
-            f"| {conds.get('outdoor_rh_min_pct', '?')} "
-            f"| {conds.get('solar_peak_w_m2', '?')} "
-            f"| {conds.get('cloud_cover_avg_pct', '?')} |"
+            metric_grid(
+                [
+                    ("Outdoor peak", f"{conds.get('outdoor_temp_peak_f', '?')}°F"),
+                    ("RH minimum", f"{conds.get('outdoor_rh_min_pct', '?')}%"),
+                    ("Solar peak", f"{conds.get('solar_peak_w_m2', '?')} W/m²"),
+                    ("Cloud average", f"{conds.get('cloud_cover_avg_pct', '?')}%"),
+                ]
+            )
         )
         if conds.get("notes"):
             lines.append("")
@@ -316,29 +344,30 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
         lines.append("")
         lines.append("**Expected stress windows**")
         lines.append("")
-        lines.append("| Kind | Severity | Start | End | Mitigation |")
-        lines.append("|---|---|---|---|---|")
+        rows = []
         for w in sw:
-            lines.append(
-                f"| {w.get('kind', '?')} | {w.get('severity', '?')} "
-                f"| {w.get('start', '?')} | {w.get('end', '?')} "
-                f"| {w.get('mitigation', '')} |"
+            rows.append(
+                (
+                    w.get("kind", "?"),
+                    f"{w.get('severity', '?')} · {w.get('start', '?')} to {w.get('end', '?')}",
+                    w.get("mitigation", ""),
+                )
             )
+        lines.append(data_table(rows))
     rat = s.get("rationale") or []
     if rat:
         lines.append("")
         lines.append("**Parameter rationale**")
         lines.append("")
-        lines.append("| Parameter | Old → New | Forecast anchor | Expected effect |")
-        lines.append("|---|---|---|---|")
+        rows = []
         for r_ in rat:
             old = r_.get("old_value")
             new = r_.get("new_value")
             change = f"{old} → {new}" if old is not None else f"{new}"
-            lines.append(
-                f"| `{r_.get('parameter', '?')}` | {change} "
-                f"| {r_.get('forecast_anchor', '')} | {r_.get('expected_effect', '')} |"
+            rows.append(
+                (r_.get("parameter", "?"), f"{change}; {r_.get('forecast_anchor', '')}", r_.get("expected_effect", ""))
             )
+        lines.append(data_table(rows))
     lines.append("")
     return lines
 
@@ -368,6 +397,8 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
     for t in times:
         day = t[:10]
         if day != current_day:
+            if current_day is not None:
+                lines.append("</div>")
             current_day = day
             try:
                 d = datetime.strptime(day, "%Y-%m-%d")
@@ -375,26 +406,31 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
             except ValueError:
                 day_label = day
             lines.append(f"\n#### {day_label}\n")
-            lines.append("| Time | high | low | vpd_h | hyst | d_cool | engage | all | pulse | gap | wt | Notes |")
-            lines.append("|------|------|-----|-------|------|--------|--------|-----|-------|-----|----|-------|")
+            lines.append('<div class="data-table">')
 
         vals = by_time[t]
         time_str = t[11:16] if len(t) > 11 else t
-        cols = [time_str]
+        cols = []
         for p in CORE_PARAMS:
             v = vals.get(p, "")
-            cols.append(str(v) if v else "·")
+            cols.append(f"{PARAM_SHORT.get(p, p)} {v if v else '·'}")
         note = notes_by_time.get(t, "")
         note = note.replace("|", "—")[:40]
-        cols.append(note)
-        lines.append("| " + " | ".join(cols) + " |")
+        lines.append(
+            f'  <div class="data-row"><strong>{escape(time_str)}</strong>'
+            f"<span>{escape('; '.join(cols))}</span><p>{escape(note or 'Core setpoint transition.')}</p></div>"
+        )
+
+    if current_day is not None:
+        lines.append("</div>")
 
     # Also include non-core params as a separate small table
     non_core = [wp for wp in waypoints if wp["parameter"] not in CORE_PARAMS]
     if non_core:
-        lines.extend(["", "**Other parameters:**", "", "| Time | Parameter | Value |", "|------|-----------|-------|"])
+        rows = []
         for wp in non_core:
-            lines.append(f"| {wp['time'][11:16]} | `{wp['parameter']}` | {wp['value']} |")
+            rows.append((wp["time"][11:16], wp["parameter"], f"Value {wp['value']}."))
+        lines.extend(["", "**Other parameters:**", "", data_table(rows)])
 
     return "\n".join(lines) + "\n"
 
@@ -509,9 +545,7 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
         default_flow_style=False,
         allow_unicode=True,
     )
-    lines = ["---", yaml_block.rstrip(), "---", ""]
-
-    lines.append("---")
+    lines = ["---", yaml_block.rstrip(), "---"]
     return "\n".join(lines)
 
 
@@ -680,16 +714,24 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
 
     lines = ["## End-of-Day Summary", ""]
 
-    # Climate table
+    # Climate cards
     lines.extend(
         [
             "### Climate",
             "",
-            "| Metric | Min | Avg | Max |",
-            "|--------|-----|-----|-----|",
-            f"| Temperature (°F) | {r(summary.get('temp_min'))} | {r(summary.get('temp_avg'))} | {r(summary.get('temp_max'))} |",
-            f"| VPD (kPa) | {r(summary.get('vpd_min'), 2)} | {r(summary.get('vpd_avg'), 2)} | {r(summary.get('vpd_max'), 2)} |",
-            f"| Relative Humidity (%) | {r(summary.get('rh_min'))} | — | {r(summary.get('rh_max'))} |",
+            metric_grid(
+                [
+                    (
+                        "Temperature",
+                        f"{r(summary.get('temp_min'))}–{r(summary.get('temp_max'))}°F; avg {r(summary.get('temp_avg'))}°F",
+                    ),
+                    (
+                        "VPD",
+                        f"{r(summary.get('vpd_min'), 2)}–{r(summary.get('vpd_max'), 2)} kPa; avg {r(summary.get('vpd_avg'), 2)} kPa",
+                    ),
+                    ("Relative humidity", f"{r(summary.get('rh_min'))}–{r(summary.get('rh_max'))}%"),
+                ]
+            ),
             "",
         ]
     )
@@ -711,9 +753,14 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
         [
             "### Economics",
             "",
-            "| Electric | Gas | Water | **Total** |",
-            "|----------|-----|-------|-----------|",
-            f"| ${r(summary.get('cost_electric'), 2)} | ${r(summary.get('cost_gas'), 2)} | ${r(summary.get('cost_water'), 3)} | **${r(summary.get('cost_total'), 2)}** |",
+            metric_grid(
+                [
+                    ("Electric", f"${r(summary.get('cost_electric'), 2)}"),
+                    ("Gas", f"${r(summary.get('cost_gas'), 2)}"),
+                    ("Water", f"${r(summary.get('cost_water'), 3)}"),
+                    ("Total", f"${r(summary.get('cost_total'), 2)}"),
+                ]
+            ),
             "",
         ]
     )
@@ -723,18 +770,24 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
         [
             "### Equipment Runtimes",
             "",
-            "| Equipment | Runtime |",
-            "|-----------|---------|",
-            f"| Fan 1 | {r(summary.get('runtime_fan1_min'), 0)} min |",
-            f"| Fan 2 | {r(summary.get('runtime_fan2_min'), 0)} min |",
-            f"| Vent | {r(summary.get('runtime_vent_min'), 0)} min |",
-            f"| Fog | {r(summary.get('runtime_fog_min'), 0)} min |",
-            f"| Heat 1 (electric) | {r(summary.get('runtime_heat1_min'), 0)} min |",
-            f"| Heat 2 (gas) | {r(summary.get('runtime_heat2_min'), 0)} min |",
-            f"| Grow lights | {r(summary.get('runtime_grow_light_min'), 0)} min |",
-            f"| Mister south | {r(summary.get('runtime_mister_south_h'), 2)}h |",
-            f"| Mister west | {r(summary.get('runtime_mister_west_h'), 2)}h |",
-            f"| Mister center | {r(summary.get('runtime_mister_center_h'), 2)}h |",
+            data_table(
+                [
+                    ("Fan 1", f"{r(summary.get('runtime_fan1_min'), 0)} min", "Primary exhaust runtime."),
+                    ("Fan 2", f"{r(summary.get('runtime_fan2_min'), 0)} min", "Secondary exhaust runtime."),
+                    ("Vent", f"{r(summary.get('runtime_vent_min'), 0)} min", "Intake vent runtime."),
+                    ("Fog", f"{r(summary.get('runtime_fog_min'), 0)} min", "Fogger runtime."),
+                    ("Heat 1 electric", f"{r(summary.get('runtime_heat1_min'), 0)} min", "Electric heater runtime."),
+                    ("Heat 2 gas", f"{r(summary.get('runtime_heat2_min'), 0)} min", "Gas heater runtime."),
+                    (
+                        "Grow lights",
+                        f"{r(summary.get('runtime_grow_light_min'), 0)} min",
+                        "Supplemental lighting runtime.",
+                    ),
+                    ("Mister south", f"{r(summary.get('runtime_mister_south_h'), 2)}h", "South mister runtime."),
+                    ("Mister west", f"{r(summary.get('runtime_mister_west_h'), 2)}h", "West mister runtime."),
+                    ("Mister center", f"{r(summary.get('runtime_mister_center_h'), 2)}h", "Center mister runtime."),
+                ]
+            ),
             "",
         ]
     )
@@ -767,24 +820,24 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
             [
                 "### Crop Health (Gemini Vision)",
                 "",
-                "| Crop | Zone | Health | Obs | Notes |",
-                "|------|------|--------|-----|-------|",
             ]
         )
+        rows = []
         for row in crop_health:
             if len(row) >= 5:
                 health_pct = f"{float(row[2].strip()) * 100:.0f}%" if row[2].strip() else "—"
                 notes = row[4].strip()[:60] if row[4].strip() else "—"
-                lines.append(f"| {row[0].strip()} | {row[1].strip()} | {health_pct} | {row[3].strip()} | {notes} |")
+                rows.append((row[0].strip(), f"{row[1].strip()} · health {health_pct} · {row[3].strip()} obs", notes))
+        lines.append(data_table(rows))
         lines.append("")
 
     # Hourly pattern (compact)
     if hourly:
-        lines.extend(
-            ["### Hourly Pattern", "", "| Hour | Temp °F | VPD kPa | RH % |", "|------|---------|---------|------|"]
-        )
+        lines.extend(["### Hourly Pattern", ""])
+        rows = []
         for h in hourly:
-            lines.append(f"| {h['hour']} | {h['temp']} | {h['vpd']} | {h['rh']} |")
+            rows.append((h["hour"], f"{h['temp']}°F; VPD {h['vpd']} kPa", f"RH {h['rh']}%."))
+        lines.append(data_table(rows))
         lines.append("")
 
     return "\n".join(lines)
@@ -810,7 +863,12 @@ def generate_day(d: date) -> str:
     frontmatter = generate_frontmatter(d, plans, summary, setpoints)
 
     # Title
-    body = [f"# {title}", ""]
+    body = [
+        "[//]: # (auto-generated by scripts/generate-daily-plan.py; source: daily_summary + plan_journal)",
+        "",
+        f"# {title}",
+        "",
+    ]
 
     if not plans:
         body.extend(["*No planning cycles recorded for this day.*", ""])
@@ -831,12 +889,12 @@ def generate_day(d: date) -> str:
             [
                 "## 7-Day Stress Context",
                 "",
-                "| Date | Heat (h) | VPD High (h) | Cold (h) |",
-                "|------|----------|--------------|----------|",
             ]
         )
+        rows = []
         for s in stress_ctx:
-            body.append(f"| {s['date']} | {s['heat']} | {s['vpd_high']} | {s['cold']} |")
+            rows.append((s["date"], f"Heat {s['heat']}h; VPD high {s['vpd_high']}h", f"Cold stress {s['cold']}h."))
+        body.append(data_table(rows))
         body.append("")
 
     return frontmatter + "\n\n" + "\n".join(body)
