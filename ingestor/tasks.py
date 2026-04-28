@@ -2424,8 +2424,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
                    AVG(co2_ppm) AS co2_avg, MAX(dli_today) AS dli_final,
                    MAX(mister_water_today) AS mister_water_gal
             FROM climate
-            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND temp_avg IS NOT NULL
         """,
             today,
@@ -2438,7 +2438,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT parameter, value, ts
             FROM setpoint_changes
             WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
-              AND ts <= ($1::date + 1) AT TIME ZONE 'America/Denver'
+              AND ts <= ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND CASE
                   WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
                   WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
@@ -2465,8 +2465,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         readings = await conn.fetch(
             """
             SELECT ts, temp_avg, vpd_avg FROM climate
-            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND temp_avg IS NOT NULL
             ORDER BY ts
             """,
@@ -2542,11 +2542,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         rt_rows = await conn.fetch(
             """
             WITH day_bounds AS (
-                SELECT $1::date AT TIME ZONE 'America/Denver' AS day_start,
-                       ($1::date + 1) AT TIME ZONE 'America/Denver' AS day_end
+                SELECT $1::date::timestamp AT TIME ZONE 'America/Denver' AS day_start,
+                       ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver' AS day_end
             ),
             transitions AS (
                 SELECT equipment, ts, state,
+                       lag(state) OVER (PARTITION BY equipment ORDER BY ts) AS prev_state,
                        lead(ts) OVER (PARTITION BY equipment ORDER BY ts) AS next_ts
                 FROM equipment_state, day_bounds
                 WHERE ts >= day_bounds.day_start AND ts < day_bounds.day_end
@@ -2555,7 +2556,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT equipment,
                    round(sum(extract(epoch FROM
                        coalesce(next_ts, (SELECT day_end FROM day_bounds)) - ts
-                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes
+                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes,
+                   count(*) FILTER (
+                       WHERE state IS TRUE
+                         AND COALESCE(prev_state, FALSE) IS FALSE
+                   ) AS cycles
             FROM transitions
             GROUP BY equipment
         """,
@@ -2563,6 +2568,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             list(_RT_EQUIP),
         )
         rt = {r["equipment"]: float(r["on_minutes"] or 0) for r in rt_rows}
+        cycles = {r["equipment"]: int(r["cycles"] or 0) for r in rt_rows}
 
         # Energy from runtimes
         kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
@@ -2573,8 +2579,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             await conn.fetchval(
                 """
             SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
-            FROM climate WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            FROM climate WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND water_total_gal > 0
         """,
                 today,
@@ -2611,7 +2617,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
                 min_dp_margin_f=$36, dp_risk_hours=$37,
                 compliance_pct=$38,
                 temp_compliance_pct=$39,
-                vpd_compliance_pct=$40
+                vpd_compliance_pct=$40,
+                cycles_mister_south=$41,
+                cycles_mister_west=$42,
+                cycles_mister_center=$43,
+                cycles_drip_wall=$44,
+                cycles_drip_center=$45
             WHERE date = $1
         """,
             today,
@@ -2654,6 +2665,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             compliance_pct,
             temp_compliance_pct,
             vpd_compliance_pct,
+            cycles.get("mister_south", 0),
+            cycles.get("mister_west", 0),
+            cycles.get("mister_center", 0),
+            cycles.get("drip_wall", 0),
+            cycles.get("drip_center", 0),
         )
 
     log.info(
