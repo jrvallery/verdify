@@ -103,6 +103,8 @@ EQUIPMENT_BINARY_MAP: dict[str, str] = {
     "economiser_blocked": "economiser_blocked",
     "leak_detected": "leak_detected",  # SAFETY CRITICAL
     "water_flowing": "water_flowing",
+    "heap_pressure_warning": "heap_pressure_warning",
+    "heap_pressure_critical": "heap_pressure_critical",
     "fan_burst_active": "fan_burst_active",
     "fog_burst_active": "fog_burst_active",
     "vent_bypass_active": "vent_bypass_active",
@@ -277,6 +279,9 @@ SETPOINT_MAP: dict[str, str] = {
     # Phase-2 dwell gate (plan firmware stabilization).
     "dwell_gate_ms": "dwell_gate_ms",
     "dwell_gate_enabled": "sw_dwell_gate_enabled",
+    # Controller v2: band-first FSM.
+    "fsm_controller_enabled": "sw_fsm_controller_enabled",
+    "mist_backoff__s_": "mist_backoff_s",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -300,6 +305,12 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     # (vent_latch_timer_s). See migration 082.
     "relief_cycle_count": "relief_cycle_count",  # SensorInfo, 0-max_relief_cycles
     "vent_latch_timer_s": "vent_latch_timer_s",  # SensorInfo, 0-1800 s
+    # Controller v2 diagnostics (migration 094): expose the timers that drive
+    # SEALED_MIST entry/backoff plus the hot/dry vent moisture-assist flag.
+    "sealed_timer_s": "sealed_timer_s",
+    "vpd_watch_timer_s": "vpd_watch_timer_s",
+    "mist_backoff_timer_s": "mist_backoff_timer_s",
+    "vent_mist_assist_active": "vent_mist_assist_active",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -403,6 +414,8 @@ CFG_READBACK_MAP: dict[str, str] = {
     # these but firmware never echoed — alert_monitor couldn't verify
     # landings. Same "Cfg • Foo Bar (unit)" → cfg___foo_bar__unit_
     # slug pattern as sprint-15 block above.
+    "cfg_fsm_controller_enabled": "sw_fsm_controller_enabled",
+    "cfg___mist_backoff__s_": "mist_backoff_s",
     "cfg___mister_pulse_on__s_": "mister_pulse_on_s",
     "cfg___mister_pulse_gap__s_": "mister_pulse_gap_s",
     "cfg___mister_water_budget__gal_": "mister_water_budget_gal",

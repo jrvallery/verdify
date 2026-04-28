@@ -415,7 +415,7 @@ globals:
   - id: mister_engage_delay_s
     type: int
     restore_value: no
-    initial_value: '300'
+    initial_value: '45'
 
   - id: mister_all_delay_s
     type: int
@@ -868,6 +868,21 @@ globals:
     type: int
     restore_value: no
     initial_value: '300000'   # 5 min
+
+  # ─── Controller v2: band-first FSM ───────────────────────────────
+  # Default OFF so legacy firmware remains the rollback path. When ON,
+  # determine_mode() routes through determine_mode_v2(): temp-band first,
+  # VPD-band second, failed sealed misting enters backoff instead of
+  # forcing VENTILATE.
+  - id: sw_fsm_controller_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: mist_backoff_s
+    type: int
+    restore_value: no
+    initial_value: '600'
 
   # ─── Occupancy-based mist inhibit ───
   - id: greenhouse_occupied

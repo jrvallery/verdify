@@ -104,6 +104,24 @@ class TestViewsCompute:
         rows = db_query_rows("SELECT * FROM v_stress_hours_today LIMIT 1")
         assert len(rows) >= 1, "v_stress_hours_today returned no rows"
 
+    def test_stress_hours_do_not_exceed_elapsed_day(self):
+        rows = db_query_rows(
+            """
+            WITH elapsed AS (
+                SELECT EXTRACT(EPOCH FROM (
+                    now() - (date_trunc('day', now() AT TIME ZONE 'America/Denver') AT TIME ZONE 'America/Denver')
+                )) / 3600.0 AS hours
+            )
+            SELECT cold_stress_hours, heat_stress_hours, vpd_stress_hours, vpd_low_hours, elapsed.hours
+            FROM v_stress_hours_today, elapsed
+            LIMIT 1
+            """
+        )
+        assert rows, "v_stress_hours_today returned no rows"
+        cold, heat, vpd_high, vpd_low, elapsed_hours = [float(v) for v in rows[0].split("|")]
+        for value in (cold, heat, vpd_high, vpd_low):
+            assert value <= elapsed_hours + 0.25
+
     def test_dew_point_risk_computes(self):
         rows = db_query_rows(
             "SELECT * FROM v_dew_point_risk WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 1 LIMIT 1"

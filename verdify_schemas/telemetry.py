@@ -152,6 +152,10 @@ class Diagnostics(BaseModel):
     active_probe_count: int | None = Field(default=None, ge=0, le=4)
     relief_cycle_count: int | None = Field(default=None, ge=0)
     vent_latch_timer_s: int | None = Field(default=None, ge=0, le=1800)
+    sealed_timer_s: int | None = Field(default=None, ge=0)
+    vpd_watch_timer_s: int | None = Field(default=None, ge=0)
+    mist_backoff_timer_s: int | None = Field(default=None, ge=0)
+    vent_mist_assist_active: int | None = Field(default=None, ge=0, le=1)
 
 
 # Every equipment_state row asserts one of these. Must cover every value in
@@ -202,6 +206,8 @@ EquipmentId = Literal[
     # Firmware gates / health (ESP32 BinarySensor)
     "mister_budget_exceeded",
     "economiser_blocked",
+    "heap_pressure_warning",
+    "heap_pressure_critical",
     "sntp_status",
     # Config switches (ESP32 Switch / HA switch sync)
     "economiser_enabled",

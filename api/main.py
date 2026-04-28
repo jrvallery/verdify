@@ -124,7 +124,8 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 'fog_rh_ceiling_pct','fog_min_temp_f','fog_time_window_start','fog_time_window_end',
                 'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold',
                 'safety_min','safety_max','safety_vpd_min','safety_vpd_max',
-                'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min'
+                'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min',
+                'sw_fsm_controller_enabled','mist_backoff_s'
               )
             ORDER BY parameter, ts DESC
         """,
@@ -201,7 +202,6 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             if outdoor["outdoor_rh_pct"]:
                 params["outdoor_rh"] = round(outdoor["outdoor_rh_pct"], 0)
     lines = [f"{k}={v}" for k, v in sorted(params.items())]
-    lines.append("source=local")
     from fastapi.responses import PlainTextResponse
 
     return PlainTextResponse(content="\n".join(lines) + "\n")

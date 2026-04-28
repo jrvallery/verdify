@@ -134,10 +134,34 @@ def test_gather_context_returns_sentinel_on_timeout():
 def test_gather_context_returns_stdout_on_success():
     """Happy path still returns real context stdout, not the sentinel."""
     fake_result = MagicMock(returncode=0, stdout="=== CONTEXT ===\nTemp: 75F\n", stderr="")
-    with patch("iris_planner.subprocess.run", return_value=fake_result):
+    with (
+        patch("iris_planner.subprocess.run", return_value=fake_result),
+        patch("iris_planner._resolve_plan_context_failures") as resolve,
+    ):
         result = iris_planner.gather_context()
     assert result == "=== CONTEXT ===\nTemp: 75F\n"
     assert result != iris_planner.CONTEXT_GATHER_FAILED_SENTINEL
+    resolve.assert_called_once_with()
+
+
+def test_record_plan_context_failure_dedupes_open_alerts():
+    with patch("iris_planner._run_alert_sql") as run_sql:
+        iris_planner._record_plan_context_failure("nonzero_exit", "boom", 1)
+
+    sql = run_sql.call_args.args[0]
+    assert "WITH updated AS" in sql
+    assert "WHERE NOT EXISTS (SELECT 1 FROM updated)" in sql
+    assert "plan_context_failed" in sql
+
+
+def test_resolve_plan_context_failures_marks_open_alerts_resolved():
+    with patch("iris_planner._run_alert_sql") as run_sql:
+        iris_planner._resolve_plan_context_failures()
+
+    sql = run_sql.call_args.args[0]
+    assert "disposition = 'resolved'" in sql
+    assert "auto-resolved: context gather succeeded" in sql
+    assert "source = 'iris_planner'" in sql
 
 
 # ── S24.9.5 — zero-variance rule param list ────────────────────────
@@ -157,6 +181,16 @@ def test_zero_variance_rule_covers_vpd_target_west():
     # All four zone targets should be in the zero-variance scan list
     for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):
         assert f'"{param}"' in tasks_source, f"zero-variance rule missing {param}"
+
+
+def test_zero_variance_rule_skips_empty_zone_target_fallbacks():
+    """A zone target pinned at its fallback is expected when that zone has no active crop."""
+    import tasks
+
+    tasks_source = Path(tasks.__file__).read_text()
+    assert "active_crop_zones" in tasks_source
+    assert "zone_target_params" in tasks_source
+    assert "if zone in active_crop_zones" in tasks_source
 
 
 def test_zero_variance_rule_also_covers_band_params():

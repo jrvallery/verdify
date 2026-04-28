@@ -128,6 +128,8 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "summer_vent_min_runtime_s",
         # Phase-2 dwell gate (plan firmware stabilization).
         "dwell_gate_ms",
+        # Controller v2: band-first FSM.
+        "mist_backoff_s",
     }
 )
 
@@ -154,6 +156,8 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         "sw_mister_closes_vent",
         # Phase-2 dwell gate master switch.
         "sw_dwell_gate_enabled",
+        # Controller v2 master switch.
+        "sw_fsm_controller_enabled",
     }
 )
 

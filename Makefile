@@ -7,7 +7,7 @@ PYTEST := $(PYTHON) -m pytest
 RUFF := $(VENV)/bin/ruff
 ESPHOME := $(VENV)/bin/esphome
 
-.PHONY: help test lint format check firmware-check smoke clean
+.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all smoke clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -98,12 +98,29 @@ test-v: ## Run tests with verbose output
 firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
 	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
 
+firmware-check-worktree: ## Compile worktree ESPHome firmware using production secrets symlink
+	@set -euo pipefail; \
+	secret="firmware/secrets.yaml"; \
+	had_gitignore=0; \
+	[ -e firmware/.gitignore ] && had_gitignore=1; \
+	if [ -e "$$secret" ]; then \
+		echo "Refusing to overwrite $$secret"; \
+		exit 2; \
+	fi; \
+	ln -s /srv/greenhouse/esphome/secrets.yaml "$$secret"; \
+	trap 'rm -f "$$secret"; if [ "$$had_gitignore" = 0 ]; then rm -f firmware/.gitignore; fi' EXIT; \
+	$(ESPHOME) compile firmware/greenhouse.yaml
+
+firmware-check-all: firmware-check-worktree firmware-check ## Compile both worktree and live deploy-source firmware configs
+	@echo "✓ Both firmware configs compile"
+
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
-	@FW_VERSION="$$(date +%Y.%-m.%-d).$$(git rev-parse --short HEAD)"; \
+	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
+	FW_VERSION="$$(date +%Y.%-m.%-d.%H%M).$$(git rev-parse --short HEAD)$$DIRTY"; \
 	echo "─── Deploying fw_version=$$FW_VERSION ───"; \
 	cd /srv/greenhouse/esphome && $(ESPHOME) -s fw_version "$$FW_VERSION" compile greenhouse.yaml && \
 	$(ESPHOME) -s fw_version "$$FW_VERSION" upload --device 192.168.10.111 greenhouse.yaml

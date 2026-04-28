@@ -119,6 +119,11 @@ struct Setpoints {
     // shadow validation.
     bool     sw_dwell_gate_enabled;
     uint32_t dwell_gate_ms;                // default 300000 (5 min)
+    // Controller v2: band-first FSM. Default OFF so the legacy cascade remains
+    // the rollback path; when enabled, firmware prioritizes temp/VPD band
+    // compliance and treats failed humidification as a backoff, not forced vent.
+    bool     sw_fsm_controller_enabled;
+    uint32_t mist_backoff_ms;
 };
 
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
@@ -167,6 +172,14 @@ struct ControlState {
     // non-held transition. Initialized to 0 which means "already past
     // dwell at boot" so the first real decision isn't gated.
     uint32_t last_transition_tick_ms;
+    // Controller v2: lockout after a sealed humidification attempt times out.
+    // During this window the firmware suppresses new SEALED_MIST entries while
+    // still allowing normal temp/dehum control.
+    uint32_t mist_backoff_timer_ms;
+    // Controller v2: moisture assist while the temp band requires VENTILATE but
+    // VPD is also above band. controls.yaml uses this to allow directional
+    // misters during vent cooling without pretending the mode is SEALED_MIST.
+    bool vent_mist_assist_active;
 };
 
 struct RelayOutputs {
@@ -192,6 +205,7 @@ struct OverrideFlags {
     bool seal_blocked_temp;          // seal wanted but within 5°F of safety_max
     bool vpd_dry_override;           // firmware sealed for VPD safety without planner dwell
     bool summer_vent_active;         // sprint-15 gate suppressed a VPD-seal in favor of VENTILATE
+    bool vent_mist_assist;           // v2 VENTILATE is carrying concurrent mister demand
 };
 
 // ── Saturating addition (prevents uint32_t overflow at 49.7 days) ──
@@ -240,7 +254,9 @@ inline Setpoints default_setpoints() {
         // Phase-2 dwell gate. Default OFF (shadow-mode bake before flipping
         // to active). 5-min dwell projected to reduce whipsaw 80%.
         .sw_dwell_gate_enabled = false,
-        .dwell_gate_ms = 300000u
+        .dwell_gate_ms = 300000u,
+        .sw_fsm_controller_enabled = false,
+        .mist_backoff_ms = 600000u
     };
 }
 
@@ -342,6 +358,9 @@ inline void validate_setpoints(Setpoints& sp) {
     // 60s floor (shorter than control-cycle cadence makes the gate useless),
     // 1800s (30-min) ceiling (longer than sealed_max_ms would starve exits).
     sp.dwell_gate_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.dwell_gate_ms));
+
+    // --- Controller v2 clamps ---
+    sp.mist_backoff_ms = std::max(uint32_t(60000), std::min(uint32_t(3600000), sp.mist_backoff_ms));
 }
 
 inline ControlState initial_state() {
@@ -356,6 +375,8 @@ inline ControlState initial_state() {
         .heat2_latched = false,
         .override_summer_vent = false,
         .last_mode_reason = "init",
-        .last_transition_tick_ms = 0
+        .last_transition_tick_ms = 0,
+        .mist_backoff_timer_ms = 0,
+        .vent_mist_assist_active = false
     };
 }

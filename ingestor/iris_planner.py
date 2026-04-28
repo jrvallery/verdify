@@ -231,6 +231,7 @@ operator-owned) see `docs/tunable-cascade.md` or read the registry.
 - `mist_max_closed_vent_s` s, [120-900], def 600 — max sealed time → THERMAL_RELIEF
 - `mist_vent_reopen_delay_s` s, [0-120], def 45 — vent held closed after misting
 - `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration
+- `mist_backoff_s` s, [60-3600], def 600 — v2 lockout after a sealed mist attempt times out; prevents immediate reseal loops
 
 **Fog (AquaFog XE 2000 — 7× mister; firmware-gated by RH/temp/time window):**
 - `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.5 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
@@ -255,6 +256,9 @@ operator-owned) see `docs/tunable-cascade.md` or read the registry.
 **Phase-2 dwell gate (whipsaw reduction; firmware shipped, currently OFF in production):**
 - `sw_dwell_gate_enabled` — master switch; firmware is shipped (default OFF). PR #35 (2026-04-22) made THERMAL_RELIEF exempt from the gate so the 90s heat-flush behavior is preserved when you flip the switch. Safe to enable on hot-dry days when whipsaw shows in the recent transition log; revert if relief_cycle_count climbs.
 - `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions. Does NOT bind THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, or SENSOR_FAULT — those preempt the gate.
+
+**Controller v2 gate:**
+- `sw_fsm_controller_enabled` — master switch for the band-first FSM. Keep ON for v2 validation; flip OFF only to return to the legacy cascade.
 
 ### Tier 2 escape hatch
 
@@ -611,13 +615,13 @@ _PROMPT_BUILDERS = {
 # ── Context gathering ────────────────────────────────────────────
 
 
-def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None) -> None:
-    """IN-10 (Sprint 19): route gather-plan-context.sh failures into alert_log so
-    the 18 known errors stop disappearing silently. Uses docker exec psql to
-    avoid introducing a sync DB driver into this sync module."""
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _run_alert_sql(sql: str) -> None:
+    """Run a small alert_log lifecycle statement without adding a sync DB driver."""
     try:
-        details = json.dumps({"reason": reason, "stderr": stderr[:500], "exit_code": exit_code})
-        message = f"gather-plan-context.sh failed: {reason}"
         subprocess.run(
             [
                 "docker",
@@ -630,9 +634,7 @@ def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None
                 "-d",
                 "verdify",
                 "-c",
-                "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
-                f"VALUES ('plan_context_failed', 'warning', 'system', '{message.replace(chr(39), chr(39) * 2)}', "
-                f"'{details.replace(chr(39), chr(39) * 2)}'::jsonb, 'iris_planner')",
+                sql,
             ],
             capture_output=True,
             text=True,
@@ -640,7 +642,47 @@ def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None
             check=False,
         )
     except Exception as e:  # never let observability failures crash the planner
-        log.warning("failed to record plan_context_failed alert: %s", e)
+        log.warning("failed to update plan_context_failed alert lifecycle: %s", e)
+
+
+def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None) -> None:
+    """Route gather-plan-context.sh failures into alert_log without duplicates."""
+    details = json.dumps({"reason": reason, "stderr": stderr[:500], "exit_code": exit_code})
+    message = f"gather-plan-context.sh failed: {reason}"
+    _run_alert_sql(
+        f"""
+        WITH updated AS (
+            UPDATE alert_log
+               SET severity = 'warning',
+                   message = {_sql_literal(message)},
+                   details = {_sql_literal(details)}::jsonb
+             WHERE alert_type = 'plan_context_failed'
+               AND disposition = 'open'
+               AND source = 'iris_planner'
+            RETURNING id
+        )
+        INSERT INTO alert_log (alert_type, severity, category, message, details, source)
+        SELECT 'plan_context_failed', 'warning', 'system', {_sql_literal(message)},
+               {_sql_literal(details)}::jsonb, 'iris_planner'
+         WHERE NOT EXISTS (SELECT 1 FROM updated)
+        """
+    )
+
+
+def _resolve_plan_context_failures() -> None:
+    """Close stale context-gather alerts after a successful gather."""
+    _run_alert_sql(
+        """
+        UPDATE alert_log
+           SET disposition = 'resolved',
+               resolved_at = now(),
+               resolved_by = 'system',
+               resolution = 'auto-resolved: context gather succeeded'
+         WHERE alert_type = 'plan_context_failed'
+           AND disposition = 'open'
+           AND source = 'iris_planner'
+        """
+    )
 
 
 # Sprint 24.9 (G-7): sentinel that tasks.py's _deliver_and_log checks to
@@ -669,6 +711,7 @@ def gather_context() -> str:
             log.error("gather-plan-context.sh failed: %s", result.stderr[:200])
             _record_plan_context_failure("nonzero_exit", result.stderr, result.returncode)
             return CONTEXT_GATHER_FAILED_SENTINEL
+        _resolve_plan_context_failures()
         return result.stdout
     except subprocess.TimeoutExpired as e:
         log.error("gather-plan-context.sh timed out (60s)")

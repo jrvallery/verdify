@@ -679,6 +679,33 @@ sensor:
     unit_of_measurement: "s"
     accuracy_decimals: 0
 
+  - platform: template
+    id: ctl_sealed_timer_s
+    name: "Sealed Timer s"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+
+  - platform: template
+    id: ctl_vpd_watch_timer_s
+    name: "VPD Watch Timer s"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+
+  - platform: template
+    id: ctl_mist_backoff_timer_s
+    name: "Mist Backoff Timer s"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+
+  - platform: template
+    id: ctl_vent_mist_assist_active
+    name: "Vent Mist Assist Active"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+
   # Absolute humidity inside
   - platform: template
     id: absolute_humidity
@@ -1736,6 +1763,29 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(sw_summer_vent_enabled) ? 1.0f : 0.0f;
+
+  - platform: template
+    id: cfg_fsm_controller_enabled
+    name: "Cfg FSM Controller Enabled"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(sw_fsm_controller_enabled) ? 1.0f : 0.0f;
+
+  - platform: template
+    id: cfg_mist_backoff_s
+    name: "Cfg • Mist Backoff (s)"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(mist_backoff_s);
 
   # Live outdoor readings (firmware exposes the values it's actually
   # comparing). Useful for Iris to see whether the gate is data-poor

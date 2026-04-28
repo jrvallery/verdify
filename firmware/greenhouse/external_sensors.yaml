@@ -334,8 +334,10 @@ sensor:
     lambda: "return id(tempest_battery_v);"
 
   # ═══════════════════════════════════════════════════════════════════
-  # SHELLY EM50 — HTTP poll every 300s
-  # Direct local API at http://<shelly-ip>/rpc/EM.GetStatus?id=0
+  # SHELLY EM50 — values are ingested off-board
+  # ESP32 HTTP polling was disabled 2026-04-27 after heap-pressure and
+  # JSON IncompleteInput logs during the live v2 bake. Shelly telemetry is
+  # not part of climate control, so the host ingestor owns that poll.
   # ═══════════════════════════════════════════════════════════════════
 
   - platform: template
@@ -377,48 +379,3 @@ sensor:
     accuracy_decimals: 1
     update_interval: 300s
     lambda: "return id(shelly_voltage);"
-
-# Shelly HTTP poll interval
-interval:
-  - interval: 300s
-    then:
-      - http_request.get:
-          url: !secret shelly_em50_url
-          capture_response: true
-          max_response_buffer_size: 1024
-          on_response:
-            then:
-              - lambda: |-
-                  if (body.empty()) {
-                    ESP_LOGW("shelly", "Empty response from Shelly EM50");
-                    return;
-                  }
-                  json::parse_json(body, [](JsonObject root) -> bool {
-                    // Shelly Pro EM-50 returns em1:0 and em1:1 objects
-                    JsonObject ch0 = root["em1:0"];
-                    JsonObject ch1 = root["em1:1"];
-                    if (ch0 && !ch0["act_power"].isNull() && !ch0["voltage"].isNull()) {
-                      float p = ch0["act_power"].as<float>();
-                      float v = ch0["voltage"].as<float>();
-                      // Reject physically impossible values
-                      if (p >= -1000 && p <= 10000 && v >= 100 && v <= 260) {
-                        id(shelly_ch0_power_w) = p;
-                        id(shelly_voltage) = v;
-                      } else {
-                        ESP_LOGW("shelly", "ch0 values out of range: P=%.0f V=%.0f", p, v);
-                      }
-                    } else {
-                      ESP_LOGW("shelly", "ch0 missing act_power or voltage");
-                    }
-                    if (ch1 && !ch1["act_power"].isNull()) {
-                      float p = ch1["act_power"].as<float>();
-                      if (p >= -1000 && p <= 10000) {
-                        id(shelly_ch1_power_w) = p;
-                      }
-                    }
-                    id(shelly_total_power_w) = id(shelly_ch0_power_w) + id(shelly_ch1_power_w);
-                    ESP_LOGI("shelly", "EM50: total %.1fW, ch0 %.1fW, ch1 %.1fW, %.1fV",
-                             id(shelly_total_power_w), id(shelly_ch0_power_w),
-                             id(shelly_ch1_power_w), id(shelly_voltage));
-                    return true;
-                  });

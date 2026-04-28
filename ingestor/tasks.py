@@ -543,11 +543,48 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             )
 
         # 3. VPD stress
+        # Daily cumulative stress belongs in the scorecard; an open alert
+        # should represent a condition that is still active. Gate the daily
+        # >2h threshold by the last 15 minutes so recovered VPD auto-resolves.
         row = await conn.fetchrow(
-            "SELECT vpd_stress_hours FROM v_stress_hours_today WHERE date >= date_trunc('day', now() AT TIME ZONE 'America/Denver') ORDER BY date DESC LIMIT 1"
+            """
+            WITH daily AS (
+                SELECT vpd_stress_hours::float AS vpd_stress_hours
+                  FROM v_stress_hours_today
+                 WHERE date >= date_trunc('day', now() AT TIME ZONE 'America/Denver')
+                 ORDER BY date DESC
+                 LIMIT 1
+            ),
+            recent AS (
+                SELECT count(*)::int AS samples,
+                       count(*) FILTER (WHERE vpd_avg > fn_setpoint_at('vpd_high', ts))::int AS high_samples,
+                       avg(vpd_avg)::float AS avg_vpd,
+                       avg(fn_setpoint_at('vpd_high', ts))::float AS avg_vpd_high
+                  FROM climate
+                 WHERE ts >= now() - interval '15 minutes'
+                   AND vpd_avg IS NOT NULL
+            )
+            SELECT daily.vpd_stress_hours,
+                   recent.samples,
+                   recent.high_samples,
+                   recent.avg_vpd,
+                   recent.avg_vpd_high,
+                   CASE WHEN recent.samples > 0
+                        THEN recent.high_samples::float / recent.samples
+                        ELSE 0.0
+                   END AS recent_high_fraction
+              FROM daily CROSS JOIN recent
+            """
         )
-        if row and row["vpd_stress_hours"] and float(row["vpd_stress_hours"]) > 2.0:
+        if (
+            row
+            and row["vpd_stress_hours"]
+            and float(row["vpd_stress_hours"]) > 2.0
+            and int(row["samples"] or 0) >= 3
+            and float(row["recent_high_fraction"] or 0.0) >= 0.5
+        ):
             hrs = float(row["vpd_stress_hours"])
+            high_fraction = float(row["recent_high_fraction"] or 0.0)
             alerts.append(
                 {
                     "alert_type": "vpd_stress",
@@ -555,8 +592,15 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "category": "climate",
                     "sensor_id": "climate.vpd_avg",
                     "zone": None,
-                    "message": f"VPD stress: {hrs:.1f} hours today",
-                    "details": {"vpd_stress_hours": hrs},
+                    "message": f"VPD stress active: {hrs:.1f} hours today, {high_fraction:.0%} high in last 15m",
+                    "details": {
+                        "vpd_stress_hours": hrs,
+                        "recent_samples": int(row["samples"] or 0),
+                        "recent_high_samples": int(row["high_samples"] or 0),
+                        "recent_high_fraction": high_fraction,
+                        "avg_vpd_15m": float(row["avg_vpd"]) if row["avg_vpd"] is not None else None,
+                        "avg_vpd_high_15m": float(row["avg_vpd_high"]) if row["avg_vpd_high"] is not None else None,
+                    },
                     "metric_value": hrs,
                     "threshold_value": 2.0,
                 }
@@ -896,23 +940,109 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
-        # 12. Tunable zero-variance detection (Sprint 24.9, G-9).
+        # 12. ESP32 heap pressure watchdogs. Firmware publishes debounced
+        # binary sensors; route them into alert_log so heap exhaustion has the
+        # same lifecycle and Slack path as the other system-owned alerts.
+        heap_rows = await conn.fetch(
+            """
+            SELECT DISTINCT ON (equipment) equipment, state, ts
+              FROM equipment_state
+             WHERE equipment IN ('heap_pressure_warning', 'heap_pressure_critical')
+             ORDER BY equipment, ts DESC, state ASC
+            """
+        )
+        heap_diag = await conn.fetchrow(
+            """
+            SELECT heap_bytes, ts
+              FROM diagnostics
+             WHERE heap_bytes IS NOT NULL
+             ORDER BY ts DESC
+             LIMIT 1
+            """
+        )
+        heap_state = {r["equipment"]: r for r in heap_rows}
+        heap_critical = heap_state.get("heap_pressure_critical")
+        heap_warning = heap_state.get("heap_pressure_warning")
+        heap_bytes = float(heap_diag["heap_bytes"]) if heap_diag and heap_diag["heap_bytes"] is not None else None
+        critical_active = bool(heap_critical and heap_critical["state"])
+        warning_active = bool(heap_warning and heap_warning["state"])
+        if heap_bytes is not None:
+            # The binary sensors and diagnostics can arrive at the same second;
+            # the latest numeric heap sample is the tie-breaker so resolved
+            # heap-pressure alerts do not stick open on event ordering alone.
+            if heap_bytes < 15.0:
+                critical_active = True
+                warning_active = False
+            elif heap_bytes < 30.0:
+                critical_active = False
+                warning_active = True
+            elif heap_diag and heap_critical and heap_diag["ts"] >= heap_critical["ts"]:
+                critical_active = False
+            if heap_bytes >= 35.0 and heap_diag and heap_warning and heap_diag["ts"] >= heap_warning["ts"]:
+                warning_active = False
+        if critical_active:
+            alerts.append(
+                {
+                    "alert_type": "heap_pressure_critical",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "equipment.heap_pressure_critical",
+                    "zone": None,
+                    "message": "ESP32 heap pressure critical: free heap dropped below firmware critical threshold",
+                    "details": {
+                        "equipment": "heap_pressure_critical",
+                        "equipment_ts": heap_critical["ts"].isoformat() if heap_critical else None,
+                        "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
+                        "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
+                    },
+                    "metric_value": heap_bytes,
+                    "threshold_value": 15.0,
+                }
+            )
+        elif warning_active:
+            alerts.append(
+                {
+                    "alert_type": "heap_pressure_warning",
+                    "severity": "warning",
+                    "category": "system",
+                    "sensor_id": "equipment.heap_pressure_warning",
+                    "zone": None,
+                    "message": "ESP32 heap pressure warning: free heap stayed below firmware warning threshold",
+                    "details": {
+                        "equipment": "heap_pressure_warning",
+                        "equipment_ts": heap_warning["ts"].isoformat() if heap_warning else None,
+                        "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
+                        "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
+                    },
+                    "metric_value": heap_bytes,
+                    "threshold_value": 30.0,
+                }
+            )
+
+        # 13. Tunable zero-variance detection (Sprint 24.9, G-9).
         # Firmware sprint-13 30-day scan flagged vpd_target_west pinned at
         # 1.2 kPa across 33k samples — either fn_zone_vpd_targets has a
         # west-zone default/bug or the west zone has no active crop. Catching
         # this class of issue automatically (any dispatcher-owned tunable with
         # stddev=0 over 7 days) surfaces the condition without waiting for
         # an operator to notice.
-        zero_var_params = (
-            "vpd_target_south",
-            "vpd_target_west",
-            "vpd_target_east",
-            "vpd_target_center",
+        active_crop_zones = {
+            str(r["zone"])
+            for r in await conn.fetch("SELECT DISTINCT zone FROM crops WHERE is_active = true AND zone IS NOT NULL")
+        }
+        zone_target_params = {
+            "vpd_target_south": "south",
+            "vpd_target_west": "west",
+            "vpd_target_east": "east",
+            "vpd_target_center": "center",
+        }
+        zero_var_params = [
             "temp_low",
             "temp_high",
             "vpd_low",
             "vpd_high",
-        )
+            *[param for param, zone in zone_target_params.items() if zone in active_crop_zones],
+        ]
         for r in await conn.fetch(
             """
             SELECT parameter, count(*) AS n, stddev(value) AS sd, avg(value) AS mean
@@ -969,25 +1099,34 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         for a in alerts:
             key = (a["alert_type"], a["sensor_id"])
             if key in open_keys:
-                # F14 (Sprint 24.6): escalate severity in place. If the new
-                # envelope is critical and the open row is warning/info,
-                # upgrade and re-notify. Only planner_stale uses this path
-                # today; the pattern is general.
                 existing = open_keys[key]
-                if a["severity"] == "critical" and existing["severity"] != "critical":
-                    try:
-                        env = AlertEnvelope.model_validate(a)
-                    except ValidationError as e:
-                        log.error("alert escalation skipped (validation failed: %s): %r", e, a)
-                        continue
-                    await conn.execute(
-                        "UPDATE alert_log SET severity=$1, message=$2, details=$3, metric_value=$4 WHERE id=$5",
-                        env.severity,
-                        env.message,
-                        json.dumps(env.details) if env.details else None,
-                        env.metric_value,
-                        existing["id"],
-                    )
+                try:
+                    env = AlertEnvelope.model_validate(a)
+                except ValidationError as e:
+                    log.error("alert refresh skipped (validation failed: %s): %r", e, a)
+                    continue
+                is_escalation = env.severity == "critical" and existing["severity"] != "critical"
+                await conn.execute(
+                    """
+                    UPDATE alert_log
+                       SET severity=$1,
+                           message=$2,
+                           details=$3,
+                           metric_value=$4,
+                           threshold_value=$5
+                     WHERE id=$6
+                    """,
+                    env.severity,
+                    env.message,
+                    json.dumps(env.details) if env.details else None,
+                    env.metric_value,
+                    env.threshold_value,
+                    existing["id"],
+                )
+                # F14 (Sprint 24.6): escalate severity in place and re-notify.
+                # Same-severity updates intentionally stay quiet but keep DB
+                # context fresh for dashboards and deploy preflights.
+                if is_escalation:
                     if slack_token is None:
                         try:
                             slack_token = _load_token(SLACK_TOKEN_FILE)
@@ -2646,19 +2785,49 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
         if resolved:
             log.info("setpoint_unconfirmed: auto-resolved %d alert(s) after confirmation", len(resolved))
 
+        superseded = await conn.fetch(
+            """
+            UPDATE alert_log al
+               SET disposition = 'resolved',
+                   resolved_at = now(),
+                   resolved_by = 'system',
+                   resolution  = 'auto-resolved: superseded by newer setpoint'
+             WHERE al.alert_type = 'setpoint_unconfirmed'
+               AND al.disposition = 'open'
+               AND al.source = 'ingestor'
+               AND EXISTS (
+                   SELECT 1
+                     FROM setpoint_changes newer
+                    WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
+                      AND newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
+                      AND newer.ts > now() - interval '2 hours'
+               )
+            RETURNING al.id
+            """,
+        )
+        if superseded:
+            log.info("setpoint_unconfirmed: auto-resolved %d superseded alert(s)", len(superseded))
+
         # Pass 2: scan for still-unconfirmed rows that need alerting.
         rows = await conn.fetch(
             """
-            SELECT parameter,
-                   value,
-                   ts,
-                   EXTRACT(EPOCH FROM (now() - ts))::int AS age_s
-              FROM setpoint_changes
-             WHERE confirmed_at IS NULL
-               AND ts < now() - interval '5 minutes'
-               AND ts > now() - interval '1 hour'
-               AND parameter = ANY($1::text[])
-             ORDER BY ts DESC
+            SELECT sc.parameter,
+                   sc.value,
+                   sc.ts,
+                   EXTRACT(EPOCH FROM (now() - sc.ts))::int AS age_s
+              FROM setpoint_changes sc
+             WHERE sc.confirmed_at IS NULL
+               AND sc.ts < now() - interval '5 minutes'
+               AND sc.ts > now() - interval '1 hour'
+               AND sc.parameter = ANY($1::text[])
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM setpoint_changes newer
+                    WHERE newer.parameter = sc.parameter
+                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                      AND newer.ts > sc.ts
+               )
+             ORDER BY sc.ts DESC
             """,
             _READBACKABLE_PARAMS,
         )

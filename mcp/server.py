@@ -299,6 +299,9 @@ async def set_tunable(
         # Phase-2 dwell gate (plan firmware stabilization).
         "sw_dwell_gate_enabled",
         "dwell_gate_ms",
+        # Controller v2: band-first FSM.
+        "sw_fsm_controller_enabled",
+        "mist_backoff_s",
     }
     # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
     if parameter not in ALL_TUNABLES:

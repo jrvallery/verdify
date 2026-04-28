@@ -395,7 +395,11 @@ interval:
               .summer_vent_min_runtime_s = (uint32_t)id(summer_vent_min_runtime_s),
               // Phase-2 dwell gate.
               .sw_dwell_gate_enabled = id(sw_dwell_gate_enabled),
-              .dwell_gate_ms = (uint32_t)id(dwell_gate_ms)
+              .dwell_gate_ms = (uint32_t)id(dwell_gate_ms),
+              // Controller v2: band-first FSM. Default OFF; can be flipped
+              // without OTA after replay/shadow validation.
+              .sw_fsm_controller_enabled = id(sw_fsm_controller_enabled),
+              .mist_backoff_ms = (uint32_t)id(mist_backoff_s) * 1000UL
           };
 
           validate_setpoints(setpts);
@@ -409,14 +413,6 @@ interval:
           // Manual overrides (ESP32-only, not in header)
           if(id(manual_fan_active)){ willFan1 = true; willFan2 = true; willVent = true; }
           if(id(manual_fog_active)){ willFog = true; }
-
-          /**************** 10 — CYCLE COUNTERS ***********************************/
-          if(willHeat1 && !id(heat1_rly)->state) id(cnt_heat1_today) += 1;
-          if(willHeat2 && !id(heat2_rly)->state) id(cnt_heat2_today) += 1;
-          if(willFog && !id(fog_rly)->state)     id(cnt_fog_today) += 1;
-          if(willFan1 && !id(fan1_rly)->state)   id(cnt_fan1_today) += 1;
-          if(willFan2 && !id(fan2_rly)->state)   id(cnt_fan2_today) += 1;
-          if(willVent && !id(vent_rly)->state)    id(cnt_vent_today) += 1;
 
           /**************** 11a — VENT-CLOSE INTERLOCK (sprint-15.1) **************/
           // Fog + misters must wait for vent to physically close. Pre-sprint-15.1,
@@ -436,6 +432,14 @@ interval:
           if (id(fog_closes_vent) && vent_is_open) {
               willFog = false;
           }
+
+          /**************** 10 — CYCLE COUNTERS ***********************************/
+          if(willHeat1 && !id(heat1_rly)->state) id(cnt_heat1_today) += 1;
+          if(willHeat2 && !id(heat2_rly)->state) id(cnt_heat2_today) += 1;
+          if(willFog && !id(fog_rly)->state)     id(cnt_fog_today) += 1;
+          if(willFan1 && !id(fan1_rly)->state)   id(cnt_fan1_today) += 1;
+          if(willFan2 && !id(fan2_rly)->state)   id(cnt_fan2_today) += 1;
+          if(willVent && !id(vent_rly)->state)    id(cnt_vent_today) += 1;
 
           /**************** 11 — APPLY RELAY OUTPUTS ******************************/
           set_relay(R[0], willHeat1);
@@ -465,7 +469,7 @@ interval:
             // per-device granularity). `vent_is_open` is in scope from
             // block 11a above.
             const bool mister_vent_ok = !id(mister_closes_vent) || !vent_is_open;
-            bool humidity_demand = (mode == SEALED_MIST) && mister_vent_ok;
+            bool humidity_demand = ((mode == SEALED_MIST) || ctl_state.vent_mist_assist_active) && mister_vent_ok;
 
             // If misters WERE firing but vent just opened, kill the zone
             // drivers immediately so we don't wait for the pulse timer.
@@ -490,10 +494,9 @@ interval:
             }
             was_sealed = humidity_demand;
 
-            // Misters only run in SEALED_MIST mode.
-            // Misters run in ANY humidity state including with vent open —
-            // they spray directionally at surfaces, providing local evaporative cooling.
-            // Fog (S3) is the heavy escalation: ~800W, fills the room.
+            // Misters run for sealed humidification and v2 vent mist assist.
+            // Fog remains the heavy escalation and is still gated by the vent
+            // close interlock above when fog_closes_vent is enabled.
             bool occupancy_blocks = id(occupancy_inhibit_enabled) && id(greenhouse_occupied);
             // FW-9: VPD emergency override — allow misting even if budget exhausted
             float vpd_max_zone = fmax(south_vpd, fmax(west_vpd, east_vpd));
@@ -799,7 +802,13 @@ interval:
           }else{
             snprintf(lbl, sizeof(lbl), "%s", MODE_NAMES[mode]);
           }
-          id(gh_state).publish_state(lbl);
+          {
+            static char last_gh_state[48] = "";
+            if(strcmp(last_gh_state, lbl) != 0){
+              id(gh_state).publish_state(lbl);
+              snprintf(last_gh_state, sizeof(last_gh_state), "%s", lbl);
+            }
+          }
 
           /*** OBS-1e — Silent-override audit (Sprint 16) ***/
           {
@@ -822,8 +831,14 @@ interval:
             // tell whether it was firing. Short tag "summer_vent" matches
             // what ingestor override_events routing expects.
             if(of.summer_vent_active)        add("summer_vent");
+            if(of.vent_mist_assist)          add("vent_mist_assist");
             obuf[n] = '\0';
-            id(gh_overrides).publish_state(n > 0 ? obuf : "none");
+            const char* overrides = n > 0 ? obuf : "none";
+            static char last_overrides[96] = "";
+            if(strcmp(last_overrides, overrides) != 0){
+              id(gh_overrides).publish_state(overrides);
+              snprintf(last_overrides, sizeof(last_overrides), "%s", overrides);
+            }
           }
 
           // Sprint-15.1 fix 8: publish mode_reason. The literal is owned
@@ -831,12 +846,27 @@ interval:
           // against nullptr so an unknown branch never crashes the publish.
           {
             const char* reason = ctl_state.last_mode_reason;
-            id(gh_mode_reason).publish_state(reason ? reason : "unknown");
+            const char* safe_reason = reason ? reason : "unknown";
+            static char last_mode_reason[48] = "";
+            if(strcmp(last_mode_reason, safe_reason) != 0){
+              id(gh_mode_reason).publish_state(safe_reason);
+              snprintf(last_mode_reason, sizeof(last_mode_reason), "%s", safe_reason);
+            }
           }
 
           /*** OBS-3 — Relief-cycle state exposure (Sprint 18) ***/
-          id(ctl_relief_cycle_count).publish_state((float)ctl_state.relief_cycle_count);
-          id(ctl_vent_latch_timer_s).publish_state((float)(ctl_state.vent_latch_timer_ms / 1000));
+          {
+            static uint8_t ctl_diag_ctr = 11;
+            if(++ctl_diag_ctr >= 12){
+              ctl_diag_ctr = 0;
+              id(ctl_relief_cycle_count).publish_state((float)ctl_state.relief_cycle_count);
+              id(ctl_vent_latch_timer_s).publish_state((float)(ctl_state.vent_latch_timer_ms / 1000));
+              id(ctl_sealed_timer_s).publish_state((float)(ctl_state.sealed_timer_ms / 1000));
+              id(ctl_vpd_watch_timer_s).publish_state((float)(ctl_state.vpd_watch_timer_ms / 1000));
+              id(ctl_mist_backoff_timer_s).publish_state((float)(ctl_state.mist_backoff_timer_ms / 1000));
+              id(ctl_vent_mist_assist_active).publish_state(ctl_state.vent_mist_assist_active ? 1.0f : 0.0f);
+            }
+          }
 
           /*** A1 — State transition logging ***/
           {
@@ -965,7 +995,18 @@ interval:
                        willHeat1, willHeat2, willFan1, willFan2,
                        willFog, willVent);
 
-              ESP_LOGI("state","Mode=%s Tin=%.1f°F VPD=%.2f kPa", lbl, Tin, VPD);
+              {
+                static uint8_t state_log_ctr = 11;
+                static Mode state_log_mode = IDLE;
+                static MistStage state_log_mist = MIST_WATCH;
+                bool state_changed = mode != state_log_mode || (mode == SEALED_MIST && ctl_state.mist_stage != state_log_mist);
+                if(state_changed || ++state_log_ctr >= 12){
+                  state_log_ctr = 0;
+                  state_log_mode = mode;
+                  state_log_mist = ctl_state.mist_stage;
+                  ESP_LOGI("state","Mode=%s Tin=%.1f°F VPD=%.2f kPa", lbl, Tin, VPD);
+                }
+              }
 
           {
               static uint8_t heat_diag_ctr = 0;
@@ -980,15 +1021,21 @@ interval:
               }
           }
 
-          char js[192];
-          snprintf(js,sizeof(js),
-              "{\"state\":\"%s\",\"Tin\":%.1f,\"VPD\":%.2f,"\
-              "\"H1\":%d,\"H2\":%d,\"F1\":%d,\"F2\":%d,\"Fog\":%d,\"Vent\":%d}",
-              lbl, Tin, VPD,
-              id(heat1_rly)->state, id(heat2_rly)->state,
-              id(fan1_rly)->state, id(fan2_rly)->state,
-              id(fog_rly)->state, id(vent_rly)->state);
-          id(ctl_snapshot_json).publish_state(js);
+          {
+            static uint8_t snapshot_ctr = 11;
+            if(++snapshot_ctr >= 12){
+              snapshot_ctr = 0;
+              char js[192];
+              snprintf(js,sizeof(js),
+                  "{\"state\":\"%s\",\"Tin\":%.1f,\"VPD\":%.2f,"\
+                  "\"H1\":%d,\"H2\":%d,\"F1\":%d,\"F2\":%d,\"Fog\":%d,\"Vent\":%d}",
+                  lbl, Tin, VPD,
+                  id(heat1_rly)->state, id(heat2_rly)->state,
+                  id(fan1_rly)->state, id(fan2_rly)->state,
+                  id(fog_rly)->state, id(vent_rly)->state);
+              id(ctl_snapshot_json).publish_state(js);
+            }
+          }
 
               // Expose runtime metrics and economiser state to global variables for HA sensors
               id(runtime_heat1_ms) = R[0].runtime_ms;
@@ -1289,11 +1336,11 @@ interval:
           }
 
 ################################################################################
-# SETPOINT PULL — Fetch planned setpoints from Verdify every 5 minutes
+# SETPOINT PULL — Fetch planned setpoints from Verdify every 30 minutes
 # Endpoint: api.verdify.ai resolves via DNS (local or cloud, transparent)
 # The aioesphomeapi dispatcher pushes in real-time; this is the fallback.
 ################################################################################
-  - interval: 300s
+  - interval: 1800s
     then:
       - http_request.get:
           url: "https://api.verdify.ai/setpoints"
@@ -1319,6 +1366,9 @@ interval:
                     if(eq == std::string::npos) continue;
                     std::string key = line.substr(0, eq);
                     std::string val_str = line.substr(eq+1);
+                    if(key == "source" || key.rfind("next_", 0) == 0){
+                      continue;
+                    }
                     char* end_ptr = nullptr;
                     float val = strtof(val_str.c_str(), &end_ptr);
                     // Guard: reject malformed values (strtof returns 0 with end_ptr at start)
@@ -1446,17 +1496,17 @@ interval:
                     // Phase-2 dwell gate tunables. Defaults: gate OFF, 5-min hold.
                     if(key == "sw_dwell_gate_enabled"){ bool v = val > 0.5f; if(id(sw_dwell_gate_enabled) != v){ id(sw_dwell_gate_enabled) = v; id(sw_dwell_gate_enabled_switch).publish_state(v); applied++; }}
                     if(key == "dwell_gate_ms"){ int v = ci((int)val, 60000, 1800000); if(id(dwell_gate_ms) != v){ id(dwell_gate_ms) = v; id(num_dwell_gate_ms).publish_state(v); applied++; }}
+                    if(key == "sw_fsm_controller_enabled"){ bool v = val > 0.5f; if(id(sw_fsm_controller_enabled) != v){ id(sw_fsm_controller_enabled) = v; id(sw_fsm_controller_enabled_switch).publish_state(v); applied++; }}
+                    if(key == "mist_backoff_s"){ int v = ci((int)val, 60, 3600); if(id(mist_backoff_s) != v){ id(mist_backoff_s) = v; id(num_mist_backoff_s).publish_state(v); applied++; }}
                   }
                   if(applied > 0){
                     ESP_LOGI("plan","Applied %d setpoint(s) from pull", applied);
                   }
                   // Sprint-14: mark first /setpoints pull complete so cfg_*
                   // sensors start publishing real values. Reaching this
-                  // point means the JSON parse succeeded (we iterated the
-                  // object); even `applied == 0` means the dispatcher
-                  // confirmed the globals were already current. Either
-                  // way, the globals are no longer uninitialized firmware
-                  // defaults.
+                  // point means the key=value parse succeeded; even
+                  // `applied == 0` means the dispatcher confirmed the
+                  // globals were already current.
                   id(cfg_first_pull_ok) = true;
 
 ################################################################################
