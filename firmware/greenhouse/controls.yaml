@@ -1335,11 +1335,12 @@ interval:
           }
 
 ################################################################################
-# SETPOINT PULL — Fetch planned setpoints from Verdify every 30 minutes
+# SETPOINT PULL — Fetch planned setpoints shortly after boot, then every 30 minutes
 # Endpoint: api.verdify.ai resolves via DNS (local or cloud, transparent)
 # The aioesphomeapi dispatcher pushes in real-time; this is the fallback.
 ################################################################################
   - interval: 1800s
+    startup_delay: 15s
     then:
       - http_request.get:
           url: "https://api.verdify.ai/setpoints"
