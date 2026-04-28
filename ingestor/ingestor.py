@@ -615,7 +615,7 @@ _BOOT_WINDOW_S = 60
 # ESPHome number entities often echo a direct push on their next state
 # publish, which can arrive well after the command returns. Suppress those
 # delayed echoes so setpoint_changes does not notify-listener push them back.
-_PUSH_ECHO_SUPPRESS_S = 120
+_PUSH_ECHO_SUPPRESS_S = 300
 
 # F10 (Sprint 24-alignment): firmware emits mister_state + mister_selected_zone
 # as numeric template sensors (state_class=measurement), not text. Map the int
