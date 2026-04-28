@@ -137,7 +137,7 @@ class TestPromptBuilders:
         message = builder("<context stub>", "<label stub>", instance)
         assert isinstance(message, str) and len(message) > 1000
         # Every prompt carries the standing directives so Iris sees the MCP tool inventory.
-        assert "17 tools" in message
+        assert "22 tools" in message
 
     @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION"])
     def test_local_prompt_smaller_than_opus_for_every_event(self, iris_planner, event):

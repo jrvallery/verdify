@@ -2521,6 +2521,9 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
     is the join key. Keep them in sync.
     """
     async with pool.acquire() as conn:
+        # Contract v1.4 primary path: exact UUID correlation. This is the
+        # only reliable join when local/opus may both receive routine
+        # triggers inside the old 2h fallback window.
         await conn.execute(
             """
             UPDATE plan_delivery_log pdl
@@ -2529,6 +2532,22 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
                    status            = 'plan_written'
               FROM plan_journal pj
              WHERE pdl.resulting_plan_id IS NULL
+               AND pdl.status = 'pending'
+               AND pdl.trigger_id IS NOT NULL
+               AND pj.trigger_id = pdl.trigger_id
+            """,
+        )
+        # Legacy fallback for pre-v1.4 rows or planner cycles where Iris did
+        # not pass the audit kwargs through to set_plan().
+        await conn.execute(
+            """
+            UPDATE plan_delivery_log pdl
+               SET resulting_plan_id = pj.plan_id,
+                   plan_written_at   = pj.created_at,
+                   status            = 'plan_written'
+              FROM plan_journal pj
+             WHERE pdl.resulting_plan_id IS NULL
+               AND pdl.status = 'pending'
                AND pdl.delivered_at > now() - interval '6 hours'
                AND pj.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
                AND pj.created_at = (

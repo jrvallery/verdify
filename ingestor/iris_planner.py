@@ -63,11 +63,12 @@ if not PLANNER_PLAYBOOK_PATH.exists():  # pragma: no cover — host-path check
 _STANDING_DIRECTIVES = """
 ## Standing Directives (MANDATORY — read before every action)
 
-1. **Use MCP tools ONLY.** You have 17 tools:
+1. **Use MCP tools ONLY.** You have 22 tools:
    **Monitoring:** `climate`, `scorecard`, `equipment_state`, `forecast`, `history`
-   **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `plan_status`, `plan_evaluate`
+   **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `acknowledge_trigger`, `plan_status`, `plan_evaluate`
    **Knowledge:** `lessons`, `lessons_manage`
    **Crops:** `crops`, `observations`
+   **Topology:** `topology`, `position_current`, `crop_history`, `crop_lifecycle`
    **Operations:** `alerts`, `query`
    **Meta:** `plan_run` — operator-triggered ad-hoc planning. You normally do NOT
      call this; you are already inside a planning cycle when you see this prompt.
@@ -87,6 +88,11 @@ _STANDING_DIRECTIVES = """
 
 5. **To adjust a tunable,** call `set_tunable(parameter, value, reason)`.
    The dispatcher pushes changes to the ESP32 within 5 minutes.
+
+6. **If a routine FORECAST/TRANSITION/HEARTBEAT needs no change,** call
+   `acknowledge_trigger(trigger_id, reason, planner_instance)` using the
+   audit values at the bottom of this prompt. This closes the delivery SLA
+   without writing a fake plan.
 """
 
 # ── Planner knowledge — split for dual-Iris routing (sprint-3, G6) ──

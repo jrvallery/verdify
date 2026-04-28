@@ -14,6 +14,7 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import asyncpg
@@ -183,9 +184,14 @@ async def equipment_state() -> str:
 async def forecast(hours: int = 72) -> str:
     """Get weather forecast summary for the next N hours (default 72).
     Returns hourly temp, RH, VPD, cloud cover, solar radiation."""
+    try:
+        hours = max(1, min(int(hours), 168))
+    except (TypeError, ValueError):
+        return json.dumps({"error": "hours must be an integer between 1 and 168"})
     conn = await _db()
     try:
-        rows = await conn.fetch(f"""
+        rows = await conn.fetch(
+            """
             SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy HH24:MI') as time,
                    round(temp_f::numeric,0) as temp, round(rh_pct::numeric,0) as rh,
                    round(vpd_kpa::numeric,2) as vpd, round(cloud_cover_pct::numeric,0) as cloud,
@@ -194,12 +200,14 @@ async def forecast(hours: int = 72) -> str:
                 SELECT DISTINCT ON (ts) ts, temp_f, rh_pct, vpd_kpa, cloud_cover_pct,
                        direct_radiation_w_m2
                 FROM weather_forecast
-                WHERE ts > now() AND ts < now() + interval '{hours} hours'
+                WHERE ts > now() AND ts < now() + ($1::int * interval '1 hour')
                 ORDER BY ts, fetched_at DESC
             ) sub
             ORDER BY ts
-            LIMIT {hours}
-        """)
+            LIMIT $1
+            """,
+            hours,
+        )
         validated = [ForecastSummaryRow.model_validate(dict(r)).model_dump(mode="json") for r in rows]
         return json.dumps(validated)
     finally:
@@ -387,8 +395,12 @@ async def plan_run(mode: str = "normal") -> str:
         from iris_planner import gather_context, send_to_iris
 
         context = gather_context()
-        ok = send_to_iris("SUNRISE", "Ad-hoc planning cycle (triggered via MCP)", context=context)
-        resp = PlanRunResponse(ok=ok, note="SUNRISE event sent to Iris planner. Check #greenhouse for the brief.")
+        result = send_to_iris("SUNRISE", "Ad-hoc planning cycle (triggered via MCP)", context=context)
+        resp = PlanRunResponse(
+            ok=bool(result.get("delivered")),
+            note="SUNRISE event sent to Iris planner. Check #greenhouse for the brief.",
+            error=None if result.get("delivered") else result.get("gateway_body"),
+        )
         return resp.model_dump_json(exclude_none=True)
     except Exception as e:
         return PlanRunResponse(ok=False, error=str(e)).model_dump_json(exclude_none=True)
@@ -446,14 +458,24 @@ async def lessons() -> str:
 async def query(sql: str) -> str:
     """Run a read-only SQL query against the Verdify database.
     Returns up to 100 rows as JSON. Only SELECT queries allowed."""
-    sql_stripped = sql.strip().upper()
-    if not sql_stripped.startswith("SELECT"):
-        return json.dumps({"error": "Only SELECT queries are allowed"})
+    sql_stripped = sql.strip()
+    sql_upper = sql_stripped.upper()
+    if not (sql_upper.startswith("SELECT") or sql_upper.startswith("WITH")):
+        return json.dumps({"error": "Only SELECT/WITH queries are allowed"})
+    # Keep this as a simple one-statement escape hatch. The DB transaction is
+    # read-only below, but rejecting multi-statement text avoids surprising
+    # behavior and keeps tool output bounded.
+    if ";" in sql_stripped.rstrip(";"):
+        return json.dumps({"error": "Only a single read-only statement is allowed"})
 
     conn = await _db()
     try:
-        rows = await conn.fetch(sql)
+        async with conn.transaction(readonly=True):
+            await conn.execute("SET LOCAL statement_timeout = '5s'")
+            rows = await conn.fetch(sql_stripped.rstrip(";"))
         return _json([dict(r) for r in rows[:100]])
+    except asyncpg.ReadOnlySQLTransactionError:
+        return json.dumps({"error": "Query attempted a write and was rejected by the read-only transaction"})
     finally:
         await conn.close()
 
@@ -529,53 +551,58 @@ async def set_plan(
 
     conn = await _db()
     try:
-        # Deactivate existing future waypoints EXCEPT iris-oneshot tactical pushes.
-        # Phase 1b: set_tunable writes to setpoint_plan with plan_id
-        # `iris-oneshot-<YYYYMMDD-HHMM>`. Those are live tactical adjustments
-        # that should survive across regular sunrise/sunset plans until
-        # superseded by a later waypoint. Plan-level supersession is by
-        # `created_at DESC` so the newer multi-waypoint plan still wins on
-        # any parameter it re-specifies.
-        await conn.execute(
-            """UPDATE setpoint_plan SET is_active = false
-               WHERE ts > now() AND is_active = true
-                 AND plan_id NOT LIKE 'iris-oneshot-%'"""
-        )
+        async with conn.transaction():
+            existing = await conn.fetchval("SELECT 1 FROM plan_journal WHERE plan_id = $1", plan.plan_id)
+            if existing:
+                return json.dumps({"error": f"plan_id {plan.plan_id!r} already exists; generate a new plan_id"})
 
-        # Write new waypoints (everything pre-validated — no further per-row guards needed)
-        rows_written = 0
-        for wp in plan.transitions:
-            for param, value in wp.params.items():
-                await conn.execute(
-                    """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
-                       VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
-                    wp.ts,
-                    param,
-                    float(value),
-                    plan.plan_id,
-                    wp.reason or "",
-                )
-                rows_written += 1
+            # Deactivate existing future waypoints EXCEPT iris-oneshot tactical pushes.
+            # Phase 1b: set_tunable writes to setpoint_plan with plan_id
+            # `iris-oneshot-<YYYYMMDD-HHMM>`. Those are live tactical adjustments
+            # that should survive across regular sunrise/sunset plans until
+            # superseded by a later waypoint. Plan-level supersession is by
+            # `created_at DESC` so the newer multi-waypoint plan still wins on
+            # any parameter it re-specifies.
+            await conn.execute(
+                """UPDATE setpoint_plan SET is_active = false
+                   WHERE ts > now() AND is_active = true
+                     AND plan_id NOT LIKE 'iris-oneshot-%'"""
+            )
 
-        # Write journal entry — structured JSONB column populated only if
-        # the PlanHypothesisStructured block was present AND valid.
-        # Contract v1.4 §2.C — stamp planner_instance + trigger_id when the
-        # caller passed them through from the prompt's audit-headers banner.
-        # Both columns nullable; NULL means "pre-v1.4 path or operator
-        # injection that didn't carry headers."
-        await conn.execute(
-            """INSERT INTO plan_journal
-                 (plan_id, created_at, hypothesis, experiment, expected_outcome,
-                  hypothesis_structured, greenhouse_id, planner_instance, trigger_id)
-               VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)""",
-            plan.plan_id,
-            plan.hypothesis,
-            plan.experiment,
-            plan.expected_outcome,
-            structured_payload,
-            planner_instance,
-            trigger_id,
-        )
+            # Write new waypoints (everything pre-validated — no further per-row guards needed)
+            rows_written = 0
+            for wp in plan.transitions:
+                for param, value in wp.params.items():
+                    await conn.execute(
+                        """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
+                           VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
+                        wp.ts,
+                        param,
+                        float(value),
+                        plan.plan_id,
+                        wp.reason or "",
+                    )
+                    rows_written += 1
+
+            # Write journal entry — structured JSONB column populated only if
+            # the PlanHypothesisStructured block was present AND valid.
+            # Contract v1.4 §2.C — stamp planner_instance + trigger_id when the
+            # caller passed them through from the prompt's audit-headers banner.
+            # Both columns nullable; NULL means "pre-v1.4 path or operator
+            # injection that didn't carry headers."
+            await conn.execute(
+                """INSERT INTO plan_journal
+                     (plan_id, created_at, hypothesis, experiment, expected_outcome,
+                      hypothesis_structured, greenhouse_id, planner_instance, trigger_id)
+                   VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)""",
+                plan.plan_id,
+                plan.hypothesis,
+                plan.experiment,
+                plan.expected_outcome,
+                structured_payload,
+                planner_instance,
+                trigger_id,
+            )
 
         # Sprint 20 Phase 6: drop a trigger file so verdify-plan-publish.path
         # fires and regenerates the daily plan page. Local-SSD location so
@@ -604,6 +631,70 @@ async def set_plan(
         if structured_warning:
             result["structured_warning"] = structured_warning
         return json.dumps(result)
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def acknowledge_trigger(trigger_id: str, reason: str, planner_instance: str | None = None) -> str:
+    """Record that Iris read a planning trigger and intentionally wrote no plan.
+
+    Use this only when a FORECAST/TRANSITION/HEARTBEAT cycle needs no setpoint
+    change. It turns the matching plan_delivery_log row from pending -> acked,
+    so SLA monitors can distinguish "read/no action" from "silent drop"."""
+    try:
+        tid = UUID(trigger_id)
+    except (TypeError, ValueError):
+        return json.dumps({"error": "trigger_id must be a valid UUID"})
+
+    reason = (reason or "").strip()
+    if not reason:
+        return json.dumps({"error": "reason is required"})
+    if len(reason) > 1000:
+        return json.dumps({"error": "reason must be <= 1000 characters"})
+
+    conn = await _db()
+    try:
+        row = await conn.fetchrow(
+            """
+            UPDATE plan_delivery_log
+               SET status = 'acked',
+                   acked_at = now(),
+                   gateway_body = concat_ws(E'\n', NULLIF(gateway_body, ''), $2::text)
+             WHERE trigger_id = $1::uuid
+               AND status = 'pending'
+             RETURNING id, event_type, instance, delivered_at, status
+            """,
+            str(tid),
+            f"acknowledged by {planner_instance or 'iris'}: {reason}",
+        )
+        if row is None:
+            existing = await conn.fetchrow(
+                "SELECT id, event_type, instance, status FROM plan_delivery_log WHERE trigger_id = $1::uuid",
+                str(tid),
+            )
+            if existing is None:
+                return json.dumps({"error": f"trigger_id {tid} not found in plan_delivery_log"})
+            return _json(
+                {
+                    "ok": False,
+                    "trigger_id": str(tid),
+                    "note": "trigger was already resolved",
+                    "status": existing["status"],
+                    "event_type": existing["event_type"],
+                    "instance": existing["instance"],
+                }
+            )
+        return _json(
+            {
+                "ok": True,
+                "trigger_id": str(tid),
+                "event_type": row["event_type"],
+                "instance": row["instance"],
+                "planner_instance": planner_instance,
+                "status": row["status"],
+            }
+        )
     finally:
         await conn.close()
 
