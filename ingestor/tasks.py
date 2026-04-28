@@ -2885,9 +2885,10 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
     pass, confirmed setpoints would leave zombie open alerts forever.
     """
     async with pool.acquire() as conn:
-        # Pass 1: auto-resolve open alerts whose underlying setpoint_changes
-        # row is now confirmed_at NOT NULL. Matches on sensor_id's `setpoint.*`
-        # suffix back to the parameter name.
+        # Pass 1: auto-resolve unresolved alerts whose underlying
+        # setpoint_changes row is now confirmed_at NOT NULL. Acknowledged
+        # alerts still block deploy preflight until resolved_at is set.
+        # Matches on sensor_id's `setpoint.*` suffix back to the parameter.
         resolved = await conn.fetch(
             """
             UPDATE alert_log al
@@ -2897,16 +2898,17 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    resolution  = 'auto-resolved: confirmation landed'
               FROM (
                   SELECT DISTINCT ON (sc.parameter)
-                         sc.parameter, sc.confirmed_at
+                         sc.parameter, sc.ts, sc.confirmed_at
                     FROM setpoint_changes sc
                    WHERE sc.confirmed_at IS NOT NULL
-                     AND sc.ts > now() - interval '2 hours'
                    ORDER BY sc.parameter, sc.ts DESC
-              ) confirmed
+             ) confirmed
              WHERE al.alert_type = 'setpoint_unconfirmed'
-               AND al.disposition = 'open'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
                AND al.source = 'ingestor'
                AND al.sensor_id = 'setpoint.' || confirmed.parameter
+               AND confirmed.ts >= COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
             RETURNING al.id
             """,
         )
@@ -2921,14 +2923,14 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    resolved_by = 'system',
                    resolution  = 'auto-resolved: superseded by newer setpoint'
              WHERE al.alert_type = 'setpoint_unconfirmed'
-               AND al.disposition = 'open'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
                AND al.source = 'ingestor'
                AND EXISTS (
                    SELECT 1
                      FROM setpoint_changes newer
-                    WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
+                   WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
                       AND newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
-                      AND newer.ts > now() - interval '2 hours'
                )
             RETURNING al.id
             """,
@@ -2977,7 +2979,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
             existing = await conn.fetchval(
                 "SELECT id FROM alert_log "
                 "WHERE alert_type='setpoint_unconfirmed' "
-                "  AND disposition='open' "
+                "  AND resolved_at IS NULL "
                 "  AND sensor_id=$1",
                 f"setpoint.{r['parameter']}",
             )

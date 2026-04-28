@@ -233,6 +233,22 @@ def test_alert_monitor_detects_band_owned_plan_rows():
         assert f"'{param}'" in src
 
 
+def test_setpoint_confirmation_monitor_resolves_acknowledged_alerts():
+    """Acknowledged setpoint_unconfirmed alerts still block deploy preflight;
+    the monitor must resolve them once a confirmation or superseding setpoint
+    lands.
+    """
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("async def setpoint_confirmation_monitor")
+    block = src[start:]
+    assert "al.resolved_at IS NULL" in block
+    assert "al.disposition IN ('open', 'acknowledged')" in block
+    assert "AND resolved_at IS NULL" in block
+    assert "newer.ts > now() - interval '2 hours'" not in block
+
+
 def test_dispatcher_band_owned_contract_is_explicit():
     """Band params are dispatcher-owned; plans should not emit them as
     tactical knobs. Keep vpd_low explicit so dry-side compliance can't fall
