@@ -284,7 +284,7 @@ SETPOINT_MAP: dict[str, str] = {
     "summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
     "summer_vent_enabled": "sw_summer_vent_enabled",
     # Phase-2 dwell gate (plan firmware stabilization).
-    "dwell_gate_ms": "dwell_gate_ms",
+    "dwell_gate__ms_": "dwell_gate_ms",
     "dwell_gate_enabled": "sw_dwell_gate_enabled",
     # Controller v2: band-first FSM.
     "fsm_controller_enabled": "sw_fsm_controller_enabled",
