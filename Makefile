@@ -109,6 +109,9 @@ firmware-check-all: firmware-check ## Compile firmware from the only supported d
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
+site-doctor: ## Audit verdify.ai source, build output, and Grafana embeds
+	$(PYTHON) scripts/site-doctor.py
+
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
 	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
@@ -123,7 +126,8 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	# FW-15 (Sprint 17): sensor-health decides whether this deploy is accepted.
 	# Pass → promote new binary to last-good (rollback target for next deploy).
 	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
-	@if $(MAKE) sensor-health SINCE='5 minutes'; then \
+	@if bash scripts/wait-for-firmware-version.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" --timeout 180 && \
+		EXPECTED_FW_VERSION="$$(cat firmware/artifacts/pending-fw-version.txt)" $(MAKE) sensor-health SINCE='5 minutes'; then \
 		cp $(FIRMWARE_OTA_BIN) firmware/artifacts/last-good.ota.bin ; \
 		cp firmware/artifacts/pending-fw-version.txt firmware/artifacts/last-good.version ; \
 		mkdir -p /srv/verdify/state ; \
@@ -145,7 +149,7 @@ firmware-rollback: ## Manually flash the saved last-good.ota.bin back onto the E
 	bash scripts/firmware-rollback.sh firmware/artifacts/last-good.ota.bin
 
 sensor-health: ## Run sensor health sweep (layer 3 of Firmware Change Protocol)
-	SINCE='$(or $(SINCE),5 minutes)' bash scripts/sensor-health-sweep.sh
+	SINCE='$(or $(SINCE),5 minutes)' EXPECTED_FW_VERSION='$(EXPECTED_FW_VERSION)' bash scripts/sensor-health-sweep.sh
 
 # ── Planner (event-driven via Iris agent) ────────────────────────────
 

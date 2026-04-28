@@ -3,6 +3,7 @@
 
 import subprocess
 from datetime import date
+from html import escape
 from pathlib import Path
 
 CONTENT_DIR = Path("/srv/verdify/verdify-site/content/plans")
@@ -44,20 +45,24 @@ def main():
         "",
         "## Recent Plans",
         "",
-        "| Date | Cycles | VPD Stress | Heat Stress | Peak Temp | Cost | Experiment | Score |",
-        "|------|--------|------------|-------------|-----------|------|------------|-------|",
+        '<div class="data-table">',
     ]
 
     for row in rows:
         if len(row) >= 8:
             d = row[0].strip()
-            link = f"[{d}](/plans/{d}/)"
+            link = f'<a href="/plans/{d}/">{escape(d)}</a>'
+            experiment = row[6].strip()[:80]
             lines.append(
-                f"| {link} | {row[1].strip()} | {row[2].strip()}h | {row[3].strip()}h | {row[5].strip()}°F | ${row[4].strip()} | {row[6].strip()[:40]} | {row[7].strip()} |"
+                f'  <div class="data-row"><strong>{link}</strong>'
+                f"<span>{escape(row[1].strip())} cycles; score {escape(row[7].strip())}; cost ${escape(row[4].strip())}</span>"
+                f"<p>VPD stress {escape(row[2].strip())}h; heat stress {escape(row[3].strip())}h; "
+                f"peak {escape(row[5].strip())}°F. Experiment: {escape(experiment)}.</p></div>"
             )
 
     lines.extend(
         [
+            "</div>",
             "",
             "---",
             "",

@@ -78,6 +78,7 @@ from verdify_schemas import (
     SetpointSnapshot,
     SystemStateRow,
 )
+from verdify_schemas.tunable_registry import get as get_tunable
 
 # ──────────────────────────────────────────────────────────────
 # Config
@@ -699,6 +700,20 @@ def _accept_setpoint(param: str, value: float) -> bool:
     return True
 
 
+def _accept_outbound_setpoint(param: str, value: float) -> bool:
+    """Return True if a DB-origin setpoint is inside registry bounds."""
+    spec = get_tunable(param)
+    if spec is None or spec.kind != "numeric":
+        return True
+    if spec.min is not None and value < spec.min:
+        log.warning("Rejecting outbound setpoint %s=%.3f below registry min %.3f", param, value, spec.min)
+        return False
+    if spec.max is not None and value > spec.max:
+        log.warning("Rejecting outbound setpoint %s=%.3f above registry max %.3f", param, value, spec.max)
+        return False
+    return True
+
+
 # ──────────────────────────────────────────────────────────────
 # ESP32 callbacks
 # ──────────────────────────────────────────────────────────────
@@ -735,6 +750,7 @@ def on_state_change(entity_state) -> None:
                     )
                     return
             state.cfg_readback[cfg_param] = val
+            shared.cfg_readback[cfg_param] = float(val)
             return
 
         col = CLIMATE_MAP.get(obj_id)
@@ -882,6 +898,9 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
             # FW-4 (Sprint 20): same pass also closes the confirmation loop —
             # any setpoint_changes row whose value matches the cfg readback
             # within the 1% dispatcher dead-band gets confirmed_at = now().
+            # Backfill a short historical window too: when firmware gains a
+            # new cfg_* readback, otherwise-matching rows pushed before that
+            # sensor existed should not stay permanently "unconfirmed".
             # Rows that never match stay NULL; the setpoint_confirmation_monitor
             # task in tasks.py (FB-1) alerts after 5 min.
             if state.cfg_readback:
@@ -902,16 +921,28 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                         # FW-4 confirmation loop — one UPDATE per readback param
                         # (tiny batch; no worse than the INSERT above).
                         # Dead-band: abs(sc.value - cfg_val) / max(|cfg_val|, 1e-3) < 0.01
-                        # — same math as ingestor.tasks._should_skip.
+                        # — same math as ingestor.tasks._should_skip. Avoid
+                        # confirming through a later differing request for the
+                        # same greenhouse/parameter; those older rows were
+                        # superseded, not proven by the current readback.
                         await conn.executemany(
                             """
-                            UPDATE setpoint_changes
+                            UPDATE setpoint_changes sc
                                SET confirmed_at = now()
-                             WHERE parameter = $1
-                               AND confirmed_at IS NULL
-                               AND ts > now() - interval '30 minutes'
-                               AND abs(value - $2::double precision)
+                             WHERE sc.parameter = $1
+                               AND sc.confirmed_at IS NULL
+                               AND sc.ts > now() - interval '7 days'
+                               AND abs(sc.value - $2::double precision)
                                      / greatest(abs($2::double precision), 1e-3) < 0.01
+                               AND NOT EXISTS (
+                                   SELECT 1
+                                     FROM setpoint_changes newer
+                                    WHERE newer.parameter = sc.parameter
+                                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                                      AND newer.ts > sc.ts
+                                      AND abs(newer.value - $2::double precision)
+                                            / greatest(abs($2::double precision), 1e-3) >= 0.01
+                               )
                             """,
                             [(param, val) for param, val in state.cfg_readback.items()],
                         )
@@ -1074,6 +1105,7 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             try:
                 from tasks import setpoint_dispatcher
 
+                await asyncio.sleep(2)
                 await setpoint_dispatcher(pool)
                 log.info("Post-reconnect setpoint dispatch complete")
             except Exception as e:
@@ -1237,6 +1269,7 @@ async def mqtt_loop(pool: asyncpg.Pool) -> None:
 # ──────────────────────────────────────────────────────────────
 async def setpoint_listener(pool: asyncpg.Pool) -> None:
     """Listen for DB setpoint changes and push to ESP32 in real-time."""
+    import json
     import time as _time
 
     from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
@@ -1251,9 +1284,19 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
     }
 
     async def _on_notify(conn, pid, channel, payload):
-        if "=" not in payload:
-            return
-        param, val_str = payload.split("=", 1)
+        source = None
+        if payload.startswith("{"):
+            try:
+                event = json.loads(payload)
+                param = str(event.get("parameter") or "")
+                val_str = str(event.get("value") or "")
+                source = str(event.get("source") or "")
+            except (TypeError, ValueError):
+                return
+        else:
+            if "=" not in payload:
+                return
+            param, val_str = payload.split("=", 1)
         try:
             val = float(val_str)
         except ValueError:
@@ -1261,6 +1304,11 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
 
         # Normalize param name
         param = _ALIASES.get(param, param)
+        if source == "esp32":
+            log.debug("RT push suppressed for ESP32 echo %s", param)
+            return
+        if not _accept_outbound_setpoint(param, val):
+            return
         pushed_at = shared.recently_pushed.get(param, 0)
         if _time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S and _same_pushed_value(param, val):
             log.debug("RT push suppressed for recently pushed %s", param)

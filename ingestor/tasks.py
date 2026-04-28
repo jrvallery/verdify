@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -1229,6 +1230,50 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         heap_bytes = float(heap_diag["heap_bytes"]) if heap_diag and heap_diag["heap_bytes"] is not None else None
         critical_logs = int(heap_log["critical_logs"] or 0) if heap_log else 0
         warning_logs = int(heap_log["warning_logs"] or 0) if heap_log else 0
+        last_critical_event_ts = max(
+            [
+                ts
+                for ts in (
+                    heap_critical["last_true_ts"] if heap_critical else None,
+                    heap_log["last_critical_ts"] if heap_log else None,
+                )
+                if ts is not None
+            ],
+            default=None,
+        )
+        last_warning_event_ts = max(
+            [
+                ts
+                for ts in (
+                    heap_warning["last_true_ts"] if heap_warning else None,
+                    heap_log["last_warning_ts"] if heap_log else None,
+                )
+                if ts is not None
+            ],
+            default=None,
+        )
+        healthy_after_critical = 0
+        healthy_after_warning = 0
+        if last_critical_event_ts:
+            healthy_after_critical = await conn.fetchval(
+                """
+                SELECT count(*)
+                  FROM diagnostics
+                 WHERE ts > $1
+                   AND heap_bytes >= 35.0
+                """,
+                last_critical_event_ts,
+            )
+        if last_warning_event_ts:
+            healthy_after_warning = await conn.fetchval(
+                """
+                SELECT count(*)
+                  FROM diagnostics
+                 WHERE ts > $1
+                   AND heap_bytes >= 35.0
+                """,
+                last_warning_event_ts,
+            )
         critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
         warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
         if heap_bytes is not None:
@@ -1242,16 +1287,36 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             elif heap_bytes < 30.0 and not critical_active:
                 critical_active = False
                 warning_active = True
-            elif not critical_active and heap_diag and heap_critical and heap_diag["ts"] >= heap_critical["latest_ts"]:
-                critical_active = False
-            if (
-                heap_bytes >= 35.0
-                and not warning_active
-                and heap_diag
-                and heap_warning
-                and heap_diag["ts"] >= heap_warning["latest_ts"]
-            ):
-                warning_active = False
+            elif heap_bytes >= 35.0 and heap_diag:
+                # Recovery is explicit once firmware publishes a false binary
+                # event after the last true/log event and the numeric heap
+                # sample is healthy after that false. This preserves real
+                # transients while preventing stale log lines from holding a
+                # critical alert open after observed recovery.
+                if (
+                    critical_active
+                    and last_critical_event_ts
+                    and heap_diag["ts"] > last_critical_event_ts
+                    and healthy_after_critical >= 2
+                    and not (
+                        heap_critical
+                        and heap_critical["latest_state"] is True
+                        and heap_critical["latest_ts"] >= last_critical_event_ts
+                    )
+                ):
+                    critical_active = False
+                if (
+                    warning_active
+                    and last_warning_event_ts
+                    and heap_diag["ts"] > last_warning_event_ts
+                    and healthy_after_warning >= 2
+                    and not (
+                        heap_warning
+                        and heap_warning["latest_state"] is True
+                        and heap_warning["latest_ts"] >= last_warning_event_ts
+                    )
+                ):
+                    warning_active = False
         if critical_active:
             alerts.append(
                 {
@@ -1270,6 +1335,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
                         "critical_logs_30m": critical_logs,
+                        "healthy_heap_samples_after_event": healthy_after_critical,
                         "last_critical_log_ts": heap_log["last_critical_ts"].isoformat()
                         if heap_log and heap_log["last_critical_ts"]
                         else None,
@@ -1297,6 +1363,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
                         "warning_logs_30m": warning_logs,
+                        "healthy_heap_samples_after_event": healthy_after_warning,
                         "last_warning_log_ts": heap_log["last_warning_ts"].isoformat()
                         if heap_log and heap_log["last_warning_ts"]
                         else None,
@@ -1377,7 +1444,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # open↔resolved every alert_monitor cycle.
         open_rows = await conn.fetch(
             "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log "
-            "WHERE disposition = 'open' AND source = 'system'"
+            "WHERE disposition IN ('open', 'acknowledged') AND resolved_at IS NULL AND source = 'system'"
         )
         open_keys = {(r["alert_type"], r["sensor_id"]): r for r in open_rows}
 
@@ -1582,11 +1649,20 @@ def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: f
 
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     global _last_pushed
-    # On ESP32 reconnect, clear the cache so ALL values get re-pushed
+    # On ESP32 reconnect, rebuild the cache from firmware cfg_* readbacks.
+    # Values already confirmed by the device do not need to be pushed again;
+    # params without a readback still flow through as a conservative fallback.
     if shared.force_setpoint_push.is_set():
         shared.force_setpoint_push.clear()
         _last_pushed.clear()
-        log.info("Dispatcher: force-push — cleared _last_pushed cache (ESP32 reconnect)")
+        seeded = 0
+        for param, val in shared.cfg_readback.items():
+            _last_pushed[param] = float(val)
+            seeded += 1
+        log.info(
+            "Dispatcher: reconnect reconcile — seeded %d cfg readbacks; pushing drift/missing setpoints",
+            seeded,
+        )
     async with pool.acquire() as conn:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
@@ -1737,6 +1813,13 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     source,
                 )
                 continue
+            # Mark before INSERT so the LISTEN/NOTIFY real-time listener
+            # suppresses this dispatcher-origin row. The dispatcher performs
+            # its own retried batch push below; without this pre-mark, reconnect
+            # force-pushes duplicate every command and can drive ESP32 heap
+            # into critical-pressure transients.
+            shared.recently_pushed[param] = time.time()
+            shared.recently_pushed_values[param] = float(val)
             await conn.execute(
                 "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
                 param,
@@ -2341,8 +2424,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
                    AVG(co2_ppm) AS co2_avg, MAX(dli_today) AS dli_final,
                    MAX(mister_water_today) AS mister_water_gal
             FROM climate
-            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND temp_avg IS NOT NULL
         """,
             today,
@@ -2355,7 +2438,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT parameter, value, ts
             FROM setpoint_changes
             WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
-              AND ts <= ($1::date + 1) AT TIME ZONE 'America/Denver'
+              AND ts <= ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND CASE
                   WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
                   WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
@@ -2382,8 +2465,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         readings = await conn.fetch(
             """
             SELECT ts, temp_avg, vpd_avg FROM climate
-            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND temp_avg IS NOT NULL
             ORDER BY ts
             """,
@@ -2459,11 +2542,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         rt_rows = await conn.fetch(
             """
             WITH day_bounds AS (
-                SELECT $1::date AT TIME ZONE 'America/Denver' AS day_start,
-                       ($1::date + 1) AT TIME ZONE 'America/Denver' AS day_end
+                SELECT $1::date::timestamp AT TIME ZONE 'America/Denver' AS day_start,
+                       ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver' AS day_end
             ),
             transitions AS (
                 SELECT equipment, ts, state,
+                       lag(state) OVER (PARTITION BY equipment ORDER BY ts) AS prev_state,
                        lead(ts) OVER (PARTITION BY equipment ORDER BY ts) AS next_ts
                 FROM equipment_state, day_bounds
                 WHERE ts >= day_bounds.day_start AND ts < day_bounds.day_end
@@ -2472,7 +2556,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT equipment,
                    round(sum(extract(epoch FROM
                        coalesce(next_ts, (SELECT day_end FROM day_bounds)) - ts
-                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes
+                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes,
+                   count(*) FILTER (
+                       WHERE state IS TRUE
+                         AND COALESCE(prev_state, FALSE) IS FALSE
+                   ) AS cycles
             FROM transitions
             GROUP BY equipment
         """,
@@ -2480,6 +2568,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             list(_RT_EQUIP),
         )
         rt = {r["equipment"]: float(r["on_minutes"] or 0) for r in rt_rows}
+        cycles = {r["equipment"]: int(r["cycles"] or 0) for r in rt_rows}
 
         # Energy from runtimes
         kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
@@ -2490,8 +2579,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             await conn.fetchval(
                 """
             SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
-            FROM climate WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            FROM climate WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND water_total_gal > 0
         """,
                 today,
@@ -2528,7 +2617,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
                 min_dp_margin_f=$36, dp_risk_hours=$37,
                 compliance_pct=$38,
                 temp_compliance_pct=$39,
-                vpd_compliance_pct=$40
+                vpd_compliance_pct=$40,
+                cycles_mister_south=$41,
+                cycles_mister_west=$42,
+                cycles_mister_center=$43,
+                cycles_drip_wall=$44,
+                cycles_drip_center=$45
             WHERE date = $1
         """,
             today,
@@ -2571,6 +2665,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             compliance_pct,
             temp_compliance_pct,
             vpd_compliance_pct,
+            cycles.get("mister_south", 0),
+            cycles.get("mister_west", 0),
+            cycles.get("mister_center", 0),
+            cycles.get("drip_wall", 0),
+            cycles.get("drip_center", 0),
         )
 
     log.info(

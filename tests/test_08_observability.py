@@ -95,6 +95,39 @@ class TestDispatcherWiring:
         body = self._read()
         assert "attempt %d/3" in body or "attempt 1/3" in body, "ESP32 direct push must retry on failure (Tier 1 #4)"
 
+    def test_dispatcher_suppresses_duplicate_notify_pushes(self):
+        body = self._read()
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        shared_source = (REPO_ROOT / "ingestor" / "shared.py").read_text()
+        push_helper = (REPO_ROOT / "ingestor" / "esp32_push.py").read_text()
+        assert "shared.recently_pushed[param] = time.time()" in body
+        assert "LISTEN/NOTIFY real-time listener" in body
+        assert "reconnect reconcile" in body
+        assert "shared.cfg_readback" in body
+        assert "cfg_readback: dict[str, float]" in shared_source
+        assert "shared.cfg_readback[cfg_param]" in ingestor
+        assert "await asyncio.sleep(2)" in ingestor
+        assert "_BATCH_PAUSE_EVERY" in push_helper
+        assert "_MIN_COMMAND_INTERVAL_S" in push_helper
+        assert "async with _PUSH_LOCK" in push_helper
+        assert "await asyncio.sleep(_BATCH_PAUSE_S)" in push_helper
+
+    def test_realtime_listener_validates_outbound_registry_bounds(self):
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        assert "from verdify_schemas.tunable_registry import get as get_tunable" in ingestor
+        assert "def _accept_outbound_setpoint" in ingestor
+        assert "Rejecting outbound setpoint" in ingestor
+        assert "if not _accept_outbound_setpoint(param, val)" in ingestor
+
+    def test_realtime_listener_suppresses_esp32_echo_payloads(self):
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        migration = (REPO_ROOT / "db" / "migrations" / "100-setpoint-notify-source.sql").read_text()
+        assert "json.loads(payload)" in ingestor
+        assert 'source == "esp32"' in ingestor
+        assert "RT push suppressed for ESP32 echo" in ingestor
+        assert "json_build_object" in migration
+        assert "'source', NEW.source" in migration
+
     def test_dispatcher_escalates_push_failure(self):
         body = self._read()
         assert "'esp32_push_failed'" in body, (
@@ -123,6 +156,10 @@ class TestHeapPressureObservability:
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
         assert "'heap_pressure_warning', 'heap_pressure_critical'" in body
         assert "recent_true" in body
+        assert "latest_state" in body
+        assert "last_critical_event_ts" in body
+        assert "healthy_after_critical" in body
+        assert "healthy_heap_samples_after_event" in body
         assert "critical_logs_30m" in body
         assert "SELECT heap_bytes, ts" in body
         assert '"alert_type": "heap_pressure_warning"' in body
@@ -144,6 +181,7 @@ class TestHeapPressureObservability:
         assert "alert refresh skipped" in body
         assert "threshold_value=$5" in body
         assert "Same-severity updates intentionally stay quiet" in body
+        assert "disposition IN ('open', 'acknowledged')" in body
 
     def test_vpd_stress_alert_requires_recent_active_stress(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
@@ -425,6 +463,23 @@ class TestProbeStalenessWiring:
             "DIAGNOSTIC_MAP must route active_probe_count to the diagnostics column"
         )
 
+    def test_sensor_health_allows_startup_probe_settling(self):
+        body = (REPO_ROOT / "scripts" / "sensor-health-sweep.sh").read_text()
+        assert "uptime_s::text" in body
+        assert "STARTUP_SETTLING" in body
+        assert "startup settling" in body
+
+    def test_firmware_deploy_waits_for_expected_version(self):
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        sweep = (REPO_ROOT / "scripts" / "sensor-health-sweep.sh").read_text()
+        wait_script = (REPO_ROOT / "scripts" / "wait-for-firmware-version.sh").read_text()
+        assert "scripts/wait-for-firmware-version.sh" in makefile
+        assert "EXPECTED_FW_VERSION" in makefile
+        assert "--expected-fw" in sweep
+        assert "'heap_pressure_critical'" in sweep
+        assert "diagnostics.firmware_version" in wait_script
+        assert "Timed out waiting for firmware_version" in wait_script
+
     def test_ingestor_writes_active_probe_count(self):
         body = self._read(self.INGESTOR_PATH)
         assert "active_probe_count" in body, "ingestor diagnostics INSERT must include active_probe_count"
@@ -558,6 +613,10 @@ class TestSetpointConfirmation:
         for param in expected:
             assert param in sensors_source
 
+    def test_dwell_gate_direct_push_uses_number_slug(self):
+        entity_map = _repo_entity_map()
+        assert entity_map.PARAM_TO_ENTITY["dwell_gate_ms"] == "dwell_gate__ms_"
+
     def test_mister_selection_uses_zone_temp_stress(self):
         controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
         assert "zone_temp_stress" in controls_source
@@ -570,6 +629,15 @@ class TestSetpointConfirmation:
         assert "newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)" in body
         assert "AND NOT EXISTS (" in body
         assert "newer.ts > sc.ts" in body
+
+    def test_confirmation_loop_backfills_new_readback_history(self):
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        migration = (REPO_ROOT / "db" / "migrations" / "099-backfill-readback-confirmations.sql").read_text()
+        assert "interval '7 days'" in ingestor
+        assert "newer.value" in ingestor
+        assert "latest_readback" in migration
+        assert "confirmed_at = latest_readback.ts" in migration
+        assert "newer.ts <= latest_readback.ts" in migration
 
 
 class TestForecastPageGeneration:
