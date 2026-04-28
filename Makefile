@@ -6,6 +6,9 @@ PYTHON := $(VENV)/bin/python
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(VENV)/bin/ruff
 ESPHOME := $(VENV)/bin/esphome
+ESP32_DEVICE ?= 192.168.10.111
+FIRMWARE_ESPHOME := scripts/firmware-esphome-worktree.sh
+FIRMWARE_OTA_BIN := firmware/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin
 
 .PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all smoke clean
 
@@ -95,24 +98,13 @@ test-v: ## Run tests with verbose output
 
 # ── Firmware ────────────────────────────────────────────────────────
 
-firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
-	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
+firmware-check: ## Compile ESP32 firmware from this git worktree (validate only, no deploy)
+	$(FIRMWARE_ESPHOME) compile
 
-firmware-check-worktree: ## Compile worktree ESPHome firmware using production secrets symlink
-	@set -euo pipefail; \
-	secret="firmware/secrets.yaml"; \
-	had_gitignore=0; \
-	[ -e firmware/.gitignore ] && had_gitignore=1; \
-	if [ -e "$$secret" ]; then \
-		echo "Refusing to overwrite $$secret"; \
-		exit 2; \
-	fi; \
-	ln -s /srv/greenhouse/esphome/secrets.yaml "$$secret"; \
-	trap 'rm -f "$$secret"; if [ "$$had_gitignore" = 0 ]; then rm -f firmware/.gitignore; fi' EXIT; \
-	$(ESPHOME) compile firmware/greenhouse.yaml
+firmware-check-worktree: firmware-check ## Back-compat alias; firmware-check already uses this worktree
 
-firmware-check-all: firmware-check-worktree firmware-check ## Compile both worktree and live deploy-source firmware configs
-	@echo "✓ Both firmware configs compile"
+firmware-check-all: firmware-check ## Compile firmware from the only supported deploy source
+	@echo "✓ Worktree firmware config compiles"
 
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
@@ -122,8 +114,8 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
 	FW_VERSION="$$(date +%Y.%-m.%-d.%H%M).$$(git rev-parse --short HEAD)$$DIRTY"; \
 	echo "─── Deploying fw_version=$$FW_VERSION ───"; \
-	cd /srv/greenhouse/esphome && $(ESPHOME) -s fw_version "$$FW_VERSION" compile greenhouse.yaml && \
-	$(ESPHOME) -s fw_version "$$FW_VERSION" upload --device 192.168.10.111 greenhouse.yaml
+	$(FIRMWARE_ESPHOME) -s fw_version "$$FW_VERSION" compile && \
+	$(FIRMWARE_ESPHOME) -s fw_version "$$FW_VERSION" upload --device "$(ESP32_DEVICE)"
 	@echo ""
 	@echo "Waiting 60s for ESP32 reboot + ingestor reconnect + first diagnostics cycle..."
 	@sleep 60
@@ -131,7 +123,7 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	# Pass → promote new binary to last-good (rollback target for next deploy).
 	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
 	@if $(MAKE) sensor-health SINCE='5 minutes'; then \
-		cp /srv/greenhouse/esphome/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin firmware/artifacts/last-good.ota.bin ; \
+		cp $(FIRMWARE_OTA_BIN) firmware/artifacts/last-good.ota.bin ; \
 		echo "✓ Deploy accepted. Promoted new binary to firmware/artifacts/last-good.ota.bin (rollback target for next deploy)." ; \
 	else \
 		echo "" ; \

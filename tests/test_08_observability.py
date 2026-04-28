@@ -151,13 +151,14 @@ class TestV2ControlDiagnostics:
 
 
 class TestFirmwareCheckTargets:
-    """Firmware validation should cover both the worktree and live deploy source."""
+    """Firmware validation should compile from the active git worktree."""
 
     def test_makefile_has_worktree_firmware_compile_target(self):
         body = (REPO_ROOT / "Makefile").read_text()
         assert "firmware-check-worktree:" in body
-        assert "$(ESPHOME) compile firmware/greenhouse.yaml" in body
-        assert "firmware-check-all: firmware-check-worktree firmware-check" in body
+        assert "FIRMWARE_ESPHOME := scripts/firmware-esphome-worktree.sh" in body
+        assert "$(FIRMWARE_ESPHOME) compile" in body
+        assert "cd /srv/greenhouse/esphome" not in body
 
 
 class TestSprint18Wiring:
