@@ -988,7 +988,8 @@
             "pointSize": 4,
             "showPoints": "never",
             "spanNulls": false
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -1259,7 +1260,10 @@
             }
           ],
           "title": "Recent Alerts",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {}
+          }
         },
         {
           "datasource": {
@@ -1275,7 +1279,8 @@
                 "lineWidth": 1,
                 "showPoints": "never",
                 "spanNulls": true
-              }
+              },
+              "unit": "currencyUSD"
             },
             "overrides": [
               {

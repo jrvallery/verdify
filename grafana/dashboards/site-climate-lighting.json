@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-lighting",
-  "title": "Site: Climate \u2014 Lighting",
+  "title": "Site: Climate — Lighting",
   "editable": true,
   "panels": [
     {
@@ -18,7 +18,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "mol/m\u00b2/day",
+            "axisLabel": "mol/m²/day",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -240,7 +240,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Maximum DLI reached each day \u2014 the final daily light integral",
+      "description": "Maximum DLI reached each day — the final daily light integral",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -281,7 +281,7 @@
               }
             ]
           },
-          "unit": "mol/m\u00b2/d"
+          "unit": "mol/m²/d"
         },
         "overrides": []
       },
@@ -310,7 +310,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
           "refId": "A"
         }
       ],
@@ -352,13 +352,13 @@
               "mode": "off"
             }
           },
-          "unit": "watt/m\u00b2"
+          "unit": "watt/m²"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Forecast (W/m\u00b2)"
+              "options": "Forecast (W/m²)"
             },
             "properties": [
               {
@@ -395,7 +395,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Actual (W/m\u00b2)"
+              "options": "Actual (W/m²)"
             },
             "properties": [
               {
@@ -446,7 +446,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), solar_w_m2 AS \"Forecast (W/m\u00b2)\"\nFROM weather_forecast\nWHERE ts >= now() AND ts <= now() + interval '48 hours'\nORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_w_m2 AS \"Forecast (W/m²)\"\nFROM weather_forecast\nWHERE ts >= now() AND ts <= now() + interval '48 hours'\nORDER BY ts",
           "refId": "A"
         },
         {
@@ -455,7 +455,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Actual (W/m\u00b2)\"\nFROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Actual (W/m²)\"\nFROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "B"
         }
       ],
@@ -467,7 +467,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Sun angle and compass bearing. Altitude: 0\u00b0=horizon, 90\u00b0=zenith, negative=night. Azimuth: 0\u00b0=N, 90\u00b0=E, 180\u00b0=S, 270\u00b0=W.",
+      "description": "Sun angle and compass bearing. Altitude: 0°=horizon, 90°=zenith, negative=night. Azimuth: 0°=N, 90°=E, 180°=S, 270°=W.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -500,7 +500,7 @@
               },
               {
                 "id": "custom.axisLabel",
-                "value": "Altitude (\u00b0)"
+                "value": "Altitude (°)"
               },
               {
                 "id": "min",
@@ -535,7 +535,7 @@
               },
               {
                 "id": "custom.axisLabel",
-                "value": "Azimuth (\u00b0)"
+                "value": "Azimuth (°)"
               },
               {
                 "id": "min",
@@ -845,7 +845,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cost_electric) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_electric), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -869,7 +869,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)"
+      "description": "Electric cost = Σ(equipment runtime × watts × $0.111/kWh)"
     },
     {
       "description": "Greenhouse electrical load overlaid with available solar radiation. When solar is up, the greenhouse runs on sun.",
@@ -910,7 +910,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar (W/m\u00b2)"
+              "options": "Solar (W/m²)"
             },
             "properties": [
               {
@@ -963,7 +963,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
           "refId": "B"
         }
       ],

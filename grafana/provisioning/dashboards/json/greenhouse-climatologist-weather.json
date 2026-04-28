@@ -1143,7 +1143,8 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -1368,7 +1369,10 @@
             }
           ],
           "title": "Disease Risk (Last 12h)",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {}
+          }
         },
         {
           "datasource": {
@@ -1397,7 +1401,10 @@
             }
           ],
           "title": "Mister Effectiveness (24h)",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {}
+          }
         }
       ],
       "title": "Disease Risk & Mister Impact",

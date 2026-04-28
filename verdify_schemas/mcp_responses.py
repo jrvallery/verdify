@@ -71,9 +71,8 @@ class ScorecardResponse(BaseModel):
     via aliases; downstream consumers (Iris prompt, daily-plan renderer,
     Grafana panels) keep reading the same shape.
 
-    Authoritative metric list is the deployed DB function, not a migration
-    file — as of 2026-04-18 the checked-in migrations + `db/schema.sql` are
-    stale relative to live (known infra drift flagged to coordinator).
+    Authoritative metric list is `db/migrations/096-scorecard-live-resync.sql`
+    and the matching `db/schema.sql` dump.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -116,11 +115,9 @@ class ScorecardResponse(BaseModel):
     avg_therms_7d: float | None = Field(default=None, alias="7d_avg_therms")
     avg_water_gal_7d: float | None = Field(default=None, alias="7d_avg_water_gal")
 
-    # Present in the migration-076/077-era function (what CI's Postgres serves
-    # via db/schema.sql) but removed in the deployed version as of 2026-04-19.
-    # Schema is a superset so it passes the drift guard against both dialects.
-    # Once G15 resyncs migrations with live, one definition becomes canonical
-    # and these two fields become either permanent or removable.
+    # Present in the migration-076/077-era function but removed from the
+    # canonical 25-metric scorecard in migration 096. Kept as optional aliases
+    # until old test databases are fully rebuilt from the resynced schema.
     avg_stress_7d: float | None = Field(default=None, alias="7d_avg_stress")
     avg_dp_risk_7d: float | None = Field(default=None, alias="7d_avg_dp_risk")
 

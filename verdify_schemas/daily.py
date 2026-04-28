@@ -51,6 +51,11 @@ class DailySummaryRow(BaseModel):
     cycles_dehum: int = 0
     cycles_safety_dehum: int = 0
     cycles_grow_light: int | None = None
+    cycles_mister_south: int | None = Field(default=None, ge=0)
+    cycles_mister_west: int | None = Field(default=None, ge=0)
+    cycles_mister_center: int | None = Field(default=None, ge=0)
+    cycles_drip_wall: int | None = Field(default=None, ge=0)
+    cycles_drip_center: int | None = Field(default=None, ge=0)
 
     # Mister fairness watchdog (sprint-24-alignment — firmware sprint-2 feature)
     mister_fairness_overrides_today: int | None = Field(default=None, ge=0)

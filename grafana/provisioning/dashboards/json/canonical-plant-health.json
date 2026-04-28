@@ -248,7 +248,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), dif AS \"DIF\"\nFROM v_dif\nWHERE $__timeFilter(date::timestamptz)\nORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), dif AS \"DIF\"\nFROM v_dif\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -783,7 +783,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), MAX(gdd_cumulative) AS \"GDD\"\nFROM v_gdd\nWHERE $__timeFilter(date::timestamptz)\nGROUP BY 1\nORDER BY 1",
+          "rawSql": "SELECT $__time(date::timestamptz), MAX(gdd_cumulative) AS \"GDD\"\nFROM v_gdd\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nGROUP BY 1\nORDER BY 1",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1084,7 +1084,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [
@@ -1150,7 +1151,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [

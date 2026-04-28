@@ -1,6 +1,6 @@
 {
   "uid": "site-intelligence-planning",
-  "title": "Site: Intelligence \u2014 Planning",
+  "title": "Site: Intelligence — Planning",
   "editable": true,
   "panels": [
     {
@@ -467,7 +467,7 @@
           }
         }
       ],
-      "title": "Forecast vs Planned vs Actual \u2014 Temperature",
+      "title": "Forecast vs Planned vs Actual — Temperature",
       "type": "timeseries"
     },
     {
@@ -721,7 +721,7 @@
           }
         }
       ],
-      "title": "Forecast vs Planned vs Actual \u2014 VPD",
+      "title": "Forecast vs Planned vs Actual — VPD",
       "type": "timeseries"
     },
     {
@@ -764,12 +764,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT * FROM fn_forecast_correction('temp_f', 24)",
+          "rawSql": "SELECT now() AS time, avg_error AS \"Forecast bias (°F)\" FROM fn_forecast_correction('temp_f', 24)",
           "refId": "A"
         }
       ],
       "title": "Forecast Bias (temp)",
-      "type": "timeseries"
+      "type": "stat"
     },
     {
       "description": "Shows hourly write activity alongside oscillation counts.",
@@ -846,7 +846,7 @@
     {
       "id": 115,
       "type": "barchart",
-      "title": "Plans per day by instance (contract \u00a72.F)",
+      "title": "Plans per day by instance (contract §2.F)",
       "description": "Daily plan_journal write count, split by planner_instance. Bars stack to show total throughput; colour distinguishes opus vs. local.",
       "datasource": {
         "type": "grafana-postgresql-datasource",

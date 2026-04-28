@@ -496,7 +496,8 @@
             "stacking": {
               "mode": "normal"
             },
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [
@@ -615,7 +616,8 @@
               "mode": "normal"
             },
             "barMaxWidth": 40,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [

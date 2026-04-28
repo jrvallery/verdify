@@ -266,7 +266,8 @@
                 "value": 2
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -3015,7 +3016,7 @@
           },
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric, 2) AS \"South\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric, 2) AS \"South\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3024,7 +3025,7 @@
           },
           "refId": "B",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric, 2) AS \"West\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric, 2) AS \"West\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3033,7 +3034,7 @@
           },
           "refId": "C",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric, 2) AS \"Center\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric, 2) AS \"Center\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         }
       ],
       "fieldConfig": {
@@ -3344,7 +3345,8 @@
             "drawStyle": "bars",
             "fillOpacity": 60,
             "barMaxWidth": 20,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [
@@ -3399,7 +3401,7 @@
           },
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), gal_per_mol_dli AS \"gal/mol\"\nFROM v_water_efficiency\nWHERE $__timeFilter(date::timestamptz)\nORDER BY date"
+          "rawSql": "SELECT $__time(date::timestamptz), gal_per_mol_dli AS \"gal/mol\"\nFROM v_water_efficiency\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))\nORDER BY date"
         }
       ],
       "fieldConfig": {
@@ -3486,7 +3488,7 @@
           },
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric/60, 1) AS \"Fan 1\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric/60, 1) AS \"Fan 1\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3495,7 +3497,7 @@
           },
           "refId": "B",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric/60, 1) AS \"Fan 2\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric/60, 1) AS \"Fan 2\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3504,7 +3506,7 @@
           },
           "refId": "C",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat1_min)::numeric/60, 1) AS \"Heat 1\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat1_min)::numeric/60, 1) AS \"Heat 1\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3513,7 +3515,7 @@
           },
           "refId": "D",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat2_min)::numeric/60, 1) AS \"Heat 2\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat2_min)::numeric/60, 1) AS \"Heat 2\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3522,7 +3524,7 @@
           },
           "refId": "E",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fog_min)::numeric/60, 1) AS \"Fog\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fog_min)::numeric/60, 1) AS \"Fog\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3531,7 +3533,7 @@
           },
           "refId": "F",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric/60, 1) AS \"Vent\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric/60, 1) AS \"Vent\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         }
       ],
       "fieldConfig": {
@@ -3596,7 +3598,7 @@
           },
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_fan1) AS \"Fan1\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_fan1) AS \"Fan1\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3605,7 +3607,7 @@
           },
           "refId": "B",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_fan2) AS \"Fan2\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_fan2) AS \"Fan2\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3614,7 +3616,7 @@
           },
           "refId": "C",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_heat1) AS \"Heat1\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_heat1) AS \"Heat1\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3623,7 +3625,7 @@
           },
           "refId": "D",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_heat2) AS \"Heat2\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_heat2) AS \"Heat2\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3632,7 +3634,7 @@
           },
           "refId": "E",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_fog) AS \"Fog\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_fog) AS \"Fog\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3641,7 +3643,7 @@
           },
           "refId": "F",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_vent) AS \"Vent\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_vent) AS \"Vent\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3650,7 +3652,7 @@
           },
           "refId": "G",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_dehum) AS \"Dehum\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_dehum) AS \"Dehum\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         },
         {
           "datasource": {
@@ -3659,7 +3661,7 @@
           },
           "refId": "H",
           "format": "time_series",
-          "rawSql": "SELECT now() AS time, SUM(cycles_safety_dehum) AS \"Safety Dehum\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz)"
+          "rawSql": "SELECT now() AS time, SUM(cycles_safety_dehum) AS \"Safety Dehum\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))"
         }
       ],
       "fieldConfig": {
@@ -5737,7 +5739,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "smooth"
-          }
+          },
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -5871,7 +5874,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "smooth"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {

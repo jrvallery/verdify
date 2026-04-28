@@ -489,7 +489,8 @@
             "showPoints": "never",
             "stacking": {
               "mode": "normal"
-            }
+            },
+            "spanNulls": false
           },
           "decimals": 2,
           "unit": "currencyUSD"

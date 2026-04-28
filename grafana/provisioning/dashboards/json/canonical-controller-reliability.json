@@ -58,7 +58,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -338,7 +339,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "h"
         },
         "overrides": []
       },
@@ -583,7 +585,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "h"
         },
         "overrides": []
       },
@@ -659,7 +662,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {

@@ -152,7 +152,8 @@
               }
             }
           ],
-          "custom": {}
+          "custom": {},
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -780,7 +781,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "h"
         },
         "overrides": []
       },

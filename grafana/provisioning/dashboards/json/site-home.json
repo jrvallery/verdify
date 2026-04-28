@@ -1227,7 +1227,8 @@
             "showPoints": "never",
             "spanNulls": true
           },
-          "decimals": 1
+          "decimals": 1,
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -1607,7 +1608,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1727,7 +1728,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), cost_electric AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_electric AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "A"
         },
         {
@@ -1736,7 +1737,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), cost_gas AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_gas AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "B"
         },
         {
@@ -1745,7 +1746,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), cost_water AS \"Water\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_water AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "C"
         }
       ],
@@ -1762,7 +1763,8 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {

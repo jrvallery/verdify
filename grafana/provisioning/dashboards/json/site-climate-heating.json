@@ -23,7 +23,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cost_gas) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_gas), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -69,7 +69,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(therms_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(therms_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -114,7 +114,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -160,7 +160,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz),\n  COALESCE(runtime_heat1_min,0)/60.0 AS \"Heat 1\",\n  COALESCE(runtime_heat2_min,0)/60.0 AS \"Heat 2\",\n  COALESCE(runtime_fan1_min,0)/60.0 AS \"Fan 1\",\n  COALESCE(runtime_fan2_min,0)/60.0 AS \"Fan 2\",\n  COALESCE(runtime_fog_min,0)/60.0 AS \"Fog\",\n  COALESCE(runtime_vent_min,0)/60.0 AS \"Vent\",\n  COALESCE(runtime_grow_light_min,0)/60.0 AS \"Grow Lights\",\n  COALESCE(runtime_mister_south_h,0) AS \"Mister South\",\n  COALESCE(runtime_mister_west_h,0) AS \"Mister West\",\n  COALESCE(runtime_mister_center_h,0) AS \"Mister Center\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time,\n  COALESCE(runtime_heat1_min,0)/60.0 AS \"Heat 1\",\n  COALESCE(runtime_heat2_min,0)/60.0 AS \"Heat 2\",\n  COALESCE(runtime_fan1_min,0)/60.0 AS \"Fan 1\",\n  COALESCE(runtime_fan2_min,0)/60.0 AS \"Fan 2\",\n  COALESCE(runtime_fog_min,0)/60.0 AS \"Fog\",\n  COALESCE(runtime_vent_min,0)/60.0 AS \"Vent\",\n  COALESCE(runtime_grow_light_min,0)/60.0 AS \"Grow Lights\",\n  COALESCE(runtime_mister_south_h,0) AS \"Mister South\",\n  COALESCE(runtime_mister_west_h,0) AS \"Mister West\",\n  COALESCE(runtime_mister_center_h,0) AS \"Mister Center\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "format": "time_series",
           "refId": "A"
         }
@@ -174,7 +174,8 @@
             "lineWidth": 0,
             "stacking": {
               "mode": "normal"
-            }
+            },
+            "spanNulls": false
           }
         },
         "overrides": [
@@ -362,7 +363,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), therms_estimated AS \"Therms\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND therms_estimated > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, therms_estimated AS \"Therms\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND therms_estimated > 0 ORDER BY date",
           "format": "time_series",
           "refId": "A"
         },
@@ -371,7 +372,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), ROUND(AVG(m.outdoor_temp_f)::numeric,1) AS \"Outdoor Temp\"\nFROM daily_summary ds JOIN v_climate_merged m ON m.bucket::date = ds.date\nWHERE $__timeFilter(date::timestamptz) AND therms_estimated > 0 GROUP BY ds.date ORDER BY ds.date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND(AVG(m.outdoor_temp_f)::numeric,1) AS \"Outdoor Temp\"\nFROM daily_summary ds JOIN v_climate_merged m ON m.bucket::date = ds.date\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND therms_estimated > 0 GROUP BY ds.date ORDER BY ds.date",
           "format": "time_series",
           "refId": "B"
         }
@@ -383,8 +384,10 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "always",
-            "pointSize": 5
-          }
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -1192,7 +1195,9 @@
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 50,
-            "showPoints": "never"
+            "showPoints": "never",
+            "lineWidth": 1,
+            "spanNulls": false
           },
           "unit": "fahrenheit"
         },
@@ -1279,7 +1284,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT date AS time, day_avg_temp AS \"Day\", night_avg_temp AS \"Night\", dif AS \"DIF\"\nFROM v_dif\nWHERE date > now() - interval '14 days'\nORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, day_avg_temp AS \"Day\", night_avg_temp AS \"Night\", dif AS \"DIF\"\nFROM v_dif\nWHERE date > now() - interval '14 days'\nORDER BY date",
           "refId": "A"
         }
       ],
@@ -1386,7 +1391,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_electric)::numeric,2) AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_electric)::numeric,2) AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) GROUP BY 1 ORDER BY 1",
           "refId": "A"
         },
         {
@@ -1395,7 +1400,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_gas)::numeric,2) AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_gas)::numeric,2) AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) GROUP BY 1 ORDER BY 1",
           "refId": "B"
         },
         {
@@ -1404,7 +1409,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_water)::numeric,2) AS \"Water\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_water)::numeric,2) AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) GROUP BY 1 ORDER BY 1",
           "refId": "C"
         }
       ],

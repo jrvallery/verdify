@@ -14,6 +14,8 @@ set -uo pipefail
 
 LOCK=/var/lock/verdify-site-build.lock
 LOG=/srv/verdify/state/site-build.log
+SITE_SOURCE=${VERDIFY_SITE_SOURCE:-/mnt/iris/verdify-worktrees/web/site}
+SITE_RUNTIME=${VERDIFY_SITE_RUNTIME:-/srv/verdify/verdify-site}
 mkdir -p "$(dirname "$LOG")"
 
 {
@@ -26,7 +28,22 @@ mkdir -p "$(dirname "$LOG")"
     sleep 5
 
     echo "$(date -Is) rebuild starting"
-    cd /srv/verdify/verdify-site
+    if [ -d "$SITE_SOURCE/quartz" ]; then
+        rsync -a --delete --exclude '.quartz-cache' "$SITE_SOURCE/quartz/" "$SITE_RUNTIME/quartz/"
+        rsync -a --delete "$SITE_SOURCE/docs/" "$SITE_RUNTIME/docs/"
+        rsync -a \
+            "$SITE_SOURCE/package.json" \
+            "$SITE_SOURCE/package-lock.json" \
+            "$SITE_SOURCE/quartz.config.ts" \
+            "$SITE_SOURCE/quartz.layout.ts" \
+            "$SITE_SOURCE/tsconfig.json" \
+            "$SITE_SOURCE/globals.d.ts" \
+            "$SITE_SOURCE/index.d.ts" \
+            "$SITE_SOURCE/nginx.conf" \
+            "$SITE_RUNTIME/"
+    fi
+
+    cd "$SITE_RUNTIME"
     if npx quartz build 2>&1 | tail -5; then
         if docker restart verdify-site > /dev/null 2>&1; then
             pages=$(find /srv/verdify/verdify-site/public -name '*.html' | wc -l)

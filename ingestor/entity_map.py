@@ -333,6 +333,11 @@ DAILY_ACCUM_MAP: dict[str, str] = {
     "cycles___vent__today_": "cycles_vent",
     "de_hum_cycles__today_": "cycles_dehum",
     "safety_de_hum_cycles__today_": "cycles_safety_dehum",
+    "cycles___mister_south__today_": "cycles_mister_south",
+    "cycles___mister_west__today_": "cycles_mister_west",
+    "cycles___mister_center__today_": "cycles_mister_center",
+    "cycles___drip_wall__today_": "cycles_drip_wall",
+    "cycles___drip_center__today_": "cycles_drip_center",
     # Runtime (relay minutes)
     "runtime___fan_1__min_today_": "runtime_fan1_min",
     "runtime___fan_2__min_today_": "runtime_fan2_min",

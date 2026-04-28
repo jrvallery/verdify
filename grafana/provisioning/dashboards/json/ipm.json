@@ -244,7 +244,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [
@@ -310,7 +311,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         },
         "overrides": [
@@ -405,7 +407,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },
@@ -467,7 +470,8 @@
         "defaults": {
           "unit": "fahrenheit",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },
@@ -536,7 +540,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },
@@ -648,7 +653,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_fog_min AS \"Fog (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_fog_min AS \"Fog (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) ORDER BY date",
           "refId": "A",
           "format": "time_series"
         },
@@ -676,7 +681,8 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },
@@ -710,12 +716,12 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_vent_min AS \"Vent (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_vent_min AS \"Vent (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) ORDER BY date",
           "refId": "A",
           "format": "time_series"
         },
         {
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_fan1_min + runtime_fan2_min AS \"Fans (min)\" FROM daily_summary WHERE $__timeFilter(date::timestamptz) ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_fan1_min + runtime_fan2_min AS \"Fans (min)\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) ORDER BY date",
           "refId": "B",
           "format": "time_series"
         }
@@ -726,7 +732,8 @@
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 40,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": false
           }
         }
       },
