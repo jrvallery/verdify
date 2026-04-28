@@ -829,10 +829,16 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # across a new diurnal period with no explicit planner review.
         required_misses = await conn.fetch(
             """
+            WITH latest_required AS (
+                SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body,
+                       row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC) AS rn
+                  FROM plan_delivery_log
+                 WHERE event_type IN ('SUNRISE', 'SUNSET')
+                   AND delivered_at > now() - interval '18 hours'
+            )
             SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body
-              FROM plan_delivery_log
-             WHERE event_type IN ('SUNRISE', 'SUNSET')
-               AND delivered_at > now() - interval '18 hours'
+              FROM latest_required
+             WHERE rn = 1
                AND delivered_at < now() - interval '15 minutes'
                AND status <> 'plan_written'
              ORDER BY delivered_at DESC

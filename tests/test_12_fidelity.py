@@ -296,6 +296,7 @@ def test_alert_monitor_detects_planner_delivery_outages():
     assert "planner_required_plan_missed" in src
     assert "system.planner_required_plan" in src
     assert "event_type IN ('SUNRISE', 'SUNSET')" in src
+    assert "row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC)" in src
 
 
 # ── S24.9.3 — status='plan_written' on resolve ─────────────────────
