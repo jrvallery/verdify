@@ -106,11 +106,11 @@ Structure transitions around solar milestones:
 ]
 ```
 
-Each transition should include the tactical Tier 1 params that define the intended posture.
-Do not include crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`);
-crop profiles and the dispatcher own them. Use `bias_heat`, `bias_cool`, mist,
-fog, dwell, and hysteresis knobs to shift behavior. The dispatcher executes the
-persisted tactical waypoints even if the planner is offline.
+Each transition MUST include all 24 tactical Tier 1 params. Do not include
+crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); crop profiles
+and the dispatcher own them. Use `bias_heat`, `bias_cool`, mist, fog, dwell,
+and hysteresis knobs to shift behavior. The dispatcher executes the persisted
+tactical waypoints even if the planner is offline.
 
 ### REPORT: Post to Slack
 

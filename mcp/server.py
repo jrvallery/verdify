@@ -63,6 +63,34 @@ if _env_path.exists():
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
 # Legacy planner.py removed — planning now runs via iris_planner.py → OpenClaw hooks
 BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+PLAN_REQUIRED_PARAMS = frozenset(
+    {
+        "vpd_hysteresis",
+        "vpd_watch_dwell_s",
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_pulse_on_s",
+        "mister_pulse_gap_s",
+        "mister_vpd_weight",
+        "mister_water_budget_gal",
+        "mist_vent_close_lead_s",
+        "mist_max_closed_vent_s",
+        "mist_vent_reopen_delay_s",
+        "mist_thermal_relief_s",
+        "enthalpy_open",
+        "enthalpy_close",
+        "min_vent_on_s",
+        "min_vent_off_s",
+        "min_fog_on_s",
+        "min_fog_off_s",
+        "fog_escalation_kpa",
+        "d_cool_stage_2",
+        "bias_heat",
+        "bias_cool",
+        "min_heat_on_s",
+        "min_heat_off_s",
+    }
+)
 TIER1_TUNABLES = frozenset(
     {
         "vpd_hysteresis",
@@ -539,6 +567,20 @@ async def set_plan(
         return json.dumps(
             {
                 "error": "Plan contains only crop-band params; these are dispatcher-owned read-only context",
+                "band_owned_params": sorted(BAND_OWNED_PARAMS),
+            }
+        )
+    missing_required = []
+    for idx, wp in enumerate(plan.transitions):
+        missing = sorted(PLAN_REQUIRED_PARAMS - set(wp.params))
+        if missing:
+            missing_required.append({"transition_index": idx, "ts": wp.ts.isoformat(), "missing": missing})
+    if missing_required:
+        return json.dumps(
+            {
+                "error": "Plan transitions must include all 24 tactical Tier 1 params",
+                "missing_required_params": missing_required,
+                "required_params": sorted(PLAN_REQUIRED_PARAMS),
                 "band_owned_params": sorted(BAND_OWNED_PARAMS),
             }
         )

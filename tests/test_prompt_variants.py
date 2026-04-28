@@ -114,6 +114,8 @@ class TestSplitInvariants:
         assert "Do not emit in plans" in iris_planner._PLANNER_CORE
         assert "crop-band params" in iris_planner._sunrise_prompt("context")
         assert "crop-band params" in iris_planner._sunset_prompt("context")
+        assert "all 24 tactical Tier 1 params" in iris_planner._sunrise_prompt("context")
+        assert "all 24 tactical Tier 1 params" in iris_planner._sunset_prompt("context")
         assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunrise_prompt("context")
         assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunset_prompt("context")
 
@@ -135,6 +137,8 @@ class TestSplitInvariants:
         """set_plan must enforce the same ownership boundary as the prompt."""
         server = (Path(_WORKTREE) / "mcp" / "server.py").read_text()
         assert 'BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}' in server
+        assert "PLAN_REQUIRED_PARAMS" in server
+        assert "Plan transitions must include all 24 tactical Tier 1 params" in server
         assert "band_params_dropped" in server
         assert "param in BAND_OWNED_PARAMS" in server
 

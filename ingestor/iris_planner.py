@@ -476,9 +476,9 @@ today's forecast, and set the daytime posture.
 6. **Check alerts** — call `alerts`. Acknowledge or resolve any that are stale.
 7. **Write today's plan** — use `set_plan(plan_id, hypothesis, transitions)` with 5-8 waypoints
    anchored to solar milestones (dawn, morning ramp, peak stress, decline, evening).
-   Each transition includes the tactical Tier 1 params you are setting. Do not include
-   crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist,
-   fog, dwell, and hysteresis knobs to shift behavior. Include a hypothesis and experiment.
+   Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
+   (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
+   dwell, and hysteresis knobs to shift behavior. Include a hypothesis and experiment.
    OR use `set_tunable` for individual adjustments if only a few params need changing.
 7. **Post morning brief to #greenhouse** — include:
    - Yesterday's scorecard: score, temp vs VPD compliance, stress breakdown, utility cost + trend
@@ -516,10 +516,10 @@ and set the overnight posture.
 5. **Check alerts** — call `alerts`. Resolve any from today.
 6. **Write overnight plan** — use `set_plan(plan_id, hypothesis, transitions)` with 3-5 waypoints
    anchored to evening/overnight milestones (evening_settle, midnight_posture, pre_dawn).
-   Each transition includes the tactical Tier 1 params you are setting. Do not include
-   crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist,
-   fog, dwell, and hysteresis knobs to shift behavior. Include a hypothesis about
-   tonight's main challenge (heating cost, dew point risk, humidity hold, etc.).
+   Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
+   (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
+   dwell, and hysteresis knobs to shift behavior. Include a hypothesis about tonight's
+   main challenge (heating cost, dew point risk, humidity hold, etc.).
    Key overnight tuning:
    - `bias_cool` +2 to +4 if heaters expected (prevents vent oscillation)
    - `bias_heat` +1 to +2 for cold nights (<45°F forecast)
