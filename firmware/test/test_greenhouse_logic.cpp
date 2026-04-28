@@ -1828,6 +1828,55 @@ static Setpoints fsm_v2_setpoints() {
     return sp;
 }
 
+TEST(fsm_v2_heat1_targets_temp_band_midpoint) {
+    auto sp = fsm_v2_setpoints();  // midpoint = 75°F
+    sp.heat_hysteresis = 1.0f;
+    auto s = initial_state();
+
+    auto out_low = resolve_equipment(IDLE, make_inputs(74.0f, 0.9f), sp, s, true);
+    ASSERT_TRUE(out_low.heat1);
+    ASSERT_FALSE(out_low.heat2);
+
+    auto out_high = resolve_equipment(IDLE, make_inputs(76.5f, 0.9f), sp, s, true);
+    ASSERT_FALSE(out_high.heat1);
+    ASSERT_FALSE(out_high.heat2);
+    PASS();
+}
+
+TEST(fsm_v2_heat2_latches_at_temp_low_not_stage2_margin) {
+    auto sp = fsm_v2_setpoints();  // band 72-78°F, midpoint = 75°F
+    sp.dH2 = 5.0f;                 // legacy margin must not delay v2 gas heat
+    auto s = initial_state();
+
+    determine_mode(make_inputs(72.1f, 0.9f), sp, s, 5000);
+    ASSERT_FALSE(s.heat2_latched);
+
+    determine_mode(make_inputs(71.9f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage2");
+
+    auto out = resolve_equipment(IDLE, make_inputs(71.9f, 0.9f), sp, s, true);
+    ASSERT_TRUE(out.heat1);
+    ASSERT_TRUE(out.heat2);
+    PASS();
+}
+
+TEST(fsm_v2_heat2_clears_after_midpoint_recovery) {
+    auto sp = fsm_v2_setpoints();  // band 72-78°F, midpoint = 75°F
+    auto s = initial_state();
+
+    determine_mode(make_inputs(71.5f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+
+    determine_mode(make_inputs(74.5f, 0.9f), sp, s, 5000);
+    ASSERT_TRUE(s.heat2_latched);
+
+    determine_mode(make_inputs(75.0f, 0.9f), sp, s, 5000);
+    ASSERT_FALSE(s.heat2_latched);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage1");
+    PASS();
+}
+
 TEST(fsm_v2_relief_exhausted_does_not_force_cold_vent) {
     auto sp = fsm_v2_setpoints();
     auto s = initial_state();
@@ -1920,7 +1969,7 @@ TEST(fsm_v2_cold_dehum_requires_temp_headroom) {
 
     Mode m = determine_mode(in, sp, s, 60000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_idle");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage1");
     PASS();
 }
 

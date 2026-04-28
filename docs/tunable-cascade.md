@@ -12,21 +12,28 @@ registry against firmware, schemas, entity_map, cfg readbacks, and MCP.
 
 **Current contract doc:** `docs/firmware-control-contract.md`.
 
-## Known open issues (as of 2026-04-20)
+## Known open issues
 
-### 🔴 Edge-targeting bug (heating side)
+### Resolved 2026-04-28 — v2 heating edge-targeting bug
 
-`firmware/lib/greenhouse_logic.h:442`:
+Pre-fix, heating demand used the lower edge/interior-lower edge of the band
+instead of the band midpoint:
 ```c
 bool needs_heating_s1 = in.temp_f < (Tlow + sp.heat_hysteresis);
 ```
-where `Tlow = sp.temp_low + sp.bias_heat`.
+and gas-stage latch used `Tlow - d_heat_stage_2`.
 
-This targets the **lower edge** of the band, not the center. With `temp_low=62, bias_heat=4, heat_hysteresis=1`, effective target is 67°F — OK. But when `bias_heat` is stale/missing (as overnight 4/18 when it was 0), effective target drops to `temp_low + 1 = 63°F` and temp pins at the lower edge.
+This let v2 sit below `temp_low` until the `d_heat_stage_2` margin was
+exceeded. With the 2026-04-28 live morning band (`temp_low=65.5`,
+`temp_high=72.7`, `d_heat_stage_2=5`), heat2 waited until roughly `62F`,
+which directly explained poor lower-band compliance.
 
-Symptom: overnight 4/18 4-hour stretch with temp at 61.9-62.2°F even though heater had capacity for higher.
+Fix: controller v2 now targets `(temp_low + temp_high) / 2` for heat1 and
+latches heat2 immediately when `temp_f < temp_low`; heat2 clears once the
+midpoint is recovered. Legacy cascade behavior is unchanged until it is retired.
 
-**Design fix (post-trip):** target `(temp_low + temp_high) / 2` with symmetric deadband, not `temp_low + bias_heat + hysteresis`. Cooling-side likely has the same edge-targeting problem in reverse. One-line firmware change; needs review + OTA + sensor-health verification.
+Open follow-up: cooling still uses the legacy 25%-inside upper target and should
+get the same first-principles review before summer heat ramps.
 
 ### 2026-04-27 Setpoints literal audit
 
@@ -67,7 +74,7 @@ Number → `/setpoints` handler → `Setpoints` field → cfg readback path:
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `temp_low` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_plan`, `setpoint_changes` | `target_temp_low_f` | `Setpoints.temp_low` | `greenhouse_logic.h:439` Tlow calc; band-compliance; mode transitions | `cfg_temp_low_f` | 58°F | [30, 80] | crop (band) + planner (override, clamped to band) | immediate (5 min) |
 | `temp_high` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_plan`, `setpoint_changes` | `target_temp_high_f` | `Setpoints.temp_high` | `greenhouse_logic.h:119` VENTILATE trigger; band-compliance | `cfg_temp_high_f` | 82°F | [40, 100] | crop (band) + planner (override, clamped) | immediate |
-| `d_heat_stage_2` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_d_heat_stage_2_f` | `Setpoints.d_heat_stage_2` | `greenhouse_logic.h:131-140` S2 latch threshold (heat2 engages at `Tlow - d_heat_stage_2`) | ⚠️ **NONE** (readback gap) | 2.0°F | [0, 5] | operator / fw-default | immediate but unverified |
+| `d_heat_stage_2` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_d_heat_stage_2_f` | `Setpoints.d_heat_stage_2` | Legacy cascade S2 latch threshold (`Tlow - d_heat_stage_2`); controller v2 ignores this for gas-stage entry and latches heat2 at raw `temp_low` | `cfg_d_heat_stage_2_f` | 2.0°F | [0, 5] | operator / fw-default | immediate |
 | `d_cool_stage_2` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_d_cool_stage_2_f` | `Setpoints.d_cool_stage_2` | `greenhouse_logic.h:494` 2nd-fan threshold (fan2 engages at `Thigh + d_cool_stage_2`) | ⚠️ **NONE** (readback gap) | 2.0°F | [0, 5] | operator / fw-default | immediate but unverified |
 | `temp_hysteresis` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_hyst_temp_f` | `Setpoints.temp_hysteresis` | `greenhouse_logic.h:120,136,262` mode transition hysteresis (prevents churn near boundary) | `cfg_hyst_temp_f` | 1.5°F | [0.5, 3.0] | operator / fw-default | immediate |
 
@@ -75,7 +82,7 @@ Number → `/setpoints` handler → `Setpoints` field → cfg readback path:
 
 | Param | Type | Pydantic | DB | Dispatcher route | FW struct | FW use | cfg_* readback | Default | Valid range | Owner | Cascade |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `bias_heat` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_bias_heat_f` | `Setpoints.bias_heat` | `greenhouse_logic.h:133,439` adds to `temp_low` to compute internal Tlow — used by edge-targeting heat logic (🔴 see "Open issues") | `cfg_bias_heat_f` | 0°F | [0, 10] | operator (sets once) | immediate |
+| `bias_heat` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_bias_heat_f` | `Setpoints.bias_heat` | Legacy cascade heating offset; controller v2 derives heat1 target from the raw temp-band midpoint and heat2 entry from raw `temp_low` | `cfg_bias_heat_f` | 0°F | [0, 10] | operator (sets once) | immediate |
 | `bias_cool` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_bias_cool_f` | `Setpoints.bias_cool` | `greenhouse_logic.h` subtracts from `temp_high` for internal Thigh (symmetric counterpart to bias_heat) | `cfg_bias_cool_f` | 0°F | [0, 10] | operator | immediate |
 
 ## VPD band (3 tunables) — FULLY SPEC'D

@@ -82,6 +82,14 @@ inline float v2_vpd_hysteresis(const Setpoints& sp) noexcept {
     return std::min(requested, cap);
 }
 
+// Controller v2 uses the crop/planner band itself as the temperature contract.
+// Heat1 protects the midpoint; heat2 protects the lower edge. The older
+// d_heat_stage_2 margin is left to the legacy cascade and should not allow v2
+// to sit several degrees below band before gas heat joins.
+inline float v2_heat_target_f(const Setpoints& sp) noexcept {
+    return (sp.temp_low + sp.temp_high) * 0.5f;
+}
+
 // Controller v2: band-first FSM.
 //
 // Policy: safety rails still preempt everything, but normal control prioritizes
@@ -115,7 +123,6 @@ inline Mode determine_mode_v2(
     }
 
     const Mode prev = state.mode_prev;
-    const float temp_low = sp.temp_low + sp.bias_heat;
     const float temp_high = sp.temp_high + sp.bias_cool;
     const float HV = v2_vpd_hysteresis(sp);
 
@@ -129,7 +136,9 @@ inline Mode determine_mode_v2(
     const bool needs_cooling = was_cooling
         ? in.temp_f > (temp_high - cooling_exit_hysteresis)
         : in.temp_f > temp_high;
-    const bool temp_too_low = in.temp_f < temp_low;
+    const float heat_target = v2_heat_target_f(sp);
+    const bool temp_below_band = in.temp_f < sp.temp_low;
+    const bool needs_heating_s1 = in.temp_f < (heat_target + sp.heat_hysteresis);
 
     const bool vpd_high = in.vpd_kpa > sp.vpd_high;
     const bool vpd_high_resolved = in.vpd_kpa <= (sp.vpd_high - HV);
@@ -141,11 +150,9 @@ inline Mode determine_mode_v2(
     const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
 
     {
-        const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
-        const float heat_target = sp.temp_low + band_width * 0.25f + sp.bias_heat;
-        if (in.temp_f < (heat_target - sp.dH2)) {
+        if (temp_below_band) {
             state.heat2_latched = true;
-        } else if (in.temp_f >= (heat_target + sp.heat_hysteresis)) {
+        } else if (in.temp_f >= heat_target) {
             state.heat2_latched = false;
         }
     }
@@ -260,7 +267,7 @@ inline Mode determine_mode_v2(
         state.sealed_timer_ms = 0;
     } else if (humidify_ready
                && !moisture_blocked
-               && !temp_too_low
+               && !temp_below_band
                && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f)) {
         mode = SEALED_MIST;
         state.last_mode_reason = "v2_humidify_enter";
@@ -270,7 +277,7 @@ inline Mode determine_mode_v2(
         state.vent_latch_timer_ms = 0;
     } else {
         mode = IDLE;
-        if (temp_too_low) {
+        if (needs_heating_s1) {
             state.last_mode_reason = state.heat2_latched ? "v2_heat_stage2" : "v2_heat_stage1";
         } else {
             state.last_mode_reason = "v2_idle";
@@ -886,7 +893,9 @@ inline OverrideFlags evaluate_overrides(
     // heat holds the temp band. Recompute the resolve_equipment() intent so
     // active_overrides makes the overlap explicit without mutating state.
     const float temp_band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
-    const float heat_target = sp.temp_low + temp_band_width * 0.25f + sp.bias_heat;
+    const float heat_target = sp.sw_fsm_controller_enabled
+        ? v2_heat_target_f(sp)
+        : sp.temp_low + temp_band_width * 0.25f + sp.bias_heat;
     const bool heat_suppressed_by_upper_band = in.temp_f >= sp.temp_high;
     const bool heat1_would_run =
         !heat_suppressed_by_upper_band
@@ -913,13 +922,13 @@ inline RelayOutputs resolve_equipment(
     const ControlState& state,
     bool lead_is_fan1
 ) {
-    // Sprint-12: interior targets (25% inside band). Heating/cooling now
-    // aim for the middle 50% of the operator-pushed band instead of
-    // pinning to the edges. See comment block in determine_mode() for
-    // rationale; keep these two blocks in sync so state-machine and
-    // equipment output use the same thresholds.
+    // Sprint-12 legacy: interior targets (25% inside band). Controller v2
+    // tightens heating to the band midpoint while keeping cooling's legacy
+    // interior target until the cooling side is redesigned separately.
     const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
-    const float Tlow  = sp.temp_low  + band_width * 0.25f + sp.bias_heat;
+    const float Tlow  = sp.sw_fsm_controller_enabled
+        ? v2_heat_target_f(sp)
+        : sp.temp_low + band_width * 0.25f + sp.bias_heat;
     const float Thigh = sp.temp_high - band_width * 0.25f + sp.bias_cool;
 
     const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
