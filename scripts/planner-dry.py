@@ -45,13 +45,13 @@ assert "22 tools" in p._STANDING_DIRECTIVES, "tool-count guard: '22 tools' missi
 assert p.PLANNER_PLAYBOOK_PATH.exists(), f"playbook missing at {p.PLANNER_PLAYBOOK_PATH}"
 
 # Sprint-3 split + Phase-1d prompt slimming: CORE must have the hypothesis
-# format AND the Tier 1 daily-use tunable dictionary. The full registry lives
-# in verdify_schemas.tunable_registry / docs/tunable-cascade.md; keeping every
-# tunable literal in CORE caused prompt bloat and stale guidance.
+# format AND the tactical Tier 1 dictionary with read-only crop bands. The full
+# registry lives in verdify_schemas.tunable_registry / docs/tunable-cascade.md;
+# keeping every tunable literal in CORE caused prompt bloat and stale guidance.
 assert "Structured hypothesis" in p._PLANNER_CORE, (
     "structured-hypothesis guidance (G7) missing from _PLANNER_CORE — must ship to both instances"
 )
-assert "Tunable Dictionary — Tier 1" in p._PLANNER_CORE, "Tier 1 dictionary header missing from _PLANNER_CORE"
+assert "Tunable Dictionary — Tactical Tier 1" in p._PLANNER_CORE, "Tier 1 dictionary header missing from _PLANNER_CORE"
 assert "docs/tunable-cascade.md" in p._PLANNER_CORE, "escape-hatch reference to full cascade doc missing"
 # Drift guard: every Tier 1 planner-pushable name must appear literally in CORE.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))

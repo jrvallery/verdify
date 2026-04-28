@@ -98,7 +98,7 @@ Structure transitions around solar milestones:
 
 ```json
 [
-  {"ts": "2026-04-12T06:30:00-06:00", "params": {...all 24...}, "reason": "Dawn — overnight posture"},
+  {"ts": "2026-04-12T06:30:00-06:00", "params": {...tactical Tier 1 params...}, "reason": "Dawn — overnight posture"},
   {"ts": "2026-04-12T10:00:00-06:00", "params": {...}, "reason": "Morning ramp — solar load building"},
   {"ts": "2026-04-12T13:00:00-06:00", "params": {...}, "reason": "Peak stress — max misting aggression"},
   {"ts": "2026-04-12T17:00:00-06:00", "params": {...}, "reason": "Decline — reduce misting, prep for evening"},
@@ -106,7 +106,11 @@ Structure transitions around solar milestones:
 ]
 ```
 
-Each transition MUST include all 24 Tier 1 params. The dispatcher executes these even if the planner is offline.
+Each transition should include the tactical Tier 1 params that define the intended posture.
+Do not include crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`);
+crop profiles and the dispatcher own them. Use `bias_heat`, `bias_cool`, mist,
+fog, dwell, and hysteresis knobs to shift behavior. The dispatcher executes the
+persisted tactical waypoints even if the planner is offline.
 
 ### REPORT: Post to Slack
 
@@ -263,5 +267,5 @@ The context is better for full-horizon scanning.
 3. **Never set fog_escalation_kpa below 0.15.** Fog is powerful — too aggressive creates VPD-low stress and condensation risk.
 4. **Never set mist_max_closed_vent_s above 900.** Heat builds during sealed misting. >15 min sealed = thermal relief cycles too frequently.
 5. **Never set min_heat_off_s below 300.** Gas heater ignition cycling damages the unit.
-6. **Never zero out safety rails or set band params to 0.** The dispatcher will reject them, but corrupt values can persist in setpoint_changes.
+6. **Never emit crop-band params in plans.** `temp_low`, `temp_high`, `vpd_low`, and `vpd_high` are dispatcher-owned read-only context; use bias, mist, fog, dwell, and hysteresis knobs instead.
 7. **Never call docker exec, psql, or shell commands.** Use MCP tools only. Post a feature request if a tool is missing.

@@ -11,6 +11,7 @@ import importlib.util
 import os
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -99,7 +100,7 @@ class TestSplitInvariants:
         literal + an escape-hatch reference for Tier 2."""
         from verdify_schemas.tunable_registry import REGISTRY
 
-        assert "Tunable Dictionary — Tier 1" in iris_planner._PLANNER_CORE, "Tier 1 dictionary header missing"
+        assert "Tunable Dictionary — Tactical Tier 1" in iris_planner._PLANNER_CORE, "Tier 1 dictionary header missing"
         assert "docs/tunable-cascade.md" in iris_planner._PLANNER_CORE, (
             "escape-hatch reference to full cascade doc missing"
         )
@@ -107,6 +108,14 @@ class TestSplitInvariants:
         tier1 = {n for n, d in REGISTRY.items() if d.planner_pushable and d.tier == 1}
         missing = sorted(t for t in tier1 if t not in iris_planner._PLANNER_CORE)
         assert not missing, f"CORE Tier-1 dictionary missing {len(missing)} params: {missing[:10]}"
+
+        for band_param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):
+            assert f"`{band_param}`" in iris_planner._PLANNER_CORE
+        assert "Do not emit in plans" in iris_planner._PLANNER_CORE
+        assert "crop-band params" in iris_planner._sunrise_prompt("context")
+        assert "crop-band params" in iris_planner._sunset_prompt("context")
+        assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunrise_prompt("context")
+        assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunset_prompt("context")
 
     def test_core_contains_decision_precedence(self, iris_planner):
         assert "Decision Precedence" in iris_planner._PLANNER_CORE
@@ -121,6 +130,13 @@ class TestSplitInvariants:
     def test_extended_does_not_duplicate_dictionary(self, iris_planner):
         """Dictionary header must appear exactly once (in CORE) — no duplication."""
         assert "Tunable Dictionary" not in iris_planner._PLANNER_EXTENDED
+
+    def test_mcp_drops_band_owned_plan_params(self):
+        """set_plan must enforce the same ownership boundary as the prompt."""
+        server = (Path(_WORKTREE) / "mcp" / "server.py").read_text()
+        assert 'BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}' in server
+        assert "band_params_dropped" in server
+        assert "param in BAND_OWNED_PARAMS" in server
 
     def test_legacy_knowledge_alias_unchanged(self, iris_planner):
         """_PLANNER_KNOWLEDGE is the legacy concatenation; any consumer still

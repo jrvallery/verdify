@@ -61,6 +61,7 @@ if _env_path.exists():
             _db_pass = line.split("=", 1)[1].strip().strip('"').strip("'")
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
 # Legacy planner.py removed — planning now runs via iris_planner.py → OpenClaw hooks
+BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}
 
 
 def _json(obj):
@@ -82,7 +83,9 @@ mcp = FastMCP(
     instructions="""Verdify greenhouse control tools. Use these to monitor climate,
     manage setpoints, run the AI planner, and review performance.
     The greenhouse has temp/VPD bands, misters, fog, fans, heaters, and a vent.
-    The planner sets 24 Tier 1 tunables that shape how the controller responds.""",
+    The planner sets tactical Tier 1 tunables that shape how the controller responds.
+    Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
+    read-only context; plans should adjust bias, mist, fog, dwell, and hysteresis knobs.""",
 )
 
 
@@ -534,6 +537,15 @@ async def set_plan(
     except ValidationError as e:
         return json.dumps({"error": "Plan validation failed", "details": json.loads(e.json())})
 
+    writable_params = [param for wp in plan.transitions for param in wp.params if param not in BAND_OWNED_PARAMS]
+    if not writable_params:
+        return json.dumps(
+            {
+                "error": "Plan contains only crop-band params; these are dispatcher-owned read-only context",
+                "band_owned_params": sorted(BAND_OWNED_PARAMS),
+            }
+        )
+
     # Sprint 20 Phase 5: try to extract a PlanHypothesisStructured JSON block
     # from the hypothesis prose. Fence convention: ```json …``` anywhere in
     # the text. Failure to find or validate is silent — the prose still lands.
@@ -569,10 +581,17 @@ async def set_plan(
                      AND plan_id NOT LIKE 'iris-oneshot-%'"""
             )
 
-            # Write new waypoints (everything pre-validated — no further per-row guards needed)
+            # Write new waypoints. Crop-band params are read-only planner
+            # context, owned by crop profiles + dispatcher; dropping them
+            # here prevents future clamp storms from semantically valid but
+            # owner-misaligned plans.
             rows_written = 0
+            band_params_dropped = 0
             for wp in plan.transitions:
                 for param, value in wp.params.items():
+                    if param in BAND_OWNED_PARAMS:
+                        band_params_dropped += 1
+                        continue
                     await conn.execute(
                         """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
                            VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
@@ -623,6 +642,7 @@ async def set_plan(
             "plan_id": plan.plan_id,
             "transitions": len(plan.transitions),
             "rows_written": rows_written,
+            "band_params_dropped": band_params_dropped,
             "structured_hypothesis": structured_payload is not None,
             "trigger_id": trigger_id,
             "planner_instance": planner_instance,

@@ -194,7 +194,7 @@ def test_zero_variance_rule_skips_empty_zone_target_fallbacks():
 
 
 def test_zero_variance_rule_also_covers_band_params():
-    """temp_low / temp_high / vpd_low / vpd_high should track crop + planner
+    """temp_low / temp_high / vpd_low / vpd_high should track crop + dispatcher
     state. If they go flat for 7 days, something upstream is broken."""
     import tasks
 

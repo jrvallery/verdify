@@ -469,7 +469,7 @@ alerts AS (
   -- HEAT WARNING
   SELECT 1 AS ord, 'HEAT WARNING: forecast high ' || round(max_t::numeric,0) || '°F at '
     || to_char(peak_ts AT TIME ZONE 'America/Denver', 'HH:MI AM')
-    || '. Consider lowering temp_high or extending mister window.' AS alert
+    || '. Consider stronger cooling posture via bias_cool, fog_escalation_kpa, and mist timing.' AS alert
   FROM (SELECT max(temp_f) AS max_t, (array_agg(ts ORDER BY temp_f DESC))[1] AS peak_ts FROM fc WHERE temp_f > 90) h
   WHERE h.max_t IS NOT NULL
   UNION ALL
@@ -482,7 +482,7 @@ alerts AS (
   -- FROST RISK
   SELECT 3, 'FROST RISK: forecast low ' || round(min_t::numeric,0) || '°F at '
     || to_char(low_ts AT TIME ZONE 'America/Denver', 'HH:MI AM')
-    || '. Verify heaters operational, consider raising temp_low.'
+    || '. Verify heaters operational; consider bias_heat and bias_cool to prevent oscillation.'
   FROM (SELECT min(temp_f) AS min_t, (array_agg(ts ORDER BY temp_f ASC))[1] AS low_ts FROM fc WHERE temp_f < 35) c
   WHERE c.min_t IS NOT NULL
   UNION ALL

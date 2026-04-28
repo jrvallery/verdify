@@ -103,7 +103,7 @@ _STANDING_DIRECTIVES = """
 # opus sends directives + CORE + EXTENDED.
 #
 #   _PLANNER_CORE      — must-send for both opus and local. Decision
-#                        precedence, KPIs, the 24 Tier 1 tunables table,
+#                        precedence, KPIs, the tactical Tier 1 tunables table,
 #                        stress-type definitions, data quality rules, and
 #                        the structured-hypothesis format (G7). Without
 #                        these, neither instance can plan safely.
@@ -190,7 +190,7 @@ Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to foc
 - `vpd_high_stress`: VPD > vpd_high — misting too conservative or vent open during dry air
 - `vpd_low_stress`: VPD < vpd_low — over-humidification or fog overshoot
 
-### Tunable Dictionary — Tier 1 (30 daily-use knobs)
+### Tunable Dictionary — Tactical Tier 1 + Read-Only Bands
 
 Push via `set_tunable(param, value, reason)` or as a transition key in
 `set_plan`. Ranges are dispatcher clamp bounds; pushing outside clamps
@@ -205,11 +205,17 @@ per-zone VPD targets, sw_* toggles you rarely touch, safety rails —
 operator-owned) see `docs/tunable-cascade.md` or read the registry.
 **If you need a tier-2 param the firmware clamp is the source of truth.**
 
-**Crop band (push daily to match weather / growth stage):**
-- `temp_low` °F — lower band edge; HEAT_S1 target
-- `temp_high` °F — upper band edge; VENTILATE trigger
-- `vpd_low` kPa — DEHUM_VENT trigger
-- `vpd_high` kPa — SEALED_MIST trigger
+**Crop band (read-only context; crop profiles + dispatcher own these):**
+- `temp_low` °F — lower band edge; HEAT_S1 target. Do not emit in plans.
+- `temp_high` °F — upper band edge; VENTILATE trigger. Do not emit in plans.
+- `vpd_low` kPa — DEHUM_VENT trigger. Do not emit in plans.
+- `vpd_high` kPa — SEALED_MIST trigger. Do not emit in plans.
+
+If a plan includes `temp_low`, `temp_high`, `vpd_low`, or `vpd_high`, MCP drops
+them before persistence. Old plans containing them create dispatcher clamps.
+Use tactical knobs below to shift behavior instead.
+
+**Band-adjacent tactical knob:**
 - `vpd_hysteresis` kPa, [0.05-1.0], def 0.3 — larger = fewer mist cycles
 
 **Bias (daytime vs overnight posture):**
@@ -466,7 +472,9 @@ today's forecast, and set the daytime posture.
 6. **Check alerts** — call `alerts`. Acknowledge or resolve any that are stale.
 7. **Write today's plan** — use `set_plan(plan_id, hypothesis, transitions)` with 5-8 waypoints
    anchored to solar milestones (dawn, morning ramp, peak stress, decline, evening).
-   Each transition includes ALL 24 Tier 1 params. Include a hypothesis and experiment.
+   Each transition includes the tactical Tier 1 params you are setting. Do not include
+   crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist,
+   fog, dwell, and hysteresis knobs to shift behavior. Include a hypothesis and experiment.
    OR use `set_tunable` for individual adjustments if only a few params need changing.
 7. **Post morning brief to #greenhouse** — include:
    - Yesterday's scorecard: score, temp vs VPD compliance, stress breakdown, utility cost + trend
@@ -504,8 +512,10 @@ and set the overnight posture.
 5. **Check alerts** — call `alerts`. Resolve any from today.
 6. **Write overnight plan** — use `set_plan(plan_id, hypothesis, transitions)` with 3-5 waypoints
    anchored to evening/overnight milestones (evening_settle, midnight_posture, pre_dawn).
-   Each transition includes ALL 24 Tier 1 params. Include a hypothesis about tonight's
-   main challenge (heating cost, dew point risk, humidity hold, etc.).
+   Each transition includes the tactical Tier 1 params you are setting. Do not include
+   crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist,
+   fog, dwell, and hysteresis knobs to shift behavior. Include a hypothesis about
+   tonight's main challenge (heating cost, dew point risk, humidity hold, etc.).
    Key overnight tuning:
    - `bias_cool` +2 to +4 if heaters expected (prevents vent oscillation)
    - `bias_heat` +1 to +2 for cold nights (<45°F forecast)
