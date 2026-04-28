@@ -126,6 +126,7 @@ from .system_infra import (
     UtilityCost,
 )
 from .telemetry import (
+    OVERRIDE_EVENT_TYPES,
     ClimateRow,
     Diagnostics,
     EnergySample,
@@ -291,6 +292,7 @@ __all__ = [
     "ObservationWithCrop",
     "OpenMeteoForecastResponse",
     "OpenMeteoHourly",
+    "OVERRIDE_EVENT_TYPES",
     "OverrideActivity24h",
     "OverrideEvent",
     "ParamRationale",

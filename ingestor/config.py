@@ -26,6 +26,11 @@ DB_DSN = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 ESP32_HOST = os.environ.get("ESP32_HOST", "192.168.10.111")
 ESP32_PORT = int(os.environ.get("ESP32_PORT", "6053"))
 ESP32_API_KEY = os.environ.get("ESP32_API_KEY", "")
+EXPECTED_FIRMWARE_VERSION = os.environ.get("EXPECTED_FIRMWARE_VERSION", "")
+EXPECTED_FIRMWARE_VERSION_FILE = os.environ.get(
+    "EXPECTED_FIRMWARE_VERSION_FILE",
+    "/srv/verdify/state/expected-firmware-version",
+)
 
 # ── Home Assistant ────────────────────────────────────────────────
 HA_URL = os.environ.get("HA_URL", "http://192.168.30.107:8123")

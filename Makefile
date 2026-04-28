@@ -113,6 +113,7 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	@mkdir -p firmware/artifacts
 	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
 	FW_VERSION="$$(date +%Y.%-m.%-d.%H%M).$$(git rev-parse --short HEAD)$$DIRTY"; \
+	echo "$$FW_VERSION" > firmware/artifacts/pending-fw-version.txt; \
 	echo "─── Deploying fw_version=$$FW_VERSION ───"; \
 	$(FIRMWARE_ESPHOME) -s fw_version "$$FW_VERSION" compile && \
 	$(FIRMWARE_ESPHOME) -s fw_version "$$FW_VERSION" upload --device "$(ESP32_DEVICE)"
@@ -124,7 +125,10 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
 	@if $(MAKE) sensor-health SINCE='5 minutes'; then \
 		cp $(FIRMWARE_OTA_BIN) firmware/artifacts/last-good.ota.bin ; \
-		echo "✓ Deploy accepted. Promoted new binary to firmware/artifacts/last-good.ota.bin (rollback target for next deploy)." ; \
+		cp firmware/artifacts/pending-fw-version.txt firmware/artifacts/last-good.version ; \
+		mkdir -p /srv/verdify/state ; \
+		cp firmware/artifacts/pending-fw-version.txt /srv/verdify/state/expected-firmware-version ; \
+		echo "✓ Deploy accepted. Promoted new binary + expected firmware pin (rollback target for next deploy)." ; \
 	else \
 		echo "" ; \
 		echo "▓▓▓  SENSOR-HEALTH FAILED POST-OTA  —  initiating auto-rollback  ▓▓▓" ; \

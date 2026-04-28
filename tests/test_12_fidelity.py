@@ -22,6 +22,7 @@ Run: `pytest tests/test_12_fidelity.py -v`
 
 from __future__ import annotations
 
+import ast
 import os
 import sys
 from pathlib import Path
@@ -44,6 +45,21 @@ os.environ.setdefault("DB_NAME", "test")
 import iris_planner  # noqa: E402
 
 import ingestor  # noqa: E402
+
+
+def _assigned_set(path: Path, name: str) -> set[str]:
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            continue
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
+            value = value.args[0]
+        return set(ast.literal_eval(value))
+    raise AssertionError(f"{name} assignment not found in {path}")
+
 
 # ── S24.9.1 — _SETPOINT_RANGES coverage ────────────────────────────
 
@@ -215,6 +231,42 @@ def test_alert_monitor_detects_band_owned_plan_rows():
     assert "is_active = true" in src
     for param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):
         assert f"'{param}'" in src
+
+
+def test_dispatcher_band_owned_contract_is_explicit():
+    """Band params are dispatcher-owned; plans should not emit them as
+    tactical knobs. Keep vpd_low explicit so dry-side compliance can't fall
+    through a planner/schema ambiguity.
+    """
+    import tasks
+
+    expected = {
+        "temp_low",
+        "temp_high",
+        "vpd_low",
+        "vpd_high",
+        "vpd_target_south",
+        "vpd_target_west",
+        "vpd_target_east",
+        "vpd_target_center",
+    }
+    assert tasks.BAND_DRIVEN_PARAMS == expected
+
+    src = Path(tasks.__file__).read_text()
+    assert "fn_band_setpoints(now())" in src
+    assert "param in BAND_DRIVEN_PARAMS" in src
+
+
+def test_mcp_set_tunable_treats_vpd_low_as_band_owned():
+    """MCP should expose crop-band params as read-only context, not Tier 1
+    tactical tuning. The dispatcher owns vpd_low through fn_band_setpoints().
+    """
+    mcp_path = Path(__file__).resolve().parent.parent / "mcp" / "server.py"
+    band_owned = _assigned_set(mcp_path, "BAND_OWNED_PARAMS")
+    tier1 = _assigned_set(mcp_path, "TIER1_TUNABLES")
+
+    assert band_owned == {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+    assert not (band_owned & tier1), f"Band-owned params must not be Tier 1 tunables: {band_owned & tier1}"
 
 
 # ── S24.9.3 — status='plan_written' on resolve ─────────────────────

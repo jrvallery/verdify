@@ -165,21 +165,22 @@ class TestDriftGuard:
 
     def test_registry_tier1_is_subset_of_mcp_tier1(self) -> None:
         """Every REGISTRY entry with tier=1 + planner_pushable=True must be in
-        mcp/server.py TIER1 so Iris can actually push it.
+        mcp/server.py TIER1_TUNABLES so Iris can actually push it.
 
         Phase-1a: one-directional check. Phase-1b replaces mcp TIER1 with
         `PLANNER_PUSHABLE_REG` from this module.
         """
         mcp_path = REPO_ROOT / "mcp" / "server.py"
         text = mcp_path.read_text()
-        # Grab the TIER1 set literal
-        m = re.search(r"TIER1\s*=\s*\{([^}]+)\}", text, re.DOTALL)
-        assert m, "Couldn't find TIER1 set in mcp/server.py"
+        # Grab either the legacy local TIER1 set or the module-level
+        # TIER1_TUNABLES frozenset contract.
+        m = re.search(r"TIER1(?:_TUNABLES)?\s*=\s*(?:frozenset\(\s*)?\{([^}]+)\}", text, re.DOTALL)
+        assert m, "Couldn't find TIER1/TIER1_TUNABLES set in mcp/server.py"
         tier1_body = m.group(1)
         mcp_tier1 = set(re.findall(r'"([a-z0-9_]+)"', tier1_body))
         registry_tier1 = {n for n, d in REGISTRY.items() if d.tier == 1 and d.planner_pushable}
         missing = registry_tier1 - mcp_tier1
         assert not missing, (
-            f"{len(missing)} registry tier-1 entries not in mcp/server.py TIER1: "
-            f"{sorted(missing)}. Add to TIER1 (Phase-1b retires TIER1 entirely)."
+            f"{len(missing)} registry tier-1 entries not in mcp/server.py TIER1_TUNABLES: "
+            f"{sorted(missing)}. Add to TIER1_TUNABLES (Phase-1b retires it entirely)."
         )
