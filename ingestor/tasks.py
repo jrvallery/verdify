@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -1251,6 +1252,28 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             ],
             default=None,
         )
+        healthy_after_critical = 0
+        healthy_after_warning = 0
+        if last_critical_event_ts:
+            healthy_after_critical = await conn.fetchval(
+                """
+                SELECT count(*)
+                  FROM diagnostics
+                 WHERE ts > $1
+                   AND heap_bytes >= 35.0
+                """,
+                last_critical_event_ts,
+            )
+        if last_warning_event_ts:
+            healthy_after_warning = await conn.fetchval(
+                """
+                SELECT count(*)
+                  FROM diagnostics
+                 WHERE ts > $1
+                   AND heap_bytes >= 35.0
+                """,
+                last_warning_event_ts,
+            )
         critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
         warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
         if heap_bytes is not None:
@@ -1272,20 +1295,26 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 # critical alert open after observed recovery.
                 if (
                     critical_active
-                    and heap_critical
-                    and heap_critical["latest_state"] is False
                     and last_critical_event_ts
-                    and heap_critical["latest_ts"] >= last_critical_event_ts
-                    and heap_diag["ts"] >= heap_critical["latest_ts"]
+                    and heap_diag["ts"] > last_critical_event_ts
+                    and healthy_after_critical >= 2
+                    and not (
+                        heap_critical
+                        and heap_critical["latest_state"] is True
+                        and heap_critical["latest_ts"] >= last_critical_event_ts
+                    )
                 ):
                     critical_active = False
                 if (
                     warning_active
-                    and heap_warning
-                    and heap_warning["latest_state"] is False
                     and last_warning_event_ts
-                    and heap_warning["latest_ts"] >= last_warning_event_ts
-                    and heap_diag["ts"] >= heap_warning["latest_ts"]
+                    and heap_diag["ts"] > last_warning_event_ts
+                    and healthy_after_warning >= 2
+                    and not (
+                        heap_warning
+                        and heap_warning["latest_state"] is True
+                        and heap_warning["latest_ts"] >= last_warning_event_ts
+                    )
                 ):
                     warning_active = False
         if critical_active:
@@ -1306,6 +1335,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
                         "critical_logs_30m": critical_logs,
+                        "healthy_heap_samples_after_event": healthy_after_critical,
                         "last_critical_log_ts": heap_log["last_critical_ts"].isoformat()
                         if heap_log and heap_log["last_critical_ts"]
                         else None,
@@ -1333,6 +1363,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
                         "warning_logs_30m": warning_logs,
+                        "healthy_heap_samples_after_event": healthy_after_warning,
                         "last_warning_log_ts": heap_log["last_warning_ts"].isoformat()
                         if heap_log and heap_log["last_warning_ts"]
                         else None,
@@ -1413,7 +1444,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # open↔resolved every alert_monitor cycle.
         open_rows = await conn.fetch(
             "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log "
-            "WHERE disposition = 'open' AND source = 'system'"
+            "WHERE disposition IN ('open', 'acknowledged') AND resolved_at IS NULL AND source = 'system'"
         )
         open_keys = {(r["alert_type"], r["sensor_id"]): r for r in open_rows}
 
@@ -1773,6 +1804,13 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     source,
                 )
                 continue
+            # Mark before INSERT so the LISTEN/NOTIFY real-time listener
+            # suppresses this dispatcher-origin row. The dispatcher performs
+            # its own retried batch push below; without this pre-mark, reconnect
+            # force-pushes duplicate every command and can drive ESP32 heap
+            # into critical-pressure transients.
+            shared.recently_pushed[param] = time.time()
+            shared.recently_pushed_values[param] = float(val)
             await conn.execute(
                 "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
                 param,

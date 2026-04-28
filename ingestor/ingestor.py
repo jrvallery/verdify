@@ -882,6 +882,9 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
             # FW-4 (Sprint 20): same pass also closes the confirmation loop —
             # any setpoint_changes row whose value matches the cfg readback
             # within the 1% dispatcher dead-band gets confirmed_at = now().
+            # Backfill a short historical window too: when firmware gains a
+            # new cfg_* readback, otherwise-matching rows pushed before that
+            # sensor existed should not stay permanently "unconfirmed".
             # Rows that never match stay NULL; the setpoint_confirmation_monitor
             # task in tasks.py (FB-1) alerts after 5 min.
             if state.cfg_readback:
@@ -902,16 +905,28 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                         # FW-4 confirmation loop — one UPDATE per readback param
                         # (tiny batch; no worse than the INSERT above).
                         # Dead-band: abs(sc.value - cfg_val) / max(|cfg_val|, 1e-3) < 0.01
-                        # — same math as ingestor.tasks._should_skip.
+                        # — same math as ingestor.tasks._should_skip. Avoid
+                        # confirming through a later differing request for the
+                        # same greenhouse/parameter; those older rows were
+                        # superseded, not proven by the current readback.
                         await conn.executemany(
                             """
-                            UPDATE setpoint_changes
+                            UPDATE setpoint_changes sc
                                SET confirmed_at = now()
-                             WHERE parameter = $1
-                               AND confirmed_at IS NULL
-                               AND ts > now() - interval '30 minutes'
-                               AND abs(value - $2::double precision)
+                             WHERE sc.parameter = $1
+                               AND sc.confirmed_at IS NULL
+                               AND sc.ts > now() - interval '7 days'
+                               AND abs(sc.value - $2::double precision)
                                      / greatest(abs($2::double precision), 1e-3) < 0.01
+                               AND NOT EXISTS (
+                                   SELECT 1
+                                     FROM setpoint_changes newer
+                                    WHERE newer.parameter = sc.parameter
+                                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                                      AND newer.ts > sc.ts
+                                      AND abs(newer.value - $2::double precision)
+                                            / greatest(abs($2::double precision), 1e-3) >= 0.01
+                               )
                             """,
                             [(param, val) for param, val in state.cfg_readback.items()],
                         )

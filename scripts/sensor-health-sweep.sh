@@ -11,14 +11,18 @@
 set -uo pipefail
 
 SINCE="${SINCE:-5 minutes}"
+EXPECTED_FW_VERSION="${EXPECTED_FW_VERSION:-}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --since) SINCE="$2"; shift 2 ;;
+        --expected-fw) EXPECTED_FW_VERSION="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [--since 'PG INTERVAL']"
+            echo "Usage: $0 [--since 'PG INTERVAL'] [--expected-fw VERSION]"
             echo "  --since takes a PostgreSQL interval string: '5 minutes', '1 hour',"
             echo "  '2 days', etc.  The leading ago is handled — do NOT append 'ago'."
             echo "  SINCE env var is equivalent."
+            echo "  --expected-fw, or EXPECTED_FW_VERSION, fails the sweep if the latest"
+            echo "  diagnostics row still reports a different firmware version."
             exit 0 ;;
         *) echo "Unknown arg: $1" >&2; exit 2 ;;
     esac
@@ -142,7 +146,15 @@ else
     else
         pass "reset_reason = $reset_reason"
     fi
-    pass "firmware_version = $fw_ver"
+    if [[ -n "$EXPECTED_FW_VERSION" ]]; then
+        if [[ "$fw_ver" == "$EXPECTED_FW_VERSION" ]]; then
+            pass "firmware_version = $fw_ver (expected)"
+        else
+            fail "firmware_version = $fw_ver (expected $EXPECTED_FW_VERSION)"
+        fi
+    else
+        pass "firmware_version = $fw_ver"
+    fi
     pass "wifi_rssi = $rssi dBm"
     pass "uptime = $uptime s"
 fi
@@ -152,7 +164,7 @@ fi
 # regression — means a sensor went dark right around the deploy.
 section "Alerts opened during the deploy window ('$SINCE')"
 
-NEW_ALERTS=$($DB "SELECT alert_type || ' :: ' || COALESCE(sensor_id, '?') FROM alert_log WHERE ts >= now() - interval '$SINCE' AND disposition = 'open' AND alert_type IN ('sensor_offline', 'esp32_reboot', 'esp32_push_failed', 'band_fn_null')" 2>/dev/null)
+NEW_ALERTS=$($DB "SELECT alert_type || ' :: ' || COALESCE(sensor_id, '?') FROM alert_log WHERE ts >= now() - interval '$SINCE' AND disposition = 'open' AND alert_type IN ('sensor_offline', 'esp32_reboot', 'esp32_push_failed', 'band_fn_null', 'heap_pressure_critical')" 2>/dev/null)
 
 if [[ -z "$NEW_ALERTS" ]]; then
     pass "No new sensor_offline / esp32_reboot / push / band alerts opened in window"
