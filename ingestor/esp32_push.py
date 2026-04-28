@@ -54,6 +54,7 @@ async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
             db_param = SETPOINT_MAP.get(obj_id)
             if db_param:
                 shared.recently_pushed[db_param] = time.time()
+                shared.recently_pushed_values[db_param] = float(val)
         except Exception as e:
             log.warning("ESP32 push failed for %s: %s", obj_id, e)
             break

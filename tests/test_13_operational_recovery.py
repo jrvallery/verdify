@@ -43,8 +43,8 @@ def test_gap_tracking_uses_disconnect_timestamp():
 
 def test_echo_suppression_covers_delayed_esphome_state_publish():
     src = Path(INGESTOR_PATH, "ingestor.py").read_text()
-    assert "_PUSH_ECHO_SUPPRESS_S = 300" in src
-    assert "_time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S" in src
+    assert "_PUSH_ECHO_SUPPRESS_S = 900" in src
+    assert "_time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S and _same_pushed_value(param, val)" in src
     assert "RT push suppressed for recently pushed" in src
 
 
@@ -59,11 +59,13 @@ def test_esp32_push_marks_shared_recently_pushed():
     shared.esp32["client"] = FakeClient()
     shared.esp32["keys"] = {"set_temp_low__f": 123}
     shared.recently_pushed.clear()
+    shared.recently_pushed_values.clear()
 
     pushed = asyncio.run(esp32_push.push_to_esp32([("set_temp_low__f", 64.0, "number")]))
 
     assert pushed == 1
     assert "temp_low" in shared.recently_pushed
+    assert shared.recently_pushed_values["temp_low"] == 64.0
 
 
 def test_live_active_plan_params_are_pushable():
