@@ -109,6 +109,9 @@ firmware-check-all: firmware-check ## Compile firmware from the only supported d
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
+site-doctor: ## Audit verdify.ai source, build output, and Grafana embeds
+	$(PYTHON) scripts/site-doctor.py
+
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
 	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
