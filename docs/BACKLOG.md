@@ -21,7 +21,7 @@ Per-agent backlogs live in `docs/backlog/{agent}.md`. This file is the index + "
 
 ## Current findings to schedule
 
-- **Web:** Site simplification pass reduced the public entry path and fixed corrupted text. Remaining editorial cleanup: fold detailed Climate subpages into `/climate`, finish hiding or archiving redundant reference routes, and remove drafting scaffolds from hidden reference pages.
+- **Web:** Site simplification pass reduced the public entry path, fixed corrupted text, and consolidated detailed Climate subpages into `/climate`. Remaining editorial cleanup is now limited to hiding/archive review for any redundant reference routes that are still intentionally public.
 - **Web:** Image cleanup removed broken/public backup assets and documented current photo fit. The manual image catalog now has a machine-readable manifest checked by `site-doctor`; crop-specific photos for basil/cucumbers/tomatoes remain a content acquisition issue, not a rendering blocker.
 - **Web:** Raw ASCII/Mermaid diagrams were removed from hand-authored public pages. Forecast, daily-plan, plans-index, crop, and zone generated outputs now use web components instead of generated Markdown tables.
 
