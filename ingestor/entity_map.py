@@ -174,6 +174,7 @@ SETPOINT_MAP: dict[str, str] = {
     "__heat_stage_2__f": "d_heat_stage_2",
     "__cool_stage_2__f": "d_cool_stage_2",
     "temp_hysteresis__f": "temp_hysteresis",
+    "heat_hysteresis__f": "heat_hysteresis",
     "bias_heat__f": "bias_heat",
     "bias_cool__f": "bias_cool",
     # VPD band
@@ -355,6 +356,7 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg_____heat_s2___f_": "d_heat_stage_2",
     "cfg_____cool_s2___f_": "d_cool_stage_2",
     "cfg___temp_hyst___f_": "temp_hysteresis",
+    "cfg___heat_hyst___f_": "heat_hysteresis",
     "cfg___vpd_low__kpa_": "vpd_low",
     "cfg___vpd_high__kpa_": "vpd_high",
     "cfg___vpd_hyst__kpa_": "vpd_hysteresis",

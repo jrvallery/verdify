@@ -365,7 +365,7 @@ interval:
               .bias_cool = id(bias_cool_f), .bias_heat = id(bias_heat_f),
               .vpd_hysteresis = HV,
               .temp_hysteresis = id(hyst_temp_f),
-              .heat_hysteresis = 1.0f,
+              .heat_hysteresis = id(heat_hysteresis_f),
               .dH2 = dH2, .dC2 = dC2,
               .safety_max = TmaxSafe, .safety_min = TminSafe,
               .vpd_max_safe = VPDmaxSafe, .vpd_min_safe = VPDminSafe,
@@ -1391,6 +1391,7 @@ interval:
                     if(key == "bias_heat"){ val = cf(val, -10, 10); if(fabs(id(bias_heat_f) - val) > 0.01f){ id(bias_heat_f) = val; id(num_bias_heat).publish_state(val); applied++; }}
                     if(key == "bias_cool"){ val = cf(val, -10, 10); if(fabs(id(bias_cool_f) - val) > 0.01f){ id(bias_cool_f) = val; id(num_bias_cool).publish_state(val); applied++; }}
                     if(key == "temp_hysteresis"){ val = cf(val, 0.5, 3); if(fabs(id(hyst_temp_f) - val) > 0.01f){ id(hyst_temp_f) = val; id(num_hyst_temp).publish_state(val); applied++; }}
+                    if(key == "heat_hysteresis"){ val = cf(val, 0, 3); if(fabs(id(heat_hysteresis_f) - val) > 0.01f){ id(heat_hysteresis_f) = val; id(num_heat_hysteresis).publish_state(val); applied++; }}
                     if(key == "vpd_hysteresis"){ val = cf(val, 0.05, 0.5); if(fabs(id(hyst_vpd_kpa) - val) > 0.01f){ id(hyst_vpd_kpa) = val; id(num_hyst_vpd).publish_state(val); applied++; }}
                     if(key == "d_heat_stage_2"){ val = cf(val, 2, 15); if(fabs(id(stage2_heat_delta_f) - val) > 0.01f){ id(stage2_heat_delta_f) = val; id(num_stage2_heat).publish_state(val); applied++; }}
                     if(key == "d_cool_stage_2"){ val = cf(val, 2, 15); if(fabs(id(stage2_cool_delta_f) - val) > 0.01f){ id(stage2_cool_delta_f) = val; id(num_stage2_cool).publish_state(val); applied++; }}

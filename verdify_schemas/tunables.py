@@ -26,6 +26,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "d_heat_stage_2",
         "d_cool_stage_2",
         "temp_hysteresis",
+        "heat_hysteresis",
         "bias_heat",
         "bias_cool",
         # VPD band

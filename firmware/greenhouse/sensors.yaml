@@ -1127,6 +1127,19 @@ sensor:
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(hyst_vpd_kpa);
 
+  - platform: template
+    id: cfg_heat_hysteresis_f
+    name: "Cfg • Heat Hyst (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(heat_hysteresis_f);
+
   # ─── Feed‑forward biases (°F) ─────────────────────────────────────────-
   - platform: template
     id: cfg_bias_heat_f

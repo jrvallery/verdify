@@ -198,7 +198,7 @@ lands in `setpoint_clamps` (audited, rejected). Every Tier 1 knob below
 is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
 drops within one planner cycle.
 
-The full registry (80 live tunables + clamps + push owners + readback
+The full registry (83 live tunables + clamps + push owners + readback
 status) is defined in `verdify_schemas/tunable_registry.py`. For Tier 2
 escape-hatch params (irrigation schedules, economiser site constants,
 per-zone VPD targets, sw_* toggles you rarely touch, safety rails —
@@ -223,7 +223,10 @@ Use tactical knobs below to shift behavior instead.
 - `bias_cool` °F, [-10 to +10], def 0 — adds to temp_high-bias. +3 = delay cooling
 
 **Staging:**
-- `d_cool_stage_2` °F, [0-5], def 2 — fan2 engages at Thigh + this
+- `d_heat_stage_2` °F, [2-15], def 5 — heat2 latches below the interior heating target minus this; lower before cold nights
+- `heat_hysteresis` °F, [0-3], def 1 — heat-stage clear margin above the interior heating target; higher holds heat longer
+- `temp_hysteresis` °F, [0.5-3], def 1.5 — temp transition deadband; lower tightens band compliance, higher reduces churn
+- `d_cool_stage_2` °F, [2-15], def 3 — fan2 engages at Thigh + this
 
 **Mister engagement:**
 - `mister_engage_kpa` kPa, [0.6-2.5], def 1.2 — SEALED_MIST S1 entry

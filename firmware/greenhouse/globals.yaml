@@ -32,6 +32,10 @@ globals:
     type: float
     restore_value: no
     initial_value: '1.0'
+  - id: heat_hysteresis_f
+    type: float
+    restore_value: no
+    initial_value: '1.0'
 
   # ─── Humidity / VPD (kPa) ───
   # Wide defaults — see comment on target_temp_low_f.

@@ -53,6 +53,7 @@ FIRMWARE_SETPOINT_PARAMS = {
     "enthalpy_close",
     "enthalpy_open",
     "fan_burst_min",
+    "heat_hysteresis",
     "fog_burst_min",
     "fog_escalation_kpa",
     "fog_min_temp_f",

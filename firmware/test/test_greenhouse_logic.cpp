@@ -1839,7 +1839,7 @@ TEST(fsm_v2_relief_exhausted_does_not_force_cold_vent) {
     // forced ventilation.
     Mode m = determine_mode(make_inputs(66.0f, 1.4f), sp, s, 5000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_temp_low_idle_heat");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage2");
     PASS();
 }
 

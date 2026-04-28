@@ -270,7 +270,11 @@ inline Mode determine_mode_v2(
         state.vent_latch_timer_ms = 0;
     } else {
         mode = IDLE;
-        state.last_mode_reason = temp_too_low ? "v2_temp_low_idle_heat" : "v2_idle";
+        if (temp_too_low) {
+            state.last_mode_reason = state.heat2_latched ? "v2_heat_stage2" : "v2_heat_stage1";
+        } else {
+            state.last_mode_reason = "v2_idle";
+        }
         state.sealed_timer_ms = 0;
     }
 
