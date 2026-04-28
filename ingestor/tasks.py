@@ -16,13 +16,16 @@ import urllib.request
 import uuid
 from datetime import UTC, datetime
 from datetime import timedelta as _td
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
-sys.path.insert(0, "/mnt/iris/verdify")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import asyncpg
 import shared
+from esp32_push import push_to_esp32
 from pydantic import ValidationError
 
 from verdify_schemas import (
@@ -1494,8 +1497,6 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
 
     # Direct ESP32 push via shared ingestor connection (non-blocking optimization)
     # Tier 1 #4: retry on failure, escalate to alert_log after exhausted attempts.
-    from ingestor import push_to_esp32
-
     esp32_changes = []
     for param, val in changes:
         if param.startswith("sw_"):
