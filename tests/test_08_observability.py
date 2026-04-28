@@ -123,6 +123,8 @@ class TestHeapPressureObservability:
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
         assert "'heap_pressure_warning', 'heap_pressure_critical'" in body
         assert "recent_true" in body
+        assert "latest_state" in body
+        assert "last_critical_event_ts" in body
         assert "critical_logs_30m" in body
         assert "SELECT heap_bytes, ts" in body
         assert '"alert_type": "heap_pressure_warning"' in body

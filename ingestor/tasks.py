@@ -1229,6 +1229,28 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         heap_bytes = float(heap_diag["heap_bytes"]) if heap_diag and heap_diag["heap_bytes"] is not None else None
         critical_logs = int(heap_log["critical_logs"] or 0) if heap_log else 0
         warning_logs = int(heap_log["warning_logs"] or 0) if heap_log else 0
+        last_critical_event_ts = max(
+            [
+                ts
+                for ts in (
+                    heap_critical["last_true_ts"] if heap_critical else None,
+                    heap_log["last_critical_ts"] if heap_log else None,
+                )
+                if ts is not None
+            ],
+            default=None,
+        )
+        last_warning_event_ts = max(
+            [
+                ts
+                for ts in (
+                    heap_warning["last_true_ts"] if heap_warning else None,
+                    heap_log["last_warning_ts"] if heap_log else None,
+                )
+                if ts is not None
+            ],
+            default=None,
+        )
         critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
         warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
         if heap_bytes is not None:
@@ -1242,16 +1264,30 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             elif heap_bytes < 30.0 and not critical_active:
                 critical_active = False
                 warning_active = True
-            elif not critical_active and heap_diag and heap_critical and heap_diag["ts"] >= heap_critical["latest_ts"]:
-                critical_active = False
-            if (
-                heap_bytes >= 35.0
-                and not warning_active
-                and heap_diag
-                and heap_warning
-                and heap_diag["ts"] >= heap_warning["latest_ts"]
-            ):
-                warning_active = False
+            elif heap_bytes >= 35.0 and heap_diag:
+                # Recovery is explicit once firmware publishes a false binary
+                # event after the last true/log event and the numeric heap
+                # sample is healthy after that false. This preserves real
+                # transients while preventing stale log lines from holding a
+                # critical alert open after observed recovery.
+                if (
+                    critical_active
+                    and heap_critical
+                    and heap_critical["latest_state"] is False
+                    and last_critical_event_ts
+                    and heap_critical["latest_ts"] >= last_critical_event_ts
+                    and heap_diag["ts"] >= heap_critical["latest_ts"]
+                ):
+                    critical_active = False
+                if (
+                    warning_active
+                    and heap_warning
+                    and heap_warning["latest_state"] is False
+                    and last_warning_event_ts
+                    and heap_warning["latest_ts"] >= last_warning_event_ts
+                    and heap_diag["ts"] >= heap_warning["latest_ts"]
+                ):
+                    warning_active = False
         if critical_active:
             alerts.append(
                 {
