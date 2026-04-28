@@ -45,6 +45,7 @@ def test_echo_suppression_covers_delayed_esphome_state_publish():
     src = Path(INGESTOR_PATH, "ingestor.py").read_text()
     assert "_PUSH_ECHO_SUPPRESS_S = 300" in src
     assert "_time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S" in src
+    assert "RT push suppressed for recently pushed" in src
 
 
 def test_esp32_push_marks_shared_recently_pushed():

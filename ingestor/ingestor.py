@@ -1210,6 +1210,8 @@ async def mqtt_loop(pool: asyncpg.Pool) -> None:
 # ──────────────────────────────────────────────────────────────
 async def setpoint_listener(pool: asyncpg.Pool) -> None:
     """Listen for DB setpoint changes and push to ESP32 in real-time."""
+    import time as _time
+
     from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
 
     _ALIASES = {
@@ -1232,6 +1234,10 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
 
         # Normalize param name
         param = _ALIASES.get(param, param)
+        pushed_at = shared.recently_pushed.get(param, 0)
+        if _time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S:
+            log.debug("RT push suppressed for recently pushed %s", param)
+            return
 
         # Look up ESP32 entity
         if param.startswith("sw_"):
