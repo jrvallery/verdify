@@ -73,10 +73,10 @@ interval:
           auto can_on  = [&](RelayMeta &r){ return now_ms - r.last_off_ms >= r.min_off_ms; };
           auto can_off = [&](RelayMeta &r){ return now_ms - r.last_on_ms  >= r.min_on_ms; };
 
-          auto set_relay = [&](RelayMeta &r,bool want){
+          auto set_relay = [&](RelayMeta &r,bool want,bool force_on){
             update_runtime(r);
             if(want){
-              if(!r.sw->state && can_on(r)){
+              if(!r.sw->state && (force_on || can_on(r))){
                 r.sw->turn_on();
                 r.last_on_ms = now_ms;
                 r.on_stamp_ms= now_ms;
@@ -412,13 +412,54 @@ interval:
           if(id(manual_fan_active)){ willFan1 = true; willFan2 = true; willVent = true; }
           if(id(manual_fog_active)){ willFog = true; }
 
-          /**************** 11a — VENT-CLOSE INTERLOCK (sprint-15.1) **************/
-          // Fog + misters must wait for vent to physically close. Pre-sprint-15.1,
+          /**************** 11a — FAN/VENT + VENT-CLOSE INTERLOCKS ***************/
+          // The pure state machine keeps fans and vent logically consistent,
+          // but relay dwell timers are physical state. On a VENTILATE→sealed
+          // transition, fan min_on can otherwise keep a fan running after the
+          // vent is allowed to close. Hold/reopen the vent until non-safety fan
+          // dwell clears. SAFETY_HEAT is the intentional circulation exception:
+          // it runs the lead fan with vent closed to keep heat in.
+          const bool fan_physically_on = id(fan1_rly)->state || id(fan2_rly)->state;
+          const bool fan_wanted = willFan1 || willFan2;
+          const bool fan_requires_vent = mode != SAFETY_HEAT && (fan_physically_on || fan_wanted);
+          const bool fan_vent_interlock_active = fan_requires_vent && !willVent;
+          static bool fan_vent_interlock_prev = false;
+          if (fan_requires_vent) {
+              willVent = true;
+          }
+          if (fan_vent_interlock_active != fan_vent_interlock_prev) {
+              if (fan_vent_interlock_active) {
+                  ESP_LOGI("interlock","Fan/vent: holding vent open until fan dwell clears");
+              } else {
+                  ESP_LOGI("interlock","Fan/vent: fan dwell clear, releasing vent hold");
+              }
+              fan_vent_interlock_prev = fan_vent_interlock_active;
+          }
+
+          const bool vent_is_open = id(vent_rly)->state;
+          const bool heat_vent_interlock_active =
+              mode != SAFETY_HEAT && (willHeat1 || willHeat2) && (vent_is_open || willVent);
+          static bool heat_vent_interlock_prev = false;
+          if (heat_vent_interlock_active) {
+              willHeat1 = false;
+              willHeat2 = false;
+          }
+          if (heat_vent_interlock_active != heat_vent_interlock_prev) {
+              if (heat_vent_interlock_active) {
+                  ESP_LOGI("interlock","Heat/vent: suppressing non-safety heat until vent closes");
+              } else {
+                  ESP_LOGI("interlock","Heat/vent: vent closed, releasing heat hold");
+              }
+              heat_vent_interlock_prev = heat_vent_interlock_active;
+          }
+
+          // Fog + misters follow their existing vent-policy tunables. Pre-sprint-15.1,
           // 74% of fog-on-time and 12% of mister-on-time had vent still open
           // (set_relay respects per-relay min_on timers but has no cross-relay
           // ordering). Reading `vent_rly->state` gives the ACTUAL physical state,
           // so even if firmware has already set willVent=false this cycle, we
-          // suppress moisture until the actuator reports closed.
+          // can suppress moisture until the actuator reports closed when the
+          // corresponding tunable asks for closed-vent moisture.
           //
           // Operator toggles:
           //   - sw_fog_closes_vent (`fog_closes_vent`, default true) gates fog
@@ -426,7 +467,6 @@ interval:
           //     gates misters. Pre-15.1 the mister switch had no dispatcher
           //     route (sprint-21 follow-up) — fix 7 closes that gap so
           //     operators have per-device granularity.
-          const bool vent_is_open = id(vent_rly)->state;
           if (id(fog_closes_vent) && vent_is_open) {
               willFog = false;
           }
@@ -440,12 +480,12 @@ interval:
           if(willVent && !id(vent_rly)->state)    id(cnt_vent_today) += 1;
 
           /**************** 11 — APPLY RELAY OUTPUTS ******************************/
-          set_relay(R[0], willHeat1);
-          set_relay(R[1], willHeat2);
-          set_relay(R[2], willFan1);
-          set_relay(R[3], willFan2);
-          set_relay(R[4], willFog);
-          set_relay(R[5], willVent);
+          set_relay(R[0], willHeat1, false);
+          set_relay(R[1], willHeat2, false);
+          set_relay(R[5], willVent, fan_requires_vent);
+          set_relay(R[2], willFan1, false);
+          set_relay(R[3], willFan2, false);
+          set_relay(R[4], willFog, false);
 
           /**************** 12 — MISTER STATE MACHINE *****************************/
           // Only runs in SEALED_MIST mode. Zone-targeted pulse rotation.
