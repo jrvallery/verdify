@@ -777,9 +777,16 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # short so transient restarts auto-resolve once deliveries recover.
         gateway_failures = await conn.fetch(
             """
+            WITH last_success AS (
+                SELECT max(delivered_at) AS ts
+                  FROM plan_delivery_log
+                 WHERE delivered_at > now() - interval '2 hours'
+                   AND gateway_status BETWEEN 200 AND 299
+            )
             SELECT id, event_type, event_label, instance, gateway_status, delivered_at, gateway_body
-              FROM plan_delivery_log
+              FROM plan_delivery_log, last_success
              WHERE delivered_at > now() - interval '2 hours'
+               AND (last_success.ts IS NULL OR delivered_at > last_success.ts)
                AND (
                     status = 'delivery_failed'
                     OR gateway_status = 0

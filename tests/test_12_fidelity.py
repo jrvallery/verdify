@@ -292,6 +292,7 @@ def test_alert_monitor_detects_planner_delivery_outages():
     src = Path(tasks.__file__).read_text()
     assert "planner_gateway_delivery_failed" in src
     assert "system.openclaw" in src
+    assert "WITH last_success AS" in src
     assert "gateway_status = 0" in src
     assert "planner_required_plan_missed" in src
     assert "system.planner_required_plan" in src
