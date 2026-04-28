@@ -2,7 +2,7 @@
 
 This is the working contract for `verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `/mnt/iris/verdify-worktrees/web/site`; Quartz builds into `/srv/verdify/verdify-site/public`.
 
-Current active source size after the 2026-04-28 simplification pass: 81 Markdown pages, including a lightweight redirect for the retired `/intelligence/lessons/` route.
+Current active source size after the 2026-04-28 simplification pass: 75 Markdown pages, including lightweight redirects for retired reference routes.
 
 ## Editorial Principle
 
@@ -14,13 +14,7 @@ The site story is: Verdify is a self-improving, AI-enabled, automated solar-powe
 |---|---|---|---|---|---|
 | `/` | Public narrative entry point | Hand-authored | Current positioning, live overview panels | `site-home` | Manual |
 | `/about` | Project context | Hand-authored | Greenhouse/project description | None | Manual |
-| `/climate` | Climate system overview | Hand-authored | Greenhouse physics + live climate panels | `site-climate` | Manual copy, live graphs |
-| `/climate/controller` | ESP32/controller evidence | Hand-authored | Controller diagnostics, state machine, planning/write health | `site-climate-controller` | Manual copy, live graphs |
-| `/climate/cooling` | Cooling/ventilation reference | Hand-authored | Cooling physics, equipment limits, solar load | `site-climate-cooling` | Manual copy, live graphs |
-| `/climate/heating` | Heating reference | Hand-authored | Gas/electric heat, thermal envelope, cost | `site-climate-heating` | Manual copy, live graphs |
-| `/climate/humidity` | VPD/humidity reference | Hand-authored | Humidity control, mister effectiveness | `site-climate-humidity` | Manual copy, live graphs |
-| `/climate/lighting` | Lighting/DLI reference | Hand-authored | DLI, grow-light behavior, solar context | `site-climate-lighting` | Manual copy, live graphs |
-| `/climate/water` | Canonical water systems page | Hand-authored | Water use, mister demand, root-zone probes | `site-climate-water` | Manual copy, live graphs |
+| `/climate` | Canonical climate system overview | Hand-authored | Greenhouse physics, controller response, cooling, heating, humidity/VPD, water, lighting | `site-climate`, `site-climate-controller`, `site-climate-cooling`, `site-climate-heating`, `site-climate-humidity`, `site-climate-water`, `site-climate-lighting` | Manual copy, live graphs |
 | `/evidence` | Live proof overview | Hand-authored | Operations, planning quality, economics, generated archives | `site-evidence-operations`, `site-evidence-planning-quality`, `site-evidence-economics` | Manual copy, live graphs |
 | `/evidence/operations` | Live operations view | Hand-authored | System health, active plan, alerts, controller state | `site-evidence-operations` | Manual copy, live graphs |
 | `/evidence/economics` | Canonical cost proof | Hand-authored | Utility consumption and cost allocation | `site-evidence-economics` | Manual copy, live graphs |
@@ -48,6 +42,7 @@ The site story is: Verdify is a self-improving, AI-enabled, automated solar-powe
 - `/plans` is the canonical public daily-plan route. `scripts/generate-daily-plan.py --backfill` must be able to regenerate every linked day page from DB state.
 - Former `/evidence/plans` content is archived outside the active website tree at `/mnt/iris/verdify-vault/archive/website-legacy-2026-04-28/evidence/plans`. Do not restore it unless there is a deliberate redirect/history decision.
 - Former `/intelligence/lessons` narrative content is archived outside the active website tree at `/mnt/iris/verdify-vault/archive/website-simplification-2026-04-28/intelligence/lessons.md`. Use generated `/greenhouse/lessons` as the source of truth.
+- Former detailed climate reference pages are archived outside the active website tree at `/mnt/iris/verdify-vault/archive/website-climate-consolidation-2026-04-28/climate/`. `/climate` now carries those proof sections, and the retired routes are aliases to the canonical climate page.
 - Generated pages must carry an explicit source marker near the top. `make site-doctor` checks this for known generated routes.
 - `make site-doctor` also flags Unicode replacement characters; these indicate source corruption, not just browser rendering issues.
 - Hand-authored pages may embed live Grafana panels, but the prose must describe the live panel that is actually embedded. Use `scripts/site-doctor.py --semantic-report /tmp/verdify-site-semantic.md` before large copy passes.
@@ -66,6 +61,7 @@ The site story is: Verdify is a self-improving, AI-enabled, automated solar-powe
 - Cooling equipment proof is live on `site-climate-cooling` panel IDs `938` and `939`.
 - Soil-moisture-vs-VPD proof is live on `site-climate-water` panel ID `218`.
 - Public navigation is intentionally simplified to Home, Greenhouse, Climate, Intelligence, Evidence, About, and Plans. Generated/reference pages remain available by direct links but are hidden from the Quartz Explorer.
+- The 2026-04-28 climate consolidation folded `/climate/controller`, `/climate/cooling`, `/climate/heating`, `/climate/humidity`, `/climate/lighting`, and `/climate/water` into `/climate`; the old routes now redirect to the canonical page.
 - The 2026-04-28 simplification pass rewrote `/`, `/evidence`, `/intelligence`, `/greenhouse`, `/greenhouse/growing`, and `/intelligence/broken`; fixed replacement-character corruption in active source; and added a redirect at `/intelligence/lessons/`.
 - The 2026-04-28 generated-block cleanup converted active crop, zone, and equipment auto-render blocks from Markdown tables into web components. It also fixed truncated position schemes caused by literal pipe characters in shelf notation and added `site-doctor` guards for self-aliases, raw Mermaid blocks, box-drawing ASCII diagrams, stale Grafana panel IDs, and image placement.
 - The unused live Grafana dashboard `site-evidence-compliance` was exported to `/mnt/iris/verdify/grafana/dashboards/archive/2026-04-28/site-evidence-compliance.json`, removed from provisioning, and no longer appears in Grafana search after the 2026-04-27/28 restart.
