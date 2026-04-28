@@ -78,6 +78,7 @@ from verdify_schemas import (
     SetpointSnapshot,
     SystemStateRow,
 )
+from verdify_schemas.tunable_registry import get as get_tunable
 
 # ──────────────────────────────────────────────────────────────
 # Config
@@ -699,6 +700,20 @@ def _accept_setpoint(param: str, value: float) -> bool:
     return True
 
 
+def _accept_outbound_setpoint(param: str, value: float) -> bool:
+    """Return True if a DB-origin setpoint is inside registry bounds."""
+    spec = get_tunable(param)
+    if spec is None or spec.kind != "numeric":
+        return True
+    if spec.min is not None and value < spec.min:
+        log.warning("Rejecting outbound setpoint %s=%.3f below registry min %.3f", param, value, spec.min)
+        return False
+    if spec.max is not None and value > spec.max:
+        log.warning("Rejecting outbound setpoint %s=%.3f above registry max %.3f", param, value, spec.max)
+        return False
+    return True
+
+
 # ──────────────────────────────────────────────────────────────
 # ESP32 callbacks
 # ──────────────────────────────────────────────────────────────
@@ -1276,6 +1291,8 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
 
         # Normalize param name
         param = _ALIASES.get(param, param)
+        if not _accept_outbound_setpoint(param, val):
+            return
         pushed_at = shared.recently_pushed.get(param, 0)
         if _time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S and _same_pushed_value(param, val):
             log.debug("RT push suppressed for recently pushed %s", param)

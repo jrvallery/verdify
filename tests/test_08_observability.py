@@ -105,6 +105,13 @@ class TestDispatcherWiring:
         assert "async with _PUSH_LOCK" in push_helper
         assert "await asyncio.sleep(_BATCH_PAUSE_S)" in push_helper
 
+    def test_realtime_listener_validates_outbound_registry_bounds(self):
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        assert "from verdify_schemas.tunable_registry import get as get_tunable" in ingestor
+        assert "def _accept_outbound_setpoint" in ingestor
+        assert "Rejecting outbound setpoint" in ingestor
+        assert "if not _accept_outbound_setpoint(param, val)" in ingestor
+
     def test_dispatcher_escalates_push_failure(self):
         body = self._read()
         assert "'esp32_push_failed'" in body, (
