@@ -285,6 +285,19 @@ def test_mcp_set_tunable_treats_vpd_low_as_band_owned():
     assert not (band_owned & tier1), f"Band-owned params must not be Tier 1 tunables: {band_owned & tier1}"
 
 
+def test_alert_monitor_detects_planner_delivery_outages():
+    """OpenClaw outages and missed SUNRISE/SUNSET plans must be visible alerts."""
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    assert "planner_gateway_delivery_failed" in src
+    assert "system.openclaw" in src
+    assert "gateway_status = 0" in src
+    assert "planner_required_plan_missed" in src
+    assert "system.planner_required_plan" in src
+    assert "event_type IN ('SUNRISE', 'SUNSET')" in src
+
+
 # ── S24.9.3 — status='plan_written' on resolve ─────────────────────
 
 
@@ -302,6 +315,20 @@ def test_resolve_delivery_log_sets_status_plan_written():
     assert "status            = 'plan_written'" in body or "status = 'plan_written'" in body, (
         "_resolve_delivery_log UPDATE must include status='plan_written'"
     )
+    assert "pdl.gateway_status BETWEEN 200 AND 299" in body, (
+        "_resolve_delivery_log must not correlate failed gateway deliveries to later plans"
+    )
+
+
+def test_failed_plan_delivery_logs_delivery_failed_status():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("async def _log_plan_delivery")
+    end = src.index("async def _deliver_and_log", start)
+    body = src[start:end]
+    assert 'result.get("delivered") is False' in body
+    assert 'explicit_status = "delivery_failed"' in body
 
 
 # ── S24.9.7 — _deliver_and_log sentinel skip (integration-shape) ───

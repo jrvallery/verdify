@@ -772,7 +772,105 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
-        # 7b. Planner band ownership drift. Crop-band params are dispatcher-
+        # 7a. Planner gateway delivery failures. A failed OpenClaw POST is a
+        # first-class outage, not a pending planner action. Keep the lookback
+        # short so transient restarts auto-resolve once deliveries recover.
+        gateway_failures = await conn.fetch(
+            """
+            SELECT id, event_type, event_label, instance, gateway_status, delivered_at, gateway_body
+              FROM plan_delivery_log
+             WHERE delivered_at > now() - interval '2 hours'
+               AND (
+                    status = 'delivery_failed'
+                    OR gateway_status = 0
+                    OR gateway_status >= 400
+               )
+             ORDER BY delivered_at DESC
+             LIMIT 10
+            """
+        )
+        if gateway_failures:
+            failures = [
+                {
+                    "id": int(r["id"]),
+                    "event_type": r["event_type"],
+                    "event_label": r["event_label"],
+                    "instance": r["instance"],
+                    "gateway_status": int(r["gateway_status"]) if r["gateway_status"] is not None else None,
+                    "delivered_at": r["delivered_at"].isoformat(),
+                    "gateway_body": (r["gateway_body"] or "")[:300],
+                }
+                for r in gateway_failures
+            ]
+            required_failed = any(f["event_type"] in ("SUNRISE", "SUNSET", "MIDNIGHT") for f in failures)
+            host_down = any(f["gateway_status"] == 0 for f in failures)
+            severity = "critical" if required_failed or host_down or len(failures) >= 3 else "warning"
+            first = failures[0]
+            alerts.append(
+                {
+                    "alert_type": "planner_gateway_delivery_failed",
+                    "severity": severity,
+                    "category": "system",
+                    "sensor_id": "system.openclaw",
+                    "zone": None,
+                    "message": (
+                        f"{len(failures)} planner gateway delivery failure(s) in 2h; "
+                        f"latest {first['event_type']}/{first['event_label']} "
+                        f"status={first['gateway_status']}"
+                    ),
+                    "details": {"failures": failures},
+                    "metric_value": float(len(failures)),
+                    "threshold_value": 0.0,
+                }
+            )
+
+        # 7b. Required SUNRISE/SUNSET plans. These triggers must produce a
+        # plan_journal row within their SLA; otherwise the prior plan governs
+        # across a new diurnal period with no explicit planner review.
+        required_misses = await conn.fetch(
+            """
+            SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body
+              FROM plan_delivery_log
+             WHERE event_type IN ('SUNRISE', 'SUNSET')
+               AND delivered_at > now() - interval '18 hours'
+               AND delivered_at < now() - interval '15 minutes'
+               AND status <> 'plan_written'
+             ORDER BY delivered_at DESC
+            """
+        )
+        if required_misses:
+            misses = [
+                {
+                    "id": int(r["id"]),
+                    "event_type": r["event_type"],
+                    "event_label": r["event_label"],
+                    "instance": r["instance"],
+                    "status": r["status"],
+                    "gateway_status": int(r["gateway_status"]) if r["gateway_status"] is not None else None,
+                    "delivered_at": r["delivered_at"].isoformat(),
+                    "gateway_body": (r["gateway_body"] or "")[:300],
+                }
+                for r in required_misses
+            ]
+            latest = misses[0]
+            alerts.append(
+                {
+                    "alert_type": "planner_required_plan_missed",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "system.planner_required_plan",
+                    "zone": None,
+                    "message": (
+                        f"{latest['event_type']} did not produce a plan within 15 minutes "
+                        f"(status={latest['status']}, gateway={latest['gateway_status']})"
+                    ),
+                    "details": {"misses": misses},
+                    "metric_value": float(len(misses)),
+                    "threshold_value": 0.0,
+                }
+            )
+
+        # 7c. Planner band ownership drift. Crop-band params are dispatcher-
         # owned read-only context; active rows in setpoint_plan can outrank the
         # crop-profile band function and create repeated clamp storms.
         band_owned_rows = await conn.fetch(
@@ -2522,6 +2620,8 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
         log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
         return
     explicit_status = result.get("status")
+    if explicit_status is None and result.get("delivered") is False:
+        explicit_status = "delivery_failed"
     # Contract v1.4 §2.D — both columns now populated on every INSERT so
     # correlation queries can match deliveries to plans by uuid (not
     # just the 2h time-window fallback in _resolve_delivery_log).
@@ -2641,6 +2741,7 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
               FROM plan_journal pj
              WHERE pdl.resulting_plan_id IS NULL
                AND pdl.status = 'pending'
+               AND pdl.gateway_status BETWEEN 200 AND 299
                AND pdl.trigger_id IS NOT NULL
                AND pj.trigger_id = pdl.trigger_id
             """,
@@ -2656,6 +2757,7 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
               FROM plan_journal pj
              WHERE pdl.resulting_plan_id IS NULL
                AND pdl.status = 'pending'
+               AND pdl.gateway_status BETWEEN 200 AND 299
                AND pdl.delivered_at > now() - interval '6 hours'
                AND pj.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
                AND pj.created_at = (
