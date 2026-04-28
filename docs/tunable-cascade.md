@@ -1,10 +1,16 @@
 # Tunable Cascade — End-to-End Spec
 
-**Status:** IN PROGRESS — started 2026-04-20 pre-Jason-departure. Critical control-loop rows filled; remaining rows stubbed and will be completed over the week.
+**Status:** IN PROGRESS — started 2026-04-20 pre-Jason-departure. Critical control-loop rows filled; registry coverage is now complete as of the 2026-04-27 firmware control-contract audit.
 
 **Purpose:** Single source of truth mapping every tunable through every layer it touches. Pydantic schema → DB column → dispatcher route → firmware struct field → firmware use site → cfg_* readback → default value → valid range → owner (who sets it) → cascade timing.
 
 **Why it exists now:** sprint-10 day/night incident + bias_heat drift + MIDNIGHT label-mismatch are all symptoms of the same missing spec. Every sprint has added tunables without extending this table, and each silent-override bug has been a consequence.
+
+**Canonical machine-readable source:** `verdify_schemas/tunable_registry.py`.
+This markdown is the human-readable cascade narrative; drift guards enforce the
+registry against firmware, schemas, entity_map, cfg readbacks, and MCP.
+
+**Current contract doc:** `docs/firmware-control-contract.md`.
 
 ## Known open issues (as of 2026-04-20)
 
@@ -22,9 +28,19 @@ Symptom: overnight 4/18 4-hour stretch with temp at 61.9-62.2°F even though hea
 
 **Design fix (post-trip):** target `(temp_low + temp_high) / 2` with symmetric deadband, not `temp_low + bias_heat + hysteresis`. Cooling-side likely has the same edge-targeting problem in reverse. One-line firmware change; needs review + OTA + sensor-health verification.
 
-### 🟡 Readback gap — 9 parameters push without verification
+### 2026-04-27 Setpoints literal audit
 
-`d_heat_stage_2`, `d_cool_stage_2`, mister pulse/budget durations (`mister_pulse_on_s`, `mister_pulse_gap_s`, `mister_water_budget_gal`, `mister_on_s`, `mister_off_s`, `mister_all_on_s`, `mister_all_off_s`), fog escalation (`fog_burst_min`), relay burst timers. No `cfg_*` sensors → sprint-20 confirmation loop cannot verify. Silent push corruption is undetectable.
+The live ESPHome Setpoints builder no longer assigns controller policy fields
+from literals. These params now have the full schema → DB → dispatcher → ESPHome
+Number → `/setpoints` handler → `Setpoints` field → cfg readback path:
+
+- `heat_hysteresis`
+- `max_relief_cycles`
+- `dehum_aggressive_kpa`
+- `vent_latch_timeout_ms`
+- `safety_max_seal_margin_f`
+- `econ_heat_margin_f`
+- `gl_lux_hysteresis`
 
 ## Column reference
 
@@ -135,8 +151,8 @@ The remaining ~50 tunables are organized below by category. Each needs the full 
 ### VPD boost (2 tunables)
 - `irrig_vpd_boost_pct`, `irrig_vpd_boost_threshold_hrs`
 
-### Grow lights (4 tunables)
-- `gl_dli_target`, `gl_lux_threshold`, `gl_sunrise_hour`, `gl_sunset_hour`
+### Grow lights (5 tunables)
+- `gl_dli_target`, `gl_lux_threshold`, `gl_lux_hysteresis`, `gl_sunrise_hour`, `gl_sunset_hour`
 
 ### Switches (7 tunables, 0.0/1.0)
 - `sw_economiser_enabled`, `sw_fog_closes_vent`, `sw_gl_auto_mode`, `sw_irrigation_enabled`, `sw_irrigation_wall_enabled`, `sw_irrigation_center_enabled`, `sw_irrigation_weather_skip`, `sw_occupancy_inhibit`

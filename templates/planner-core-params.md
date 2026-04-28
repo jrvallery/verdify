@@ -1,49 +1,34 @@
-# Planner Core Parameters — Mandatory Emission List
+# Planner Core Parameters
 
-## The canonical list
+## Canonical Contract
 
-Every planner transition must emit **all 24 Tier 1 tunables**. The authoritative
-list lives in two places that are kept in sync:
+The canonical tunable list is `verdify_schemas/tunable_registry.py`.
+`REGISTRY` covers every dispatcher route in `ingestor/entity_map.py::SETPOINT_MAP`.
+MCP `set_tunable` accepts exactly `PLANNER_PUSHABLE_REG`, which means Tier 2
+escape-hatch parameters are pushable when Iris names a specific reason.
 
-1. `ingestor/iris_planner.py` — the `_PLANNER_KNOWLEDGE` block enumerates all
-   24 in the "24 Tier 1 Tunables" table Iris reads on every event.
-2. `scripts/validate-plan-coverage.sh` — the `CORE=` variable (line 8) is the
-   executable spec. CI and `gather-plan-context.sh` section 28 invoke it to
-   assert each transition carries the full set.
+`TIER1_REG` is only the daily prompt subset. A planner transition should include
+the tactical Tier 1 parameters it is intentionally setting, not a mandatory
+copy of every tunable.
 
-If those two disagree, the shell script wins.
+## Ownership
 
-## Why emit the full set every transition
+- Crop band: `temp_low`, `temp_high`, `vpd_low`, `vpd_high` are dispatcher-owned
+  from crop profiles in normal operation. Use direct `set_tunable` only for an
+  explicit temporary override.
+- Safety rails: `safety_min`, `safety_max`, `safety_vpd_min`, `safety_vpd_max`
+  are operator/fallback rails and are not planner-pushable.
+- Planner policy: all other `planner_pushable=True` registry rows may be pushed
+  via `set_tunable` or `set_plan`; firmware clamps remain the final authority.
 
-1. **Clean supersession.** The DB trigger deactivates older plans' waypoints
-   when a new plan writes the same parameter at a future ts. If you skip a
-   Tier 1 param, the previous plan's value stays "active" for it indefinitely.
-2. **Chart continuity.** Dashboards and the daily plan page trace setpoint
-   lines across the forecast window; gaps show up as stale.
-3. **Audit trail.** Every plan explicitly documents all 24 tuning levers,
-   not just what changed.
+## Drift Guards
 
-## Tier 2 — do NOT emit
+CI checks the registry against:
 
-The following are **band-driven**, computed every 5 minutes from
-`fn_band_setpoints()` against active crop profiles. The planner cannot set
-them; the ingestor dispatcher (`ingestor/tasks.py` `BAND_DRIVEN` set) silently
-drops them if they appear in a plan:
+- `verdify_schemas/tunables.py` schema names
+- `ingestor/entity_map.py` dispatcher and cfg readback maps
+- `firmware/greenhouse/controls.yaml` `/setpoints` clamp keys
+- `mcp/server.py` Tier 1 prompt allowlist and planner-pushable gate
 
-- `temp_high`, `temp_low`
-- `vpd_high`, `vpd_low`
-- `vpd_target_south`, `vpd_target_west`, `vpd_target_east`, `vpd_target_center`
-- `mister_engage_delay_s`, `mister_all_delay_s`
-- `safety_min`, `safety_max`, `safety_vpd_min`, `safety_vpd_max`
-
-To shift thermal or VPD band edges, tune `bias_heat` / `bias_cool` and
-`vpd_hysteresis` (all Tier 1). Emitting a Tier 2 param is a silent no-op —
-not an error, but not an effect either.
-
-## Historical note
-
-Earlier revisions of this doc listed 10 "mandatory" params that included
-`temp_high`/`temp_low`/`vpd_high`/`vpd_low`. That was wrong: those four
-were already Tier 2 at the time the list was written. The doc was
-rewritten 2026-04-18 after an audit caught the contradiction against
-`ingestor/tasks.py` dispatch logic.
+New firmware tunables must add the ESPHome Number, `/setpoints` parser entry,
+cfg readback, entity map route, schema name, and registry row in the same PR.

@@ -184,6 +184,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Safety rails
     "safety_min__f": "safety_min",
     "safety_max__f": "safety_max",
+    "safety_seal_margin__f": "safety_max_seal_margin_f",
     "safety_vpd_min_kpa": "safety_vpd_min",
     "safety_vpd_max_kpa": "safety_vpd_max",
     # Mister
@@ -197,6 +198,9 @@ SETPOINT_MAP: dict[str, str] = {
     "mister_all_off__s_": "mister_all_off_s",
     "mister_water_budget__gal_": "mister_water_budget_gal",
     "mister_max_runtime__min_": "mister_max_runtime_min",
+    "max_relief_cycles": "max_relief_cycles",
+    "dehum_aggressive_kpa": "dehum_aggressive_kpa",
+    "vent_latch_timeout__ms_": "vent_latch_timeout_ms",
     # Equipment timing
     "min_heat_on__s_": "min_heat_on_s",
     "min_heat_off__s_": "min_heat_off_s",
@@ -211,6 +215,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Economiser
     "enthalpy_open__kj_kg_": "enthalpy_open",
     "enthalpy_close__kj_kg_": "enthalpy_close",
+    "econ_heat_margin__f": "econ_heat_margin_f",
     "site_pressure__hpa_": "site_pressure_hpa",
     # Irrigation wall
     "irrig_wall_start_hour": "irrig_wall_start_hour",
@@ -234,6 +239,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Grow lights
     "gl_dli_target__mol_": "gl_dli_target",
     "gl_lux_threshold": "gl_lux_threshold",
+    "gl_lux_hysteresis": "gl_lux_hysteresis",
     "gl_start_hour": "gl_sunrise_hour",
     "gl_cutoff_hour": "gl_sunset_hour",
     # Switches (boolean, tracked as 0.0/1.0)
@@ -364,11 +370,13 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___bias_cool___f_": "bias_cool",
     "cfg___safety_min___f_": "safety_min",
     "cfg___safety_max___f_": "safety_max",
+    "cfg___safety_seal_margin___f_": "safety_max_seal_margin_f",
     "cfg___safety_vpd_min__kpa_": "safety_vpd_min",
     "cfg___safety_vpd_max__kpa_": "safety_vpd_max",
     "cfg___site_pressure__hpa_": "site_pressure_hpa",
     "cfg___enthalpy_open__kj_kg___": "enthalpy_open",
     "cfg___enthalpy_close__kj_kg___": "enthalpy_close",
+    "cfg___econ_heat_margin___f_": "econ_heat_margin_f",
     "cfg___fan_burst__min_": "fan_burst_min",
     "cfg___vent_bypass__min_": "vent_bypass_min",
     "cfg___fog_burst__min_": "fog_burst_min",
@@ -428,6 +436,12 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
     "cfg___mist_thermal_relief__s_": "mist_thermal_relief_s",
     "cfg___fog_escalation__kpa_": "fog_escalation_kpa",
+    "cfg___fog_window_start__hour_": "fog_time_window_start",
+    "cfg___fog_window_end__hour_": "fog_time_window_end",
+    "cfg___max_relief_cycles": "max_relief_cycles",
+    "cfg___dehum_aggressive__kpa_": "dehum_aggressive_kpa",
+    "cfg___vent_latch_timeout__ms_": "vent_latch_timeout_ms",
+    "cfg___gl_lux_hysteresis": "gl_lux_hysteresis",
 }
 
 # ──────────────────────────────────────────────────────────────

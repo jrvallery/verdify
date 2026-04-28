@@ -226,6 +226,17 @@ number:
           id(enthalpy_close_kjkg) = x;
           id(num_enthalpy_close).publish_state(x);
   - platform: template
+    id: num_econ_heat_margin
+    name: "Econ Heat Margin °F"
+    min_value: 1
+    max_value: 15
+    step: 0.5
+    lambda: "return id(econ_heat_margin_f);"
+    set_action:
+      - lambda: |
+          id(econ_heat_margin_f) = x;
+          id(num_econ_heat_margin).publish_state(x);
+  - platform: template
     id: num_site_pressure
     name: "Site Pressure (hPa)"
     min_value: 700
@@ -300,6 +311,18 @@ number:
       - lambda: |
           id(safety_max_f) = x;
           id(num_safety_max).publish_state(x);
+
+  - platform: template
+    id: num_safety_max_seal_margin
+    name: "Safety Seal Margin °F"
+    min_value: 1
+    max_value: 15
+    step: 0.5
+    lambda: "return id(safety_max_seal_margin_f);"
+    set_action:
+      - lambda: |
+          id(safety_max_seal_margin_f) = x;
+          id(num_safety_max_seal_margin).publish_state(x);
 
   # --- VPD SAFETY rails (kPa) ----------------------------------------
   - platform: template
@@ -592,6 +615,48 @@ number:
       - lambda: |
           id(fog_escalation_kpa) = x;
           id(num_fog_escalation_kpa).publish_state(x);
+
+  - platform: template
+    id: num_max_relief_cycles
+    name: "Max Relief Cycles"
+    min_value: 1
+    max_value: 10
+    step: 1
+    lambda: "return id(max_relief_cycles);"
+    set_action:
+      - lambda: |
+          int v = (int)roundf(x);
+          if(v < 1) v = 1;
+          if(v > 10) v = 10;
+          id(max_relief_cycles) = v;
+          id(num_max_relief_cycles).publish_state(v);
+
+  - platform: template
+    id: num_dehum_aggressive_kpa
+    name: "Dehum Aggressive kPa"
+    min_value: 0.05
+    max_value: 1.0
+    step: 0.05
+    lambda: "return id(dehum_aggressive_kpa);"
+    set_action:
+      - lambda: |
+          id(dehum_aggressive_kpa) = x;
+          id(num_dehum_aggressive_kpa).publish_state(x);
+
+  - platform: template
+    id: num_vent_latch_timeout_ms
+    name: "Vent Latch Timeout (ms)"
+    min_value: 60000
+    max_value: 7200000
+    step: 60000
+    lambda: "return id(vent_latch_timeout_ms);"
+    set_action:
+      - lambda: |
+          uint32_t v = (uint32_t)x;
+          if(v < 60000) v = 60000;
+          if(v > 7200000) v = 7200000;
+          id(vent_latch_timeout_ms) = v;
+          id(num_vent_latch_timeout_ms).publish_state(v);
 
   # ─── Sprint-15: summer thermal-driven vent gate tunables ───────────
   # Operator-tunable. Spec: docs/firmware-sprint-15-summer-vent-spec.md.
@@ -1080,6 +1145,19 @@ number:
           id(gl_lux_threshold) = x;
           id(num_gl_lux_threshold).publish_state(x);
           ESP_LOGI("grow_light","Lux threshold set to %.0f", x);
+
+  - platform: template
+    id: num_gl_lux_hysteresis
+    name: "GL Lux Hysteresis"
+    min_value: 0
+    max_value: 10000
+    step: 250
+    lambda: "return id(gl_lux_hysteresis);"
+    set_action:
+      - lambda: |
+          id(gl_lux_hysteresis) = x;
+          id(num_gl_lux_hysteresis).publish_state(x);
+          ESP_LOGI("grow_light","Lux hysteresis set to %.0f", x);
 
   - platform: template
     id: num_gl_dli_target

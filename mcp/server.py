@@ -50,6 +50,7 @@ from verdify_schemas import (  # noqa: E402
     SetpointSummary,
     TreatmentCreate,
 )
+from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG  # noqa: E402
 
 # ── Config ──
 # Read DB password from .env
@@ -127,9 +128,9 @@ mcp = FastMCP(
     instructions="""Verdify greenhouse control tools. Use these to monitor climate,
     manage setpoints, run the AI planner, and review performance.
     The greenhouse has temp/VPD bands, misters, fog, fans, heaters, and a vent.
-    The planner sets tactical Tier 1 tunables that shape how the controller responds.
+    The planner sets registry-approved tunables that shape how the controller responds.
     Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
-    read-only context; plans should adjust bias, mist, fog, dwell, and hysteresis knobs.""",
+    read-only context in routine plans; use direct tunable pushes only for explicit overrides.""",
 )
 
 
@@ -271,26 +272,17 @@ async def get_setpoints() -> str:
     """Get all current active setpoints (band values + planner tunables)."""
     conn = await _db()
     try:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT parameter, round(value::numeric,3) as value, source,
                    to_char(ts AT TIME ZONE 'America/Denver', 'HH24:MI') as updated
             FROM (SELECT DISTINCT ON (parameter) parameter, value, source, ts
                   FROM setpoint_changes ORDER BY parameter, ts DESC) sub
-            WHERE parameter IN (
-                'temp_high','temp_low','vpd_high','vpd_low',
-                'bias_cool','bias_heat','vpd_hysteresis',
-                'mister_engage_kpa','mister_all_kpa',
-                'mister_pulse_on_s','mister_pulse_gap_s','mister_vpd_weight',
-                'mister_water_budget_gal','mister_engage_delay_s','mister_all_delay_s',
-                'mist_max_closed_vent_s','mist_thermal_relief_s','mist_vent_close_lead_s',
-                'mist_vent_reopen_delay_s',
-                'vpd_watch_dwell_s','fog_escalation_kpa',
-                'min_fog_on_s','min_fog_off_s',
-                'min_vent_on_s','min_vent_off_s',
-                'd_cool_stage_2','min_heat_on_s','min_heat_off_s',
-                'enthalpy_open','enthalpy_close'
-            ) ORDER BY parameter
-        """)
+            WHERE parameter = ANY($1::text[])
+            ORDER BY parameter
+            """,
+            sorted(ALL_TUNABLES),
+        )
         validated = [SetpointSummary.model_validate(dict(r)).model_dump(mode="json") for r in rows]
         return json.dumps(validated)
     finally:
@@ -305,7 +297,7 @@ async def set_tunable(
     trigger_id: str | None = None,
     planner_instance: str | None = None,
 ) -> str:
-    """Push a single Tier 1 tunable to the ESP32 immediately.
+    """Push a single registry-approved tunable to the ESP32 immediately.
     The dispatcher will apply it within 5 minutes.
     Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')
 
@@ -313,11 +305,17 @@ async def set_tunable(
     Pass through from the trigger banner shown at the bottom of every
     planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
     Stamped onto plan_journal so SLA monitors can correlate by uuid."""
-    # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
+    # Schema-level gate first rejects typos; the registry then blocks
+    # operator-only safety rails and readback-only diagnostics.
     if parameter not in ALL_TUNABLES:
         return json.dumps({"error": f"'{parameter}' is not a known tunable — not in verdify_schemas.ALL_TUNABLES"})
-    if parameter not in TIER1_TUNABLES:
-        return json.dumps({"error": f"'{parameter}' is not a Tier 1 tunable", "allowed": sorted(TIER1_TUNABLES)})
+    if parameter not in PLANNER_PUSHABLE_REG:
+        return json.dumps(
+            {
+                "error": f"'{parameter}' is not planner-pushable in the tunable registry",
+                "allowed": sorted(PLANNER_PUSHABLE_REG),
+            }
+        )
 
     # Phase-1b: set_tunable writes to setpoint_plan (one-shot waypoint at
     # ts=now()) so the dispatcher's plan-reading cycle doesn't overwrite
