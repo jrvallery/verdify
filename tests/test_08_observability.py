@@ -134,6 +134,9 @@ class TestHeapPressureObservability:
         migration = (REPO_ROOT / "db/migrations/098-greenhouse-state-refresh.sql").read_text()
         assert "refresh_greenhouse_state" in body
         assert "CREATE OR REPLACE FUNCTION refresh_greenhouse_state" in migration
+        assert "CREATE OR REPLACE VIEW v_greenhouse_state" in migration
+        assert "interval '14 days'" in migration
+        assert "Compatibility no-op" in migration
         assert "ORDER BY equipment, ts DESC, state ASC" in migration
 
     def test_alert_monitor_refreshes_existing_alert_payloads(self):
