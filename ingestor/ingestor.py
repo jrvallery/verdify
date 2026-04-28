@@ -750,6 +750,7 @@ def on_state_change(entity_state) -> None:
                     )
                     return
             state.cfg_readback[cfg_param] = val
+            shared.cfg_readback[cfg_param] = float(val)
             return
 
         col = CLIMATE_MAP.get(obj_id)
@@ -1104,6 +1105,7 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             try:
                 from tasks import setpoint_dispatcher
 
+                await asyncio.sleep(2)
                 await setpoint_dispatcher(pool)
                 log.info("Post-reconnect setpoint dispatch complete")
             except Exception as e:
@@ -1267,6 +1269,7 @@ async def mqtt_loop(pool: asyncpg.Pool) -> None:
 # ──────────────────────────────────────────────────────────────
 async def setpoint_listener(pool: asyncpg.Pool) -> None:
     """Listen for DB setpoint changes and push to ESP32 in real-time."""
+    import json
     import time as _time
 
     from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
@@ -1281,9 +1284,19 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
     }
 
     async def _on_notify(conn, pid, channel, payload):
-        if "=" not in payload:
-            return
-        param, val_str = payload.split("=", 1)
+        source = None
+        if payload.startswith("{"):
+            try:
+                event = json.loads(payload)
+                param = str(event.get("parameter") or "")
+                val_str = str(event.get("value") or "")
+                source = str(event.get("source") or "")
+            except (TypeError, ValueError):
+                return
+        else:
+            if "=" not in payload:
+                return
+            param, val_str = payload.split("=", 1)
         try:
             val = float(val_str)
         except ValueError:
@@ -1291,6 +1304,9 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
 
         # Normalize param name
         param = _ALIASES.get(param, param)
+        if source == "esp32":
+            log.debug("RT push suppressed for ESP32 echo %s", param)
+            return
         if not _accept_outbound_setpoint(param, val):
             return
         pushed_at = shared.recently_pushed.get(param, 0)

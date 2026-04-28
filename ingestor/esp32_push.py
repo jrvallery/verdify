@@ -18,7 +18,7 @@ log = logging.getLogger("esp32_push")
 
 _BATCH_PAUSE_EVERY = 8
 _BATCH_PAUSE_S = 0.15
-_MIN_COMMAND_INTERVAL_S = 0.05
+_MIN_COMMAND_INTERVAL_S = 0.15
 _PUSH_LOCK = asyncio.Lock()
 _LAST_COMMAND_TS = 0.0
 

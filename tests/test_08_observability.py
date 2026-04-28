@@ -97,9 +97,16 @@ class TestDispatcherWiring:
 
     def test_dispatcher_suppresses_duplicate_notify_pushes(self):
         body = self._read()
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        shared_source = (REPO_ROOT / "ingestor" / "shared.py").read_text()
         push_helper = (REPO_ROOT / "ingestor" / "esp32_push.py").read_text()
         assert "shared.recently_pushed[param] = time.time()" in body
         assert "LISTEN/NOTIFY real-time listener" in body
+        assert "reconnect reconcile" in body
+        assert "shared.cfg_readback" in body
+        assert "cfg_readback: dict[str, float]" in shared_source
+        assert "shared.cfg_readback[cfg_param]" in ingestor
+        assert "await asyncio.sleep(2)" in ingestor
         assert "_BATCH_PAUSE_EVERY" in push_helper
         assert "_MIN_COMMAND_INTERVAL_S" in push_helper
         assert "async with _PUSH_LOCK" in push_helper
@@ -111,6 +118,15 @@ class TestDispatcherWiring:
         assert "def _accept_outbound_setpoint" in ingestor
         assert "Rejecting outbound setpoint" in ingestor
         assert "if not _accept_outbound_setpoint(param, val)" in ingestor
+
+    def test_realtime_listener_suppresses_esp32_echo_payloads(self):
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        migration = (REPO_ROOT / "db" / "migrations" / "100-setpoint-notify-source.sql").read_text()
+        assert "json.loads(payload)" in ingestor
+        assert 'source == "esp32"' in ingestor
+        assert "RT push suppressed for ESP32 echo" in ingestor
+        assert "json_build_object" in migration
+        assert "'source', NEW.source" in migration
 
     def test_dispatcher_escalates_push_failure(self):
         body = self._read()

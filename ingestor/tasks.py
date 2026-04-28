@@ -1649,11 +1649,20 @@ def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: f
 
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     global _last_pushed
-    # On ESP32 reconnect, clear the cache so ALL values get re-pushed
+    # On ESP32 reconnect, rebuild the cache from firmware cfg_* readbacks.
+    # Values already confirmed by the device do not need to be pushed again;
+    # params without a readback still flow through as a conservative fallback.
     if shared.force_setpoint_push.is_set():
         shared.force_setpoint_push.clear()
         _last_pushed.clear()
-        log.info("Dispatcher: force-push — cleared _last_pushed cache (ESP32 reconnect)")
+        seeded = 0
+        for param, val in shared.cfg_readback.items():
+            _last_pushed[param] = float(val)
+            seeded += 1
+        log.info(
+            "Dispatcher: reconnect reconcile — seeded %d cfg readbacks; pushing drift/missing setpoints",
+            seeded,
+        )
     async with pool.acquire() as conn:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")

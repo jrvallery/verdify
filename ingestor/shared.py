@@ -12,8 +12,13 @@ esp32 = {"client": None, "keys": {}}
 recently_pushed: dict[str, float] = {}
 recently_pushed_values: dict[str, float] = {}
 
-# Set by esp32_loop on reconnect — tells dispatcher to clear _last_pushed
-# and do a full re-push of all setpoints (prevents stale values after reboot)
+# param -> latest cfg_* readback from ESP32. Used by reconnect dispatch to
+# reconcile desired setpoints against device state instead of force-pushing
+# values the firmware has already confirmed.
+cfg_readback: dict[str, float] = {}
+
+# Set by esp32_loop on reconnect — tells dispatcher to reconcile desired
+# setpoints against cfg_readback and push only drift/missing values.
 force_setpoint_push = asyncio.Event()
 
 # Timestamp of last ESP32 connect (used for boot-window gating)
