@@ -36,6 +36,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Safety rails
         "safety_min",
         "safety_max",
+        "safety_max_seal_margin_f",
         "safety_vpd_min",
         "safety_vpd_max",
         # Mister
@@ -49,6 +50,9 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "mister_all_off_s",
         "mister_water_budget_gal",
         "mister_max_runtime_min",
+        "max_relief_cycles",
+        "dehum_aggressive_kpa",
+        "vent_latch_timeout_ms",
         # Equipment timing
         "min_heat_on_s",
         "min_heat_off_s",
@@ -70,6 +74,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Economiser
         "enthalpy_open",
         "enthalpy_close",
+        "econ_heat_margin_f",
         "site_pressure_hpa",
         # Irrigation wall
         "irrig_wall_start_hour",
@@ -93,6 +98,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Grow lights
         "gl_dli_target",
         "gl_lux_threshold",
+        "gl_lux_hysteresis",
         "gl_sunrise_hour",
         "gl_sunset_hour",
         # Mister pulse model

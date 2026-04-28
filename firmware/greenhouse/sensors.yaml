@@ -1195,6 +1195,19 @@ sensor:
       return id(safety_max_f);
 
   - platform: template
+    id: cfg_safety_max_seal_margin_f
+    name: "Cfg • Safety Seal Margin (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(safety_max_seal_margin_f);
+
+  - platform: template
     id: cfg_safety_vpd_min_kpa
     name: "Cfg • Safety VPD Min (kPa)"
     unit_of_measurement: "kPa"
@@ -1255,6 +1268,19 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(enthalpy_close_kjkg);
+
+  - platform: template
+    id: cfg_econ_heat_margin_f
+    name: "Cfg • Econ Heat Margin (°F)"
+    device_class: temperature
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(econ_heat_margin_f);
 
   # ─── Manual‑burst & control timers ─────────────────────────────────────
   - platform: template
@@ -1660,6 +1686,41 @@ sensor:
       return id(fog_escalation_kpa);
 
   - platform: template
+    id: cfg_max_relief_cycles
+    name: "Cfg • Max Relief Cycles"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(max_relief_cycles);
+
+  - platform: template
+    id: cfg_dehum_aggressive_kpa
+    name: "Cfg • Dehum Aggressive (kPa)"
+    unit_of_measurement: "kPa"
+    state_class: measurement
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(dehum_aggressive_kpa);
+
+  - platform: template
+    id: cfg_vent_latch_timeout_ms
+    name: "Cfg • Vent Latch Timeout (ms)"
+    unit_of_measurement: "ms"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(vent_latch_timeout_ms);
+
+  - platform: template
     id: cfg_fog_rh_ceiling_pct
     name: "Cfg • Fog RH Ceiling (%)"
     unit_of_measurement: "%"
@@ -1936,6 +1997,18 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return (float)id(mist_thermal_relief_s);
+
+  - platform: template
+    id: cfg_gl_lux_hysteresis
+    name: "Cfg • GL Lux Hysteresis"
+    unit_of_measurement: "lx"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_lux_hysteresis);
 
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template

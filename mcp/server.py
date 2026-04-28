@@ -50,6 +50,7 @@ from verdify_schemas import (  # noqa: E402
     SetpointSummary,
     TreatmentCreate,
 )
+from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG  # noqa: E402
 
 # ── Config ──
 # Read DB password from .env
@@ -62,6 +63,50 @@ if _env_path.exists():
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
 # Legacy planner.py removed — planning now runs via iris_planner.py → OpenClaw hooks
 BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+TIER1_TUNABLES = frozenset(
+    {
+        "vpd_hysteresis",
+        "vpd_watch_dwell_s",
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_pulse_on_s",
+        "mister_pulse_gap_s",
+        "mister_vpd_weight",
+        "mister_water_budget_gal",
+        "mist_vent_close_lead_s",
+        "mist_max_closed_vent_s",
+        "mist_vent_reopen_delay_s",
+        "mist_thermal_relief_s",
+        "enthalpy_open",
+        "enthalpy_close",
+        "min_vent_on_s",
+        "min_vent_off_s",
+        "min_fog_on_s",
+        "min_fog_off_s",
+        "fog_escalation_kpa",
+        "d_heat_stage_2",
+        "d_cool_stage_2",
+        "temp_hysteresis",
+        "heat_hysteresis",
+        "bias_heat",
+        "bias_cool",
+        "min_heat_on_s",
+        "min_heat_off_s",
+        "mister_engage_delay_s",
+        "mister_all_delay_s",
+        "sw_summer_vent_enabled",
+        "vent_prefer_temp_delta_f",
+        "vent_prefer_dp_delta_f",
+        "outdoor_staleness_max_s",
+        "summer_vent_min_runtime_s",
+        "sw_fog_closes_vent",
+        "sw_mister_closes_vent",
+        "sw_dwell_gate_enabled",
+        "dwell_gate_ms",
+        "sw_fsm_controller_enabled",
+        "mist_backoff_s",
+    }
+)
 
 
 def _json(obj):
@@ -83,9 +128,9 @@ mcp = FastMCP(
     instructions="""Verdify greenhouse control tools. Use these to monitor climate,
     manage setpoints, run the AI planner, and review performance.
     The greenhouse has temp/VPD bands, misters, fog, fans, heaters, and a vent.
-    The planner sets tactical Tier 1 tunables that shape how the controller responds.
+    The planner sets registry-approved tunables that shape how the controller responds.
     Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
-    read-only context; plans should adjust bias, mist, fog, dwell, and hysteresis knobs.""",
+    read-only context in routine plans; use direct tunable pushes only for explicit overrides.""",
 )
 
 
@@ -227,26 +272,17 @@ async def get_setpoints() -> str:
     """Get all current active setpoints (band values + planner tunables)."""
     conn = await _db()
     try:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT parameter, round(value::numeric,3) as value, source,
                    to_char(ts AT TIME ZONE 'America/Denver', 'HH24:MI') as updated
             FROM (SELECT DISTINCT ON (parameter) parameter, value, source, ts
                   FROM setpoint_changes ORDER BY parameter, ts DESC) sub
-            WHERE parameter IN (
-                'temp_high','temp_low','vpd_high','vpd_low',
-                'bias_cool','bias_heat','vpd_hysteresis',
-                'mister_engage_kpa','mister_all_kpa',
-                'mister_pulse_on_s','mister_pulse_gap_s','mister_vpd_weight',
-                'mister_water_budget_gal','mister_engage_delay_s','mister_all_delay_s',
-                'mist_max_closed_vent_s','mist_thermal_relief_s','mist_vent_close_lead_s',
-                'mist_vent_reopen_delay_s',
-                'vpd_watch_dwell_s','fog_escalation_kpa',
-                'min_fog_on_s','min_fog_off_s',
-                'min_vent_on_s','min_vent_off_s',
-                'd_cool_stage_2','min_heat_on_s','min_heat_off_s',
-                'enthalpy_open','enthalpy_close'
-            ) ORDER BY parameter
-        """)
+            WHERE parameter = ANY($1::text[])
+            ORDER BY parameter
+            """,
+            sorted(ALL_TUNABLES),
+        )
         validated = [SetpointSummary.model_validate(dict(r)).model_dump(mode="json") for r in rows]
         return json.dumps(validated)
     finally:
@@ -261,7 +297,7 @@ async def set_tunable(
     trigger_id: str | None = None,
     planner_instance: str | None = None,
 ) -> str:
-    """Push a single Tier 1 tunable to the ESP32 immediately.
+    """Push a single registry-approved tunable to the ESP32 immediately.
     The dispatcher will apply it within 5 minutes.
     Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')
 
@@ -269,59 +305,17 @@ async def set_tunable(
     Pass through from the trigger banner shown at the bottom of every
     planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
     Stamped onto plan_journal so SLA monitors can correlate by uuid."""
-    TIER1 = {
-        "vpd_hysteresis",
-        "vpd_watch_dwell_s",
-        "mister_engage_kpa",
-        "mister_all_kpa",
-        "mister_pulse_on_s",
-        "mister_pulse_gap_s",
-        "mister_vpd_weight",
-        "mister_water_budget_gal",
-        "mist_vent_close_lead_s",
-        "mist_max_closed_vent_s",
-        "mist_vent_reopen_delay_s",
-        "mist_thermal_relief_s",
-        "enthalpy_open",
-        "enthalpy_close",
-        "min_vent_on_s",
-        "min_vent_off_s",
-        "min_fog_on_s",
-        "min_fog_off_s",
-        "fog_escalation_kpa",
-        "d_heat_stage_2",
-        "d_cool_stage_2",
-        "temp_hysteresis",
-        "heat_hysteresis",
-        "bias_heat",
-        "bias_cool",
-        "min_heat_on_s",
-        "min_heat_off_s",
-        "mister_engage_delay_s",
-        "mister_all_delay_s",
-        # Sprint-15 summer-vent gate — dispatcher-pushable tunables that
-        # planner should tune when hot-dry-afternoon regime activates.
-        "sw_summer_vent_enabled",
-        "vent_prefer_temp_delta_f",
-        "vent_prefer_dp_delta_f",
-        "outdoor_staleness_max_s",
-        "summer_vent_min_runtime_s",
-        # Sprint-15.1 vent-close interlocks — fixes 4/5/7. Operator toggles;
-        # planner should typically leave ON unless an A/B test requires.
-        "sw_fog_closes_vent",
-        "sw_mister_closes_vent",
-        # Phase-2 dwell gate (plan firmware stabilization).
-        "sw_dwell_gate_enabled",
-        "dwell_gate_ms",
-        # Controller v2: band-first FSM.
-        "sw_fsm_controller_enabled",
-        "mist_backoff_s",
-    }
-    # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
+    # Schema-level gate first rejects typos; the registry then blocks
+    # operator-only safety rails and readback-only diagnostics.
     if parameter not in ALL_TUNABLES:
         return json.dumps({"error": f"'{parameter}' is not a known tunable — not in verdify_schemas.ALL_TUNABLES"})
-    if parameter not in TIER1:
-        return json.dumps({"error": f"'{parameter}' is not a Tier 1 tunable", "allowed": sorted(TIER1)})
+    if parameter not in PLANNER_PUSHABLE_REG:
+        return json.dumps(
+            {
+                "error": f"'{parameter}' is not planner-pushable in the tunable registry",
+                "allowed": sorted(PLANNER_PUSHABLE_REG),
+            }
+        )
 
     # Phase-1b: set_tunable writes to setpoint_plan (one-shot waypoint at
     # ts=now()) so the dispatcher's plan-reading cycle doesn't overwrite

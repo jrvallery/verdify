@@ -44,6 +44,8 @@ log = logging.getLogger("tasks")
 
 # ── Shared config (from config.py / environment) ────────────────
 from config import (
+    EXPECTED_FIRMWARE_VERSION,
+    EXPECTED_FIRMWARE_VERSION_FILE,
     HA_TOKEN_FILE,
     HA_URL,
     SLACK_CHANNEL,
@@ -54,6 +56,37 @@ from config import (
 from config import (
     load_token as _load_token,
 )
+
+# Crop-band params are not planner-owned waypoints. The dispatcher derives all
+# four from fn_band_setpoints(now()) every cycle and pushes them to firmware.
+# A missing setpoint_plan row for vpd_low is therefore not a firmware fallback:
+# vpd_low is explicit in the band contract here.
+BAND_DRIVEN_PARAMS = frozenset(
+    {
+        "temp_high",
+        "temp_low",
+        "vpd_high",
+        "vpd_low",
+        "vpd_target_south",
+        "vpd_target_west",
+        "vpd_target_east",
+        "vpd_target_center",
+    }
+)
+
+
+def _expected_firmware_version() -> str | None:
+    """Return the firmware version pin alert_monitor should enforce."""
+    if EXPECTED_FIRMWARE_VERSION.strip():
+        return EXPECTED_FIRMWARE_VERSION.strip()
+    path = Path(EXPECTED_FIRMWARE_VERSION_FILE)
+    try:
+        if path.exists():
+            value = path.read_text().strip()
+            return value or None
+    except OSError as exc:
+        log.warning("Could not read expected firmware version pin %s: %s", path, exc)
+    return None
 
 
 def _ha_state(states: dict[str, dict], eid: str) -> HAEntityState | None:
@@ -990,7 +1023,46 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
-        # 12. ESP32 heap pressure watchdogs. Firmware publishes debounced
+        # 12. Firmware version mismatch. The deploy path writes
+        # STATE_DIR/expected-firmware-version only after sensor-health accepts
+        # an OTA. If diagnostics later report a different build, the operator
+        # may be validating the wrong binary or an out-of-band OTA happened.
+        expected_fw = _expected_firmware_version()
+        if expected_fw:
+            latest_fw = await conn.fetchrow(
+                """
+                SELECT firmware_version, ts
+                  FROM diagnostics
+                 WHERE ts >= now() - interval '10 minutes'
+                   AND firmware_version IS NOT NULL
+                 ORDER BY ts DESC
+                 LIMIT 1
+                """
+            )
+            live_fw = latest_fw["firmware_version"] if latest_fw else None
+            if live_fw and live_fw != expected_fw:
+                alerts.append(
+                    {
+                        "alert_type": "firmware_version_mismatch",
+                        "severity": "high",
+                        "category": "system",
+                        "sensor_id": "diag.firmware_version",
+                        "zone": None,
+                        "message": (f"ESP32 firmware_version={live_fw} does not match expected pin {expected_fw}"),
+                        "details": {
+                            "expected_firmware_version": expected_fw,
+                            "live_firmware_version": live_fw,
+                            "diagnostics_ts": latest_fw["ts"].isoformat() if latest_fw else None,
+                            "pin_source": EXPECTED_FIRMWARE_VERSION_FILE
+                            if not EXPECTED_FIRMWARE_VERSION.strip()
+                            else "EXPECTED_FIRMWARE_VERSION",
+                        },
+                        "metric_value": None,
+                        "threshold_value": None,
+                    }
+                )
+
+        # 13. ESP32 heap pressure watchdogs. Firmware publishes debounced
         # binary sensors; route them into alert_log so heap exhaustion has the
         # same lifecycle and Slack path as the other system-owned alerts.
         heap_rows = await conn.fetch(
@@ -1069,7 +1141,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
-        # 13. Tunable zero-variance detection (Sprint 24.9, G-9).
+        # 14. Tunable zero-variance detection (Sprint 24.9, G-9).
         # Firmware sprint-13 30-day scan flagged vpd_target_west pinned at
         # 1.2 kPa across 33k samples — either fn_zone_vpd_targets has a
         # west-zone default/bug or the west zone has no active crop. Catching
@@ -1349,17 +1421,6 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         shared.force_setpoint_push.clear()
         _last_pushed.clear()
         log.info("Dispatcher: force-push — cleared _last_pushed cache (ESP32 reconnect)")
-    # Parameters driven by the target band curve, not the AI planner
-    BAND_DRIVEN = {
-        "temp_high",
-        "temp_low",
-        "vpd_high",
-        "vpd_low",
-        "vpd_target_south",
-        "vpd_target_west",
-        "vpd_target_east",
-        "vpd_target_center",
-    }
     async with pool.acquire() as conn:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
@@ -1458,7 +1519,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         # Process planner setpoints (tactical knobs — skip band params already handled)
         for row in planned or []:
             param, planned_val = row["parameter"], row["value"]
-            if param.startswith("plan_") or param in BAND_DRIVEN:
+            if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue
 
             last = _last_pushed.get(param)
@@ -1485,7 +1546,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             "mister_center_penalty",
         }
         for param, val in changes:
-            if param in BAND_DRIVEN:
+            if param in BAND_DRIVEN_PARAMS:
                 source = "band"
             elif param in SAFETY_PARAMS and param not in planner_params:
                 source = "band"
@@ -1538,8 +1599,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         log.info(
             "Dispatcher: pushed %d setpoint changes (%d band, %d plan)",
             len(changes),
-            sum(1 for p, _ in changes if p in BAND_DRIVEN),
-            sum(1 for p, _ in changes if p not in BAND_DRIVEN),
+            sum(1 for p, _ in changes if p in BAND_DRIVEN_PARAMS),
+            sum(1 for p, _ in changes if p not in BAND_DRIVEN_PARAMS),
         )
 
     # Direct ESP32 push via shared ingestor connection (non-blocking optimization)
@@ -2824,9 +2885,10 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
     pass, confirmed setpoints would leave zombie open alerts forever.
     """
     async with pool.acquire() as conn:
-        # Pass 1: auto-resolve open alerts whose underlying setpoint_changes
-        # row is now confirmed_at NOT NULL. Matches on sensor_id's `setpoint.*`
-        # suffix back to the parameter name.
+        # Pass 1: auto-resolve unresolved alerts whose underlying
+        # setpoint_changes row is now confirmed_at NOT NULL. Acknowledged
+        # alerts still block deploy preflight until resolved_at is set.
+        # Matches on sensor_id's `setpoint.*` suffix back to the parameter.
         resolved = await conn.fetch(
             """
             UPDATE alert_log al
@@ -2836,16 +2898,17 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    resolution  = 'auto-resolved: confirmation landed'
               FROM (
                   SELECT DISTINCT ON (sc.parameter)
-                         sc.parameter, sc.confirmed_at
+                         sc.parameter, sc.ts, sc.confirmed_at
                     FROM setpoint_changes sc
                    WHERE sc.confirmed_at IS NOT NULL
-                     AND sc.ts > now() - interval '2 hours'
                    ORDER BY sc.parameter, sc.ts DESC
-              ) confirmed
+             ) confirmed
              WHERE al.alert_type = 'setpoint_unconfirmed'
-               AND al.disposition = 'open'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
                AND al.source = 'ingestor'
                AND al.sensor_id = 'setpoint.' || confirmed.parameter
+               AND confirmed.ts >= COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
             RETURNING al.id
             """,
         )
@@ -2860,14 +2923,14 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    resolved_by = 'system',
                    resolution  = 'auto-resolved: superseded by newer setpoint'
              WHERE al.alert_type = 'setpoint_unconfirmed'
-               AND al.disposition = 'open'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
                AND al.source = 'ingestor'
                AND EXISTS (
                    SELECT 1
                      FROM setpoint_changes newer
-                    WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
+                   WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
                       AND newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
-                      AND newer.ts > now() - interval '2 hours'
                )
             RETURNING al.id
             """,
@@ -2916,7 +2979,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
             existing = await conn.fetchval(
                 "SELECT id FROM alert_log "
                 "WHERE alert_type='setpoint_unconfirmed' "
-                "  AND disposition='open' "
+                "  AND resolved_at IS NULL "
                 "  AND sensor_id=$1",
                 f"setpoint.{r['parameter']}",
             )

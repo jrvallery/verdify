@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from verdify_schemas.telemetry import (
+    OVERRIDE_EVENT_TYPES,
     ClimateRow,
     Diagnostics,
     EnergySample,
@@ -132,3 +133,21 @@ class TestOverrideEvent:
             details={"rh": 82.0, "occupancy": True},
         )
         assert ov.details["rh"] == 82.0
+
+    def test_accepts_every_known_override_type(self):
+        for override_type in OVERRIDE_EVENT_TYPES:
+            ov = OverrideEvent(ts=NOW, override_type=override_type)
+            assert ov.override_type == override_type
+
+    def test_accepts_comma_separated_known_override_types(self):
+        ov = OverrideEvent(ts=NOW, override_type="summer_vent,vent_mist_assist,fog_heat_assist")
+        assert ov.override_type == "summer_vent,vent_mist_assist,fog_heat_assist"
+
+    def test_rejects_unknown_override_type(self):
+        with pytest.raises(ValidationError, match="Unknown override_type"):
+            OverrideEvent(ts=NOW, override_type="summer_vent,renamed_flag")
+
+    def test_rejects_empty_or_none_override_type(self):
+        for override_type in ("", "none", " , "):
+            with pytest.raises(ValidationError, match="at least one active override flag"):
+                OverrideEvent(ts=NOW, override_type=override_type)

@@ -27,6 +27,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from verdify_schemas.telemetry import OVERRIDE_EVENT_TYPES
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 YAML_DIRS = [
     REPO_ROOT / "firmware" / "greenhouse",
@@ -232,3 +234,39 @@ def test_known_drift_is_still_drifting(fw_ids, entity_map):
 def test_firmware_emits_a_reasonable_number_of_entities(fw_ids):
     """Sanity check — if the YAML parser silently lost everything we want to know."""
     assert len(fw_ids) >= 50, f"only {len(fw_ids)} firmware entity ids parsed; expected >=50"
+
+
+def _override_flag_fields() -> set[str]:
+    src = (REPO_ROOT / "firmware" / "lib" / "greenhouse_types.h").read_text()
+    block = re.search(r"struct\s+OverrideFlags\s*\{(?P<body>.*?)\};", src, re.S)
+    assert block, "OverrideFlags struct not found in greenhouse_types.h"
+    return set(re.findall(r"\bbool\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", block.group("body")))
+
+
+def _published_override_tags() -> dict[str, str]:
+    src = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
+    return dict(re.findall(r"if\(of\.([A-Za-z_][A-Za-z0-9_]*)\)\s*add\(\"([^\"]+)\"\)", src))
+
+
+def test_override_event_schema_matches_firmware_published_tags():
+    """Override tags are a wire contract: firmware fields → controls.yaml
+    payloads → ingestor OverrideEvent schema. A rename in any layer must
+    force a coordinated update.
+    """
+    aliases = {"summer_vent_active": "summer_vent"}
+    fields = _override_flag_fields()
+    published = _published_override_tags()
+
+    expected_tags = {aliases.get(field, field) for field in fields}
+    assert set(published) == fields, (
+        "controls.yaml must publish exactly one tag for every OverrideFlags field. "
+        f"missing={sorted(fields - set(published))}, extra={sorted(set(published) - fields)}"
+    )
+    assert set(published.values()) == expected_tags, (
+        "controls.yaml override tags must match OverrideFlags names, except documented aliases. "
+        f"expected={sorted(expected_tags)}, got={sorted(published.values())}"
+    )
+    assert set(OVERRIDE_EVENT_TYPES) == expected_tags, (
+        "verdify_schemas.telemetry.OVERRIDE_EVENT_TYPES must match firmware-published override tags. "
+        f"expected={sorted(expected_tags)}, got={sorted(OVERRIDE_EVENT_TYPES)}"
+    )

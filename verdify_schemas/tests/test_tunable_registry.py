@@ -43,6 +43,10 @@ _CLAMP_RE = re.compile(
     r"(?:cf|ci)\s*\(\s*(?:\(int\))?\s*val\s*,\s*"
     r"(?P<lo>-?\d+(?:\.\d+)?)\s*,\s*(?P<hi>-?\d+(?:\.\d+)?)"
 )
+_SETPOINT_LITERAL_RE = re.compile(
+    r"\.(?P<field>[a-zA-Z0-9_]+)\s*=\s*"
+    r"(?P<rhs>(?:uint32_t\()?-?\d+(?:\.\d+)?[fFuUlL]*(?:\))?)\s*,"
+)
 
 
 def _parse_controls_clamps(text: str) -> dict[str, tuple[float, float]]:
@@ -96,13 +100,23 @@ class TestDriftGuard:
         if mismatched:
             pytest.fail(f"Clamp drift detected in {len(mismatched)} tunables:\n  " + "\n  ".join(mismatched))
 
+    def test_controls_setpoints_are_not_literal_policy(self, controls_yaml: str) -> None:
+        """Setpoints fields must come from globals/handler values, not local
+        literals. Literal safety bounds belong in validate_setpoints(), where
+        they are fallback clamps, not in the live ESPHome Setpoints builder.
+        """
+        m = re.search(r"Setpoints setpts\s*=\s*\{(?P<body>.*?)\n\s*\};", controls_yaml, re.DOTALL)
+        assert m, "Could not find Setpoints setpts initializer in controls.yaml"
+        literal_fields = [match.group("field") for match in _SETPOINT_LITERAL_RE.finditer(m.group("body"))]
+        assert not literal_fields, (
+            "Setpoints initializer has hardcoded numeric policy literals: "
+            f"{literal_fields}. Add globals/tunables/readbacks and assign from id(...)."
+        )
+
     def test_registry_matches_entity_map_setpoint(self) -> None:
         """Every REGISTRY entry's esp_object_id must be in entity_map.SETPOINT_MAP
-        (so dispatcher can route it) and vice-versa for Phase-1a subset.
-
-        Phase-1a subset only — only asserts one-direction (registry ⊆ entity_map)
-        because `tunable_registry.py` is still a seed. Phase-1b flips the
-        bidirectional assertion on.
+        (so dispatcher can route it) and every SETPOINT_MAP route must have a
+        registry row.
         """
         # Resolve ingestor module; same idiom as test_tunables.py
         for p in reversed(
@@ -124,6 +138,11 @@ class TestDriftGuard:
         assert not missing, (
             f"{len(missing)} registry entries have esp_object_ids not in entity_map.SETPOINT_MAP:\n  "
             + "\n  ".join(missing)
+        )
+        missing_registry = sorted(set(SETPOINT_MAP.values()) - set(REGISTRY))
+        assert not missing_registry, (
+            f"{len(missing_registry)} SETPOINT_MAP params have no tunable_registry row: "
+            f"{missing_registry}. Add registry metadata so MCP/planner access cannot drift."
         )
 
     def test_registry_cfg_readback_matches_entity_map(self) -> None:
@@ -165,21 +184,32 @@ class TestDriftGuard:
 
     def test_registry_tier1_is_subset_of_mcp_tier1(self) -> None:
         """Every REGISTRY entry with tier=1 + planner_pushable=True must be in
-        mcp/server.py TIER1 so Iris can actually push it.
+        mcp/server.py TIER1_TUNABLES so Iris can actually push it.
 
         Phase-1a: one-directional check. Phase-1b replaces mcp TIER1 with
         `PLANNER_PUSHABLE_REG` from this module.
         """
         mcp_path = REPO_ROOT / "mcp" / "server.py"
         text = mcp_path.read_text()
-        # Grab the TIER1 set literal
-        m = re.search(r"TIER1\s*=\s*\{([^}]+)\}", text, re.DOTALL)
-        assert m, "Couldn't find TIER1 set in mcp/server.py"
+        # Grab either the legacy local TIER1 set or the module-level
+        # TIER1_TUNABLES frozenset contract.
+        m = re.search(r"TIER1(?:_TUNABLES)?\s*=\s*(?:frozenset\(\s*)?\{([^}]+)\}", text, re.DOTALL)
+        assert m, "Couldn't find TIER1/TIER1_TUNABLES set in mcp/server.py"
         tier1_body = m.group(1)
         mcp_tier1 = set(re.findall(r'"([a-z0-9_]+)"', tier1_body))
         registry_tier1 = {n for n, d in REGISTRY.items() if d.tier == 1 and d.planner_pushable}
         missing = registry_tier1 - mcp_tier1
         assert not missing, (
-            f"{len(missing)} registry tier-1 entries not in mcp/server.py TIER1: "
-            f"{sorted(missing)}. Add to TIER1 (Phase-1b retires TIER1 entirely)."
+            f"{len(missing)} registry tier-1 entries not in mcp/server.py TIER1_TUNABLES: "
+            f"{sorted(missing)}. Add to TIER1_TUNABLES (Phase-1b retires it entirely)."
         )
+
+    def test_mcp_set_tunable_uses_planner_pushable_registry(self) -> None:
+        """MCP set_tunable must expose all registry planner-pushable params,
+        not just the daily Tier 1 prompt subset.
+        """
+        mcp_path = REPO_ROOT / "mcp" / "server.py"
+        text = mcp_path.read_text()
+        assert "PLANNER_PUSHABLE_REG" in text
+        assert "parameter not in PLANNER_PUSHABLE_REG" in text
+        assert "parameter not in TIER1_TUNABLES" not in text

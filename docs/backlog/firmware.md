@@ -5,6 +5,7 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 ## In flight
 
 - [ ] **48-hour v2 bake + reboot forensics follow-through.** Behavior-changing OTA for `2026.4.27.2009.2b5f2a5` began at `2026-04-28 02:12:25 UTC`; a wrapper-only main redeploy later put `2026.4.27.2040.c1a6403` live at `2026-04-28 02:41:54 UTC`. Sensor-health is `PASS 27 / FAIL 0 / WARN 0`, open critical/high alerts are `0`, and there are no post-OTA `Guru/Panic` / `Task WDT` resets in the sampled window. Keep OTA freeze intact during the bake. Current evidence reframes the old "midday crash-loop" as broader JSON/API/crash-forensics work; see [`docs/firmware-v2-postdeploy-forensics-2026-04-27.md`](../firmware-v2-postdeploy-forensics-2026-04-27.md).
+- [ ] **Contract + alert drift guard PR.** `firmware/contracts-alert-drift` makes `vpd_low` explicitly dispatcher/band-owned, adds expected-firmware-version mismatch alerting, and adds static drift guards for firmware override tags, `sw_mister_closes_vent` routing, and MCP Tier 1 validation.
 
 ## Recently landed
 
@@ -29,16 +30,16 @@ Findings from the 2026-04-18 audit that live outside firmware scope. Each is a f
 - [x] **Coordinator — EquipmentId schema reconciliation.** ✅ Landed as ingestor sprint-24 hotfix (commit `4a89844`).
 - [x] **Ingestor — route `mister_fairness_overrides_today`.** ✅ Landed as ingestor sprint-24-alignment; `daily_summary.mister_fairness_overrides_today` column exists.
 - [x] **Ingestor — F10: `mister_state` / `mister_zone` STATE_MAP mismatch.** ✅ Landed as ingestor sprint-24-alignment; sensor_health is now 100% (0 stale).
-- [ ] **Coordinator — override flag enum guard.** Add a drift guard that compares `OverrideEvent.override_type` against the 7 flag names in `firmware/lib/greenhouse_types.h` (`OverrideFlags` struct). Today the schema accepts any string; a silent rename would corrupt `override_events`.
-- [ ] **Coordinator + genai — `sw_mister_closes_vent` routing.** Firmware handles the key in `controls.yaml`, but it's not in `verdify_schemas/tunables.py` ALL_TUNABLES or `entity_map.py` SETPOINT_MAP. Decide: add to schema or drop the firmware handler.
-- [ ] **Ingestor — alert monitor coverage for OBS-3.** `scripts/alert-monitor.py` does not watch `diagnostics.relief_cycle_count > 0` (breaker latched) or `diagnostics.vent_latch_timer_s > 1200` (vent stuck in latched VENTILATE). Add both, plus firmware version staleness vs. an expected pin.
+- [x] **Coordinator — override flag enum guard.** ✅ In `firmware/contracts-alert-drift`: `OVERRIDE_EVENT_TYPES` validates `OverrideEvent.override_type`; a firmware drift guard compares `OverrideFlags` fields, controls.yaml published tags, and schema-accepted tags.
+- [x] **Coordinator + genai — `sw_mister_closes_vent` routing.** ✅ Routed through `entity_map.SETPOINT_MAP`, `CFG_READBACK_MAP`, `SWITCH_TO_ENTITY`, `verdify_schemas.tunables`, firmware `controls.yaml`, and MCP `TIER1_TUNABLES`; static tests now pin the route.
+- [x] **Ingestor — alert monitor coverage for OBS-3.** ✅ `alert_monitor` watches `diagnostics.relief_cycle_count` and `diagnostics.vent_latch_timer_s`; the same PR adds expected firmware-version mismatch alerting from `/srv/verdify/state/expected-firmware-version`.
 - [ ] **Ingestor — override events smoke test.** Add `test_override_events_written` to `tests/test_05_ingestor.py` to verify `gh_overrides` diff → `override_events` write.
 - [ ] **Ingestor — `setpoint_unconfirmed` lifecycle fix.** alert_monitor tracks specific (param, value, push_ts) tuples; stale alerts persist indefinitely when a later push supersedes an older one before readback can confirm the older value. Net effect: 20+ critical alerts per 5 hours of active dispatch. Should resolve by latest-readback-for-parameter rather than require exact-push-match.
 - [ ] **Coordinator — `daily_summary.cycles_{mister_south,mister_west,mister_center,drip_wall,drip_center}` columns (sprint-7 follow-up).** Firmware now emits these via `daily_mister_*_cycles` + `daily_drip_*_cycles` template sensors. Needs a migration to add the columns to `daily_summary`.
 - [ ] **Ingestor — DAILY_ACCUM_MAP entries for the sprint-7 cycle sensors.** Slug keys: `cycles___mister_south__today_`, `cycles___mister_west__today_`, `cycles___mister_center__today_`, `cycles___drip_wall__today_`, `cycles___drip_center__today_`. Depends on the coordinator migration above.
 - [ ] **Coordinator — `v_cycle_count_audit` view (sprint-7 follow-up).** Join `daily_summary.cycles_*` with per-day aggregates from `equipment_state` (count of state-true transitions). Flag divergence >5% as a warning. Depends on the column migration.
 - [ ] **Ingestor — F12 triage: `v_stress_hours_today` semantics.** "32 h cold_stress/day" suggests zone-summing not clock-summing. Doc fix or view fix.
-- [ ] **Genai — MCP `set_tunable()` validator.** Today MCP can push any key; if it's not in the firmware handler's accept list, it silently no-ops. Add a pre-push validation.
+- [x] **Genai — MCP `set_tunable()` validator.** ✅ MCP rejects unknown params via `ALL_TUNABLES` and rejects non-Tier-1 params via `TIER1_TUNABLES`; tests pin `vpd_low` as band-owned rather than tactical.
 - [ ] **Saas — real-time setpoint push.** `controls.yaml` references an aioesphomeapi push path that doesn't exist. Either implement or drop the comment.
 
 ## Candidates (operational, co-owned with `saas`)

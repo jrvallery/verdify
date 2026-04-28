@@ -7,6 +7,7 @@ every query in TestSchema below fails — that's the "would fail without the
 change" gate per the fleet DoD.
 """
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,31 @@ from conftest import db_query
 sys.path.insert(0, "/srv/verdify/ingestor")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _assigned_frozenset(path: Path, name: str) -> set[str]:
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            continue
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
+            value = value.args[0]
+        return set(ast.literal_eval(value))
+    raise AssertionError(f"{name} assignment not found in {path}")
+
+
+def _repo_entity_map():
+    ingestor_path = str(REPO_ROOT / "ingestor")
+    if ingestor_path in sys.path:
+        sys.path.remove(ingestor_path)
+    sys.path.insert(0, ingestor_path)
+    sys.modules.pop("entity_map", None)
+    import entity_map
+
+    return entity_map
 
 
 class TestSchema:
@@ -148,6 +174,61 @@ class TestV2ControlDiagnostics:
         for col in ("sealed_timer_s", "vpd_watch_timer_s", "mist_backoff_timer_s", "vent_mist_assist_active"):
             assert f'"{col}": "{col}"' in entity_map
             assert col in ingestor
+
+
+class TestContractDriftGuardrails:
+    """Static checks for firmware/planner contracts that have drifted before."""
+
+    def test_dispatcher_declares_vpd_low_band_owned(self):
+        band_params = _assigned_frozenset(REPO_ROOT / "ingestor" / "tasks.py", "BAND_DRIVEN_PARAMS")
+        assert {"temp_low", "temp_high", "vpd_low", "vpd_high"} <= band_params
+
+        tasks_source = (REPO_ROOT / "ingestor" / "tasks.py").read_text()
+        assert "fn_band_setpoints(now())" in tasks_source
+        assert "param in BAND_DRIVEN_PARAMS" in tasks_source
+
+    def test_alert_monitor_covers_obs3_relief_and_latch(self):
+        tasks_source = (REPO_ROOT / "ingestor" / "tasks.py").read_text()
+        assert '"alert_type": "firmware_relief_ceiling"' in tasks_source
+        assert '"alert_type": "firmware_vent_latched"' in tasks_source
+        assert 'sensor_id": "diag.relief_cycle_count"' in tasks_source
+        assert 'sensor_id": "diag.vent_latch_timer_s"' in tasks_source
+        assert "relief >= 2" in tasks_source
+        assert "relief >= 3" in tasks_source
+        assert "latch >= 600" in tasks_source
+        assert "latch >= 1200" in tasks_source
+
+    def test_alert_monitor_checks_expected_firmware_pin(self):
+        config_source = (REPO_ROOT / "ingestor" / "config.py").read_text()
+        tasks_source = (REPO_ROOT / "ingestor" / "tasks.py").read_text()
+        makefile = (REPO_ROOT / "Makefile").read_text()
+
+        assert "EXPECTED_FIRMWARE_VERSION" in config_source
+        assert "EXPECTED_FIRMWARE_VERSION_FILE" in config_source
+        assert "firmware_version_mismatch" in tasks_source
+        assert "diag.firmware_version" in tasks_source
+        assert "/srv/verdify/state/expected-firmware-version" in config_source
+        assert "/srv/verdify/state/expected-firmware-version" in makefile
+        assert "pending-fw-version.txt" in makefile
+
+    def test_sw_mister_closes_vent_routes_end_to_end(self):
+        entity_map = _repo_entity_map()
+        assert entity_map.SETPOINT_MAP["mister_closes_vent"] == "sw_mister_closes_vent"
+        assert entity_map.CFG_READBACK_MAP["sw_mister_closes_vent"] == "sw_mister_closes_vent"
+        assert entity_map.SWITCH_TO_ENTITY["sw_mister_closes_vent"] == "mister_closes_vent"
+
+        from verdify_schemas.tunables import ALL_TUNABLES, SWITCH_TUNABLES
+
+        assert "sw_mister_closes_vent" in SWITCH_TUNABLES
+        assert "sw_mister_closes_vent" in ALL_TUNABLES
+
+        tier1 = _assigned_frozenset(REPO_ROOT / "mcp" / "server.py", "TIER1_TUNABLES")
+        assert "sw_mister_closes_vent" in tier1
+
+        controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
+        tunables_source = (REPO_ROOT / "firmware" / "greenhouse" / "tunables.yaml").read_text()
+        assert 'key == "sw_mister_closes_vent"' in controls_source
+        assert "id: sw_mister_closes_vent" in tunables_source
 
 
 class TestFirmwareCheckTargets:

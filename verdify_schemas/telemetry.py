@@ -19,7 +19,24 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+OVERRIDE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "occupancy_blocks_moisture",
+        "fog_gate_rh",
+        "fog_gate_temp",
+        "fog_gate_window",
+        "relief_cycle_breaker",
+        "seal_blocked_temp",
+        "vpd_dry_override",
+        # Firmware field is summer_vent_active; controls.yaml publishes the
+        # historical short tag to override_events.
+        "summer_vent",
+        "vent_mist_assist",
+        "fog_heat_assist",
+    }
+)
 
 
 class ClimateRow(BaseModel):
@@ -278,3 +295,14 @@ class OverrideEvent(BaseModel):
     mode: str | None = None  # controller mode at emission (SEALED_MIST, VENTILATE, ...)
     details: dict | None = None
     greenhouse_id: str = "vallery"
+
+    @field_validator("override_type")
+    @classmethod
+    def known_override_type(cls, v: str) -> str:
+        parts = [part.strip() for part in v.split(",") if part.strip()]
+        if not parts or parts == ["none"]:
+            raise ValueError("override_type must contain at least one active override flag")
+        unknown = sorted(part for part in parts if part not in OVERRIDE_EVENT_TYPES)
+        if unknown:
+            raise ValueError(f"Unknown override_type(s): {unknown}; expected one of {sorted(OVERRIDE_EVENT_TYPES)}")
+        return v

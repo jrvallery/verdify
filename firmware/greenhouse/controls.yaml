@@ -373,20 +373,18 @@ interval:
               .relief_duration_ms = uint32_t(id(mist_thermal_relief_s)) * 1000UL,
               .vpd_watch_dwell_ms = uint32_t(id(vpd_watch_dwell_s)) * 1000UL,
               .mist_s2_delay_ms = uint32_t(id(mister_all_delay_s)) * 1000UL,
-              .max_relief_cycles = 3,
+              .max_relief_cycles = (uint32_t)id(max_relief_cycles),
               .fog_escalation_kpa = id(fog_escalation_kpa),
               .fog_rh_ceiling = (float)id(fog_rh_ceiling_pct),
               .fog_min_temp = (float)id(fog_min_temp_f),
               .fog_window_start = id(fog_time_window_start),
               .fog_window_end = id(fog_time_window_end),
-              .dehum_aggressive_kpa = 0.6f,
+              .dehum_aggressive_kpa = id(dehum_aggressive_kpa),
               .occupancy_inhibit = id(occupancy_inhibit_enabled) && id(greenhouse_occupied),
               .econ_block = econ_block,
-              // sprint-10 0.4b magic-numbers-now-tunable (defaults match
-              // the pre-sprint-10 hardcoded constants):
-              .vent_latch_timeout_ms = 1800000u,
-              .safety_max_seal_margin_f = 5.0f,
-              .econ_heat_margin_f = 5.0f,
+              .vent_latch_timeout_ms = id(vent_latch_timeout_ms),
+              .safety_max_seal_margin_f = id(safety_max_seal_margin_f),
+              .econ_heat_margin_f = id(econ_heat_margin_f),
               // sprint-15: summer thermal-driven vent gate.
               .sw_summer_vent_enabled = id(sw_summer_vent_enabled),
               .vent_prefer_temp_delta_f = id(vent_prefer_temp_delta_f),
@@ -1398,6 +1396,7 @@ interval:
                     // ── Safety (CRITICAL: hard floor/ceiling enforced) ──
                     if(key == "safety_min"){ val = cf(val, 30, 60); if(fabs(id(safety_min_f) - val) > 0.01f){ id(safety_min_f) = val; id(num_safety_min).publish_state(val); applied++; }}
                     if(key == "safety_max"){ val = cf(val, 80, 110); if(fabs(id(safety_max_f) - val) > 0.01f){ id(safety_max_f) = val; id(num_safety_max).publish_state(val); applied++; }}
+                    if(key == "safety_max_seal_margin_f"){ val = cf(val, 1, 15); if(fabs(id(safety_max_seal_margin_f) - val) > 0.01f){ id(safety_max_seal_margin_f) = val; id(num_safety_max_seal_margin).publish_state(val); applied++; }}
                     if(key == "safety_vpd_min"){ val = cf(val, 0.1, 1.5); if(fabs(id(safety_vpd_min_kpa) - val) > 0.01f){ id(safety_vpd_min_kpa) = val; id(num_safety_vpd_min).publish_state(val); applied++; }}
                     if(key == "safety_vpd_max"){ val = cf(val, 2.5, 3.0); if(fabs(id(safety_vpd_max_kpa) - val) > 0.01f){ id(safety_vpd_max_kpa) = val; id(num_safety_vpd_max).publish_state(val); applied++; }}
                     // ── Relay timing (clamped to prevent 0 = infinite or rapid cycling) ──
@@ -1410,6 +1409,7 @@ interval:
                     // ── Economiser ──
                     if(key == "enthalpy_open"){ val = cf(val, -5, 0); if(fabs(id(enthalpy_open_kjkg) - val) > 0.01f){ id(enthalpy_open_kjkg) = val; id(num_enthalpy_open).publish_state(val); applied++; }}
                     if(key == "enthalpy_close"){ val = cf(val, -5, 20); if(fabs(id(enthalpy_close_kjkg) - val) > 0.01f){ id(enthalpy_close_kjkg) = val; id(num_enthalpy_close).publish_state(val); applied++; }}
+                    if(key == "econ_heat_margin_f"){ val = cf(val, 1, 15); if(fabs(id(econ_heat_margin_f) - val) > 0.01f){ id(econ_heat_margin_f) = val; id(num_econ_heat_margin).publish_state(val); applied++; }}
                     if(key == "site_pressure_hpa"){ val = cf(val, 700, 1100); if(fabs(id(site_pressure_hpa) - val) > 0.01f){ id(site_pressure_hpa) = val; id(num_site_pressure).publish_state(val); applied++; }}
                     // ── Overrides (clamped) ──
                     if(key == "lead_rotate_s"){ int v = ci((int)val, 60, 1800); if(id(lead_rotate_timeout_s) != v){ id(lead_rotate_timeout_s) = v; id(num_lead_rotate).publish_state(v); applied++; }}
@@ -1430,6 +1430,7 @@ interval:
                     // ── Grow lights (clamped) ──
                     if(key == "gl_dli_target"){ val = cf(val, 1, 50); if(fabs(id(gl_dli_target) - val) > 0.01f){ id(gl_dli_target) = val; id(num_gl_dli_target).publish_state(val); applied++; }}
                     if(key == "gl_lux_threshold"){ val = cf(val, 100, 50000); if(fabs(id(gl_lux_threshold) - val) > 0.01f){ id(gl_lux_threshold) = val; id(num_gl_lux_threshold).publish_state(val); applied++; }}
+                    if(key == "gl_lux_hysteresis"){ val = cf(val, 0, 10000); if(fabs(id(gl_lux_hysteresis) - val) > 0.01f){ id(gl_lux_hysteresis) = val; id(num_gl_lux_hysteresis).publish_state(val); applied++; }}
                     if(key == "gl_sunrise_hour"){ int v = ci((int)val, 0, 23); if(id(gl_sunrise_hour) != v){ id(gl_sunrise_hour) = v; id(num_gl_sunrise_hour).publish_state(v); applied++; }}
                     if(key == "gl_sunset_hour"){ int v = ci((int)val, 0, 23); if(id(gl_sunset_hour) != v){ id(gl_sunset_hour) = v; id(num_gl_sunset_hour).publish_state(v); applied++; }}
                     // ── Irrigation wall (clamped) ──
@@ -1476,6 +1477,9 @@ interval:
                     if(key == "mist_vent_close_lead_s"){ int v = ci((int)val, 0, 60); if(id(mist_vent_close_lead_s) != v){ id(mist_vent_close_lead_s) = v; id(num_mist_vent_close_lead).publish_state(v); applied++; }}
                     if(key == "mist_max_closed_vent_s"){ int v = ci((int)val, 120, 900); if(id(mist_max_closed_vent_s) != v){ id(mist_max_closed_vent_s) = v; id(num_mist_max_closed_vent).publish_state(v); applied++; }}
                     if(key == "fog_escalation_kpa"){ val = cf(val, 0.1, 1.0); if(fabs(id(fog_escalation_kpa) - val) > 0.01f){ id(fog_escalation_kpa) = val; id(num_fog_escalation_kpa).publish_state(val); applied++; }}
+                    if(key == "max_relief_cycles"){ int v = ci((int)val, 1, 10); if(id(max_relief_cycles) != v){ id(max_relief_cycles) = v; id(num_max_relief_cycles).publish_state(v); applied++; }}
+                    if(key == "dehum_aggressive_kpa"){ val = cf(val, 0.05, 1.0); if(fabs(id(dehum_aggressive_kpa) - val) > 0.01f){ id(dehum_aggressive_kpa) = val; id(num_dehum_aggressive_kpa).publish_state(val); applied++; }}
+                    if(key == "vent_latch_timeout_ms"){ int v = ci((int)val, 60000, 7200000); if(id(vent_latch_timeout_ms) != (uint32_t)v){ id(vent_latch_timeout_ms) = (uint32_t)v; id(num_vent_latch_timeout_ms).publish_state(v); applied++; }}
                     if(key == "sw_gl_auto_mode"){ bool v = val > 0.5f; if(id(gl_auto_enabled) != v){ id(gl_auto_enabled) = v; id(sw_gl_auto).publish_state(v); applied++; }}
                     if(key == "sw_irrigation_enabled"){ bool v = val > 0.5f; if(id(irrig_enabled) != v){ id(irrig_enabled) = v; id(sw_irrig_enabled).publish_state(v); applied++; }}
                     if(key == "sw_irrigation_wall_enabled"){ bool v = val > 0.5f; if(id(irrig_wall_enabled) != v){ id(irrig_wall_enabled) = v; id(sw_irrig_wall_enabled).publish_state(v); applied++; }}

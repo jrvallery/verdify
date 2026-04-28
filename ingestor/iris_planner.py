@@ -121,7 +121,7 @@ _STANDING_DIRECTIVES = """
 _PLANNER_CORE = """
 ## Greenhouse Planner Knowledge
 
-You are the greenhouse supervisory planner. You adjust Tier 1 tunables that shape
+You are the greenhouse supervisory planner. You adjust registry-approved tunables that shape
 HOW the ESP32 controller responds to conditions. You do not control relays directly.
 
 **Full operational playbook:** Read `skills/greenhouse-planner.md` for detailed workflows,
@@ -198,12 +198,13 @@ lands in `setpoint_clamps` (audited, rejected). Every Tier 1 knob below
 is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
 drops within one planner cycle.
 
-The full registry (83 live tunables + clamps + push owners + readback
+The full registry (103 live tunables + clamps + push owners + readback
 status) is defined in `verdify_schemas/tunable_registry.py`. For Tier 2
 escape-hatch params (irrigation schedules, economiser site constants,
 per-zone VPD targets, sw_* toggles you rarely touch, safety rails —
 operator-owned) see `docs/tunable-cascade.md` or read the registry.
-**If you need a tier-2 param the firmware clamp is the source of truth.**
+**If you need a tier-2 param, state the reason and push it; the registry
+and firmware clamp are the source of truth.**
 
 **Crop band (read-only context; crop profiles + dispatcher own these):**
 - `temp_low` °F — lower band edge; HEAT_S1 target. Do not emit in plans.

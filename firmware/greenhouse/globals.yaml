@@ -77,6 +77,10 @@ globals:
     type: float
     restore_value: no
     initial_value: '2.50'
+  - id: safety_max_seal_margin_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
 
   # ─── Economiser (enthalpy thresholds) ───
   - id: site_pressure_hpa
@@ -95,6 +99,24 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
+  - id: econ_heat_margin_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
+
+  # ─── Controller relief / latch policy ───
+  - id: max_relief_cycles
+    type: int
+    restore_value: no
+    initial_value: '3'
+  - id: dehum_aggressive_kpa
+    type: float
+    restore_value: no
+    initial_value: '0.6'
+  - id: vent_latch_timeout_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '1800000'
 
   # ─── Fog / evap-assist thresholds ───
   # (removed unused fog_offset_f and AH thresholds)
