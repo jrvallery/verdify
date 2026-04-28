@@ -6,7 +6,16 @@ Full delivery plan with reasoning, cross-agent branch survey, and risk register 
 
 ## In flight
 
-Nothing. Sprint 24 + hotfix + alignment all shipped and live-gate-green as of 2026-04-19 12:54. Deploy path: `main → /mnt/iris/verdify → systemd restart`. See "Recent history" for commit chain.
+**Sprint 25.1 — Operational recovery** (`ingestor/sprint-25.1-operational-recovery`) is closing the 2026-04-27 full-review findings:
+
+- [x] Branch rebased onto current `origin/main` so topology/tunable registry/heap-pressure alignment is present.
+- [x] `data_gaps` now measures actual disconnect→reconnect windows, not previous-connect→current-connect uptime.
+- [x] Direct ESP32 push moved out of `ingestor.py` to avoid split module state under `python ingestor.py`; echo suppression now uses `shared.recently_pushed`.
+- [x] Ingestor modules use repo-relative schema imports instead of hardcoding `/mnt/iris/verdify`.
+- [x] Regression coverage added for push helper wiring, gap timestamp source, import path, and live active-plan pushability.
+- [x] Gates passed before deploy: `make lint`; `pytest --import-mode=importlib verdify_schemas/tests/test_drift_guards.py`; `make test` (`248 passed, 1 xfailed`).
+
+Deploy path remains `main → /mnt/iris/verdify → systemd restart`, followed by a 5+ minute journal tail and DB freshness checks.
 
 ## Findings from 2026-04-18 scope review
 

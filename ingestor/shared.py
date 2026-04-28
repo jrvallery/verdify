@@ -6,6 +6,11 @@ import asyncio
 # Used by dispatcher in tasks.py for direct setpoint push
 esp32 = {"client": None, "keys": {}}
 
+# param -> monotonic timestamp of the last direct ESP32 push.
+# Shared between ingestor.py callbacks and tasks.py dispatcher so echo
+# suppression works even when the service is launched as __main__.
+recently_pushed: dict[str, float] = {}
+
 # Set by esp32_loop on reconnect — tells dispatcher to clear _last_pushed
 # and do a full re-push of all setpoints (prevents stale values after reboot)
 force_setpoint_push = asyncio.Event()

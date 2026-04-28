@@ -21,23 +21,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
-sys.path.insert(0, "/mnt/iris/verdify")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import asyncpg
 import paho.mqtt.client as paho_mqtt
 import shared
 from aioesphomeapi import APIClient, APIConnectionError, LogLevel
-from pydantic import ValidationError
-
-# verdify_schemas lives one level up at /mnt/iris/verdify
-# (loaded via sys.path in shared.py / entrypoint). Import at module load.
-try:
-    from verdify_schemas import ClimateRow, EquipmentStateEvent
-except ImportError:
-    # During dev / first-run before verdify_schemas is on path, fall back gracefully.
-    ClimateRow = None
-    EquipmentStateEvent = None
 from aioesphomeapi.model import (
     BinarySensorInfo,
     NumberInfo,
@@ -56,6 +47,7 @@ from entity_map import (
     SETPOINT_MAP,
     STATE_MAP,
 )
+from esp32_push import push_to_esp32
 from pydantic import ValidationError
 from tasks import (
     alert_monitor,
@@ -145,9 +137,6 @@ class State:
         self.setpoints: dict[str, float] = {}
         self.diagnostics: dict[str, Any] = {}
         self.daily: dict[str, float] = {}
-
-        # Debounce: recently pushed params (suppress ESP32 echo)
-        self.recently_pushed: dict[str, float] = {}  # param → timestamp
 
         # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot)
         self.cfg_readback: dict[str, float] = {}  # param → value
@@ -821,7 +810,7 @@ def on_state_change(entity_state) -> None:
                 # Suppress echo: if we pushed this param in the last 5s, skip DB write
                 import time as _time
 
-                pushed_at = state.recently_pushed.get(param, 0)
+                pushed_at = shared.recently_pushed.get(param, 0)
                 if _time.time() - pushed_at < 5.0:
                     return
                 state.pending_setpoints.append((param, val))
@@ -953,7 +942,7 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
 
     On disconnect, logs the gap duration and reconnects automatically.
     """
-    last_connected_at = None
+    last_disconnected_at: datetime | None = None
 
     while True:
         log.info(f"Connecting to ESP32 at {ESP32_HOST}:{ESP32_PORT}...")
@@ -966,9 +955,12 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
 
         # Event that fires when the connection drops (set by on_stop callback or ping failure)
         connection_lost = asyncio.Event()
+        disconnected_at: datetime | None = None
 
         async def on_stop(expected_disconnect: bool) -> None:
             """Called by aioesphomeapi when connection drops."""
+            nonlocal disconnected_at
+            disconnected_at = datetime.now(UTC)
             if expected_disconnect:
                 log.info("ESP32 disconnected (expected)")
             else:
@@ -979,18 +971,20 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             await client.connect(on_stop=on_stop, login=True)
             connected_at = datetime.now(UTC)
 
-            # Log reconnect gap and backfill if applicable
-            if last_connected_at:
-                gap = (connected_at - last_connected_at).total_seconds()
-                log.info(f"Connected to ESP32 (gap: {gap:.0f}s since last connection)")
+            # Log reconnect gap and backfill if applicable. Use the actual
+            # disconnect timestamp, not the previous connect timestamp, so
+            # data_gaps represents missing telemetry rather than uptime.
+            if last_disconnected_at:
+                gap = (connected_at - last_disconnected_at).total_seconds()
+                log.info(f"Connected to ESP32 (gap: {gap:.0f}s since disconnect)")
                 if gap > 120:  # >2 min gap — record and backfill
                     try:
-                        await backfill_gap(pool, last_connected_at, connected_at)
+                        await backfill_gap(pool, last_disconnected_at, connected_at)
                     except Exception as e:
                         log.error(f"Gap backfill failed: {e}")
             else:
                 log.info("Connected to ESP32")
-            last_connected_at = connected_at
+            last_disconnected_at = None
 
             # Enumerate entities to build key→object_id map
             entities, services = await client.list_entities_services()
@@ -1067,17 +1061,24 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
                         await asyncio.wait_for(client.device_info(), timeout=10.0)
                     except (TimeoutError, Exception) as ping_err:
                         log.warning(f"Keepalive ping failed: {ping_err}")
+                        if disconnected_at is None:
+                            disconnected_at = datetime.now(UTC)
                         connection_lost.set()
                         break
 
             log.warning("Connection lost — will reconnect")
+            last_disconnected_at = disconnected_at or datetime.now(UTC)
             shared.esp32["client"] = None
 
         except APIConnectionError as e:
             log.warning(f"ESP32 connection error: {e}. Reconnecting in 30s...")
+            if last_disconnected_at is None:
+                last_disconnected_at = datetime.now(UTC)
             await asyncio.sleep(30)
         except Exception as e:
             log.error(f"Unexpected error: {e}. Reconnecting in 30s...")
+            if last_disconnected_at is None:
+                last_disconnected_at = datetime.now(UTC)
             await asyncio.sleep(30)
         finally:
             try:
@@ -1132,46 +1133,6 @@ async def task_loop(pool: asyncpg.Pool) -> None:
                     log.error("Task %s timed out (120s)", name)
                 except Exception as e:
                     log.error("Task %s failed: %s", name, e)
-
-
-# ──────────────────────────────────────────────────────────────
-# Shared ESP32 client (set by esp32_loop, used by dispatcher)
-# ──────────────────────────────────────────────────────────────
-async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
-    """Push setpoint changes directly via the shared ESP32 connection.
-    changes: [(esp32_object_id, value, 'number'|'switch'), ...]
-    Returns number successfully pushed. Non-blocking: returns 0 if disconnected.
-    """
-    client = shared.esp32["client"]
-    keys = shared.esp32["keys"]
-    if client is None:
-        return 0
-    pushed = 0
-    for obj_id, val, etype in changes:
-        key = keys.get(obj_id)
-        if not key:
-            log.warning("push_to_esp32: no key for '%s' (%d keys)", obj_id, len(keys))
-            continue
-        try:
-            if etype == "number":
-                result = client.number_command(key, val)
-                if asyncio.iscoroutine(result):
-                    await result
-            elif etype == "switch":
-                result = client.switch_command(key, val > 0.5)
-                if asyncio.iscoroutine(result):
-                    await result
-            pushed += 1
-            # Mark as recently pushed to suppress echo (Bug #3 fix)
-            import time as _time
-
-            db_param = SETPOINT_MAP.get(obj_id)
-            if db_param:
-                state.recently_pushed[db_param] = _time.time()
-        except Exception as e:
-            log.warning("ESP32 push failed for %s: %s", obj_id, e)
-            break
-    return pushed
 
 
 # ──────────────────────────────────────────────────────────────
