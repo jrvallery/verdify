@@ -279,6 +279,32 @@ class TestContractDriftGuardrails:
         assert 'key == "sw_mister_closes_vent"' in controls_source
         assert "id: sw_mister_closes_vent" in tunables_source
 
+    def test_firmware_holds_vent_open_while_fan_dwell_clears(self):
+        controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
+        assert "fan_vent_interlock_active" in controls_source
+        assert "fan_requires_vent" in controls_source
+        assert "mode != SAFETY_HEAT" in controls_source
+        assert "id(fan1_rly)->state || id(fan2_rly)->state" in controls_source
+        assert "willVent = true;" in controls_source
+        assert "set_relay(R[5], willVent, fan_requires_vent)" in controls_source
+        assert controls_source.index("set_relay(R[5], willVent, fan_requires_vent)") < controls_source.index(
+            "set_relay(R[2], willFan1, false)"
+        )
+
+    def test_firmware_suppresses_non_safety_heat_while_vent_open(self):
+        controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
+        assert "heat_vent_interlock_active" in controls_source
+        assert "mode != SAFETY_HEAT" in controls_source
+        assert "(vent_is_open || willVent)" in controls_source
+        assert "willHeat1 = false;" in controls_source
+        assert "willHeat2 = false;" in controls_source
+
+    def test_fan_vent_interlock_does_not_blanket_block_vented_moisture(self):
+        controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
+        assert "vent_blocks_moisture" not in controls_source
+        assert "if (id(fog_closes_vent) && vent_is_open)" in controls_source
+        assert "const bool mister_vent_ok = !id(mister_closes_vent) || !vent_is_open;" in controls_source
+
 
 class TestFirmwareCheckTargets:
     """Firmware validation should compile from the active git worktree."""
@@ -589,7 +615,7 @@ class TestSetpointConfirmation:
 
     def test_dwell_gate_direct_push_uses_number_slug(self):
         entity_map = _repo_entity_map()
-        assert entity_map.PARAM_TO_ENTITY["dwell_gate_ms"] == "dwell_gate__ms_"
+        assert entity_map.PARAM_TO_ENTITY["dwell_gate_ms"] == "dwell_gate_ms"
 
     def test_mister_selection_uses_zone_temp_stress(self):
         controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
