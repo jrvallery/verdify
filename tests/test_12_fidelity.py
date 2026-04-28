@@ -204,6 +204,19 @@ def test_zero_variance_rule_also_covers_band_params():
         assert f'"{param}"' in src
 
 
+def test_alert_monitor_detects_band_owned_plan_rows():
+    """Future crop-band rows in setpoint_plan must open an alert."""
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    assert "planner_band_ownership_drift" in src
+    assert "system.planner_band_ownership" in src
+    assert "setpoint_plan" in src
+    assert "is_active = true" in src
+    for param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):
+        assert f"'{param}'" in src
+
+
 # ── S24.9.3 — status='plan_written' on resolve ─────────────────────
 
 

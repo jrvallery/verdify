@@ -739,6 +739,53 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
+        # 7b. Planner band ownership drift. Crop-band params are dispatcher-
+        # owned read-only context; active rows in setpoint_plan can outrank the
+        # crop-profile band function and create repeated clamp storms.
+        band_owned_rows = await conn.fetch(
+            """
+            SELECT parameter,
+                   coalesce(plan_id, '<null>') AS plan_id,
+                   coalesce(source, '<null>') AS source,
+                   count(*)::int AS rows
+              FROM setpoint_plan
+             WHERE is_active = true
+               AND parameter IN ('temp_low', 'temp_high', 'vpd_low', 'vpd_high')
+             GROUP BY parameter, coalesce(plan_id, '<null>'), coalesce(source, '<null>')
+             ORDER BY parameter, plan_id, source
+            """
+        )
+        if band_owned_rows:
+            offenders = [
+                {
+                    "parameter": r["parameter"],
+                    "plan_id": r["plan_id"],
+                    "source": r["source"],
+                    "rows": int(r["rows"]),
+                }
+                for r in band_owned_rows
+            ]
+            total_rows = sum(r["rows"] for r in offenders)
+            sample = ", ".join(f"{r['parameter']}:{r['plan_id']}({r['rows']})" for r in offenders[:4])
+            alerts.append(
+                {
+                    "alert_type": "planner_band_ownership_drift",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "system.planner_band_ownership",
+                    "zone": None,
+                    "message": (
+                        f"{total_rows} active planner row(s) contain dispatcher-owned crop-band params: {sample}"
+                    ),
+                    "details": {
+                        "band_owned_params": ["temp_low", "temp_high", "vpd_low", "vpd_high"],
+                        "offenders": offenders,
+                    },
+                    "metric_value": float(total_rows),
+                    "threshold_value": 0.0,
+                }
+            )
+
         # 8. Safety value sanity check — catch zeroed/invalid safety rails
         for r in await conn.fetch("""
             SELECT DISTINCT ON (parameter) parameter, value

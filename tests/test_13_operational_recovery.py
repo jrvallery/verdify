@@ -99,3 +99,43 @@ def test_live_active_plan_params_are_pushable():
     pushable = set(PARAM_TO_ENTITY) | set(SWITCH_TO_ENTITY)
 
     assert sorted(active - pushable) == []
+
+
+def test_live_active_plan_has_no_band_owned_rows():
+    """Crop-band params are dispatcher-owned context, not planner waypoints.
+
+    Query setpoint_plan directly rather than v_active_plan so stale active rows
+    from older plans cannot hide behind a newer clean plan.
+    """
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            "verdify-timescaledb",
+            "psql",
+            "-U",
+            "verdify",
+            "-d",
+            "verdify",
+            "-t",
+            "-A",
+            "-c",
+            """
+            COPY (
+                SELECT parameter || ':' || coalesce(plan_id, '<null>') || ':' || coalesce(source, '<null>')
+                  FROM setpoint_plan
+                 WHERE is_active = true
+                   AND parameter IN ('temp_low', 'temp_high', 'vpd_low', 'vpd_high')
+                 ORDER BY 1
+            ) TO STDOUT
+            """,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    )
+    offenders = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    assert offenders == []
