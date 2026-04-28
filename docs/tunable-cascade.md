@@ -117,6 +117,10 @@ Number → `/setpoints` handler → `Setpoints` field → cfg readback path:
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `mister_engage_kpa` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_engage_kpa` | `Setpoints.mister_engage_kpa` | SEALED_MIST S1 entry threshold | `cfg_mister_engage_kpa` | 1.2 | [0.6, 2.5] | planner | immediate |
 | `mister_all_kpa` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_all_kpa` | `Setpoints.mister_all_kpa` | SEALED_MIST S2 escalation threshold | `cfg_mister_all_kpa` | 1.8 | [0.9, 3.0] | planner | immediate |
+| `mister_engage_delay_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_engage_delay_s` | ESPHome global `mister_engage_delay_s` | S1 dwell before first mister pulse | `cfg_mister_engage_delay_s` | 30s | [5, 300] | planner | immediate |
+| `mister_all_delay_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_all_delay_s` | `Setpoints.mist_s2_delay_ms` + ESPHome global | S2/all-zone dwell before escalation | `cfg_mister_all_delay_s` | 60s | [10, 600] | planner | immediate |
+| `mister_pulse_on_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_pulse_on_s` | ESPHome global `mister_pulse_on_s` | per-zone pulse duration | `cfg_mister_pulse_on_s` | 45s | [10, 120] | planner | immediate |
+| `mister_pulse_gap_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_pulse_gap_s` | ESPHome global `mister_pulse_gap_s` | gap between mister pulses | `cfg_mister_pulse_gap_s` | 60s | [10, 300] | planner | immediate |
 
 ## Summer thermal-driven vent gate (sprint-15, 5 tunables + 2 readback-only) — FULLY SPEC'D
 
@@ -137,11 +141,16 @@ See `docs/firmware-sprint-15-summer-vent-spec.md` for design rationale. Gate fir
 The remaining ~50 tunables are organized below by category. Each needs the full row treatment. **Default values, ranges, FW use sites, and cfg_* readback presence will be filled in week of 2026-04-20.**
 
 ### Mister pulse + timing (9 tunables, readback gap suspected)
-- `mister_engage_delay_s`, `mister_all_delay_s`, `mister_on_s`, `mister_off_s`, `mister_all_on_s`, `mister_all_off_s`, `mister_pulse_on_s`, `mister_pulse_gap_s`, `mister_max_runtime_min`
-- `mister_water_budget_gal`, `mister_vpd_weight`
+- `mister_on_s`, `mister_off_s`, `mister_all_on_s`, `mister_all_off_s`, `mister_max_runtime_min`
+- Readback-covered: `mister_engage_delay_s`, `mister_all_delay_s`, `mister_pulse_on_s`, `mister_pulse_gap_s`, `mister_water_budget_gal`, `mister_vpd_weight`
 
 ### Equipment timing — relay min on/off (8 tunables)
 - `min_heat_on_s`, `min_heat_off_s`, `min_fan_on_s`, `min_fan_off_s`, `min_vent_on_s`, `min_vent_off_s`, `lead_rotate_s`, `fan_burst_min`, `vent_bypass_min`, `fog_burst_min`
+- Readback-covered fog timing: `min_fog_on_s`, `min_fog_off_s`
+
+### Controller v2 dwell gate
+- Readback-covered: `sw_dwell_gate_enabled` (`cfg_dwell_gate_enabled`), `dwell_gate_ms` (`cfg_dwell_gate_ms`)
+- Controller v2 cooling now enters at raw `temp_high` under normal outdoor conditions; `bias_cool` remains legacy-only for v2 normal cooling. If outdoor air is deeply cold relative to the crop band, v2 waits for the same band-scaled delta used by stage-2 fan escalation (`min(d_cool_stage_2, max(1°F, 25% of temp band width))`) before opening the vent, protecting temp-band compliance without cold-day vent thrash.
 
 ### Firmware internal (1 tunable)
 - `fallback_window_s` — sensor staleness → firmware reboot threshold

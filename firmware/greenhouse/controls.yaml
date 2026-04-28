@@ -458,6 +458,9 @@ interval:
             float west_vpd  = id(vpd_west).state;
             float east_vpd  = id(vpd_east).state;
             float avg_vpd   = VPD;
+            float south_temp = id(south_wall_temperature).state;
+            float west_temp  = id(west_wall_temperature).state;
+            float east_temp  = id(east_wall_temperature).state;
 
             // Sprint-15.1 fix 5: vent-close interlock for misters. Same
             // physics as fog (block 11a) — atomizers ejecting moisture
@@ -553,33 +556,48 @@ interval:
 
               // Helper: select mister zone with highest stress score.
               // Each zone has its own VPD target from its planted crops.
-              // Stress score = (actual - target) / target. Higher = more stressed.
+              // Stress score starts with (actual VPD - target) / target.
+              // Once humidity demand exists, zone heat stress is also folded
+              // in from the crop temp band so hot south/east pockets influence
+              // which mister zone gets the next pulse.
               // East has a sensor + target but NO mister — its stress boosts
               // adjacent zones (south, center) to increase their misting urgency.
               // Center has no sensor, uses avg_vpd with a penalty multiplier.
               auto select_most_stressed_zone = [&]() -> int {
                 float s_stress = -999.0f, w_stress = -999.0f, c_stress = -999.0f;
+                float temp_band = max(2.0f, id(target_temp_high_f) - id(target_temp_low_f));
+                auto zone_temp_stress = [&](float zone_temp) -> float {
+                  if(isnan(zone_temp)) return 0.0f;
+                  float above_high = max(0.0f, zone_temp - id(target_temp_high_f)) / temp_band;
+                  float above_avg  = max(0.0f, zone_temp - Tin) / temp_band;
+                  return above_high + above_avg;
+                };
 
                 // East zone stress (sensor, no mister) — boosts south + center
                 float east_vpd_val = isnan(east_vpd) ? 0.0f : east_vpd;
                 float e_stress = 0.0f;
                 if(!isnan(east_vpd) && id(vpd_target_east) > 0.0f)
                   e_stress = max(0.0f, (east_vpd_val - id(vpd_target_east)) / id(vpd_target_east));
+                e_stress += zone_temp_stress(east_temp);
 
                 // South: own sensor + gets boost from east stress (adjacent)
                 if(!isnan(south_vpd) && id(vpd_target_south) > 0.0f)
-                  s_stress = (south_vpd - id(vpd_target_south)) / id(vpd_target_south) + e_stress * id(east_adjacency_factor);
+                  s_stress = (south_vpd - id(vpd_target_south)) / id(vpd_target_south)
+                             + zone_temp_stress(south_temp)
+                             + e_stress * id(east_adjacency_factor);
 
                 // West: own sensor, no east adjacency boost
                 if(!isnan(west_vpd) && id(vpd_target_west) > 0.0f)
-                  w_stress = (west_vpd - id(vpd_target_west)) / id(vpd_target_west);
+                  w_stress = (west_vpd - id(vpd_target_west)) / id(vpd_target_west)
+                             + zone_temp_stress(west_temp);
 
                 // Center: avg_vpd proxy + east adjacency boost + sensor penalty
                 if(id(vpd_target_center) > 0.0f)
                   c_stress = (avg_vpd - id(vpd_target_center)) / id(vpd_target_center)
-                             * id(mister_center_penalty) + e_stress * id(east_adjacency_factor);
+                             * id(mister_center_penalty)
+                             + e_stress * id(east_adjacency_factor);
 
-                // Only mist zones actually above their target (stress > 0)
+                // Only mist zones actually above their VPD or temp target.
                 if(s_stress <= 0 && w_stress <= 0 && c_stress <= 0) return 0;
                 if(s_stress >= w_stress && s_stress >= c_stress && s_stress > 0) return 1;
                 if(w_stress >= s_stress && w_stress >= c_stress && w_stress > 0) return 2;

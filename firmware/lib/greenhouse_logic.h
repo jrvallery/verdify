@@ -90,6 +90,15 @@ inline float v2_heat_target_f(const Setpoints& sp) noexcept {
     return (sp.temp_low + sp.temp_high) * 0.5f;
 }
 
+// Controller v2 normally cools at the raw upper band edge. Stage-2 fan
+// escalation is band-scaled so a 6°F crop band does not wait the full legacy
+// d_cool_stage_2 margin before using both fans. The same derived margin is
+// used only for cold-outdoor vent entry to avoid repeated cold-air slugs.
+inline float v2_cool_stage2_delta_f(const Setpoints& sp) noexcept {
+    const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    return std::min(sp.dC2, std::max(1.0f, band_width * 0.25f));
+}
+
 // Controller v2: band-first FSM.
 //
 // Policy: safety rails still preempt everything, but normal control prioritizes
@@ -123,7 +132,7 @@ inline Mode determine_mode_v2(
     }
 
     const Mode prev = state.mode_prev;
-    const float temp_high = sp.temp_high + sp.bias_cool;
+    const float temp_high = sp.temp_high;
     const float HV = v2_vpd_hysteresis(sp);
 
     const bool safety_cool = in.temp_f >= sp.safety_max;
@@ -133,9 +142,11 @@ inline Mode determine_mode_v2(
         std::isfinite(in.outdoor_temp_f) && in.outdoor_temp_f < (sp.temp_low - 10.0f);
     const float cooling_exit_hysteresis =
         outdoor_cold_for_vent ? std::max(sp.temp_hysteresis, 3.0f) : sp.temp_hysteresis;
+    const float cooling_entry_margin =
+        outdoor_cold_for_vent ? v2_cool_stage2_delta_f(sp) : 0.0f;
     const bool needs_cooling = was_cooling
         ? in.temp_f > (temp_high - cooling_exit_hysteresis)
-        : in.temp_f > temp_high;
+        : in.temp_f > (temp_high + cooling_entry_margin);
     const float heat_target = v2_heat_target_f(sp);
     const bool temp_below_band = in.temp_f < sp.temp_low;
     const bool needs_heating_s1 = in.temp_f < (heat_target + sp.heat_hysteresis);
@@ -929,7 +940,9 @@ inline RelayOutputs resolve_equipment(
     const float Tlow  = sp.sw_fsm_controller_enabled
         ? v2_heat_target_f(sp)
         : sp.temp_low + band_width * 0.25f + sp.bias_heat;
-    const float Thigh = sp.temp_high - band_width * 0.25f + sp.bias_cool;
+    const float Thigh = sp.sw_fsm_controller_enabled
+        ? sp.temp_high
+        : sp.temp_high - band_width * 0.25f + sp.bias_cool;
 
     const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
     const float vpd_low_eff  = sp.vpd_low  + vpd_width * 0.25f;
@@ -989,7 +1002,10 @@ inline RelayOutputs resolve_equipment(
 
         case VENTILATE: {
             out.vent = true;
-            bool needs_both = in.temp_f > (Thigh + sp.dC2);
+            const float stage2_delta = sp.sw_fsm_controller_enabled
+                ? v2_cool_stage2_delta_f(sp)
+                : sp.dC2;
+            bool needs_both = in.temp_f > (Thigh + stage2_delta);
             if (lead_is_fan1) { out.fan1 = true; out.fan2 = needs_both; }
             else              { out.fan2 = true; out.fan1 = needs_both; }
             // FW-9b (PR-A lowered): fire fog concurrently with vent when VPD
