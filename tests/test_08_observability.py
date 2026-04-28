@@ -131,7 +131,7 @@ class TestHeapPressureObservability:
 
     def test_greenhouse_state_refresh_registered(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
-        migration = (REPO_ROOT / "db/migrations/096-greenhouse-state-refresh.sql").read_text()
+        migration = (REPO_ROOT / "db/migrations/098-greenhouse-state-refresh.sql").read_text()
         assert "refresh_greenhouse_state" in body
         assert "CREATE OR REPLACE FUNCTION refresh_greenhouse_state" in migration
         assert "ORDER BY equipment, ts DESC, state ASC" in migration

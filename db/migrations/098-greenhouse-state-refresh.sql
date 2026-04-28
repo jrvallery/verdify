@@ -1,4 +1,4 @@
--- 096-greenhouse-state-refresh.sql
+-- 098-greenhouse-state-refresh.sql
 -- Keep v_greenhouse_state current and make latest equipment state tie-breaking
 -- deterministic when ESPHome emits same-timestamp true/false pulses.
 
