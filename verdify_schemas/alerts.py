@@ -13,9 +13,9 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-AlertSeverity = Literal["info", "warning", "critical"]
+AlertSeverity = Literal["info", "warning", "high", "critical"]
 AlertCategory = Literal["sensor", "equipment", "climate", "water", "system"]
-AlertDisposition = Literal["open", "acknowledged", "resolved"]
+AlertDisposition = Literal["open", "acknowledged", "resolved", "suppressed"]
 
 
 class AlertEnvelope(BaseModel):

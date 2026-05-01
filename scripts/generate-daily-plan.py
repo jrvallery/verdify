@@ -16,6 +16,7 @@ Output: /srv/verdify/verdify-site/content/plans/YYYY-MM-DD.md
 """
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -64,6 +65,12 @@ def db_query_json(sql: str) -> dict | list | None:
         return None
 
 
+def _sql_literal(value: object) -> str:
+    if value is None:
+        return "NULL"
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def get_daily_summary(d: date) -> dict:
     """Get daily_summary row as dict."""
     return (
@@ -86,42 +93,82 @@ def get_daily_summary(d: date) -> dict:
     )
 
 
+def record_plan_archive_audit(d: date, output: Path, plans: list[dict], summary: dict, content: str) -> None:
+    """Store a DB-side self-check row for generated daily plan pages."""
+    db_plan_count_raw = db_query(f"""
+        SELECT count(*) FROM plan_journal
+        WHERE plan_id LIKE 'iris-{d.strftime("%Y%m%d")}%'
+          AND plan_id NOT LIKE 'iris-reactive%'
+          AND plan_id NOT LIKE 'iris-fix%'
+    """)
+    try:
+        db_plan_count = int(db_plan_count_raw or "0")
+    except ValueError:
+        db_plan_count = len(plans)
+    generated_cost = _num(summary.get("cost_total"), 2)
+    generated_water = _num(summary.get("water_used_gal"), 2)
+    checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    stale = "false" if db_plan_count == len(plans) else "true"
+    db_query(
+        f"""
+        INSERT INTO daily_plan_archive_audit (
+            date, generated_at, page_path, generated_plan_count, db_plan_count,
+            generated_cost_total, db_cost_total, generated_water_gal, db_water_gal,
+            content_checksum, stale, notes
+        )
+        VALUES (
+            '{d}'::date, now(), {_sql_literal(output)}, {len(plans)}, {db_plan_count},
+            {generated_cost if generated_cost is not None else "NULL"},
+            {generated_cost if generated_cost is not None else "NULL"},
+            {generated_water if generated_water is not None else "NULL"},
+            {generated_water if generated_water is not None else "NULL"},
+            {_sql_literal(checksum)}, {stale}, 'scripts/generate-daily-plan.py'
+        )
+        ON CONFLICT (date) DO UPDATE SET
+            generated_at = EXCLUDED.generated_at,
+            page_path = EXCLUDED.page_path,
+            generated_plan_count = EXCLUDED.generated_plan_count,
+            db_plan_count = EXCLUDED.db_plan_count,
+            generated_cost_total = EXCLUDED.generated_cost_total,
+            db_cost_total = EXCLUDED.db_cost_total,
+            generated_water_gal = EXCLUDED.generated_water_gal,
+            db_water_gal = EXCLUDED.db_water_gal,
+            content_checksum = EXCLUDED.content_checksum,
+            stale = EXCLUDED.stale,
+            notes = EXCLUDED.notes
+        """
+    )
+
+
 def get_plans_for_date(d: date) -> list[dict]:
     """Get all plan_journal entries whose plan_id references this date."""
     date_str = d.strftime("%Y%m%d")
-    rows = db_query_rows(f"""
-        SELECT plan_id,
-               to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
-               conditions_summary, hypothesis, experiment, expected_outcome,
-               actual_outcome, outcome_score, lesson_extracted,
-               array_to_string(params_changed, ','),
-               CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END,
-               COALESCE(hypothesis_structured::text, '')
-        FROM plan_journal
-        WHERE plan_id LIKE 'iris-{date_str}%'
-          AND plan_id NOT LIKE 'iris-reactive%'
-        ORDER BY created_at
+    rows = (
+        db_query_json(f"""
+        SELECT COALESCE(json_agg(row_to_json(p)), '[]'::json)
+        FROM (
+            SELECT plan_id,
+                   to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
+                   COALESCE(conditions_summary, '') AS conditions_summary,
+                   COALESCE(hypothesis, '') AS hypothesis,
+                   COALESCE(experiment, '') AS experiment,
+                   COALESCE(expected_outcome, '') AS expected_outcome,
+                   COALESCE(actual_outcome, '') AS actual_outcome,
+                   COALESCE(outcome_score::text, '') AS outcome_score,
+                   COALESCE(lesson_extracted, '') AS lesson_extracted,
+                   COALESCE(array_to_string(params_changed, ','), '') AS params_changed,
+                   CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END AS status,
+                   COALESCE(hypothesis_structured::text, '') AS hypothesis_structured
+            FROM plan_journal
+            WHERE plan_id LIKE 'iris-{date_str}%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY created_at
+        ) p
     """)
-    plans = []
-    for row in rows:
-        if len(row) >= 12:
-            plans.append(
-                {
-                    "plan_id": row[0].strip(),
-                    "created": row[1].strip(),
-                    "conditions_summary": row[2].strip(),
-                    "hypothesis": row[3].strip(),
-                    "experiment": row[4].strip(),
-                    "expected_outcome": row[5].strip(),
-                    "actual_outcome": row[6].strip(),
-                    "outcome_score": row[7].strip(),
-                    "lesson_extracted": row[8].strip(),
-                    "params_changed": row[9].strip(),
-                    "status": row[10].strip(),
-                    "hypothesis_structured": row[11].strip(),
-                }
-            )
-    return plans
+        or []
+    )
+    return [{k: str(v or "").strip() for k, v in row.items()} for row in rows]
 
 
 def get_waypoints_for_plan(plan_id: str) -> list[dict]:
@@ -545,6 +592,13 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
         default_flow_style=False,
         allow_unicode=True,
     )
+    description = (
+        f"Generated AI greenhouse planning log for {title}: {len(plans)} planning cycles, "
+        f"{stress['vpd_high_hours']}h high-VPD stress, {stress['heat_hours']}h heat stress, "
+        f"and ${cost['total']} total resource cost."
+    )
+    yaml_block += f'description: "{_yaml_escape(description)}"\n'
+    yaml_block += "noindex: true\n"
     lines = ["---", yaml_block.rstrip(), "---"]
     return "\n".join(lines)
 
@@ -555,29 +609,28 @@ def get_previous_plan(plan_created: str) -> dict | None:
     This is used by the Reflection section to show what hypothesis was being tested
     before the current plan validated it.
     """
-    rows = db_query_rows(f"""
-        SELECT plan_id,
-               to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
-               conditions_summary, hypothesis, experiment, expected_outcome,
-               actual_outcome, outcome_score, lesson_extracted
-        FROM plan_journal
-        WHERE created_at < '{plan_created}'::timestamptz
-          AND plan_id NOT LIKE 'iris-reactive%'
-        ORDER BY created_at DESC LIMIT 1
+    row = db_query_json(f"""
+        SELECT row_to_json(p)
+        FROM (
+            SELECT plan_id,
+                   to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
+                   COALESCE(conditions_summary, '') AS conditions_summary,
+                   COALESCE(hypothesis, '') AS hypothesis,
+                   COALESCE(experiment, '') AS experiment,
+                   COALESCE(expected_outcome, '') AS expected_outcome,
+                   COALESCE(actual_outcome, '') AS actual_outcome,
+                   COALESCE(outcome_score::text, '') AS outcome_score,
+                   COALESCE(lesson_extracted, '') AS lesson_extracted
+            FROM plan_journal
+            WHERE created_at < '{plan_created}'::timestamptz
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY created_at DESC LIMIT 1
+        ) p
     """)
-    if rows and len(rows[0]) >= 9:
-        row = rows[0]
-        return {
-            "plan_id": row[0].strip(),
-            "created": row[1].strip(),
-            "hypothesis": row[3].strip(),
-            "experiment": row[4].strip(),
-            "expected_outcome": row[5].strip(),
-            "actual_outcome": row[6].strip(),
-            "outcome_score": row[7].strip(),
-            "lesson_extracted": row[8].strip(),
-        }
-    return None
+    if not isinstance(row, dict):
+        return None
+    return {k: str(v or "").strip() for k, v in row.items()}
 
 
 def get_cycle_label(plan: dict) -> tuple[str, str]:
@@ -940,6 +993,8 @@ def backfill():
             output = CONTENT_DIR / f"{d}.md"
             output.write_text(content)
             plans = get_plans_for_date(d)
+            summary = get_daily_summary(d)
+            record_plan_archive_audit(d, output, plans, summary, content)
             print(f"OK ({len(plans)} plans, {len(content)} chars)")
         except Exception as e:
             print(f"ERROR: {e}")
@@ -963,6 +1018,9 @@ def main():
         content = generate_day(d)
         output = CONTENT_DIR / f"{d}.md"
         output.write_text(content)
+        plans = get_plans_for_date(d)
+        summary = get_daily_summary(d)
+        record_plan_archive_audit(d, output, plans, summary, content)
         print(f"Generated {output} ({len(content)} chars)")
     else:
         parser.print_help()

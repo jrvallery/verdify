@@ -493,24 +493,47 @@ async def list_observations(crop_id: int, limit: int = 20):
 @app.post("/api/v1/crops/{crop_id}/observations", status_code=201)
 async def create_observation(crop_id: int, obs: ObservationCreate):
     async with pool.acquire() as conn:
-        crop = await conn.fetchrow("SELECT zone, position FROM crops WHERE id = $1", crop_id)
+        crop = await conn.fetchrow("SELECT zone, position, zone_id, position_id FROM crops WHERE id = $1", crop_id)
         if not crop:
             raise HTTPException(404, "Crop not found")
 
         row = await conn.fetchrow(
             """
-            INSERT INTO observations (crop_id, zone, position, obs_type, notes, severity, observer, health_score, source)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'api')
+            INSERT INTO observations (
+                crop_id, zone, position, zone_id, position_id, obs_type, notes, severity,
+                observer, health_score, species, count, affected_pct, photo_path,
+                plant_height_cm, leaf_count, canopy_cover_pct, flowering_count,
+                fruit_count, root_condition, mortality_count, stress_tags, source
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8,
+                $9, $10, $11, $12, $13, $14,
+                $15, $16, $17, $18, $19, $20, $21, $22, 'api'
+            )
             RETURNING *
         """,
             crop_id,
-            crop["zone"],
-            crop["position"],
+            obs.zone or crop["zone"],
+            obs.position or crop["position"],
+            crop["zone_id"],
+            crop["position_id"],
             obs.obs_type,
             obs.notes,
             obs.severity,
             obs.observer,
             obs.health_score,
+            obs.species,
+            obs.count,
+            obs.affected_pct,
+            obs.photo_path,
+            obs.plant_height_cm,
+            obs.leaf_count,
+            obs.canopy_cover_pct,
+            obs.flowering_count,
+            obs.fruit_count,
+            obs.root_condition,
+            obs.mortality_count,
+            obs.stress_tags,
         )
     return dict(row)
 
@@ -926,8 +949,14 @@ class HarvestBody(BaseModel):
     weight_kg: float | None = None
     unit_count: int | None = None
     quality_grade: str | None = None
+    salable_weight_kg: float | None = None
+    cull_weight_kg: float | None = None
+    cull_reason: str | None = None
+    quality_reason: str | None = None
     unit_price: float | None = None
     revenue: float | None = None
+    destination: str | None = None
+    labor_minutes: int | None = None
     advance_stage: str | None = None  # optional: also update crops.stage
     operator: str | None = None
     notes: str | None = None
@@ -947,18 +976,27 @@ async def harvest_crop(crop_id: int, body: HarvestBody, greenhouse_id: str = DEF
         row = await conn.fetchrow(
             """
             INSERT INTO harvests (
-                ts, crop_id, weight_kg, unit_count, quality_grade, unit_price, revenue,
+                ts, crop_id, weight_kg, unit_count, quality_grade,
+                salable_weight_kg, cull_weight_kg, cull_reason, quality_reason,
+                unit_price, revenue, destination, labor_minutes,
                 zone, operator, notes, greenhouse_id, position_id
             )
-            VALUES (now(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES (now(), $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12, $13, $14, $15, $16, $17)
             RETURNING *
             """,
             crop_id,
             body.weight_kg,
             body.unit_count,
             body.quality_grade,
+            body.salable_weight_kg,
+            body.cull_weight_kg,
+            body.cull_reason,
+            body.quality_reason,
             body.unit_price,
             body.revenue,
+            body.destination,
+            body.labor_minutes,
             crop["zone"],
             body.operator,
             body.notes,

@@ -14,6 +14,7 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from time import perf_counter
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -164,6 +165,36 @@ mcp = FastMCP(
 
 async def _db() -> asyncpg.Connection:
     return await asyncpg.connect(DB_DSN)
+
+
+async def _record_openclaw_interaction(
+    conn: asyncpg.Connection,
+    action: str,
+    started_at: float,
+    *,
+    success: bool,
+    error_message: str | None = None,
+    model: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """Best-effort MCP/OpenClaw observability row."""
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO openclaw_interaction_log
+                (session_type, action, duration_ms, tokens_in, tokens_out, model, success, error_message, metadata)
+            VALUES ('mcp', $1, $2, 0, 0, $3, $4, $5, $6::jsonb)
+            """,
+            action,
+            duration_ms,
+            model,
+            success,
+            error_message,
+            json.dumps(metadata or {}),
+        )
+    except Exception as e:
+        print(f"openclaw interaction log failed (non-fatal): {e}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -437,7 +468,10 @@ async def plan_run(mode: str = "normal") -> str:
 @mcp.tool()
 async def plan_status() -> str:
     """Get the current active plan — waypoints, plan_id, hypothesis, compliance."""
+    started_at = perf_counter()
     conn = await _db()
+    success = False
+    error_message: str | None = None
     try:
         journal = await conn.fetchrow("""
             SELECT plan_id, to_char(created_at AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') as created,
@@ -454,8 +488,20 @@ async def plan_status() -> str:
             plan=PlanStatusJournal.model_validate(dict(journal)) if journal else None,
             future_waypoints=[PlanStatusWaypoint.model_validate(dict(w)) for w in waypoints],
         )
+        success = True
         return resp.model_dump_json(exclude_none=True)
+    except Exception as e:
+        error_message = str(e)
+        raise
     finally:
+        await _record_openclaw_interaction(
+            conn,
+            "plan_status",
+            started_at,
+            success=success,
+            error_message=error_message,
+            metadata={"source": "mcp.server.plan_status"},
+        )
         await conn.close()
 
 
@@ -997,7 +1043,7 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
             return _json([dict(r) for r in rows])
 
         elif action == "record_observation" and crop_id:
-            crop = await conn.fetchrow("SELECT zone, position FROM crops WHERE id = $1", crop_id)
+            crop = await conn.fetchrow("SELECT zone, position, zone_id, position_id FROM crops WHERE id = $1", crop_id)
             if not crop:
                 return json.dumps({"error": f"Crop {crop_id} not found"})
             try:
@@ -1006,12 +1052,22 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 return json.dumps({"error": "ObservationCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO observations (crop_id, zone, position, obs_type, notes, severity,
-                                          observer, health_score, species, count, affected_pct, photo_path, source)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'iris') RETURNING *""",
+                INSERT INTO observations (
+                    crop_id, zone, position, zone_id, position_id, obs_type, notes, severity,
+                    observer, health_score, species, count, affected_pct, photo_path,
+                    plant_height_cm, leaf_count, canopy_cover_pct, flowering_count,
+                    fruit_count, root_condition, mortality_count, stress_tags, source
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    $9, $10, $11, $12, $13, $14,
+                    $15, $16, $17, $18, $19, $20, $21, $22, 'iris'
+                ) RETURNING *""",
                 crop_id,
                 obs.zone or crop["zone"],
                 obs.position or crop["position"],
+                crop["zone_id"],
+                crop["position_id"],
                 obs.obs_type,
                 obs.notes,
                 obs.severity,
@@ -1021,6 +1077,14 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 obs.count,
                 obs.affected_pct,
                 obs.photo_path,
+                obs.plant_height_cm,
+                obs.leaf_count,
+                obs.canopy_cover_pct,
+                obs.flowering_count,
+                obs.fruit_count,
+                obs.root_condition,
+                obs.mortality_count,
+                obs.stress_tags,
             )
             return _json(dict(row))
 
@@ -1060,17 +1124,26 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 return json.dumps({"error": "HarvestCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO harvests (crop_id, weight_kg, unit_count, quality_grade, zone, destination,
-                                      unit_price, revenue, operator, notes)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *""",
+                INSERT INTO harvests (
+                    crop_id, weight_kg, unit_count, quality_grade,
+                    salable_weight_kg, cull_weight_kg, cull_reason, quality_reason,
+                    zone, destination, unit_price, revenue, labor_minutes, operator, notes
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                RETURNING *""",
                 crop_id,
                 hv.weight_kg,
                 hv.unit_count,
                 hv.quality_grade,
+                hv.salable_weight_kg,
+                hv.cull_weight_kg,
+                hv.cull_reason,
+                hv.quality_reason,
                 hv.zone,
                 hv.destination,
                 hv.unit_price,
                 hv.revenue,
+                hv.labor_minutes,
                 hv.operator,
                 hv.notes,
             )
@@ -1093,10 +1166,13 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 return json.dumps({"error": "TreatmentCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO treatments (crop_id, product, active_ingredient, concentration, rate, rate_unit,
-                                        method, zone, target_pest, phi_days, rei_hours, applicator,
-                                        observation_id, notes)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *""",
+                INSERT INTO treatments (
+                    crop_id, product, active_ingredient, concentration, rate, rate_unit,
+                    method, zone, target_pest, phi_days, rei_hours, applicator,
+                    observation_id, followup_due_at, followup_completed_at, outcome, notes
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                RETURNING *""",
                 crop_id,
                 tr.product,
                 tr.active_ingredient,
@@ -1110,6 +1186,9 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 tr.rei_hours,
                 tr.applicator,
                 tr.observation_id,
+                tr.followup_due_at,
+                tr.followup_completed_at,
+                tr.outcome,
                 tr.notes,
             )
             return _json(dict(row))

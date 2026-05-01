@@ -2476,6 +2476,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT MIN(temp_avg) AS temp_min, MAX(temp_avg) AS temp_max, AVG(temp_avg) AS temp_avg,
                    MIN(vpd_avg) AS vpd_min, MAX(vpd_avg) AS vpd_max, AVG(vpd_avg) AS vpd_avg,
                    MIN(rh_avg) AS rh_min, MAX(rh_avg) AS rh_max, AVG(rh_avg) AS rh_avg,
+                   MIN(outdoor_temp_f) AS outdoor_temp_min, MAX(outdoor_temp_f) AS outdoor_temp_max,
                    AVG(co2_ppm) AS co2_avg, MAX(dli_today) AS dli_final,
                    MAX(mister_water_today) AS mister_water_gal
             FROM climate
@@ -2633,10 +2634,14 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         water_gal = (
             await conn.fetchval(
                 """
-            SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
-            FROM climate WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
-              AND water_total_gal > 0
+            SELECT COALESCE(
+                (SELECT used_gal FROM v_water_daily WHERE day::date = $1 ORDER BY day DESC LIMIT 1),
+                (SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
+                   FROM climate
+                  WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+                    AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
+                    AND water_total_gal > 0)
+            )
         """,
                 today,
             )
@@ -2656,28 +2661,30 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             UPDATE daily_summary SET
                 temp_min=$2, temp_max=$3, temp_avg=$4,
                 vpd_min=$5, vpd_max=$6, vpd_avg=$7,
-                rh_min=$8, rh_max=$9,
-                co2_avg=$10, dli_final=$11,
-                stress_hours_heat=$12, stress_hours_vpd_high=$13,
-                stress_hours_cold=$14, stress_hours_vpd_low=$15,
-                runtime_fan1_min=$16, runtime_fan2_min=$17,
-                runtime_heat1_min=$18, runtime_heat2_min=$19,
-                runtime_fog_min=$20, runtime_vent_min=$21,
-                runtime_grow_light_min=$22,
-                runtime_mister_south_h=$23, runtime_mister_west_h=$24, runtime_mister_center_h=$25,
-                runtime_drip_wall_h=$26, runtime_drip_center_h=$27,
-                kwh_estimated=$28, therms_estimated=$29,
-                cost_electric=$30, cost_gas=$31, cost_water=$32, cost_total=$33,
-                water_used_gal=$34, mister_water_gal=$35,
-                min_dp_margin_f=$36, dp_risk_hours=$37,
-                compliance_pct=$38,
-                temp_compliance_pct=$39,
-                vpd_compliance_pct=$40,
-                cycles_mister_south=$41,
-                cycles_mister_west=$42,
-                cycles_mister_center=$43,
-                cycles_drip_wall=$44,
-                cycles_drip_center=$45
+                rh_min=$8, rh_max=$9, rh_avg=$10,
+                co2_avg=$11, dli_final=$12,
+                outdoor_temp_min=$13, outdoor_temp_max=$14,
+                stress_hours_heat=$15, stress_hours_vpd_high=$16,
+                stress_hours_cold=$17, stress_hours_vpd_low=$18,
+                runtime_fan1_min=$19, runtime_fan2_min=$20,
+                runtime_heat1_min=$21, runtime_heat2_min=$22,
+                runtime_fog_min=$23, runtime_vent_min=$24,
+                runtime_grow_light_min=$25,
+                runtime_mister_south_h=$26, runtime_mister_west_h=$27, runtime_mister_center_h=$28,
+                runtime_drip_wall_h=$29, runtime_drip_center_h=$30,
+                kwh_estimated=$31, therms_estimated=$32,
+                cost_electric=$33, cost_gas=$34, cost_water=$35, cost_total=$36,
+                water_used_gal=$37, mister_water_gal=$38,
+                min_dp_margin_f=$39, dp_risk_hours=$40,
+                compliance_pct=$41,
+                temp_compliance_pct=$42,
+                vpd_compliance_pct=$43,
+                cycles_mister_south=$44,
+                cycles_mister_west=$45,
+                cycles_mister_center=$46,
+                cycles_drip_wall=$47,
+                cycles_drip_center=$48,
+                captured_at=now()
             WHERE date = $1
         """,
             today,
@@ -2689,8 +2696,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             climate["vpd_avg"] if climate else None,
             climate["rh_min"] if climate else None,
             climate["rh_max"] if climate else None,
+            climate["rh_avg"] if climate else None,
             climate["co2_avg"] if climate else None,
             climate["dli_final"] if climate else None,
+            climate["outdoor_temp_min"] if climate else None,
+            climate["outdoor_temp_max"] if climate else None,
             float(stress["heat"]) if stress else 0,
             float(stress["vpd_high"]) if stress else 0,
             float(stress["cold"]) if stress else 0,

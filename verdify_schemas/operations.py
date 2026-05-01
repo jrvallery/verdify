@@ -39,6 +39,9 @@ class Treatment(BaseModel):
     rei_hours: int | None = Field(default=None, ge=0)  # restricted-entry interval
     applicator: str | None = None
     observation_id: int | None = None
+    followup_due_at: AwareDatetime | None = None
+    followup_completed_at: AwareDatetime | None = None
+    outcome: str | None = None
     notes: str | None = None
 
 
@@ -54,10 +57,15 @@ class Harvest(BaseModel):
     weight_kg: float | None = Field(default=None, ge=0)
     unit_count: int | None = Field(default=None, ge=0)
     quality_grade: str | None = None
+    salable_weight_kg: float | None = Field(default=None, ge=0)
+    cull_weight_kg: float | None = Field(default=None, ge=0)
+    cull_reason: str | None = None
+    quality_reason: str | None = None
     zone: str | None = None
     destination: str | None = None
     unit_price: float | None = Field(default=None, ge=0)
     revenue: float | None = Field(default=None, ge=0)
+    labor_minutes: int | None = Field(default=None, ge=0)
     operator: str | None = None
     notes: str | None = None
 
@@ -78,10 +86,15 @@ class HarvestCreate(BaseModel):
     weight_kg: float | None = Field(default=None, ge=0)
     unit_count: int | None = Field(default=None, ge=0)
     quality_grade: str | None = Field(default=None, max_length=50)
+    salable_weight_kg: float | None = Field(default=None, ge=0)
+    cull_weight_kg: float | None = Field(default=None, ge=0)
+    cull_reason: str | None = Field(default=None, max_length=500)
+    quality_reason: str | None = Field(default=None, max_length=500)
     zone: str | None = Field(default=None, max_length=100)
     destination: str | None = Field(default=None, max_length=200)
     unit_price: float | None = Field(default=None, ge=0)
     revenue: float | None = Field(default=None, ge=0)
+    labor_minutes: int | None = Field(default=None, ge=0)
     operator: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
@@ -108,6 +121,9 @@ class TreatmentCreate(BaseModel):
     rei_hours: int | None = Field(default=None, ge=0)
     applicator: str | None = Field(default=None, max_length=100)
     observation_id: int | None = Field(default=None, ge=1)
+    followup_due_at: AwareDatetime | None = None
+    followup_completed_at: AwareDatetime | None = None
+    outcome: str | None = Field(default=None, max_length=1000)
     notes: str | None = None
 
 
@@ -126,6 +142,9 @@ class IrrigationLog(BaseModel):
     actual_end: AwareDatetime | None = None
     volume_gal: Decimal | None = Field(default=None, ge=0)
     source: str = "manual"
+    weather_skip: bool | None = None
+    fertigation: bool = False
+    metering_method: str | None = None
     notes: str | None = None
     created_at: AwareDatetime | None = None
 
@@ -174,6 +193,8 @@ class LabResult(BaseModel):
     cu_ppm: float | None = Field(default=None, ge=0)
     na_ppm: float | None = Field(default=None, ge=0)
     cl_ppm: float | None = Field(default=None, ge=0)
+    recipe_id: int | None = None
+    source_sample_id: str | None = None
     notes: str | None = None
 
 

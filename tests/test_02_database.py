@@ -24,6 +24,9 @@ class TestSchemaIntegrity:
         "observations",
         "alert_log",
         "diagnostics",
+        "water_meter_events",
+        "daily_plan_archive_audit",
+        "instrumentation_requirements",
     ]
 
     REQUIRED_VIEWS = [
@@ -35,6 +38,28 @@ class TestSchemaIntegrity:
         "v_climate_latest",
         "v_relay_stuck",
         "v_sensor_staleness",
+        "v_data_trust_ledger",
+        "v_required_sensor_coverage",
+        "v_water_accountability",
+        "v_forecast_accuracy_lead_buckets",
+        "v_energy_estimate_reconciliation",
+        "v_setpoint_delivery_latency",
+        "v_mister_zone_effectiveness",
+        "v_plan_tactical_outcome_daily",
+        "v_water_meter_daily",
+        "v_irrigation_accountability",
+        "v_alert_lifecycle_quality",
+        "v_forecast_action_outcomes",
+        "v_setpoint_change_delivery",
+        "v_crop_lifecycle_completeness",
+        "v_growth_observation_quality",
+        "v_harvest_story",
+        "v_nutrient_lab_status",
+        "v_succession_plan_readiness",
+        "v_instrumentation_readiness",
+        "v_daily_plan_archive_self_check",
+        "v_forecast_plan_outcome_mart",
+        "v_grower_economics_story",
     ]
 
     REQUIRED_FUNCTIONS = [
@@ -145,3 +170,46 @@ class TestViewsCompute:
     def test_compliance_returns(self):
         rows = db_query_rows("SELECT * FROM fn_compliance_pct('24 hours'::interval)")
         assert len(rows) >= 1, "fn_compliance_pct returned no rows"
+
+    def test_data_trust_ledger_returns(self):
+        rows = db_query_rows("SELECT check_name, status FROM v_data_trust_ledger")
+        assert len(rows) >= 5, "v_data_trust_ledger returned too few checks"
+
+    def test_required_sensor_coverage_returns(self):
+        rows = db_query_rows("SELECT * FROM v_required_sensor_coverage LIMIT 1")
+        assert len(rows) >= 1, "v_required_sensor_coverage returned no rows"
+
+    def test_forecast_accuracy_lead_buckets_compute(self):
+        rows = db_query_rows("SELECT * FROM v_forecast_accuracy_lead_buckets LIMIT 1")
+        assert len(rows) >= 1, "v_forecast_accuracy_lead_buckets returned no rows"
+
+    def test_water_meter_daily_compute(self):
+        rows = db_query_rows("SELECT day, used_gal FROM v_water_meter_daily LIMIT 1")
+        assert len(rows) >= 1, "v_water_meter_daily returned no rows"
+
+    def test_backlog_story_views_compute(self):
+        checks = [
+            "SELECT * FROM v_irrigation_accountability LIMIT 1",
+            "SELECT * FROM v_forecast_action_outcomes LIMIT 1",
+            "SELECT * FROM v_crop_lifecycle_completeness LIMIT 1",
+            "SELECT * FROM v_forecast_plan_outcome_mart LIMIT 1",
+            "SELECT * FROM v_grower_economics_story LIMIT 1",
+        ]
+        for sql in checks:
+            db_query(sql)
+
+    def test_daily_summary_backfill_fields_present(self):
+        rows = db_query_rows(
+            """
+            SELECT rh_avg, outdoor_temp_min, outdoor_temp_max, kwh_total
+            FROM daily_summary
+            WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 7
+            ORDER BY date DESC
+            LIMIT 1
+            """
+        )
+        assert rows, "daily_summary returned no recent rows"
+        rh_avg, outdoor_min, outdoor_max, kwh_total = rows[0].split("|")
+        assert rh_avg, "daily_summary.rh_avg was not backfilled"
+        assert outdoor_min and outdoor_max, "daily_summary outdoor temp min/max were not backfilled"
+        assert kwh_total, "daily_summary.kwh_total was not populated from measured energy"
