@@ -50,7 +50,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       }
@@ -89,7 +90,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       }
