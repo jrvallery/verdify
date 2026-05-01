@@ -14,6 +14,7 @@ number:
     lambda: "return id(target_temp_low_f);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_temp_low_f) = x;
           id(num_temp_low).publish_state(x);
 
@@ -26,6 +27,7 @@ number:
     lambda: "return id(target_temp_high_f);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_temp_high_f) = x;
           id(num_temp_high).publish_state(x);
 
@@ -89,6 +91,7 @@ number:
     lambda: "return id(target_vpd_low_kpa);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_vpd_low_kpa) = x;
           id(num_vpd_low).publish_state(x);
   - platform: template
@@ -100,6 +103,7 @@ number:
     lambda: "return id(target_vpd_high_kpa);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_vpd_high_kpa) = x;
           id(num_vpd_high).publish_state(x);
   - platform: template

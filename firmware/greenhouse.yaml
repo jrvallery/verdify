@@ -22,6 +22,7 @@ esphome:
   name_add_mac_suffix: false
   min_version: 2026.1.4
   includes:
+    - lib/heap_diagnostics.h
     - lib/greenhouse_types.h
     - lib/greenhouse_logic.h
   # Lutron LEAP TLS disabled (causes ESP32 crash — TLS heap exhaustion)
@@ -501,13 +502,14 @@ binary_sensor:
     on_press:
       then:
         - lambda: |-
-            ESP_LOGW("heap", "Heap pressure WARNING: free=%.1f kB min=%.1f kB",
-                     esp_get_free_heap_size() / 1024.0f,
-                     esp_get_minimum_free_heap_size() / 1024.0f);
+            ESP_LOGW("heap", "Heap pressure WARNING: free=%.1f kB min=%.1f kB largest=%.1f kB",
+                     gh_free_heap_kb(),
+                     gh_min_free_heap_kb(),
+                     gh_largest_free_heap_block_kb());
     lambda: |-
       static uint32_t below_thresh_since_ms = 0;
       uint32_t now_ms = millis();
-      float heap_kb = esp_get_free_heap_size() / 1024.0f;
+      float heap_kb = gh_free_heap_kb();
       if (heap_kb < 25.0f) {
           if (below_thresh_since_ms == 0) below_thresh_since_ms = now_ms;
           if (now_ms - below_thresh_since_ms > 120000) return true;
@@ -523,13 +525,14 @@ binary_sensor:
     on_press:
       then:
         - lambda: |-
-            ESP_LOGE("heap", "Heap pressure CRITICAL: free=%.1f kB min=%.1f kB",
-                     esp_get_free_heap_size() / 1024.0f,
-                     esp_get_minimum_free_heap_size() / 1024.0f);
+            ESP_LOGE("heap", "Heap pressure CRITICAL: free=%.1f kB min=%.1f kB largest=%.1f kB",
+                     gh_free_heap_kb(),
+                     gh_min_free_heap_kb(),
+                     gh_largest_free_heap_block_kb());
     lambda: |-
       // Instantaneous — no debounce. <15 KB is panic-adjacent territory
       // (observed pre-panic floor 20.6 KB; safety margin at 15 KB).
-      float heap_kb = esp_get_free_heap_size() / 1024.0f;
+      float heap_kb = gh_free_heap_kb();
       return heap_kb < 15.0f;
 
 # ───────────────────── DASHBOARD BUTTONS ─────────────────────

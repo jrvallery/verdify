@@ -140,12 +140,30 @@ class TestHeapPressureObservability:
 
     def test_firmware_declares_heap_pressure_problem_sensors(self):
         body = (REPO_ROOT / "firmware/greenhouse.yaml").read_text()
+        sensors = (REPO_ROOT / "firmware/greenhouse/sensors.yaml").read_text()
+        controls = (REPO_ROOT / "firmware/greenhouse/controls.yaml").read_text()
         assert "id: bs_heap_pressure_warning" in body
         assert 'name: "Heap Pressure Warning"' in body
         assert "id: bs_heap_pressure_critical" in body
         assert 'name: "Heap Pressure Critical"' in body
         assert "Heap pressure WARNING" in body
         assert "Heap pressure CRITICAL" in body
+        assert "largest=%.1f kB" in body
+        assert "id: heap_min_free" in sensors
+        assert "id: heap_largest_free_block" in sensors
+        assert "Heap profile: free=%.1f kB min=%.1f kB largest=%.1f kB" in controls
+        assert "Skipping /setpoints pull: heap free=%.1f kB largest=%.1f kB" in controls
+
+    def test_direct_band_pushes_unlock_cfg_readbacks_without_http_pull(self):
+        body = (REPO_ROOT / "firmware/greenhouse/tunables.yaml").read_text()
+        for marker in (
+            "id(target_temp_low_f) = x;",
+            "id(target_temp_high_f) = x;",
+            "id(target_vpd_low_kpa) = x;",
+            "id(target_vpd_high_kpa) = x;",
+        ):
+            idx = body.index(marker)
+            assert "id(cfg_first_pull_ok) = true;" in body[max(0, idx - 80) : idx]
 
     def test_entity_map_routes_heap_pressure_binary_sensors(self):
         body = (REPO_ROOT / "ingestor/entity_map.py").read_text()
@@ -165,6 +183,20 @@ class TestHeapPressureObservability:
         assert '"alert_type": "heap_pressure_warning"' in body
         assert '"alert_type": "heap_pressure_critical"' in body
         assert '"sensor_id": "equipment.heap_pressure_critical"' in body
+
+    def test_alert_monitor_does_not_call_demanded_heat_a_stuck_relay(self):
+        body = (REPO_ROOT / "ingestor/tasks.py").read_text()
+        assert "state_source" in body
+        assert "commanded_equipment_state" in body
+        assert "float(temp_avg) <= float(sp_temp_high) + 0.5" in body
+        assert "while temp is not below the active band" in body
+        assert "without an OFF command" in body
+
+    def test_v2_open_vent_fog_assist_not_blocked_by_generic_interlock(self):
+        body = (REPO_ROOT / "firmware/greenhouse/controls.yaml").read_text()
+        assert "open_vent_fog_assist" in body
+        assert "ctl_state.vent_mist_assist_active && relay_out.fog" in body
+        assert "id(fog_closes_vent) && vent_is_open && !open_vent_fog_assist" in body
 
     def test_greenhouse_state_refresh_registered(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
@@ -302,7 +334,8 @@ class TestContractDriftGuardrails:
     def test_fan_vent_interlock_does_not_blanket_block_vented_moisture(self):
         controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
         assert "vent_blocks_moisture" not in controls_source
-        assert "if (id(fog_closes_vent) && vent_is_open)" in controls_source
+        assert "open_vent_fog_assist" in controls_source
+        assert "if (id(fog_closes_vent) && vent_is_open && !open_vent_fog_assist)" in controls_source
         assert "const bool mister_vent_ok = !id(mister_closes_vent) || !vent_is_open;" in controls_source
 
 
@@ -468,6 +501,13 @@ class TestProbeStalenessWiring:
         assert "uptime_s::text" in body
         assert "STARTUP_SETTLING" in body
         assert "startup settling" in body
+
+    def test_sensor_health_warns_on_stale_wdt_reset_reason(self):
+        body = (REPO_ROOT / "scripts" / "sensor-health-sweep.sh").read_text()
+        assert "no recent Task WDT resets" in body
+        assert "u + 0 >= 21600" in body
+        assert "sticky reset cause, not a recent reboot" in body
+        assert "recent watchdog-induced reboot" in body
 
     def test_firmware_deploy_waits_for_expected_version(self):
         makefile = (REPO_ROOT / "Makefile").read_text()

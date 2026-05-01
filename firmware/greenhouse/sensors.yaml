@@ -40,7 +40,25 @@ sensor:
     entity_category: diagnostic
     accuracy_decimals: 1
     update_interval: 60s
-    lambda: 'return esp_get_free_heap_size() / 1024.0f;'
+    lambda: 'return gh_free_heap_kb();'
+
+  - platform: template
+    id: heap_min_free
+    name: "Minimum Free Heap"
+    unit_of_measurement: "kB"
+    entity_category: diagnostic
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: 'return gh_min_free_heap_kb();'
+
+  - platform: template
+    id: heap_largest_free_block
+    name: "Largest Free Heap Block"
+    unit_of_measurement: "kB"
+    entity_category: diagnostic
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: 'return gh_largest_free_heap_block_kb();'
 
   # --------------------------------------------------------------------------
   # 1‑B Analog – CO₂ & Light

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # sensor-health-sweep.sh — Layer 3 of the Firmware Change Protocol.
 # Post-deploy validation: every probe on the Modbus bus answered, no new
-# sensor_offline alerts fired, no Task WDT resets, no override-event storm.
+# sensor_offline alerts fired, no recent Task WDT resets, no override-event storm.
 # Auto-invoked by `make firmware-deploy`. Also runnable standalone via
 # `make sensor-health` or directly: `./scripts/sensor-health-sweep.sh [--since "5 min ago"]`
 #
@@ -131,8 +131,10 @@ fi
 
 # ── 3. ESP32 DIAGNOSTICS ───────────────────────────────────────────
 # After a firmware deploy we expect uptime to be small (ESP32 just
-# rebooted) and reset_reason NOT to be a Task WDT. Absence of diagnostics
-# row in 5 min is itself a failure.
+# rebooted) and reset_reason NOT to be a Task WDT. Outside the immediate
+# post-boot window, reset_reason is sticky across the whole uptime; a WDT from
+# many hours ago should warn but not permanently fail every later sweep.
+# Absence of diagnostics row in 5 min is itself a failure.
 section "ESP32 diagnostics"
 
 DIAG=$($DB "SELECT reset_reason || '|' || COALESCE(firmware_version, '?') || '|' || COALESCE(wifi_rssi::text, '?') || '|' || COALESCE(uptime_s::text, '?') FROM diagnostics WHERE ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null)
@@ -142,7 +144,12 @@ if [[ -z "$DIAG" ]]; then
 else
     IFS='|' read -r reset_reason fw_ver rssi uptime <<< "$DIAG"
     if [[ "$reset_reason" == "Task WDT" ]]; then
-        fail "reset_reason = Task WDT (watchdog-induced reboot — investigate!)"
+        WDT_RECENT=$(awk -v u="$uptime" 'BEGIN { print (u != "?" && u + 0 >= 21600) ? 0 : 1 }')
+        if [[ "$WDT_RECENT" -eq 1 ]]; then
+            fail "reset_reason = Task WDT with uptime ${uptime}s (recent watchdog-induced reboot — investigate!)"
+        else
+            warn "reset_reason = Task WDT, but uptime ${uptime}s >= 21600s (sticky reset cause, not a recent reboot)"
+        fi
     else
         pass "reset_reason = $reset_reason"
     fi

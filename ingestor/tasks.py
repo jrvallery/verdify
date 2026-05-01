@@ -563,18 +563,62 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             )
 
         # 2. relay_stuck
+        # v_relay_stuck is derived from commanded switch state, not independent
+        # relay feedback. Treat long heater runtime as normal when current
+        # climate still demands heat; only alert when heat remains commanded
+        # above the active band where it is physically contradictory.
+        relay_context = await conn.fetchrow(
+            """
+            SELECT temp_avg, sp_temp_high, heat1, heat2, greenhouse_mode, ts
+              FROM v_greenhouse_state
+             WHERE ts >= now() - interval '10 minutes'
+             ORDER BY ts DESC
+             LIMIT 1
+            """
+        )
         for r in await conn.fetch(
             "SELECT equipment, hours_on, threshold_hours FROM v_relay_stuck WHERE is_stuck = true"
         ):
+            equipment = r["equipment"]
+            details = {
+                "hours_on": float(r["hours_on"]),
+                "threshold_hours": float(r["threshold_hours"]),
+                "state_source": "commanded_equipment_state",
+            }
+            if equipment in ("heat1", "heat2") and relay_context:
+                temp_avg = relay_context["temp_avg"]
+                sp_temp_high = relay_context["sp_temp_high"]
+                heat_commanded = bool(relay_context[equipment])
+                details.update(
+                    {
+                        "temp_avg": float(temp_avg) if temp_avg is not None else None,
+                        "sp_temp_high": float(sp_temp_high) if sp_temp_high is not None else None,
+                        "greenhouse_mode": relay_context["greenhouse_mode"],
+                        "context_ts": relay_context["ts"].isoformat() if relay_context["ts"] else None,
+                    }
+                )
+                if (
+                    heat_commanded
+                    and temp_avg is not None
+                    and sp_temp_high is not None
+                    and float(temp_avg) <= float(sp_temp_high) + 0.5
+                ):
+                    continue
+                message = (
+                    f"Heater `{equipment}` commanded ON for {r['hours_on']:.1f}h "
+                    f"while temp is not below the active band"
+                )
+            else:
+                message = f"Relay `{equipment}` commanded ON for {r['hours_on']:.1f}h without an OFF command"
             alerts.append(
                 {
                     "alert_type": "relay_stuck",
                     "severity": "warning",
                     "category": "equipment",
-                    "sensor_id": f"equipment.{r['equipment']}",
+                    "sensor_id": f"equipment.{equipment}",
                     "zone": None,
-                    "message": f"Relay `{r['equipment']}` stuck ON for {r['hours_on']:.1f}h",
-                    "details": {"hours_on": float(r["hours_on"])},
+                    "message": message,
+                    "details": details,
                     "metric_value": float(r["hours_on"]),
                     "threshold_value": float(r["threshold_hours"]),
                 }
