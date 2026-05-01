@@ -179,7 +179,9 @@ class TestHeapPressureObservability:
         assert "healthy_after_critical" in body
         assert "healthy_heap_samples_after_event" in body
         assert "critical_logs_30m" in body
-        assert "SELECT heap_bytes, ts" in body
+        assert "SELECT heap_bytes, uptime_s, ts" in body
+        assert "startup_heap_grace" in body
+        assert "age_after_boot_s <= 180" in body
         assert '"alert_type": "heap_pressure_warning"' in body
         assert '"alert_type": "heap_pressure_critical"' in body
         assert '"sensor_id": "equipment.heap_pressure_critical"' in body

@@ -1261,7 +1261,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         )
         heap_diag = await conn.fetchrow(
             """
-            SELECT heap_bytes, ts
+            SELECT heap_bytes, uptime_s, ts
               FROM diagnostics
              WHERE heap_bytes IS NOT NULL
              ORDER BY ts DESC
@@ -1318,6 +1318,15 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 """,
                 last_warning_event_ts,
             )
+        startup_heap_grace = False
+        if last_critical_event_ts and heap_diag and heap_diag["uptime_s"] is not None:
+            boot_ts = heap_diag["ts"] - _td(seconds=float(heap_diag["uptime_s"]))
+            age_after_boot_s = (last_critical_event_ts - boot_ts).total_seconds()
+            # ESPHome/API reconnect and reconnect setpoint reconciliation can
+            # transiently dip heap during the first boot minute. Keep those
+            # events out of critical alerting once the current heap sample is
+            # healthy; sustained pressure still alerts after startup.
+            startup_heap_grace = 0 <= age_after_boot_s <= 180
         critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
         warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
         if heap_bytes is not None:
@@ -1361,6 +1370,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     )
                 ):
                     warning_active = False
+            if critical_active and startup_heap_grace and heap_bytes >= 35.0:
+                critical_active = False
         if critical_active:
             alerts.append(
                 {
