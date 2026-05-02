@@ -5,6 +5,7 @@ All tests run against the live production stack.
 
 import asyncio
 import os
+import shutil
 import subprocess
 
 import pytest
@@ -15,11 +16,15 @@ DB_DSN = os.environ.get("DB_DSN", "postgresql://verdify:verdify@localhost:5432/v
 # Docker exec wrapper for DB queries (works even if pg port isn't exposed to host)
 def db_query(sql: str) -> str:
     """Run a SQL query via docker exec and return stdout."""
+    if os.environ.get("VERDIFY_DB_QUERY_MODE") == "direct" and shutil.which("psql"):
+        cmd = ["psql", "-t", "-A", "-c", sql]
+    else:
+        cmd = ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-c", sql]
     result = subprocess.run(
-        ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-c", sql],
+        cmd,
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=45,
     )
     if result.returncode != 0:
         raise RuntimeError(f"DB query failed: {result.stderr.strip()}")

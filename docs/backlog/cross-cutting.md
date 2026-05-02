@@ -4,25 +4,25 @@ Coordinator-owned queue. Items that span 2+ agent scopes, touch shared territory
 
 ## Schemas / contracts
 
-- [ ] **Per-alert-type discriminated union for `AlertEnvelope`.** Requested by `ingestor`. Split the single flat shape into a discriminated union keyed by `alert_type` so each alert's `details` gets a dedicated model.
-- [ ] **Migrate `verdify_schemas.crops.ObservationAction.data` union to also accept `HarvestCreate` / `TreatmentCreate`.** (Already done in Sprint 23; verify after merge.)
+- [x] **Per-alert-type discriminated union for `AlertEnvelope`.** Requested by `ingestor`. `AlertEnvelope` now preserves the existing model API while validating through a tagged per-alert registry covering every current alert writer, including planner, API, dispatcher, heap, firmware, and setpoint-confirmation alerts.
+- [x] **Migrate `verdify_schemas.crops.ObservationAction.data` union to also accept `HarvestCreate` / `TreatmentCreate`.** Verified with regression coverage.
 - [x] **Scorecard typed projection** (requested by `genai` + `web`). `ScorecardResponse` is the shared typed shape; migration 096 and `db/schema.sql` now match the live 25-metric numeric `fn_planner_scorecard()`, and `/api/v1/scorecard` returns that schema.
 
 ## Migrations
 
-- [ ] Audit all `greenhouse_id` defaults — some tables have the column, some don't; `harvests` + `treatments` notably missing. SaaS-track requires every table to have it.
+- [x] Audit all `greenhouse_id` defaults — migration `103-greenhouse-id-default-audit.sql` sets the missing single-site defaults and publishes `v_greenhouse_id_default_audit`; DB tests enforce zero missing defaults.
 - [ ] Consolidate `v_daily_oscillation` + `v_daily_oscillation_summary` — one wraps the other; renderer confusion on which to use.
 
 ## Infra
 
 - [ ] Secret Manager migration (Sprint 10 B10.5 from SaaS backlog) — credentials move from `.env` to Secret Manager refs. Touches every service.
-- [ ] Flaky `test_dew_point_risk_computes`. Pre-existing; times out after 15 s on the `docker exec` path. Either increase timeout in `conftest.py` or switch the test to asyncpg.
+- [x] Flaky `test_dew_point_risk_computes`. Increased the shared DB smoke-test wrapper timeout from 15 s to 45 s.
 - [x] Grafana dashboard audit. 55 live dashboards / 904 panels were swept on 2026-04-28; JSON changes are committed with the web/runtime reconciliation.
 
 ## CI / tooling
 
-- [ ] Sprint 22 added drift guards in CI with a Postgres service container. Extend to run smoke tests (`tests/`) in the same job — currently only schema tests run in CI.
-- [ ] `ruff format` in pre-commit reformats files Claude agents just wrote, occasionally creating a 2-round edit cycle. Pre-commit should run ruff with the project config, not defaults.
+- [x] Sprint 22 added drift guards in CI with a Postgres service container. CI now runs the DB schema smoke subset (`tests/test_02_database.py::TestSchemaIntegrity`) against that service container via the direct psql test helper mode.
+- [x] `ruff format` in pre-commit reformats files Claude agents just wrote, occasionally creating a 2-round edit cycle. Pre-commit now passes `--config pyproject.toml` explicitly to both ruff hooks.
 
 ## Docs
 

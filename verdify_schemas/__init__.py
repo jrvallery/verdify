@@ -7,6 +7,7 @@ partial-writing.
 """
 
 from .alerts import (
+    ALERT_TYPES,
     AlertAckPayload,
     AlertAction,
     AlertCategory,
@@ -15,6 +16,7 @@ from .alerts import (
     AlertLogRow,
     AlertResolvePayload,
     AlertSeverity,
+    AlertType,
 )
 from .api import (
     APIStatus,
@@ -198,6 +200,7 @@ from .views import (
 
 __all__ = [
     "ALL_TUNABLES",
+    "ALERT_TYPES",
     "AlertAckPayload",
     "AlertAction",
     "AlertCategory",
@@ -207,6 +210,7 @@ __all__ = [
     "APIStatus",
     "AlertResolvePayload",
     "AlertSeverity",
+    "AlertType",
     "ClampActivity24h",
     "ClimateRow",
     "ClimateSnapshot",

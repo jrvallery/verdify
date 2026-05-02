@@ -78,6 +78,8 @@ jobs:
         run: pytest verdify_schemas/tests/ -v --ignore=verdify_schemas/tests/test_drift_guards.py --ignore=verdify_schemas/tests/test_vault_writers.py --ignore=verdify_schemas/tests/test_views.py
       - name: Drift guards (against CI Postgres)
         run: pytest verdify_schemas/tests/test_drift_guards.py -v
+      - name: Database smoke tests (against CI Postgres)
+        run: VERDIFY_DB_QUERY_MODE=direct pytest tests/test_02_database.py::TestSchemaIntegrity -q
 
   firmware:
     name: Firmware Compile Check

@@ -32,6 +32,7 @@ from verdify_schemas.lessons import (
     LessonValidate,
     PlannerLesson,
 )
+from verdify_schemas.operations import HarvestCreate, TreatmentCreate
 
 NOW = datetime(2026, 4, 19, 1, 0, tzinfo=UTC)
 
@@ -44,6 +45,14 @@ class TestAlertEnvelope:
             category="climate",
             sensor_id="climate.vpd_avg",
             message="VPD outside band for 45 min",
+            details={
+                "vpd_stress_hours": 2.5,
+                "recent_samples": 12,
+                "recent_high_samples": 8,
+                "recent_high_fraction": 0.67,
+                "avg_vpd_15m": 2.3,
+                "avg_vpd_high_15m": 1.8,
+            },
             metric_value=2.3,
             threshold_value=2.0,
         )
@@ -226,6 +235,22 @@ class TestObservationAction:
             data=EventCreate(event_type="harvested", count=20),
         )
         assert isinstance(a.data, EventCreate)
+
+    def test_record_harvest(self):
+        a = ObservationAction(
+            action="record_harvest",
+            crop_id=3,
+            data=HarvestCreate(weight_kg=1.2, salable_weight_kg=1.0, operator="jason"),
+        )
+        assert isinstance(a.data, HarvestCreate)
+
+    def test_record_treatment(self):
+        a = ObservationAction(
+            action="record_treatment",
+            crop_id=3,
+            data=TreatmentCreate(product="Neem", method="foliar", target_pest="aphids"),
+        )
+        assert isinstance(a.data, TreatmentCreate)
 
 
 class TestLessonAction:

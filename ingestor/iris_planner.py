@@ -13,6 +13,7 @@ trigger invocations, building up operational memory over time.
 import json
 import logging
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -31,6 +32,12 @@ from config import (
     OPENCLAW_TOKEN,
     OPENCLAW_URL,
 )
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from verdify_schemas import AlertEnvelope  # noqa: E402
 
 log = logging.getLogger("iris_planner")
 
@@ -667,14 +674,22 @@ def _run_alert_sql(sql: str) -> None:
 
 def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None) -> None:
     """Route gather-plan-context.sh failures into alert_log without duplicates."""
-    details = json.dumps({"reason": reason, "stderr": stderr[:500], "exit_code": exit_code})
-    message = f"gather-plan-context.sh failed: {reason}"
+    alert = AlertEnvelope.model_validate(
+        {
+            "alert_type": "plan_context_failed",
+            "severity": "warning",
+            "category": "system",
+            "message": f"gather-plan-context.sh failed: {reason}",
+            "details": {"reason": reason, "stderr": stderr[:500], "exit_code": exit_code},
+        }
+    )
+    details = json.dumps(alert.details)
     _run_alert_sql(
         f"""
         WITH updated AS (
             UPDATE alert_log
                SET severity = 'warning',
-                   message = {_sql_literal(message)},
+                   message = {_sql_literal(alert.message)},
                    details = {_sql_literal(details)}::jsonb
              WHERE alert_type = 'plan_context_failed'
                AND disposition = 'open'
@@ -682,7 +697,7 @@ def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None
             RETURNING id
         )
         INSERT INTO alert_log (alert_type, severity, category, message, details, source)
-        SELECT 'plan_context_failed', 'warning', 'system', {_sql_literal(message)},
+        SELECT 'plan_context_failed', 'warning', 'system', {_sql_literal(alert.message)},
                {_sql_literal(details)}::jsonb, 'iris_planner'
          WHERE NOT EXISTS (SELECT 1 FROM updated)
         """

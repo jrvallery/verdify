@@ -60,6 +60,7 @@ class TestSchemaIntegrity:
         "v_daily_plan_archive_self_check",
         "v_forecast_plan_outcome_mart",
         "v_grower_economics_story",
+        "v_greenhouse_id_default_audit",
     ]
 
     REQUIRED_FUNCTIONS = [
@@ -152,6 +153,10 @@ class TestViewsCompute:
             "SELECT * FROM v_dew_point_risk WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 1 LIMIT 1"
         )
         assert len(rows) >= 1, "v_dew_point_risk returned no rows"
+
+    def test_greenhouse_id_defaults_complete(self):
+        missing = db_query("SELECT count(*) FROM v_greenhouse_id_default_audit WHERE NOT has_default")
+        assert int(missing) == 0, "tenant-scoped tables with greenhouse_id must have a default"
 
     def test_planner_performance_computes(self):
         rows = db_query_rows(

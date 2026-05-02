@@ -1944,16 +1944,23 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     "SELECT id FROM alert_log WHERE alert_type = 'esp32_push_failed' AND disposition = 'open' LIMIT 1"
                 )
                 if existing is None:
+                    alert = AlertEnvelope.model_validate(
+                        {
+                            "alert_type": "esp32_push_failed",
+                            "severity": "warning",
+                            "category": "system",
+                            "message": f"ESP32 direct push failed after 3 attempts: {last_err}",
+                            "details": {
+                                "error": str(last_err),
+                                "change_count": len(esp32_changes),
+                            },
+                        }
+                    )
                     await conn.execute(
                         "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
                         "VALUES ('esp32_push_failed', 'warning', 'system', $1, $2, 'dispatcher')",
-                        f"ESP32 direct push failed after 3 attempts: {last_err}",
-                        json.dumps(
-                            {
-                                "error": str(last_err),
-                                "change_count": len(esp32_changes),
-                            }
-                        ),
+                        alert.message,
+                        json.dumps(alert.details),
                     )
 
     (STATE_DIR / "setpoint-dispatcher.log").touch()
@@ -2208,6 +2215,24 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
             cg,
             cw,
             ct,
+        )
+        await conn.execute(
+            """
+            UPDATE daily_summary ds
+               SET kwh_total = ed.measured_kwh::double precision,
+                   peak_kw = (ed.peak_watts / 1000.0)::double precision,
+                   cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
+                   cost_total = round((
+                       COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
+                       + COALESCE(ds.cost_gas::numeric, 0)
+                       + COALESCE(ds.cost_water::numeric, 0)
+                   ), 2)::double precision
+              FROM v_energy_daily ed
+             WHERE ds.date = $1
+               AND ed.date = ds.date
+               AND ed.measured_kwh IS NOT NULL
+            """,
+            yesterday,
         )
 
     log.info("Daily summary (%s): %.1f kWh, %.3f therms, $%.2f", yesterday, kwh, therms, ct)
@@ -2735,6 +2760,25 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             cycles.get("mister_center", 0),
             cycles.get("drip_wall", 0),
             cycles.get("drip_center", 0),
+        )
+        await conn.execute(
+            """
+            UPDATE daily_summary ds
+               SET kwh_total = ed.measured_kwh::double precision,
+                   peak_kw = (ed.peak_watts / 1000.0)::double precision,
+                   cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
+                   cost_total = round((
+                       COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
+                       + COALESCE(ds.cost_gas::numeric, 0)
+                       + COALESCE(ds.cost_water::numeric, 0)
+                   ), 2)::double precision,
+                   captured_at = now()
+              FROM v_energy_daily ed
+             WHERE ds.date = $1
+               AND ed.date = ds.date
+               AND ed.measured_kwh IS NOT NULL
+            """,
+            today,
         )
 
     log.info(
@@ -3327,46 +3371,62 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
             if existing is not None:
                 # Already alerted — escalate severity only if crossed the 15-min threshold
                 if severity == "critical":
-                    await conn.execute(
-                        "UPDATE alert_log SET severity='critical', message=$2, details=$3 WHERE id=$1",
-                        existing,
-                        (
-                            f"Setpoint unconfirmed >15 min: {r['parameter']}={float(r['value']):.3f} "
-                            f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
-                            f"{last_cfg if last_cfg is not None else '(none)'}"
-                        ),
-                        json.dumps(
-                            {
+                    alert = AlertEnvelope.model_validate(
+                        {
+                            "alert_type": "setpoint_unconfirmed",
+                            "severity": severity,
+                            "category": "system",
+                            "sensor_id": f"setpoint.{r['parameter']}",
+                            "message": (
+                                f"Setpoint unconfirmed >15 min: {r['parameter']}={float(r['value']):.3f} "
+                                f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
+                                f"{last_cfg if last_cfg is not None else '(none)'}"
+                            ),
+                            "details": {
                                 "parameter": r["parameter"],
                                 "requested_value": float(r["value"]),
                                 "last_cfg_readback": last_cfg,
                                 "age_s": age_s,
                                 "pushed_at": r["ts"].isoformat(),
-                            }
-                        ),
+                            },
+                        }
+                    )
+                    await conn.execute(
+                        "UPDATE alert_log SET severity='critical', message=$2, details=$3 WHERE id=$1",
+                        existing,
+                        alert.message,
+                        json.dumps(alert.details),
                     )
                 continue
 
-            await conn.execute(
-                "INSERT INTO alert_log "
-                "(alert_type, severity, category, sensor_id, message, details, source) "
-                "VALUES ('setpoint_unconfirmed', $1, 'system', $2, $3, $4::jsonb, 'ingestor')",
-                severity,
-                f"setpoint.{r['parameter']}",
-                (
-                    f"Setpoint unconfirmed >5 min: {r['parameter']}={float(r['value']):.3f} "
-                    f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
-                    f"{last_cfg if last_cfg is not None else '(none)'}"
-                ),
-                json.dumps(
-                    {
+            alert = AlertEnvelope.model_validate(
+                {
+                    "alert_type": "setpoint_unconfirmed",
+                    "severity": severity,
+                    "category": "system",
+                    "sensor_id": f"setpoint.{r['parameter']}",
+                    "message": (
+                        f"Setpoint unconfirmed >5 min: {r['parameter']}={float(r['value']):.3f} "
+                        f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
+                        f"{last_cfg if last_cfg is not None else '(none)'}"
+                    ),
+                    "details": {
                         "parameter": r["parameter"],
                         "requested_value": float(r["value"]),
                         "last_cfg_readback": last_cfg,
                         "age_s": age_s,
                         "pushed_at": r["ts"].isoformat(),
-                    }
-                ),
+                    },
+                }
+            )
+            await conn.execute(
+                "INSERT INTO alert_log "
+                "(alert_type, severity, category, sensor_id, message, details, source) "
+                "VALUES ('setpoint_unconfirmed', $1, 'system', $2, $3, $4::jsonb, 'ingestor')",
+                alert.severity,
+                alert.sensor_id,
+                alert.message,
+                json.dumps(alert.details),
             )
 
         log.info("Setpoint confirmation monitor: %d unconfirmed row(s)", len(rows))

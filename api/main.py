@@ -38,6 +38,7 @@ for _p in ("/app", "/mnt/iris/verdify"):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 from verdify_schemas import (  # noqa: E402
+    AlertEnvelope,
     APIStatus,
     CropCreate,
     CropDetail,
@@ -147,15 +148,26 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 "SELECT id FROM alert_log WHERE alert_type = 'band_fn_null' AND disposition = 'open' LIMIT 1"
             )
             if existing is None:
+                alert = AlertEnvelope.model_validate(
+                    {
+                        "alert_type": "band_fn_null",
+                        "severity": "critical",
+                        "category": "system",
+                        "message": (
+                            "fn_band_setpoints or fn_zone_vpd_targets returned NULL — "
+                            "ESP32 cannot refresh band setpoints"
+                        ),
+                        "details": {
+                            "band_row_null": band_row is None,
+                            "zone_row_null": zone_row is None,
+                        },
+                    }
+                )
                 await conn.execute(
                     "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
                     "VALUES ('band_fn_null', 'critical', 'system', $1, $2, 'api')",
-                    "fn_band_setpoints or fn_zone_vpd_targets returned NULL — ESP32 cannot refresh band setpoints",
-                    '{"band_row_null": '
-                    + ("true" if band_row is None else "false")
-                    + ', "zone_row_null": '
-                    + ("true" if zone_row is None else "false")
-                    + "}",
+                    alert.message,
+                    json.dumps(alert.details),
                 )
             raise HTTPException(
                 status_code=503,
