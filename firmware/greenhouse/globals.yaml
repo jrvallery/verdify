@@ -821,7 +821,7 @@ globals:
     restore_value: no
     initial_value: 'NAN'
 
-  # ─── Outdoor data from /setpoints pull (Tempest → DB → setpoint-server → ESP32) ───
+  # ─── Legacy pulled outdoor data fallback ───
   - id: pulled_outdoor_temp_f
     type: float
     restore_value: no
@@ -835,16 +835,15 @@ globals:
   - id: pulled_data_age_s
     type: uint32_t
     restore_value: no
-    initial_value: '99999'  # Start stale — force fresh pull on boot
+    initial_value: '99999'  # Start stale; direct Tempest is primary.
 
-  # Sprint-14: gate cfg_* readback publishes until the first /setpoints
-  # pull completes. Without this gate, cfg_* sensors publish the
+  # Sprint-14: gate cfg_* readback publishes until the first direct band push
+  # lands. Without this gate, cfg_* sensors publish the
   # firmware-default globals at boot (before the dispatcher has pushed
   # real values) and the resulting rows poison setpoint_snapshot
   # analytics (observed: min=0 for temp_high/vpd_low/safety_* across
-  # the 30-day trailing window). Flipped true at the end of the
-  # /setpoints pull handler (see controls.yaml). cfg_* sensors return
-  # NAN while this is false; ingestor filters NAN and skips writing.
+  # the 30-day trailing window). The four band number set_actions flip this
+  # true. cfg_* sensors return NAN while false; ingestor skips NAN.
   - id: cfg_first_pull_ok
     type: bool
     restore_value: no

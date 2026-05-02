@@ -297,6 +297,8 @@ SETPOINT_MAP: dict[str, str] = {
 DIAGNOSTIC_MAP: dict[str, str] = {
     "wifi_signal": "wifi_rssi",  # SensorInfo, dBm
     "free_heap": "heap_bytes",  # SensorInfo
+    "minimum_free_heap": "heap_min_free_kb",  # SensorInfo, kB
+    "largest_free_heap_block": "heap_largest_free_block_kb",  # SensorInfo, kB
     "uptime": "uptime_s",  # SensorInfo
     "probe_health": "probe_health",  # TextSensorInfo
     "reset_reason": "reset_reason",  # TextSensorInfo

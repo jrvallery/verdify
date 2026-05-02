@@ -151,8 +151,16 @@ class TestHeapPressureObservability:
         assert "largest=%.1f kB" in body
         assert "id: heap_min_free" in sensors
         assert "id: heap_largest_free_block" in sensors
-        assert "Heap profile: free=%.1f kB min=%.1f kB largest=%.1f kB" in controls
-        assert "Skipping /setpoints pull: heap free=%.1f kB largest=%.1f kB" in controls
+        assert 'ESP_LOGD("heap", "Heap profile: free=%.1f kB min=%.1f kB largest=%.1f kB"' in controls
+
+    def test_firmware_removes_heap_expensive_http_fallback(self):
+        for rel in (
+            "firmware/greenhouse.yaml",
+            "firmware/greenhouse/hardware.yaml",
+            "firmware/greenhouse/controls.yaml",
+        ):
+            body = (REPO_ROOT / rel).read_text()
+            assert "http_request" not in body
 
     def test_direct_band_pushes_unlock_cfg_readbacks_without_http_pull(self):
         body = (REPO_ROOT / "firmware/greenhouse/tunables.yaml").read_text()
@@ -169,6 +177,21 @@ class TestHeapPressureObservability:
         body = (REPO_ROOT / "ingestor/entity_map.py").read_text()
         assert '"heap_pressure_warning": "heap_pressure_warning"' in body
         assert '"heap_pressure_critical": "heap_pressure_critical"' in body
+
+    def test_entity_map_routes_heap_fragmentation_diagnostics(self):
+        body = (REPO_ROOT / "ingestor/entity_map.py").read_text()
+        assert '"minimum_free_heap": "heap_min_free_kb"' in body
+        assert '"largest_free_heap_block": "heap_largest_free_block_kb"' in body
+
+    def test_ingestor_persists_heap_fragmentation_diagnostics(self):
+        body = (REPO_ROOT / "ingestor/ingestor.py").read_text()
+        assert "heap_min_free_kb" in body
+        assert "heap_largest_free_block_kb" in body
+
+    def test_heap_fragmentation_migration_exists(self):
+        body = (REPO_ROOT / "db/migrations/105-heap-fragmentation-diagnostics.sql").read_text()
+        assert "ADD COLUMN IF NOT EXISTS heap_min_free_kb" in body
+        assert "ADD COLUMN IF NOT EXISTS heap_largest_free_block_kb" in body
 
     def test_alert_monitor_checks_heap_pressure_state(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
@@ -308,10 +331,10 @@ class TestContractDriftGuardrails:
         tier1 = _assigned_frozenset(REPO_ROOT / "mcp" / "server.py", "TIER1_TUNABLES")
         assert "sw_mister_closes_vent" in tier1
 
-        controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
         tunables_source = (REPO_ROOT / "firmware" / "greenhouse" / "tunables.yaml").read_text()
-        assert 'key == "sw_mister_closes_vent"' in controls_source
         assert "id: sw_mister_closes_vent" in tunables_source
+        assert "id(mister_closes_vent) = true;" in tunables_source
+        assert "id(mister_closes_vent) = false;" in tunables_source
 
     def test_firmware_holds_vent_open_while_fan_dwell_clears(self):
         controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()

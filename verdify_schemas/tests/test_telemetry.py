@@ -67,6 +67,8 @@ class TestDiagnostics:
             ts=NOW,
             wifi_rssi=-47.0,
             heap_bytes=180000.0,
+            heap_min_free_kb=17.6,
+            heap_largest_free_block_kb=13.0,
             uptime_s=3600.0,
             probe_health="4/4 ok",
             reset_reason="Software reset",
@@ -84,6 +86,10 @@ class TestDiagnostics:
     def test_rejects_rssi_above_zero(self):
         with pytest.raises(ValidationError):
             Diagnostics(ts=NOW, wifi_rssi=10.0)
+
+    def test_rejects_negative_heap_fragmentation_metric(self):
+        with pytest.raises(ValidationError):
+            Diagnostics(ts=NOW, heap_largest_free_block_kb=-1.0)
 
     def test_rejects_probe_count_over_4(self):
         with pytest.raises(ValidationError):

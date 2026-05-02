@@ -161,6 +161,8 @@ class Diagnostics(BaseModel):
     greenhouse_id: str = "vallery"
     wifi_rssi: float | None = Field(default=None, ge=-120, le=0)
     heap_bytes: float | None = Field(default=None, ge=0)
+    heap_min_free_kb: float | None = Field(default=None, ge=0)
+    heap_largest_free_block_kb: float | None = Field(default=None, ge=0)
     uptime_s: float | None = Field(default=None, ge=0)
     probe_health: str | None = None
     reset_reason: str | None = None

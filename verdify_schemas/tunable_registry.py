@@ -45,8 +45,8 @@ class TunableDef(BaseModel):
         min, max: schema-level bounds (advisory for planner UI). None if unbounded.
         default: firmware default from `greenhouse_types.h::default_setpoints()`.
         fw_clamp_lo, fw_clamp_hi: dispatcher + firmware clamp. Must match the
-            `cf(val, lo, hi)` / `ci((int)val, lo, hi)` call in controls.yaml
-            `/setpoints` handler. Drift guard checks this every CI run.
+            ESPHome number entity min_value/max_value in
+            firmware/greenhouse/tunables.yaml. Drift guard checks this every CI run.
         esp_object_id: ESPHome entity object_id (slug). Same string as
             SETPOINT_MAP key today; mcp/ingestor will derive from here.
         cfg_readback_object_id: `cfg_*` sensor slug, if firmware publishes one.

@@ -210,8 +210,8 @@ number:
   - platform: template
     id: num_enthalpy_open
     name: "Enthalpy Open (kJ⁄kg)"
-    min_value: -20
-    max_value: 5
+    min_value: -5
+    max_value: 0
     step: 0.5
     lambda: "return id(enthalpy_open_kjkg);"
     set_action:
@@ -244,7 +244,7 @@ number:
     id: num_site_pressure
     name: "Site Pressure (hPa)"
     min_value: 700
-    max_value: 1050
+    max_value: 1100
     step: 1
     lambda: "return id(site_pressure_hpa);"
     set_action:
@@ -372,14 +372,14 @@ number:
     id: num_vent_bypass
     name: "Vent Bypass (min)"
     min_value: 1
-    max_value: 30
+    max_value: 60
     step: 1
     lambda: "return id(vent_bypass_minutes);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
           if(val < 1) val = 1;
-          if(val > 30) val = 30;
+          if(val > 60) val = 60;
           id(vent_bypass_minutes) = val;
           id(num_vent_bypass).publish_state(val);
 
@@ -402,7 +402,7 @@ number:
   - platform: template
     id: num_mister_engage_kpa
     name: "VPD Mister Engage kPa"
-    min_value: 1.20
+    min_value: 0.50
     max_value: 2.50
     step: 0.05
     lambda: "return id(mister_engage_kpa);"
@@ -414,8 +414,8 @@ number:
   - platform: template
     id: num_mister_all_kpa
     name: "VPD Mister All kPa"
-    min_value: 1.50
-    max_value: 2.80
+    min_value: 1.00
+    max_value: 2.50
     step: 0.05
     lambda: "return id(mister_all_kpa);"
     set_action:
@@ -443,8 +443,8 @@ number:
   - platform: template
     id: num_mister_pulse_on
     name: "Mister Pulse ON (s)"
-    min_value: 15
-    max_value: 120
+    min_value: 30
+    max_value: 90
     step: 5
     lambda: "return id(mister_pulse_on_s);"
     set_action:
@@ -455,8 +455,8 @@ number:
   - platform: template
     id: num_mister_pulse_gap
     name: "Mister Pulse Gap (s)"
-    min_value: 15
-    max_value: 120
+    min_value: 10
+    max_value: 60
     step: 5
     lambda: "return id(mister_pulse_gap_s);"
     set_action:
@@ -467,8 +467,8 @@ number:
   - platform: template
     id: num_mister_vpd_weight
     name: "Mister VPD Weight"
-    min_value: 1.0
-    max_value: 3.0
+    min_value: 0.5
+    max_value: 5.0
     step: 0.5
     lambda: "return id(mister_vpd_weight);"
     set_action:
@@ -479,8 +479,8 @@ number:
   - platform: template
     id: num_vpd_target_south
     name: "VPD Target South (kPa)"
-    min_value: 0.5
-    max_value: 2.5
+    min_value: 0.3
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_south);"
     set_action:
@@ -491,8 +491,8 @@ number:
   - platform: template
     id: num_vpd_target_west
     name: "VPD Target West (kPa)"
-    min_value: 0.5
-    max_value: 2.5
+    min_value: 0.3
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_west);"
     set_action:
@@ -503,8 +503,8 @@ number:
   - platform: template
     id: num_vpd_target_east
     name: "VPD Target East (kPa)"
-    min_value: 0.5
-    max_value: 2.5
+    min_value: 0.3
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_east);"
     set_action:
@@ -515,8 +515,8 @@ number:
   - platform: template
     id: num_vpd_target_center
     name: "VPD Target Center (kPa)"
-    min_value: 0.3
-    max_value: 2.0
+    min_value: 0.1
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_center);"
     set_action:
@@ -691,13 +691,13 @@ number:
   - platform: template
     id: num_outdoor_staleness_max
     name: "Outdoor Staleness Max (s)"
-    min_value: 60
+    min_value: 120
     max_value: 1800
     step: 30
     lambda: "return id(outdoor_staleness_max_s);"
     set_action:
       - lambda: |
-          int v = (int)x; if(v < 60) v = 60; if(v > 1800) v = 1800;
+          int v = (int)x; if(v < 120) v = 120; if(v > 1800) v = 1800;
           id(outdoor_staleness_max_s) = v;
           id(num_outdoor_staleness_max).publish_state(v);
 
@@ -892,7 +892,7 @@ number:
   - platform: template
     id: num_mister_water_budget
     name: "Mister Water Budget (gal)"
-    min_value: 20
+    min_value: 100
     max_value: 600
     step: 10
     lambda: "return id(mister_water_budget_gal);"
@@ -904,15 +904,15 @@ number:
   - platform: template
     id: num_mister_max_runtime
     name: "Mister Max Runtime (min)"
-    min_value: 30
-    max_value: 300
+    min_value: 5
+    max_value: 480
     step: 10
     lambda: "return id(mister_max_runtime_min);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
-          if(val < 30) val = 30;
-          if(val > 300) val = 300;
+          if(val < 5) val = 5;
+          if(val > 480) val = 480;
           id(mister_max_runtime_min) = val;
           id(num_mister_max_runtime).publish_state(val);
 
@@ -951,7 +951,7 @@ number:
     id: num_irrig_wall_duration
     name: "Irrig Wall Duration (min)"
     min_value: 1
-    max_value: 60
+    max_value: 120
     step: 1
     lambda: "return id(irrig_wall_duration_min);"
     set_action:
@@ -964,14 +964,14 @@ number:
   - platform: template
     id: num_irrig_wall_fert_duration
     name: "Irrig Wall Fert Duration (min)"
-    min_value: 1
+    min_value: 0
     max_value: 60
     step: 1
     lambda: "return id(irrig_wall_fert_duration_min);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
-          if(val < 1) val = 1;
+          if(val < 0) val = 0;
           id(irrig_wall_fert_duration_min) = val;
           id(num_irrig_wall_fert_duration).publish_state(val);
 
@@ -979,7 +979,7 @@ number:
     id: num_irrig_wall_fert_every_n
     name: "Irrig Wall Fert Every N Cycles"
     min_value: 0
-    max_value: 14
+    max_value: 30
     step: 1
     lambda: "return id(irrig_wall_fert_every_n);"
     set_action:
@@ -992,7 +992,7 @@ number:
     id: num_irrig_wall_flush
     name: "Irrig Wall Flush (min)"
     min_value: 0
-    max_value: 10
+    max_value: 30
     step: 1
     lambda: "return id(irrig_wall_flush_min);"
     set_action:
@@ -1005,7 +1005,7 @@ number:
     id: num_irrig_wall_interval
     name: "Irrig Wall Interval (days)"
     min_value: 1
-    max_value: 7
+    max_value: 14
     step: 1
     lambda: "return id(irrig_wall_interval_days);"
     set_action:
@@ -1046,7 +1046,7 @@ number:
     id: num_irrig_center_duration
     name: "Irrig Center Duration (min)"
     min_value: 1
-    max_value: 60
+    max_value: 120
     step: 1
     lambda: "return id(irrig_center_duration_min);"
     set_action:
@@ -1059,14 +1059,14 @@ number:
   - platform: template
     id: num_irrig_center_fert_duration
     name: "Irrig Center Fert Duration (min)"
-    min_value: 1
+    min_value: 0
     max_value: 60
     step: 1
     lambda: "return id(irrig_center_fert_duration_min);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
-          if(val < 1) val = 1;
+          if(val < 0) val = 0;
           id(irrig_center_fert_duration_min) = val;
           id(num_irrig_center_fert_duration).publish_state(val);
 
@@ -1074,7 +1074,7 @@ number:
     id: num_irrig_center_fert_every_n
     name: "Irrig Center Fert Every N Cycles"
     min_value: 0
-    max_value: 14
+    max_value: 30
     step: 1
     lambda: "return id(irrig_center_fert_every_n);"
     set_action:
@@ -1087,7 +1087,7 @@ number:
     id: num_irrig_center_flush
     name: "Irrig Center Flush (min)"
     min_value: 0
-    max_value: 10
+    max_value: 30
     step: 1
     lambda: "return id(irrig_center_flush_min);"
     set_action:
@@ -1100,7 +1100,7 @@ number:
     id: num_irrig_center_interval
     name: "Irrig Center Interval (days)"
     min_value: 1
-    max_value: 7
+    max_value: 14
     step: 1
     lambda: "return id(irrig_center_interval_days);"
     set_action:
@@ -1115,7 +1115,7 @@ number:
     id: num_irrig_vpd_boost_pct
     name: "Irrig VPD Boost %"
     min_value: 0
-    max_value: 100
+    max_value: 200
     step: 5
     lambda: "return id(irrig_vpd_boost_pct);"
     set_action:
@@ -1127,8 +1127,8 @@ number:
   - platform: template
     id: num_irrig_vpd_boost_threshold
     name: "Irrig VPD Boost Threshold (hrs)"
-    min_value: 0.5
-    max_value: 12.0
+    min_value: 0
+    max_value: 24.0
     step: 0.5
     lambda: "return id(irrig_vpd_boost_threshold_hrs);"
     set_action:
@@ -1140,8 +1140,8 @@ number:
   - platform: template
     id: num_gl_lux_threshold
     name: "GL Lux Threshold"
-    min_value: 500
-    max_value: 10000
+    min_value: 100
+    max_value: 50000
     step: 500
     lambda: "return id(gl_lux_threshold);"
     set_action:
@@ -1166,8 +1166,8 @@ number:
   - platform: template
     id: num_gl_dli_target
     name: "GL DLI Target (mol)"
-    min_value: 5
-    max_value: 30
+    min_value: 1
+    max_value: 50
     step: 1
     lambda: "return id(gl_dli_target);"
     set_action:
@@ -1179,8 +1179,8 @@ number:
   - platform: template
     id: num_gl_sunrise_hour
     name: "GL Start Hour"
-    min_value: 5
-    max_value: 12
+    min_value: 0
+    max_value: 23
     step: 1
     lambda: "return id(gl_sunrise_hour);"
     set_action:
@@ -1191,7 +1191,7 @@ number:
   - platform: template
     id: num_gl_sunset_hour
     name: "GL Cutoff Hour"
-    min_value: 16
+    min_value: 0
     max_value: 23
     step: 1
     lambda: "return id(gl_sunset_hour);"

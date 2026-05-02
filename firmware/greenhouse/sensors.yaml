@@ -514,9 +514,10 @@ sensor:
       - timeout: 300s
 
   # --------------------------------------------------------------------------
-  # 2b. OUTDOOR CLIMATE — Tempest direct (primary) + HTTP pull (fallback)
+  # 2b. OUTDOOR CLIMATE — Tempest direct primary, legacy pulled globals fallback
   # --------------------------------------------------------------------------
-  # Tempest UDP provides data every 60s. HTTP /setpoints pull every 300s as backup.
+  # Tempest UDP provides data every 60s. The pulled globals are retained only as
+  # a no-HTTP compatibility fallback if an external path ever sets them.
   # The enthalpy calculation and economiser reference these IDs.
   - platform: template
     id: ha_outdoor_temp
@@ -1636,8 +1637,8 @@ sensor:
       return id(east_adjacency_factor);
 
   # ─── Sprint-14: close readback gaps for dispatcher-pushable params ─────────
-  # These 9 parameters are parsed by the /setpoints handler and stored
-  # in ESP32 globals, but pre-sprint-14 had no cfg_* readback sensor.
+  # These parameters are dispatcher-pushable ESPHome numbers stored in ESP32
+  # globals, but pre-sprint-14 had no cfg_* readback sensor.
   # Sprint-24.7 confirmation monitor can cover them once ingestor's
   # CFG_READBACK_MAP picks them up (handoff PR).
 

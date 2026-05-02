@@ -76,6 +76,10 @@ globals:
     type: float
     restore_value: no
     initial_value: "NAN"
+  - id: tempest_last_obs_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
   # Shelly globals
   - id: shelly_total_power_w
     type: float
@@ -174,6 +178,7 @@ udp:
               id(tempest_lightning_count) = lt_count;
               id(tempest_lightning_dist_km) = lt_dist;
               id(tempest_battery_v) = battery;
+              id(tempest_last_obs_ms) = millis();
 
               ESP_LOGI("tempest", "obs_st: %.1f°F, %.0f%% RH, wind %.1f mph, solar %.0f W/m², pressure %.1f hPa",
                        temp_f, rh, wind_avg, solar, pressure);

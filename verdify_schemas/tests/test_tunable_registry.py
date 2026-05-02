@@ -1,16 +1,14 @@
 """Phase-1 drift-guard tests for the single-source-of-truth tunable registry.
 
 The test set that closes the sprint-15 / sprint-15.1 drift-class bug:
-- Every REGISTRY entry's fw_clamp_lo/hi matches the `cf(val, lo, hi)` or
-  `ci((int)val, lo, hi)` call in `firmware/greenhouse/controls.yaml` for that
-  tunable's ESPHome key.
-- Every /setpoints handler key in controls.yaml is in REGISTRY (no dispatcher-
-  accepted keys that the schema doesn't know).
+- Every REGISTRY entry's fw_clamp_lo/hi matches the ESPHome number entity
+  min_value/max_value in `firmware/greenhouse/tunables.yaml` for that tunable's
+  ESPHome object_id. Direct aioesphomeapi pushes are now the setpoint path.
 - Every REGISTRY entry with a non-None cfg_readback_object_id maps bidirectionally
   with `ingestor/entity_map.py::CFG_READBACK_MAP`.
 - Every REGISTRY entry maps bidirectionally with `ingestor/entity_map.py::SETPOINT_MAP`.
 
-Runs in <50ms — pure text parsing of controls.yaml, no ESPHome build needed.
+Runs in <50ms — pure text parsing of tunables.yaml, no ESPHome build needed.
 Any drift → CI fails → operator fixes before merge.
 """
 
@@ -33,68 +31,74 @@ def controls_yaml() -> str:
     return path.read_text()
 
 
+@pytest.fixture(scope="module")
+def tunables_yaml() -> str:
+    path = REPO_ROOT / "firmware" / "greenhouse" / "tunables.yaml"
+    return path.read_text()
+
+
 # ─── Drift Guard #1 — firmware clamps match registry ─────────────────────
 
-# Parse `if(key == "<name>") { ... cf(val, <lo>, <hi>) ... }` and the int
-# variant `ci((int)val, <lo>, <hi>)`. Tolerate whitespace and number formats.
-_CLAMP_RE = re.compile(
-    r'if\s*\(\s*key\s*==\s*"(?P<key>[a-z0-9_]+)"\s*\)'
-    r"\s*\{[^}]*?"
-    r"(?:cf|ci)\s*\(\s*(?:\(int\))?\s*val\s*,\s*"
-    r"(?P<lo>-?\d+(?:\.\d+)?)\s*,\s*(?P<hi>-?\d+(?:\.\d+)?)"
-)
 _SETPOINT_LITERAL_RE = re.compile(
     r"\.(?P<field>[a-zA-Z0-9_]+)\s*=\s*"
     r"(?P<rhs>(?:uint32_t\()?-?\d+(?:\.\d+)?[fFuUlL]*(?:\))?)\s*,"
 )
+_NUMBER_BLOCK_RE = re.compile(
+    r"\n\s*-\s+platform:\s+template\n(?P<body>.*?)(?=\n\s*-\s+platform:\s+template\n|\nswitch:|\Z)", re.DOTALL
+)
+_NUMBER_NAME_RE = re.compile(r'\n\s*name:\s*"(?P<name>[^"]+)"')
+_MIN_RE = re.compile(r"\n\s*min_value:\s*(?P<value>-?\d+(?:\.\d+)?)")
+_MAX_RE = re.compile(r"\n\s*max_value:\s*(?P<value>-?\d+(?:\.\d+)?)")
 
 
-def _parse_controls_clamps(text: str) -> dict[str, tuple[float, float]]:
-    """Extract {canonical_name: (lo, hi)} from controls.yaml /setpoints handler."""
+def _esphome_object_id(name: str) -> str:
+    """Mirror ESPHome's object_id slug style used by entity_map.py."""
+    return re.sub(r"[^a-z0-9]", "_", name.lower())
+
+
+def _parse_number_bounds(text: str) -> dict[str, tuple[float, float]]:
+    """Extract {object_id: (min_value, max_value)} from ESPHome number entities."""
     out: dict[str, tuple[float, float]] = {}
-    for m in _CLAMP_RE.finditer(text):
-        key = m.group("key")
-        try:
-            lo = float(m.group("lo"))
-            hi = float(m.group("hi"))
-        except ValueError:
+    number_section = text.split("\nswitch:", 1)[0]
+    for m in _NUMBER_BLOCK_RE.finditer(number_section):
+        body = "\n" + m.group("body")
+        name_m = _NUMBER_NAME_RE.search(body)
+        min_m = _MIN_RE.search(body)
+        max_m = _MAX_RE.search(body)
+        if not (name_m and min_m and max_m):
             continue
-        out[key] = (lo, hi)
+        out[_esphome_object_id(name_m.group("name"))] = (float(min_m.group("value")), float(max_m.group("value")))
     return out
 
 
 class TestDriftGuard:
-    def test_registry_clamps_match_controls_yaml(self, controls_yaml: str) -> None:
-        """Every registry entry with fw_clamp_lo/hi must match controls.yaml.
+    def test_registry_clamps_match_tunables_yaml(self, tunables_yaml: str) -> None:
+        """Every registry entry with fw_clamp_lo/hi must match tunables.yaml.
 
         This is the drift guard. Sprint-15 and sprint-15.1 would have failed
         here if run pre-merge — they both added tunables to the schema
         without touching the MCP allowlist / readback. Guard catches
-        firmware clamp drift specifically: if someone changes `cf(val, 2, 15)`
-        to `cf(val, 3, 15)` in controls.yaml and doesn't update the registry,
-        this fails.
+        firmware clamp drift specifically: if someone changes a number
+        min_value/max_value and doesn't update the registry, this fails.
         """
-        clamps = _parse_controls_clamps(controls_yaml)
+        bounds = _parse_number_bounds(tunables_yaml)
         # Only check numeric tunables with explicit fw_clamp declared.
         to_check = {n: d for n, d in REGISTRY.items() if d.kind == "numeric" and d.fw_clamp_lo is not None}
         missing: list[str] = []
         mismatched: list[str] = []
         for name, d in to_check.items():
-            # Controls.yaml `/setpoints` handler uses canonical names (not ESP
-            # object_ids) as the `key == "..."` string. Verified in
-            # controls.yaml:1369+ for sprint-15/15.1 additions.
-            key = name
-            if key not in clamps:
+            key = d.esp_object_id
+            if key not in bounds:
                 missing.append(name)
                 continue
-            lo, hi = clamps[key]
+            lo, hi = bounds[key]
             if abs(lo - d.fw_clamp_lo) > 1e-6 or abs(hi - d.fw_clamp_hi) > 1e-6:
-                mismatched.append(f"{name}: registry=({d.fw_clamp_lo}, {d.fw_clamp_hi}) controls.yaml=({lo}, {hi})")
+                mismatched.append(f"{name}: registry=({d.fw_clamp_lo}, {d.fw_clamp_hi}) tunables.yaml=({lo}, {hi})")
         if missing:
             pytest.fail(
                 f"Registry has {len(missing)} tunables with fw_clamp declared "
-                f"but no matching `if(key == ...)` in controls.yaml: "
-                f"{missing[:10]}. Either add to controls.yaml or remove "
+                f"but no matching ESPHome number in tunables.yaml: "
+                f"{missing[:10]}. Either add to tunables.yaml or remove "
                 f"fw_clamp_lo/hi from registry."
             )
         if mismatched:

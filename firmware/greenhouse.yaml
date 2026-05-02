@@ -26,7 +26,7 @@ esphome:
     - lib/greenhouse_types.h
     - lib/greenhouse_logic.h
   # Lutron LEAP TLS disabled (causes ESP32 crash — TLS heap exhaustion)
-  # Grow lights now controlled via HA REST API with long-lived token
+  # Grow lights use HA native service calls; no on-device HTTP client.
   # Cold-start safety: turn every relay OFF before the first control pass
   on_boot:
     priority: 600
@@ -141,22 +141,12 @@ wifi:
     subnet:    255.255.255.0
     dns1:      192.168.10.1
   reboot_timeout: 300s  # Reboot if WiFi down for 5 minutes
-  ap:
-    ssid: "greenhouse Fallback"
-
-captive_portal:
 
 # Disabled 2026-04-27: ESPHome web_server keeps several TCP sockets and
 # response buffers alive on a controller that is already seeing heap-pressure
 # reboots. HA API, MQTT logs, OTA, and the ingestor provide the operational
 # surfaces we actually use; browser access is not worth the RAM cost.
 # web_server:
-
-# ────────────────────────────── HTTP Client ─────────────────────────────────
-# Used by grow light switches to call HA REST API (Lutron bridge)
-http_request:
-  id: http_client
-  timeout: 2s
 
 logger:
   baud_rate: 0
@@ -167,11 +157,10 @@ logger:
     api: WARN
     ota: WARN
     mdns: WARN
-    captive_portal: WARN
     web_server: WARN
-    # Control + Modbus at INFO (state transitions, relay commands, probe failures)
+    # Control at INFO for state transitions; Modbus detail is covered by probe health.
     lambda: INFO
-    modbus_controller: INFO
+    modbus_controller: WARN
     sensor: WARN
 
 # ────────────────────────────── API / OTA ─────────────────────────────────
@@ -194,7 +183,7 @@ mqtt:
   discovery: false
   log_topic:
     topic: "greenhouse/vallery/log"
-    level: INFO
+    level: WARN
   birth_message:
     topic: "greenhouse/vallery/status"
     payload: "online"
