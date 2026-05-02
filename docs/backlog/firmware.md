@@ -7,6 +7,12 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 - [ ] **48-hour v2 bake + reboot forensics follow-through.** Behavior-changing OTA for `2026.4.27.2009.2b5f2a5` began at `2026-04-28 02:12:25 UTC`; a wrapper-only main redeploy later put `2026.4.27.2040.c1a6403` live at `2026-04-28 02:41:54 UTC`. Sensor-health is `PASS 27 / FAIL 0 / WARN 0`, open critical/high alerts are `0`, and there are no post-OTA `Guru/Panic` / `Task WDT` resets in the sampled window. Keep OTA freeze intact during the bake. Current evidence reframes the old "midday crash-loop" as broader JSON/API/crash-forensics work; see [`docs/firmware-v2-postdeploy-forensics-2026-04-27.md`](../firmware-v2-postdeploy-forensics-2026-04-27.md).
 - [ ] **Contract + alert drift guard PR.** `firmware/contracts-alert-drift` makes `vpd_low` explicitly dispatcher/band-owned, adds expected-firmware-version mismatch alerting, and adds static drift guards for firmware override tags, `sw_mister_closes_vent` routing, and MCP Tier 1 validation.
 
+**Launch support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
+
+- [ ] **F-L1.1 Architecture fact review.** Verify public claims for ESP32 loop cadence, relay/safety ownership, controller state count, sensor paths, and "LLM does not flip relays" wording.
+- [ ] **F-L1.2 Bill-of-materials fact pack.** Provide launch-safe list of ESP32 board, relay board, RS485 probes, soil sensors, misters, heaters, fans, vent actuator, flow meter, and sensor/entity counts.
+- [ ] **F-L0 Freeze discipline.** No launch-driven behavior-changing OTA. Firmware changes remain Track A only and must obey replay/invariant/freeze rules.
+
 ## Recently landed
 
 - **`2b5f2a5` / firmware PR #37** — v2 controller deployment, controlled fog+heat assist, replay/invariant/test coverage, ESPHome worktree deploy cleanup, rollback path cleanup, and final OTA of `2026.4.27.2009.2b5f2a5`. Validation: `make lint`, `make test`, `make test-firmware`, `make firmware-invariants`, `make firmware-check`, replay diff, OTA, and post-deploy sensor-health all passed. `/srv/greenhouse/esphome` symlink farm was retired; `make firmware-check` / `make firmware-deploy` now compile from the active git worktree.

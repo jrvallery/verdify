@@ -23,9 +23,14 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 
 ## In flight
 
-- Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope — already merged
-  into an ingestor sprint commit (`47f8154`). Once the parent merges to
-  main, genai's MCP boundary is fully typed.
+**Launch narrative + lesson credibility support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
+
+- [ ] **G-L0.3 Lesson canonicalization semantics.** Define how near-duplicate machine lessons collapse into canonical lessons with `validated_n`, confidence, source lesson IDs, supersession/retirement, and raw visibility. Must address repeated bias/mist findings before launch.
+- [ ] **G-L0.4 Daily-plan story support.** Provide renderer-facing guidance for leading plan pages with hypothesis/result/rationale and suppressing unchanged tactical parameters from the default reading path.
+- [ ] **G-L1.7 Launch response pack.** Prepare concise technical answers for HN/Reddit: why not PID, LLM not in real-time loop, ESP32 safety ownership, VPD physics, shade-cloth limits, and what "self-improving" does and does not mean.
+- [ ] **G-L2.1 Weekly proof cadence.** Define the weekly "Verdify this week" planner summary inputs: weather faced, planner score, stress windows, lessons graduated, failures, repairs.
+
+Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; genai's MCP boundary is typed.
 
 ## Tracked list
 

@@ -2,6 +2,21 @@
 
 Per-agent backlogs live in `docs/backlog/{agent}.md`. This file is the index + "who's on what this cycle."
 
+## Launch command (2026-05-02)
+
+Broad launch is now a cross-agent release train. Canonical launch gates live in [`docs/launch/README.md`](launch/README.md); task tracking lives in [`docs/backlog/launch.md`](backlog/launch.md).
+
+Current launch posture: **not broad-launch ready** until the P0 gates are complete.
+
+| Owner | Launch focus | Backlog |
+|---|---|---|
+| `coordinator` / Jason | Privacy/security scrub, launch sequencing, identity/code-transparency decisions, final copy approval | `docs/backlog/launch.md` |
+| `web` | Launch page/homepage proof path, lessons curation, daily-plan readability, OG card, Grafana public/fallback QA, metrics consumption, architecture/BOM/cost/outage pages | `docs/backlog/web.md` |
+| `genai` | Lesson canonicalization semantics, planner narrative, HN response pack, weekly summary inputs | `docs/backlog/genai.md` |
+| `ingestor` | Public metrics/data-health contract, plan delta support, sample export, freshness gates | `docs/backlog/ingestor.md` |
+| `firmware` | Safety/control-split facts, BOM/control claims, no launch-blocking OTA unless Track A safety requires it | `docs/backlog/firmware.md` |
+| `saas` | Public Grafana/access checks, waitlist/capture option, Cloudflare/Traefik/public API implications | `docs/backlog/saas.md` |
+
 ## Current cycle (as of 2026-04-20)
 
 | Agent | Sprint | Status | Detail |

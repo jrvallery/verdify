@@ -2,6 +2,17 @@
 
 Coordinator-owned queue. Items that span 2+ agent scopes, touch shared territory, or are high-stakes enough to warrant single-driver execution.
 
+## Launch coordination
+
+Launch work is tracked in [`docs/backlog/launch.md`](launch.md) with the command center in [`docs/launch/README.md`](../launch/README.md). Coordinator owns:
+
+- [ ] **Launch privacy/security gate.** Define and enforce the public scrub boundary before broad launch.
+- [ ] **Launch identity/code transparency decisions.** Jason decides attribution and repo/prompt visibility before HN/Reddit.
+- [ ] **Public API and indexing stance.** Coordinator decides which API/Grafana/site surfaces are publicly reachable and indexable before broad launch.
+- [ ] **Public proof contract.** Coordinate any DB view/schema/API contract needed for live homepage metrics and data-health freshness.
+- [ ] **Launch sequencing.** Hold broad launch until P0 gates are closed; approve any soft-launch exception explicitly.
+- [ ] **Cross-agent release train.** Keep web/genai/ingestor/firmware/saas launch tasks ordered and unblock handshakes.
+
 ## Schemas / contracts
 
 - [x] **Per-alert-type discriminated union for `AlertEnvelope`.** Requested by `ingestor`. `AlertEnvelope` now preserves the existing model API while validating through a tagged per-alert registry covering every current alert writer, including planner, API, dispatcher, heap, firmware, and setpoint-confirmation alerts.

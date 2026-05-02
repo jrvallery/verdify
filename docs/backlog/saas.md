@@ -10,6 +10,17 @@ Owned by the [`saas`](../agents/saas.md) agent. Cloud migration, multi-tenancy, 
 
 ---
 
+## Launch Support — Public Proof + Capture
+
+Coordinated through [`docs/backlog/launch.md`](launch.md). These are launch support tasks, not a replacement for Sprint 10 cloud hardening.
+
+- [ ] **S-L0.7 Public Grafana access QA.** Verify `graphs.verdify.ai` full-dashboard and iframe URLs in incognito desktop/mobile and in-app browsers. Fix auth/robots/resource-load failures or provide static fallback path with web.
+- [ ] **S-L0.9 Public API lockdown.** Inventory unauthenticated internet-facing API routes. Mutating crop/event/harvest/light routes must be authenticated, blocked, or removed from public routing before broad launch.
+- [ ] **S-L0.10 Robots/indexing alignment.** Align Cloudflare/Traefik/API/Grafana headers with site metadata and `robots.txt`; API and Grafana surfaces are noindex unless coordinator approves indexing.
+- [ ] **S-L2.2 Waitlist/newsletter decision.** Propose the lowest-risk capture path: static form provider, Cloud Run endpoint, or explicit no-capture decision. No secrets in repo or static site.
+- [ ] **S-L1.3 Public cost callout support.** Provide cloud/API/runtime cost facts for the launch page if current local-only numbers are incomplete.
+- [ ] **S-L0.1 Public infra scrub.** Audit public dashboards/pages for internal hostnames, service URLs, credentials, local IPs, raw device IDs, or security-sensitive metadata.
+
 ## Sprint 7: SaaS Foundation — COMPLETE ✅
 
 All items done. `greenhouse_id` on all tables, `greenhouses` registry table, parameterized scripts, greenhouse-scoped API endpoints.
