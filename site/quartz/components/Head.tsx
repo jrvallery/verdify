@@ -59,7 +59,7 @@ export default (() => {
           name: "Verdify",
           url: `https://${cfg.baseUrl}`,
           description:
-            "An ESP32-run greenhouse where Iris uses Claude to write bounded tactical plans, while telemetry, costs, failures, and lessons stay public.",
+            "An ESP32-run greenhouse where Iris uses OpenClaw, local Gemma4 inference, memory, forecasts, and lessons to write bounded tactics while telemetry, costs, failures, and lessons stay public.",
         },
         {
           "@type": "WebPage",
