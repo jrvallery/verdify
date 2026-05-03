@@ -30,7 +30,7 @@ This sprint is intentionally **not** a firmware behavior sprint, SaaS sprint, or
 
 | ID | Status | Owner | Task | Acceptance | Dependencies |
 |---|---|---|---|---|---|
-| L1.1 | done | web + firmware + ingestor + genai | Architecture SVG | Shareable diagram shows ESP32 -> ingestor/Home Assistant -> TimescaleDB -> Iris/Claude -> plan_journal -> dispatcher -> ESP32; labels evidence loop and safety split without brittle table/view/dashboard counts | Agent factual review |
+| L1.1 | done | web + firmware + ingestor + genai | Architecture SVG | Shareable diagram shows ESP32 -> ingestor/Home Assistant -> TimescaleDB -> OpenClaw/Iris local Gemma4 + cloud peer -> plan_journal -> dispatcher -> ESP32; labels evidence loop and safety split without brittle table/view/dashboard counts | Agent factual review |
 | L1.2 | done | web + firmware + Jason | Bill of materials | Sensor/probe/ESP32/relay/mister/heater list exists with enough detail for homelab readers | Privacy scrub |
 | L1.3 | done | web + saas/coordinator | Cost callout | Public page gives one clear operating-cost/API-cost summary without corrupted dollar signs | Current cost query |
 | L1.4 | done | web + coordinator | Outage story | Evidence page owns April 22-25 zero-plan/VPD-stress run as a transparent incident, not an unexplained archive gap | Data pull from plan archive |
@@ -58,6 +58,7 @@ This sprint is intentionally **not** a firmware behavior sprint, SaaS sprint, or
 | L2.6 | genai + coordinator | Counterfactual replay roadmap | Public roadmap explains replaying recent telemetry with alternate tunables before considering RL or simulator-trained policies | L1.13 |
 | L2.7 | web + genai + ingestor | Full daily lifecycle artifact | One public example shows forecast -> plan -> tunables -> telemetry -> score -> lesson, with sample JSON/CSV artifacts | L1.14 |
 | L2.8 | web + ingestor + Jason | Crop-steering maturity roadmap | Public roadmap covers substrate sensors, dryback/irrigation windows, pH/EC/DO, DLI correction, and shade cloth automation without implying these are complete | L1.14 |
+| L2.9 | genai + ingestor + web | Plan-memory semantic retrieval hardening | If Verdify publicly claims semantic search over previous plans, add explicit embeddings or retrieval indexes for `plan_journal` outcomes; until then, public copy should describe prior plans as structured memory | Current implementation exposes plan history through structured context, scorecards, and lessons |
 
 ## Jason Decisions
 

@@ -11,7 +11,7 @@ Verdify is a public AI-assisted physical-control experiment. The AI plans, the c
 
 Short version:
 
-> An ESP32 runs my greenhouse locally. Iris uses Claude to write bounded tactical plans at solar milestones and event triggers. The ESP32 owns relay control and safety every 5 seconds. The plans, telemetry, costs, failures, and lessons are public.
+> An ESP32 runs my greenhouse locally. Iris is an OpenClaw agent with local Gemma4 inference, greenhouse memory, semantic context, forecasts, prior plans, scorecards, and lessons. Iris writes bounded tactics; the ESP32 owns relay control and safety every 5 seconds. The plans, telemetry, costs, failures, and lessons are public.
 
 Do not lead with:
 
@@ -22,7 +22,7 @@ Do not lead with:
 
 ## HN First Comment Draft
 
-I built this in a 367 sq ft greenhouse in Longmont, Colorado. The interesting part is the control split: Iris uses Claude to write tactical plans and bounded setpoints, but an ESP32 owns deterministic relay control and safety every 5 seconds.
+I built this in a 367 sq ft greenhouse in Longmont, Colorado. The interesting part is the split between local agentic planning and deterministic edge control. Iris is an OpenClaw agent with a local Gemma4-26B path for routine inference. It reads live telemetry, forecast, crop bands, prior plans, scorecards, validated lessons, and the website pages that document the greenhouse's physical constraints. It writes bounded setpoints, but an ESP32 owns deterministic relay control and safety every 5 seconds.
 
 The site publishes the plan archive, telemetry, scorecards, costs, lessons, and known failures. I am trying to make the AI layer falsifiable: every plan says what it expects, the next cycle measures what happened, and useful findings become lessons.
 
@@ -38,7 +38,15 @@ PID is useful for stable single-loop control. This greenhouse is a coupled multi
 
 No. Iris writes tactical parameters. The dispatcher validates them. The ESP32 evaluates mode and relays every 5 seconds. If the planner or network path fails, firmware keeps enforcing the last valid setpoints and safety rails.
 
-### What happens when Anthropic is down?
+### Why local Gemma4 instead of only a hosted model?
+
+The greenhouse creates lots of routine reasoning events: heartbeats, transitions, minor forecast shifts, and small deviations. Those should be cheap, local, and inspectable. OpenClaw lets Iris route routine work to a local Gemma4-26B instance and reserve heavyweight cloud reasoning for milestone reviews or major changes. Both paths use the same MCP tools, trigger IDs, dispatcher validation, and ESP32 safety boundary.
+
+### What memory does Iris use?
+
+Iris is not reasoning from a blank prompt. The context bundle includes live telemetry, 72-hour forecast, crop bands, equipment state, scorecards, previous plan hypotheses, outcome reviews, active lessons, alerts, and the static site pages that describe the greenhouse structure, zones, equipment, crops, known limits, and build notes. Embedding-backed similarity exists for observations where available; plan outcomes are exposed as structured memory through `plan_journal`, scorecards, and lessons.
+
+### What happens when local inference or the cloud peer is down?
 
 The greenhouse continues running. The planner stops producing fresh tactics, the archive shows the gap, and data-health goes stale if telemetry is affected. The April 22-25 outage is public because the claim is auditability, not perfection.
 
@@ -95,6 +103,8 @@ Koidra, Source.ag, and Blue Radix are commercial grower-augmentation systems. Ve
 ## Phrases To Use
 
 - "The AI plans; firmware enforces."
+- "Iris is local-first, but never safety-critical."
+- "OpenClaw routes routine reasoning to local Gemma4 and escalates major reviews."
 - "Every plan is a hypothesis."
 - "The greenhouse keeps running if the planner goes away."
 - "This is an operational comparison, not a controlled A/B trial."

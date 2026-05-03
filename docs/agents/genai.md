@@ -40,7 +40,7 @@ Iris the planner agent, the MCP tool surface, prompt templates, plan scoring and
 
 ## Ask coordinator before
 
-- Switching planner models (Claude ↔ Gemini, or version bumps with behavior impact)
+- Switching planner models or routing policy (local ↔ cloud, Gemma/version bumps, or behavior-impacting model changes)
 - Adding a new MCP tool (affects Iris's action space — review for safety + cost)
 - Changing the scorecard formula or plan evaluation rubric (affects how performance is measured across sprints)
 - Rewriting the core prompt template in a way that changes plan structure (downstream renderers depend on plan shape)

@@ -9,7 +9,7 @@ Owned by the [`web`](../agents/web.md) agent.
 - [x] **W-L0.2 Live proof path.** Homepage proof cards consume `/api/v1/public/home-metrics`; stale data is labeled and Grafana panels remain as fallback receipts.
 - [x] **W-L0.3 Lessons credibility pass.** `scripts/generate-lessons-page.py` now publishes canonical lessons with validation counts by default and keeps the raw machine stream labeled behind `<details>`.
 - [x] **W-L0.4 Daily plan readability.** `scripts/generate-daily-plan.py` leads cycles with score/outcome/rationale and changed parameters; full secondary dumps are behind `<details>`. Verified against `/plans/2026-04-29`.
-- [x] **W-L0.5 Launch story page.** `/` now has the ESP32/Claude control-split narrative, greenhouse visuals, live proof cards, and evidence/architecture paths.
+- [x] **W-L0.5 Launch story page.** `/` now has the OpenClaw/Iris local-inference narrative, ESP32 control-split, greenhouse visuals, live proof cards, and evidence/architecture paths.
 - [x] **W-L0.6 Social preview.** Homepage emits explicit OG/Twitter metadata and uses the snow greenhouse photo for the share card.
 - [x] **W-L0.7 Public Grafana/fallback QA.** Grafana health, anonymous dashboard boot data, d-solo URLs, and JS app bundles return successfully with noindex headers; mobile/in-app smoke remains a human pre-post check.
 - [x] **W-L0.8 Copy correctness.** Public Markdown/HTML has no raw `$123` cost strings, ambiguous `solar-powered` claims, family names, camera model, or local IP strings.

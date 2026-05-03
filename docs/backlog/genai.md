@@ -79,7 +79,7 @@ Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; ge
 - `scripts/smoke-sprint20.py` (post-G11: `smoke-feedback-loop.py`) —
   end-to-end against live stack.
 - Cost sanity — coordinator reviews if avg plan-cycle cost inflates >20%.
-- Model swaps (Claude ↔ Gemini, version bumps) — require coordinator sign-off.
+- Model swaps or routing-policy changes (local ↔ cloud, Gemma/version bumps, or behavior-impacting model changes) — require coordinator sign-off.
 
 ## Handshake state
 

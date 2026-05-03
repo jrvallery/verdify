@@ -4,7 +4,7 @@
 
 367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95°F solar peaks. Mixed crops. One deterministic controller.
 
-About 172 ESPHome entities feed an 8-state firmware controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Iris uses Claude through OpenClaw to write bounded tactical plans at solar milestones and event triggers. The system measures outcomes, scores plans, and feeds validated lessons into future planning.
+About 172 ESPHome entities feed an 8-state firmware controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Iris runs through OpenClaw with a local Gemma4-26B inference path for routine planning and a larger cloud peer for heavyweight reviews. It reads telemetry, forecasts, prior plans, scorecards, site context, and validated lessons before writing bounded tactical plans. The system measures outcomes, scores plans, and feeds validated lessons into future planning.
 
 **[verdify.ai](https://verdify.ai)**
 
@@ -22,12 +22,12 @@ TimescaleDB (telemetry, views, scorecards, lessons)
   ├── MCP Server (typed tools for Iris)
   └── Quartz (static site with embedded panels)
 
-Iris Planner (Claude via OpenClaw)
+Iris Planner (OpenClaw: local Gemma4 + cloud peer)
   └── Event-driven: sunrise, transitions, sunset, forecast, deviation
       → MCP tools → set_tunable() → Slack #greenhouse
 ```
 
-The greenhouse control core runs on a single VM. External APIs provide planning, weather, and public delivery support; real-time relay control stays local.
+The greenhouse control core runs on a single VM. Local GPU inference handles routine Iris reasoning; external APIs provide weather, optional heavyweight reasoning, and public delivery support. Real-time relay control stays local on the ESP32.
 
 ## Components
 
@@ -70,7 +70,7 @@ make help              # List all targets
 The control system has three layers:
 
 1. **Crop target band** — diurnal VPD/temperature profiles for active crops, computed from `fn_band_setpoints()` every 5 minutes
-2. **AI planner** — Iris reads live context (scorecard, forecast, lessons, sensors) and writes 72h tactical setpoint plans with performance targets
+2. **AI planner** — Iris reads live context (scorecard, forecast, lessons, sensors), plan memory, and static greenhouse documentation, then writes 72h tactical setpoint plans with performance targets
 3. **ESP32 state machine** — 8 priority-ordered states evaluated every 5 seconds, enforcing the band with fans, heaters, misters, and fog
 
 The crops set the targets. The AI tunes the tactics. The controller enforces them. The telemetry proves what happened.

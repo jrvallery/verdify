@@ -26,7 +26,7 @@ Pattern to borrow: edge-safe / cloud-smart greenhouse control. Local determinist
 Verdify action:
 
 - Add a public "Why the AI does not control relays" page.
-- State the failure behavior plainly: if Anthropic, Wi-Fi, or the planner is down, the ESP32 keeps enforcing the last safe bounded plan and firmware safeguards.
+- State the failure behavior plainly: if local inference, the cloud peer, Wi-Fi, or the planner is down, the ESP32 keeps enforcing the last safe bounded plan and firmware safeguards.
 - Position Verdify's 72-hour tactical planning and public scorecards as stronger than threshold-triggered consultative LLM advice.
 
 ### IOGRUCloud
@@ -131,4 +131,3 @@ Soon after launch:
 - Add counterfactual replay roadmap.
 - Add crop-steering roadmap: substrate sensors, pH/EC/DO, DLI correction, shade cloth automation.
 - Add progressive autonomy L1-L4 roadmap.
-
