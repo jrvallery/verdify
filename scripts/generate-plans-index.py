@@ -55,7 +55,7 @@ def main():
             experiment = row[6].strip()[:80]
             lines.append(
                 f'  <div class="data-row"><strong>{link}</strong>'
-                f"<span>{escape(row[1].strip())} cycles; score {escape(row[7].strip())}; cost ${escape(row[4].strip())}</span>"
+                f"<span>{escape(row[1].strip())} cycles; score {escape(row[7].strip())}; cost USD {escape(row[4].strip())}</span>"
                 f"<p>VPD stress {escape(row[2].strip())}h; heat stress {escape(row[3].strip())}h; "
                 f"peak {escape(row[5].strip())}°F. Experiment: {escape(experiment)}.</p></div>"
             )

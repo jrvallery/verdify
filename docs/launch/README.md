@@ -2,7 +2,7 @@
 
 Updated: 2026-05-02
 Launch owner: coordinator / iris-dev
-Launch posture: **not broad-launch ready until P0 gates are closed**
+Launch posture: **P0 hardening deployed; broad-launch timing now depends on Jason's identity/copy/video decisions**
 
 Source triage: [`feedback-triage-2026-05-02.md`](feedback-triage-2026-05-02.md)
 
@@ -16,19 +16,19 @@ This replaces weaker launch framing like "self-improving AI greenhouse" when add
 
 | Gate | Owner | Status | Acceptance |
 |---|---|---|---|
-| L0.1 Privacy/security scrub | coordinator + Jason | pending | No children's names, sensitive household details, local IPs, raw device IDs, tokens, alert channels, or exposed camera/security layout on public pages/dashboards. |
-| L0.2 Public proof path | web + saas/coordinator | pending | Homepage or `/launch` shows live proof without auth bounce: current temp, VPD, outdoor temp, last plan timestamp, last plan score. Static fallback snapshot exists if Grafana fails. |
-| L0.3 Lessons credibility | web + genai | pending | Default lessons page shows 15-20 distinct curated lessons with duplicate families collapsed into a canonical lesson plus validation count. Raw firehose remains accessible but labeled. |
-| L0.4 Daily plan readability | web + genai | pending | Daily plan pages lead with score, hypothesis, result, and changed parameters; unchanged parameter dumps are behind `<details>` or raw view. |
-| L0.5 Launch story page | web + Jason | pending | `/` or `/launch` has a hero number, snow/greenhouse visual, launch one-liner, proof cards, architecture link, and known-limits link. |
-| L0.6 Social preview | web | pending | Explicit `og:title`, `og:description`, `og:image`, Twitter card tags; verified with a local/static inspector and live URL after deploy. |
-| L0.7 Grafana public QA | web + saas/coordinator | pending | `graphs.verdify.ai` dashboards and embedded panels load in incognito Chrome/Safari/mobile and in-app browsers, or pages show static fallback snapshots. |
-| L0.8 Launch assets | Jason + web | pending | 30-90s operations screen recording, architecture SVG, BOM, cost callout, outage story, and audience-specific launch copy drafts exist. |
-| L0.9 Public API lockdown | coordinator + web + saas | pending | Unauthenticated internet-facing API routes are read-only/launch-safe; mutating routes return 401/403 or are not publicly routed; `/docs`/OpenAPI exposure is intentional. |
-| L0.10 Robots/indexing policy | coordinator + web + saas | pending | `robots.txt`, sitemap, page metadata, Grafana/API headers, and Traefik `X-Robots-Tag` agree on what indexes and what stays noindex. |
-| L0.11 Public metrics/freshness contract | ingestor + coordinator + web | pending | One public-safe metrics/data-health contract powers launch proof cards and stale-data labels; no hard-coded homepage counters. |
+| L0.1 Privacy/security scrub | coordinator + Jason | done | Public Markdown and generated HTML scrubbed for family names, local IPs, camera model/security layout, ambiguous cloud/solar claims, and raw dollar-sign rendering. API/Grafana surfaces carry `X-Robots-Tag: noindex, nofollow`. |
+| L0.2 Public proof path | web + saas/coordinator | done | Homepage shows live read-only API proof cards for current temp, VPD, outdoor temp, planner score, plan count, and data-health status, with freshness/stale labeling. |
+| L0.3 Lessons credibility | web + genai | done | Default lessons page shows 20 canonical lessons distilled from active machine rows, with validation counts; raw machine stream is behind a labeled details section. |
+| L0.4 Daily plan readability | web + genai | done | Daily plan pages lead with cycle metrics, score/outcome, hypothesis/rationale, and changed secondary parameters; full secondary dumps are behind `<details>`. |
+| L0.5 Launch story page | web + Jason | done | Homepage now leads with the ESP32/Claude/control-split narrative, greenhouse visuals, live proof cards, Grafana fallbacks, and direct evidence/architecture paths. |
+| L0.6 Social preview | web | done | Homepage emits explicit OG/Twitter tags and uses the real snow greenhouse photo for `og:image`. |
+| L0.7 Grafana public QA | web + saas/coordinator | done | Public dashboard and d-solo URLs return anonymous Viewer boot data; app bundles load with 200 responses; Grafana health and headers verified. Jason should still smoke-test mobile/in-app browsers before HN. |
+| L0.8 Launch assets | Jason + web | split | Architecture SVG, equipment/BOM surface, cost callout, and April 22-25 outage story exist. The 30-90s screen recording and final audience copy remain Jason-owned launch-day assets, not code blockers. |
+| L0.9 Public API lockdown | coordinator + web + saas | done | Public API exposes read-only proof/data-health endpoints; mutating routes require `X-Verdify-API-Key` unless explicitly overridden for dev; `/docs` is hidden by default and `/openapi.json` is noindexed for contract checks. |
+| L0.10 Robots/indexing policy | coordinator + web + saas | done | Root `robots.txt`, canonical metadata, API/Grafana noindex headers, and Traefik security headers are aligned. |
+| L0.11 Public metrics/freshness contract | ingestor + coordinator + web | done | `/api/v1/public/home-metrics` and `/api/v1/public/data-health` power live proof cards and stale-data status without hard-coded homepage counters. |
 
-Broad launch means HN/Reddit. X/LinkedIn soft launch can happen after L0.1-L0.6 and L0.9-L0.11 if Jason explicitly accepts remaining proof-path risk.
+Broad launch means HN/Reddit. The remaining launch decisions are attribution, public code stance, final HN/Reddit copy, and whether to record the short operations clip before posting.
 
 ## Agent Assignments
 

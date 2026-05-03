@@ -8,6 +8,7 @@ Usage:
     uvicorn main:app --host 0.0.0.0 --port 8300
 """
 
+import hmac
 import json
 import os
 import sys
@@ -16,7 +17,8 @@ from datetime import date
 from typing import Annotated
 
 import asyncpg
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
@@ -52,6 +54,10 @@ from verdify_schemas import (  # noqa: E402
     ObservationCreate,
     ObservationWithCrop,
     PositionCurrentEntry,
+    PublicDataHealthCheck,
+    PublicDataHealthResponse,
+    PublicHomeMetrics,
+    PublicPipelineHealthSource,
     ZoneDetail,
     ZoneListItem,
 )
@@ -88,7 +94,27 @@ app = FastAPI(
     version="1.0.0",
     description="Greenhouse crop management — inventory, observations, health tracking",
     lifespan=lifespan,
+    docs_url="/docs" if os.environ.get("VERDIFY_ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"} else None,
+    redoc_url="/redoc" if os.environ.get("VERDIFY_ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"} else None,
+    # Keep OpenAPI available for contract/drift tests, but noindex it at
+    # Traefik/API headers and keep the interactive docs hidden by default.
+    openapi_url="/openapi.json",
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://verdify.ai", "https://www.verdify.ai", "http://localhost:8080"],
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+
+@app.middleware("http")
+async def noindex_api_responses(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
 
 # ── Models ──
 #
@@ -97,6 +123,41 @@ app = FastAPI(
 # (API, MCP crops tool, vault-crop-writer, planner) shares the same shape.
 
 DEFAULT_GREENHOUSE = "vallery"
+WRITE_API_KEY_ENV = "VERDIFY_WRITE_API_KEY"
+ALLOW_UNAUTHENTICATED_WRITES_ENV = "VERDIFY_ALLOW_UNAUTHENTICATED_WRITES"
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def require_write_access(
+    request: Request,
+    x_verdify_api_key: Annotated[str | None, Header(alias="X-Verdify-API-Key")] = None,
+) -> None:
+    """Fail closed for mutating routes unless an operator key is configured."""
+    if _truthy_env(ALLOW_UNAUTHENTICATED_WRITES_ENV):
+        return
+    expected = os.environ.get(WRITE_API_KEY_ENV)
+    if expected and x_verdify_api_key and hmac.compare_digest(expected, x_verdify_api_key):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=f"Write API disabled for unauthenticated request to {request.url.path}",
+    )
+
+
+def _to_float(value) -> float | None:
+    return float(value) if value is not None else None
+
+
+def _overall_data_health(rows: list[asyncpg.Record]) -> str:
+    statuses = {str(r["status"]).lower() for r in rows}
+    if "fail" in statuses:
+        return "fail"
+    if "warn" in statuses:
+        return "warn"
+    return "ok"
 
 
 # ── Setpoints (ESP32 pulls this every 5 min) ──
@@ -227,7 +288,12 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
 
 
 @app.post("/api/v1/greenhouses/{greenhouse_id}/lights/{circuit}/{action}")
-async def control_lights(greenhouse_id: str, circuit: str, action: str):
+async def control_lights(
+    greenhouse_id: str,
+    circuit: str,
+    action: str,
+    _write_access: None = Depends(require_write_access),
+):
     """Publish light command to MQTT for the Lutron bridge to execute."""
     if circuit not in ("main", "grow") or action not in ("on", "off"):
         raise HTTPException(status_code=400, detail="Invalid circuit or action")
@@ -255,8 +321,10 @@ async def root():
         "service": "verdify-api",
         "version": "1.0.0",
         "greenhouse": DEFAULT_GREENHOUSE,
-        "docs": "/docs",
+        "docs": "/docs" if app.docs_url else None,
         "status": "/api/v1/status",
+        "public_home_metrics": "/api/v1/public/home-metrics",
+        "public_data_health": "/api/v1/public/data-health",
     }
 
 
@@ -383,7 +451,11 @@ async def get_crop(crop_id: int):
 
 @app.post("/api/v1/greenhouses/{greenhouse_id}/crops", status_code=201)
 @app.post("/api/v1/crops", status_code=201)
-async def create_crop(crop: CropCreate, greenhouse_id: str = DEFAULT_GREENHOUSE):
+async def create_crop(
+    crop: CropCreate,
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    _write_access: None = Depends(require_write_access),
+):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -423,7 +495,7 @@ async def create_crop(crop: CropCreate, greenhouse_id: str = DEFAULT_GREENHOUSE)
 
 
 @app.put("/api/v1/crops/{crop_id}")
-async def update_crop(crop_id: int, crop: CropUpdate):
+async def update_crop(crop_id: int, crop: CropUpdate, _write_access: None = Depends(require_write_access)):
     async with pool.acquire() as conn:
         existing = await conn.fetchrow("SELECT * FROM crops WHERE id = $1", crop_id)
         if not existing:
@@ -474,7 +546,7 @@ async def update_crop(crop_id: int, crop: CropUpdate):
 
 
 @app.delete("/api/v1/crops/{crop_id}")
-async def delete_crop(crop_id: int):
+async def delete_crop(crop_id: int, _write_access: None = Depends(require_write_access)):
     async with pool.acquire() as conn:
         result = await conn.execute(
             "UPDATE crops SET is_active = false, updated_at = now() WHERE id = $1 AND is_active = true", crop_id
@@ -503,7 +575,11 @@ async def list_observations(crop_id: int, limit: int = 20):
 
 
 @app.post("/api/v1/crops/{crop_id}/observations", status_code=201)
-async def create_observation(crop_id: int, obs: ObservationCreate):
+async def create_observation(
+    crop_id: int,
+    obs: ObservationCreate,
+    _write_access: None = Depends(require_write_access),
+):
     async with pool.acquire() as conn:
         crop = await conn.fetchrow("SELECT zone, position, zone_id, position_id FROM crops WHERE id = $1", crop_id)
         if not crop:
@@ -578,7 +654,7 @@ async def list_events(crop_id: int, limit: int = 20):
 
 
 @app.post("/api/v1/crops/{crop_id}/events", status_code=201)
-async def create_event(crop_id: int, event: EventCreate):
+async def create_event(crop_id: int, event: EventCreate, _write_access: None = Depends(require_write_access)):
     async with pool.acquire() as conn:
         crop = await conn.fetchrow("SELECT id FROM crops WHERE id = $1", crop_id)
         if not crop:
@@ -716,6 +792,182 @@ async def planner_scorecard(scorecard_date: Annotated[date | None, Query(alias="
     return ScorecardResponse.from_metric_rows(rows)
 
 
+@app.get("/api/v1/public/data-health", response_model=PublicDataHealthResponse)
+async def public_data_health():
+    """Public-safe proof freshness and trust-ledger status for launch pages."""
+    async with pool.acquire() as conn:
+        generated_at = await conn.fetchval("SELECT now()")
+        check_rows = await conn.fetch(
+            """
+            SELECT check_name, lower(status) AS status, metric_value, threshold_value, details
+            FROM v_data_trust_ledger
+            ORDER BY
+              CASE lower(status) WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
+              check_name
+            """
+        )
+        pipeline_rows = await conn.fetch(
+            """
+            SELECT source, rows_1h, rows_24h, age_s, null_pct_1h
+            FROM v_data_pipeline_health
+            ORDER BY source
+            """
+        )
+
+    checks = [
+        PublicDataHealthCheck(
+            name=r["check_name"],
+            status=r["status"],
+            metric_value=_to_float(r["metric_value"]),
+            threshold_value=_to_float(r["threshold_value"]),
+            details=r["details"],
+        )
+        for r in check_rows
+    ]
+    pipeline_sources = [
+        PublicPipelineHealthSource(
+            source=r["source"],
+            rows_1h=r["rows_1h"],
+            rows_24h=r["rows_24h"],
+            age_s=r["age_s"],
+            null_pct_1h=_to_float(r["null_pct_1h"]),
+        )
+        for r in pipeline_rows
+    ]
+    return PublicDataHealthResponse(
+        generated_at=generated_at,
+        overall_status=_overall_data_health(check_rows),
+        checks=checks,
+        pipeline_sources=pipeline_sources,
+    )
+
+
+@app.get("/api/v1/public/home-metrics", response_model=PublicHomeMetrics)
+async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Launch-safe live metrics for verdify.ai proof cards."""
+    async with pool.acquire() as conn:
+        generated_at = await conn.fetchval("SELECT now()")
+        climate_summary = await conn.fetchrow(
+            """
+            SELECT count(*)::int AS climate_rows,
+                   COALESCE(
+                     round((extract(epoch FROM max(ts) - min(ts)) / 86400.0)::numeric, 1),
+                     0
+                   )::float AS climate_days
+            FROM climate
+            WHERE greenhouse_id = $1
+            """,
+            greenhouse_id,
+        )
+        latest_climate = await conn.fetchrow(
+            """
+            SELECT ts,
+                   extract(epoch FROM now() - ts)::int AS age_s,
+                   round(temp_avg::numeric, 1)::float AS indoor_temp_f,
+                   round(vpd_avg::numeric, 2)::float AS indoor_vpd_kpa,
+                   round(outdoor_temp_f::numeric, 1)::float AS outdoor_temp_f,
+                   round(outdoor_rh_pct::numeric, 1)::float AS outdoor_rh_pct
+            FROM climate
+            WHERE greenhouse_id = $1
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        active_crops = await conn.fetchval(
+            "SELECT count(*)::int FROM crops WHERE greenhouse_id = $1 AND is_active",
+            greenhouse_id,
+        )
+        plan_count = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM plan_journal
+            WHERE greenhouse_id = $1
+              AND plan_id LIKE 'iris-%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            """,
+            greenhouse_id,
+        )
+        lesson_count = await conn.fetchval(
+            "SELECT count(*)::int FROM planner_lessons WHERE greenhouse_id = $1 AND is_active",
+            greenhouse_id,
+        )
+        last_plan = await conn.fetchrow(
+            """
+            SELECT plan_id, created_at, extract(epoch FROM now() - created_at)::int AS age_s
+            FROM plan_journal
+            WHERE greenhouse_id = $1
+              AND plan_id LIKE 'iris-%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        score_rows = await conn.fetch(
+            "SELECT metric, value FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date)"
+        )
+        scorecard = {r["metric"]: _to_float(r["value"]) for r in score_rows}
+        open_critical_high = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM alert_log
+            WHERE greenhouse_id = $1
+              AND disposition = 'open'
+              AND severity IN ('critical', 'high')
+            """,
+            greenhouse_id,
+        )
+        data_checks = await conn.fetch(
+            """
+            SELECT check_name, lower(status) AS status, metric_value, threshold_value, details
+            FROM v_data_trust_ledger
+            ORDER BY
+              CASE lower(status) WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
+              check_name
+            """
+        )
+
+    warning_checks = [
+        PublicDataHealthCheck(
+            name=r["check_name"],
+            status=r["status"],
+            metric_value=_to_float(r["metric_value"]),
+            threshold_value=_to_float(r["threshold_value"]),
+            details=r["details"],
+        )
+        for r in data_checks
+        if r["status"] != "ok"
+    ]
+    return PublicHomeMetrics(
+        generated_at=generated_at,
+        greenhouse_id=greenhouse_id,
+        climate_rows=climate_summary["climate_rows"] if climate_summary else 0,
+        climate_days=climate_summary["climate_days"] if climate_summary else 0,
+        active_crops=active_crops or 0,
+        plan_count=plan_count or 0,
+        lesson_count=lesson_count or 0,
+        latest_climate_ts=latest_climate["ts"] if latest_climate else None,
+        latest_climate_age_s=latest_climate["age_s"] if latest_climate else None,
+        indoor_temp_f=latest_climate["indoor_temp_f"] if latest_climate else None,
+        indoor_vpd_kpa=latest_climate["indoor_vpd_kpa"] if latest_climate else None,
+        outdoor_temp_f=latest_climate["outdoor_temp_f"] if latest_climate else None,
+        outdoor_rh_pct=latest_climate["outdoor_rh_pct"] if latest_climate else None,
+        last_plan_id=last_plan["plan_id"] if last_plan else None,
+        last_plan_created_at=last_plan["created_at"] if last_plan else None,
+        last_plan_age_s=last_plan["age_s"] if last_plan else None,
+        planner_score_today=scorecard.get("planner_score"),
+        compliance_pct_today=scorecard.get("compliance_pct"),
+        cost_today_usd=scorecard.get("cost_total"),
+        water_today_gal=scorecard.get("water_used_gal"),
+        open_critical_high_alerts=open_critical_high or 0,
+        data_health_status=_overall_data_health(data_checks),
+        data_health_warnings=warning_checks[:8],
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Sprint 23 — Topology + crop-history endpoints
 # ═══════════════════════════════════════════════════════════════════════
@@ -808,7 +1060,12 @@ async def get_position(position_id: int, greenhouse_id: str = DEFAULT_GREENHOUSE
 
 
 @app.post("/api/v1/positions/{position_id}/plant", status_code=201)
-async def plant_at_position(position_id: int, body: CropCreate, greenhouse_id: str = DEFAULT_GREENHOUSE):
+async def plant_at_position(
+    position_id: int,
+    body: CropCreate,
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    _write_access: None = Depends(require_write_access),
+):
     """Create a new crop at a specific position. Validates slot is unoccupied.
 
     The unique-active-per-position partial index (migration 088) prevents
@@ -891,7 +1148,11 @@ async def get_crop_lifecycle(crop_id: int, greenhouse_id: str = DEFAULT_GREENHOU
 
 
 @app.post("/api/v1/crops/{crop_id}/clear")
-async def clear_crop(crop_id: int, operator: str | None = None):
+async def clear_crop(
+    crop_id: int,
+    operator: str | None = None,
+    _write_access: None = Depends(require_write_access),
+):
     """Mark a crop as inactive (cleared/removed). Trigger auto-sets cleared_at
     and logs a 'removed' crop_events row."""
     async with pool.acquire() as conn:
@@ -917,7 +1178,12 @@ class TransplantBody(BaseModel):
 
 
 @app.post("/api/v1/crops/{crop_id}/transplant")
-async def transplant_crop(crop_id: int, body: TransplantBody, greenhouse_id: str = DEFAULT_GREENHOUSE):
+async def transplant_crop(
+    crop_id: int,
+    body: TransplantBody,
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    _write_access: None = Depends(require_write_access),
+):
     """Move a crop to a new position. Logs a 'transplanted' event with old/new position_ids."""
     async with pool.acquire() as conn:
         crop = await conn.fetchrow(
@@ -975,7 +1241,12 @@ class HarvestBody(BaseModel):
 
 
 @app.post("/api/v1/crops/{crop_id}/harvest", status_code=201)
-async def harvest_crop(crop_id: int, body: HarvestBody, greenhouse_id: str = DEFAULT_GREENHOUSE):
+async def harvest_crop(
+    crop_id: int,
+    body: HarvestBody,
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    _write_access: None = Depends(require_write_access),
+):
     """Record a harvest against this crop. Optionally advance stage."""
     async with pool.acquire() as conn:
         crop = await conn.fetchrow(

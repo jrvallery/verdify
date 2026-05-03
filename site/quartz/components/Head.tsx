@@ -19,6 +19,10 @@ export default (() => {
       fileData.frontmatter?.socialDescription ??
       fileData.frontmatter?.description ??
       unescapeHTML(fileData.description?.trim() ?? i18n(cfg.locale).propertyDefaults.description)
+    const noindex =
+      fileData.slug?.startsWith("tags/") ||
+      fileData.frontmatter?.noindex === true ||
+      fileData.frontmatter?.noindex === "true"
 
     const { css, js, additionalHead } = externalResources
 
@@ -28,13 +32,46 @@ export default (() => {
     const iconPath = joinSegments(baseDir, "static/icon.png")
 
     // Url of current page
+    const socialSlug =
+      fileData.slug === "index" ? "" : fileData.slug?.replace(/\/index$/, "") ?? ""
     const socialUrl =
-      fileData.slug === "404" ? url.toString() : joinSegments(url.toString(), fileData.slug!)
+      fileData.slug === "404" || socialSlug === ""
+        ? url.toString()
+        : joinSegments(url.toString(), socialSlug)
 
     const usesCustomOgImage = ctx.cfg.plugins.emitters.some(
       (e) => e.name === CustomOgImagesEmitterName,
     )
-    const ogImageDefaultPath = `https://${cfg.baseUrl}/static/og-image.png`
+    const socialImage = fileData.frontmatter?.socialImage
+    const socialImagePath =
+      typeof socialImage === "string" && socialImage.length > 0
+        ? socialImage.startsWith("http")
+          ? socialImage
+          : `https://${cfg.baseUrl}${socialImage.startsWith("/") ? socialImage : `/${socialImage}`}`
+        : undefined
+    const ogImageDefaultPath = socialImagePath ?? `https://${cfg.baseUrl}/static/og-image.png`
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `https://${cfg.baseUrl}/#website`,
+          name: "Verdify",
+          url: `https://${cfg.baseUrl}`,
+          description:
+            "An ESP32-run greenhouse where Claude tunes setpoints and the plans, telemetry, costs, failures, and lessons are public.",
+        },
+        {
+          "@type": "WebPage",
+          name: title,
+          url: socialUrl,
+          description,
+          isPartOf: {
+            "@id": `https://${cfg.baseUrl}/#website`,
+          },
+        },
+      ],
+    }
 
     return (
       <head>
@@ -83,7 +120,13 @@ export default (() => {
         )}
 
         <link rel="icon" href={iconPath} />
+        <link rel="canonical" href={socialUrl} />
         <meta name="description" content={description} />
+        {noindex && <meta name="robots" content="noindex, follow" />}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <meta name="generator" content="Quartz" />
 
         {css.map((resource) => CSSResourceToStyleElement(resource, true))}

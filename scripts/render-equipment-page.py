@@ -64,7 +64,7 @@ def _fmt_watts(value: float | None) -> str:
 
 
 def _fmt_cost(value: float | None) -> str:
-    return f"${value:.3f}" if value is not None else "-"
+    return f"USD {value:.3f}" if value is not None else "-"
 
 
 def _equipment_catalog(rows: list[asyncpg.Record]) -> str:

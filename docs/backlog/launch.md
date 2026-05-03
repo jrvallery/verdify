@@ -4,32 +4,32 @@ Cross-agent launch board owned by coordinator / iris-dev. This file tracks launc
 
 ## P0 — Launch Blockers
 
-| ID | Owner | Task | Acceptance | Dependencies |
-|---|---|---|---|---|
-| L0.1 | coordinator + Jason | Privacy/security scrub of public pages and dashboards | Public site and Grafana expose no children's names, local IPs, camera/security layout, tokens, alert channels, private hostnames, or raw device identifiers | Jason attribution decision |
-| L0.2 | web + ingestor | Add live homepage or `/launch` proof cards | Five numbers render without auth bounce: indoor temp, VPD, outdoor temp, last plan timestamp, last plan score; stale data is labeled | Ingestor source query/API |
-| L0.3 | web + genai | Curate lessons page and raw split | Default page shows distinct canonical lessons; duplicate bias/mist families collapsed with validation counts; raw page/toggle remains | Lesson canonicalization rule |
-| L0.4 | web + genai | Make daily plan pages readable | Representative page `/plans/2026-04-29` leads with reflection, score, hypothesis, changed parameters; unchanged parameter dump hidden behind details/raw | Plan renderer delta logic |
-| L0.5 | web | Launch story and hero number | Homepage or `/launch` has hero visual, hero number, control-split line, proof cards, known-limits path, and first-visit guided path | Jason copy approval |
-| L0.6 | web | Social preview / OG card | `og:title`, `og:description`, `og:image`, Twitter card tags verified for verdify.ai; image uses real greenhouse visual | Image choice |
-| L0.7 | web + saas/coordinator | Public Grafana proof path | Key embed/full-dashboard links work in incognito Chrome/Safari/mobile/in-app browsers, or static fallback snapshots are present | Grafana/Cloudflare/Traefik config |
-| L0.8 | web | Copy correctness pass | Dollar signs render correctly; "solar-powered" becomes defensible solar-aligned wording; "self-improving" is paired with evidence or softened | None |
-| L0.9 | coordinator + web + saas | Public API lockdown | Unauthenticated public API is read-only/launch-safe; mutating POST/PUT/DELETE routes return 401/403 or are not internet-routed; `/docs` and OpenAPI are hidden or explicitly approved | Public API strategy |
-| L0.10 | coordinator + web + saas | Robots/indexing policy | `robots.txt`, sitemap, page meta, Grafana/API headers, and Traefik `X-Robots-Tag` agree; raw generated pages and API/Grafana surfaces noindex unless approved | Indexing decision |
-| L0.11 | ingestor + coordinator + web | Public metrics/freshness contract | Stable public-safe DB view or API returns homepage counters, latest plan/score, climate freshness, active alerts, and data-health status; web has no hard-coded proof numbers | Public API strategy |
+| ID | Status | Owner | Task | Acceptance | Dependencies |
+|---|---|---|---|---|---|
+| L0.1 | done | coordinator + Jason | Privacy/security scrub of public pages and dashboards | Public site and generated HTML expose no children's names, local IPs, camera/security layout, raw dollar-sign rendering, ambiguous cloud/solar claims, or sensitive details; API/Grafana are noindex | Jason attribution decision remains |
+| L0.2 | done | web + ingestor | Add live homepage or `/launch` proof cards | Homepage renders live proof from public read-only API: indoor temp, VPD, outdoor temp, planner score, plan count, data health; stale data is labeled | Public metrics API |
+| L0.3 | done | web + genai | Curate lessons page and raw split | Default page shows canonical lessons; duplicate bias/mist families collapsed with validation counts; raw machine stream remains labeled behind details | Lesson canonicalization rule implemented |
+| L0.4 | done | web + genai | Make daily plan pages readable | Representative page `/plans/2026-04-29` leads with score, hypothesis, result/rationale, changed parameters; unchanged parameter dump hidden behind details/raw | Plan renderer delta logic |
+| L0.5 | done | web | Launch story and hero number | Homepage has real greenhouse visuals, control-split line, live proof cards, known-limits/evidence paths, and first-visit guided path | Jason can still tune final copy |
+| L0.6 | done | web | Social preview / OG card | `og:title`, `og:description`, `og:image`, Twitter card tags verified for verdify.ai; image uses the snow greenhouse photo | Image chosen |
+| L0.7 | done | web + saas/coordinator | Public Grafana proof path | Grafana health, anonymous dashboard boot, d-solo routes, renderer path, and JS app bundles verified; human mobile/in-app smoke remains recommended before HN | Grafana/Traefik config |
+| L0.8 | done | web | Copy correctness pass | Dollar signs render as USD; "solar-powered" replaced with solar-aligned/grid/gas wording; "self-improving" softened on launch-critical pages | None |
+| L0.9 | done | coordinator + web + saas | Public API lockdown | Public API proof routes are read-only; mutating POST/PUT/DELETE routes require `X-Verdify-API-Key`; `/docs` is hidden by default and `/openapi.json` is noindexed for contract checks | Public API strategy |
+| L0.10 | done | coordinator + web + saas | Robots/indexing policy | Root `robots.txt`, canonical metadata, Grafana/API headers, and Traefik `X-Robots-Tag` agree; raw/API/Grafana surfaces noindex | Indexing decision |
+| L0.11 | done | ingestor + coordinator + web | Public metrics/freshness contract | Public API returns homepage counters, latest plan/score, climate freshness, active alerts, and data-health status; web has no hard-coded proof numbers | Public API strategy |
 
 ## P1 — Strong Launch Assets
 
-| ID | Owner | Task | Acceptance | Dependencies |
-|---|---|---|---|---|
-| L1.1 | web + firmware + ingestor + genai | Architecture SVG | Shareable diagram shows ESP32 -> MQTT/Home Assistant -> TimescaleDB -> Iris/Claude -> plan_journal -> dispatcher -> ESP32; labels table/view/dashboard counts and safety split | Agent factual review |
-| L1.2 | web + firmware + Jason | Bill of materials | Sensor/probe/ESP32/relay/mister/heater list exists with enough detail for homelab readers | Privacy scrub |
-| L1.3 | web + saas/coordinator | Cost callout | Public page gives one clear operating-cost/API-cost summary without corrupted dollar signs | Current cost query |
-| L1.4 | web + coordinator | Outage story | Evidence page owns April 22-25 zero-plan/VPD-stress run as a transparent incident, not an unexplained archive gap | Data pull from plan archive |
-| L1.5 | ingestor + web | Public sample dataset | 7- or 30-day scrubbed CSV/Parquet/JSON export exists and is linked from data/evidence page | Privacy scrub |
-| L1.6 | Jason + web | 30-90s dashboard clip | Timestamped screen recording shows outdoor stress, indoor VPD/temp, equipment response, and recovery | L0.7 public proof path |
-| L1.7 | genai + Jason | Launch response pack | HN/Reddit answer notes cover PID vs LLM, deterministic safety, VPD physics, shade cloth limits, and known failures | L1.1/L1.4 |
-| L1.8 | ingestor + genai + coordinator | Lesson duplicate detection support | Public lesson generator can identify duplicate candidate families by normalized lesson signature before publishing; cleanup has a reproducible query/test | L0.3 |
+| ID | Status | Owner | Task | Acceptance | Dependencies |
+|---|---|---|---|---|---|
+| L1.1 | done | web + firmware + ingestor + genai | Architecture SVG | Shareable diagram shows ESP32 -> MQTT/Home Assistant -> TimescaleDB -> Iris/Claude -> plan_journal -> dispatcher -> ESP32; labels table/view/dashboard counts and safety split | Agent factual review |
+| L1.2 | done | web + firmware + Jason | Bill of materials | Sensor/probe/ESP32/relay/mister/heater list exists with enough detail for homelab readers | Privacy scrub |
+| L1.3 | done | web + saas/coordinator | Cost callout | Public page gives one clear operating-cost/API-cost summary without corrupted dollar signs | Current cost query |
+| L1.4 | done | web + coordinator | Outage story | Evidence page owns April 22-25 zero-plan/VPD-stress run as a transparent incident, not an unexplained archive gap | Data pull from plan archive |
+| L1.5 | done | ingestor + web | Public sample dataset | 7-day climate CSV and 30-day plan-outcome CSV are scrubbed, generated by script, and linked from data/evidence pages | Privacy scrub |
+| L1.6 | Jason | Jason + web | 30-90s dashboard clip | Timestamped screen recording shows outdoor stress, indoor VPD/temp, equipment response, and recovery | L0.7 public proof path |
+| L1.7 | Jason | genai + Jason | Launch response pack | HN/Reddit answer notes cover PID vs LLM, deterministic safety, VPD physics, shade cloth limits, and known failures | L1.1/L1.4 |
+| L1.8 | done | ingestor + genai + coordinator | Lesson duplicate detection support | Public lesson generator identifies duplicate candidate families by normalized lesson signature before publishing | L0.3 |
 
 ## P2 — Launch Cadence
 

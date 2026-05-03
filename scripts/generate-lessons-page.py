@@ -48,6 +48,11 @@ def plan_id_to_link(plan_id: str) -> str:
     return f"[{plan_id}](/plans/{plan_date})"
 
 
+def public_text(text: str) -> str:
+    """Avoid Quartz/Markdown dollar-sign math parsing on public pages."""
+    return re.sub(r"\$(\d)", r"USD \1", text or "")
+
+
 def fetch_lessons(active: bool) -> list[dict]:
     """Fetch lessons from the database."""
     flag = "true" if active else "false"
@@ -92,11 +97,83 @@ def fetch_lessons(active: bool) -> list[dict]:
     return lessons
 
 
+CONFIDENCE_RANK = {"low": 1, "medium": 2, "high": 3}
+PARAM_TOKEN_RE = re.compile(
+    r"\b(?:bias_cool|bias_heat|mist_max_closed_vent_s|mister_engage_kpa|mister_all_kpa|"
+    r"fog_escalation_kpa|fog_min_temp_f|vpd_high|vpd_low|temp_high|temp_low|"
+    r"d_cool_stage_2|enthalpy_open|enthalpy_close|mist_vent_close_lead_s)\b",
+    re.IGNORECASE,
+)
+
+
+def lesson_signature(lesson: dict) -> str:
+    """Stable-ish key for collapsing repeated machine-extracted lesson rows."""
+    raw = f"{lesson['category']} {lesson['condition']} {lesson['lesson']}".lower()
+    raw = re.sub(r"\b\d+(?:st|nd|rd|th)?\b", "#", raw)
+    raw = re.sub(
+        r"\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|nth)\b",
+        "#",
+        raw,
+    )
+    raw = re.sub(r"\b(confirm(?:ed|ation|ations)?|validated|validation)\b", "", raw)
+    raw = re.sub(r"\s+", " ", raw).strip()
+    params = sorted({p.lower() for p in PARAM_TOKEN_RE.findall(raw)})
+    if params:
+        return f"{lesson['category'].lower()}|{','.join(params)}|{raw[:160]}"
+    return f"{lesson['category'].lower()}|{raw[:180]}"
+
+
+def canonicalize_lessons(lessons: list[dict], limit: int = 20) -> list[dict]:
+    """Collapse near-duplicate active lessons into launch-readable canonical rows."""
+    groups: dict[str, list[dict]] = {}
+    for lesson in lessons:
+        groups.setdefault(lesson_signature(lesson), []).append(lesson)
+
+    canonical: list[dict] = []
+    for group in groups.values():
+        source_ids: list[str] = []
+        seen_sources: set[str] = set()
+        for lesson in group:
+            for plan_id in lesson["source_plan_ids"]:
+                if plan_id not in seen_sources:
+                    seen_sources.add(plan_id)
+                    source_ids.append(plan_id)
+
+        best = max(
+            group,
+            key=lambda lesson_row: (
+                CONFIDENCE_RANK.get(lesson_row["confidence"].lower(), 0),
+                lesson_row["times_validated"],
+                len(lesson_row["source_plan_ids"]),
+                -lesson_row["id"],
+            ),
+        ).copy()
+        duplicate_ids = sorted(lesson_row["id"] for lesson_row in group)
+        best["source_plan_ids"] = source_ids or best["source_plan_ids"]
+        best["times_validated"] = max(
+            best["times_validated"],
+            len(source_ids),
+            sum(max(1, lesson_row["times_validated"]) for lesson_row in group),
+        )
+        best["duplicate_ids"] = duplicate_ids
+        best["duplicate_count"] = len(group)
+        canonical.append(best)
+
+    canonical.sort(
+        key=lambda lesson_row: (
+            -CONFIDENCE_RANK.get(lesson_row["confidence"].lower(), 0),
+            -lesson_row["times_validated"],
+            lesson_row["id"],
+        )
+    )
+    return canonical[:limit]
+
+
 def render_lesson(lesson: dict, include_superseded_note: bool = False) -> str:
     """Render a single lesson as markdown."""
     lines = []
     # Build a short title from the lesson text — take first sentence or clause
-    text = lesson["lesson"]
+    text = public_text(lesson["lesson"])
     # Try first sentence (period-terminated)
     dot = text.find(". ")
     title = text[:dot] if 0 < dot <= 80 else text[:60].rsplit(" ", 1)[0]
@@ -110,9 +187,9 @@ def render_lesson(lesson: dict, include_superseded_note: bool = False) -> str:
         f"**Validated:** {lesson['times_validated']}×"
     )
     lines.append("")
-    lines.append(f"**When:** {lesson['condition']}")
+    lines.append(f"**When:** {public_text(lesson['condition'])}")
     lines.append("")
-    lines.append(f"**Finding:** {lesson['lesson']}")
+    lines.append(f"**Finding:** {text}")
     lines.append("")
 
     # Source plan links
@@ -122,6 +199,11 @@ def render_lesson(lesson: dict, include_superseded_note: bool = False) -> str:
         lines.append(f"**First proven:** {first_link} | **Last confirmed:** {last_link}")
     else:
         lines.append(f"**Created:** {lesson['created_at']}")
+
+    if lesson.get("duplicate_count", 1) > 1:
+        duplicate_ids = ", ".join(f"#{i}" for i in lesson["duplicate_ids"])
+        lines.append("")
+        lines.append(f"*Canonical lesson collapsed from {lesson['duplicate_count']} raw rows: {duplicate_ids}.*")
 
     if include_superseded_note and lesson.get("superseded_by"):
         lines.append("")
@@ -135,6 +217,7 @@ def generate_page() -> str:
     """Generate the full lessons.md content."""
     active = fetch_lessons(active=True)
     superseded = fetch_lessons(active=False)
+    canonical_active = canonicalize_lessons(active)
     today = date.today().isoformat()
 
     parts = []
@@ -150,6 +233,11 @@ def generate_page() -> str:
         sort_keys=False,
         default_flow_style=None,
     )
+    yaml_block = re.sub(r"^title: .*$", "title: AI Greenhouse Lessons Learned", yaml_block, flags=re.MULTILINE)
+    yaml_block += (
+        "description: \"Generated and validated lessons from Verdify's AI greenhouse planning cycles: "
+        'what worked, what failed, and what Iris reads before future plans."\n'
+    )
     parts.append("---")
     parts.append(yaml_block.rstrip())
     parts.append("---")
@@ -158,26 +246,44 @@ def generate_page() -> str:
     parts.append("")
 
     # Intro
-    parts.append("# Lessons Learned")
+    parts.append("# AI Greenhouse Lessons Learned")
     parts.append("")
     parts.append(
-        "Findings validated through hypothesis-driven planning cycles. "
-        "Each lesson was tested, measured, and confirmed before graduating here."
+        "Curated, distinct findings validated through hypothesis-driven planning cycles. "
+        "Repeated machine-extracted confirmations are collapsed into canonical lessons with validation counts; "
+        "the raw stream remains available below for auditability."
     )
     parts.append("")
 
     # Active lessons
-    parts.append("## Active Lessons")
+    parts.append("## Canonical Lessons")
     parts.append("")
-    if active:
-        for lesson in active:
+    parts.append(
+        f"Showing {len(canonical_active)} canonical lessons distilled from {len(active)} active machine rows. "
+        f"Generated {today}."
+    )
+    parts.append("")
+    if canonical_active:
+        for lesson in canonical_active:
             parts.append(render_lesson(lesson))
     else:
         parts.append("*No active lessons yet.*")
         parts.append("")
 
+    parts.append("<details>")
+    parts.append("<summary>Raw machine lesson stream</summary>")
+    parts.append("")
+    if active:
+        for lesson in active:
+            parts.append(render_lesson(lesson))
+    else:
+        parts.append("*No active raw lessons yet.*")
+        parts.append("")
+    parts.append("</details>")
+    parts.append("")
+
     # Superseded lessons
-    parts.append("## Superseded Lessons")
+    parts.append("## Superseded / Retired Lessons")
     parts.append("")
     if superseded:
         for lesson in superseded:

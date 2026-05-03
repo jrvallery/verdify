@@ -202,7 +202,7 @@ services:
       - "traefik.http.routers.verdify-api.rule=Host(`api.verdify.ai`)"
       - "traefik.http.routers.verdify-api.entrypoints=websecure"
       - "traefik.http.routers.verdify-api.tls=true"
-      - "traefik.http.routers.verdify-api.middlewares=security-headers@file"
+      - "traefik.http.routers.verdify-api.middlewares=api-security-headers@file"
       - "traefik.http.services.verdify-api.loadbalancer.server.port=8080"
 
   # ── Verdify.ai Website (Quartz static site) ─────────────────

@@ -18,6 +18,7 @@ Output: /srv/verdify/verdify-site/content/plans/YYYY-MM-DD.md
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from datetime import date, datetime
@@ -69,6 +70,11 @@ def _sql_literal(value: object) -> str:
     if value is None:
         return "NULL"
     return "'" + str(value).replace("'", "''") + "'"
+
+
+def public_text(value: object) -> str:
+    """Avoid Quartz/Markdown dollar-sign math parsing on public pages."""
+    return re.sub(r"\$(\d)", r"USD \1", str(value or ""))
 
 
 def get_daily_summary(d: date) -> dict:
@@ -385,7 +391,7 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
         )
         if conds.get("notes"):
             lines.append("")
-            lines.append(f"> {conds['notes']}")
+            lines.append(f"> {public_text(conds['notes'])}")
     sw = s.get("stress_windows") or []
     if sw:
         lines.append("")
@@ -397,7 +403,7 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
                 (
                     w.get("kind", "?"),
                     f"{w.get('severity', '?')} · {w.get('start', '?')} to {w.get('end', '?')}",
-                    w.get("mitigation", ""),
+                    public_text(w.get("mitigation", "")),
                 )
             )
         lines.append(data_table(rows))
@@ -412,7 +418,11 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
             new = r_.get("new_value")
             change = f"{old} → {new}" if old is not None else f"{new}"
             rows.append(
-                (r_.get("parameter", "?"), f"{change}; {r_.get('forecast_anchor', '')}", r_.get("expected_effect", ""))
+                (
+                    r_.get("parameter", "?"),
+                    public_text(f"{change}; {r_.get('forecast_anchor', '')}"),
+                    public_text(r_.get("expected_effect", "")),
+                )
             )
         lines.append(data_table(rows))
     lines.append("")
@@ -471,13 +481,40 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
     if current_day is not None:
         lines.append("</div>")
 
-    # Also include non-core params as a separate small table
-    non_core = [wp for wp in waypoints if wp["parameter"] not in CORE_PARAMS]
-    if non_core:
-        rows = []
-        for wp in non_core:
-            rows.append((wp["time"][11:16], wp["parameter"], f"Value {wp['value']}."))
-        lines.extend(["", "**Other parameters:**", "", data_table(rows)])
+    # Secondary parameters are noisy when every waypoint repeats the full
+    # controller state. Lead with deltas; keep the raw dump auditable.
+    changed_non_core_rows = []
+    raw_non_core_rows = []
+    last_seen: dict[str, str] = {}
+    for t in times:
+        vals = by_time[t]
+        time_str = t[11:16] if len(t) > 11 else t
+        for param in sorted(vals):
+            if param in CORE_PARAMS:
+                continue
+            value = vals[param]
+            previous = last_seen.get(param)
+            raw_non_core_rows.append((time_str, param, f"Value {value}."))
+            if previous != value:
+                change = f"{previous} → {value}" if previous is not None else f"initial {value}"
+                changed_non_core_rows.append((time_str, param, change))
+            last_seen[param] = value
+
+    if changed_non_core_rows:
+        lines.extend(["", "**Changed secondary parameters:**", "", data_table(changed_non_core_rows)])
+
+    if raw_non_core_rows:
+        lines.extend(
+            [
+                "",
+                "<details>",
+                "<summary>Full secondary parameter dump</summary>",
+                "",
+                data_table(raw_non_core_rows),
+                "",
+                "</details>",
+            ]
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -563,9 +600,9 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
     experiment = None
     if latest_plan:
         experiment = {
-            "hypothesis": latest_plan.get("hypothesis", ""),
-            "test": latest_plan.get("experiment", ""),
-            "expected_outcome": latest_plan.get("expected_outcome", ""),
+            "hypothesis": public_text(latest_plan.get("hypothesis", "")),
+            "test": public_text(latest_plan.get("experiment", "")),
+            "expected_outcome": public_text(latest_plan.get("expected_outcome", "")),
             "outcome_score": latest_plan.get("outcome_score", ""),
             "status": latest_plan.get("status", "pending"),
         }
@@ -595,7 +632,7 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
     description = (
         f"Generated AI greenhouse planning log for {title}: {len(plans)} planning cycles, "
         f"{stress['vpd_high_hours']}h high-VPD stress, {stress['heat_hours']}h heat stress, "
-        f"and ${cost['total']} total resource cost."
+        f"and USD {cost['total']} total resource cost."
     )
     yaml_block += f'description: "{_yaml_escape(description)}"\n'
     yaml_block += "noindex: true\n"
@@ -678,6 +715,28 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     plan_id = plan.get("plan_id", "")
     lines = [f"## {label} — `{plan_id}`", ""]
 
+    changed_params = [p.strip() for p in plan.get("params_changed", "").split(",") if p.strip()]
+    score = plan.get("outcome_score", "")
+    lines.append(
+        metric_grid(
+            [
+                ("Status", plan.get("status", "pending")),
+                ("Outcome score", f"{score}/10" if score else "pending"),
+                (
+                    "Changed parameters",
+                    ", ".join(changed_params[:8]) + (" ..." if len(changed_params) > 8 else "")
+                    if changed_params
+                    else "none recorded",
+                ),
+            ]
+        )
+    )
+    actual = plan.get("actual_outcome", "")
+    if actual:
+        lines.append("")
+        lines.append(f"> **Result:** {public_text(actual)}")
+    lines.append("")
+
     # --- Reflection: validates the previous cycle ---
     lines.append("### Reflection")
     lines.append("")
@@ -695,7 +754,7 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
         prev_hypothesis = prev_plan.get("hypothesis", "")
         if prev_hypothesis:
-            lines.append(f"**Previous hypothesis:** {prev_hypothesis}")
+            lines.append(f"**Previous hypothesis:** {public_text(prev_hypothesis)}")
         else:
             lines.append("**Previous hypothesis:** *(not recorded)*")
 
@@ -703,14 +762,14 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
         actual = plan.get("actual_outcome", "")
         score = plan.get("outcome_score", "")
         if actual:
-            lines.append(f"**Result:** {actual}")
+            lines.append(f"**Result:** {public_text(actual)}")
         if score:
             lines.append(f"**Score:** {score}/10")
         lines.append("")
 
         lesson = plan.get("lesson_extracted", "")
         if lesson:
-            lines.append(f"> **New finding:** {lesson} → Added to [Lessons Learned](/greenhouse/lessons)")
+            lines.append(f"> **New finding:** {public_text(lesson)} → Added to [Lessons Learned](/greenhouse/lessons)")
             lines.append("")
     else:
         # First ever cycle or no previous plan found
@@ -723,15 +782,15 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
     conditions = plan.get("conditions_summary", "")
     if conditions:
-        lines.append(f"**Conditions:** {conditions}")
+        lines.append(f"**Conditions:** {public_text(conditions)}")
 
     experiment = plan.get("experiment", "")
     if experiment:
-        lines.append(f"**Testing:** {experiment}")
+        lines.append(f"**Testing:** {public_text(experiment)}")
 
     expected = plan.get("expected_outcome", "")
     if expected:
-        lines.append(f"**Expected outcome:** {expected}")
+        lines.append(f"**Expected outcome:** {public_text(expected)}")
     lines.append("")
 
     # Sprint 20 Phase 5: structured hypothesis block (typed conditions /
@@ -808,10 +867,10 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
             "",
             metric_grid(
                 [
-                    ("Electric", f"${r(summary.get('cost_electric'), 2)}"),
-                    ("Gas", f"${r(summary.get('cost_gas'), 2)}"),
-                    ("Water", f"${r(summary.get('cost_water'), 3)}"),
-                    ("Total", f"${r(summary.get('cost_total'), 2)}"),
+                    ("Electric", f"USD {r(summary.get('cost_electric'), 2)}"),
+                    ("Gas", f"USD {r(summary.get('cost_gas'), 2)}"),
+                    ("Water", f"USD {r(summary.get('cost_water'), 3)}"),
+                    ("Total", f"USD {r(summary.get('cost_total'), 2)}"),
                 ]
             ),
             "",

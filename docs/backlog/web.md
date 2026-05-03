@@ -6,23 +6,23 @@ Owned by the [`web`](../agents/web.md) agent.
 
 **Launch polish P0** (coordinated through [`docs/backlog/launch.md`](launch.md)).
 
-- [ ] **W-L0.2 Live proof path.** Add homepage or `/launch` cards for current indoor temp, current VPD, outdoor temp, last plan timestamp, and last plan score. Must work without Grafana auth bounce; stale data must be labeled.
-- [ ] **W-L0.3 Lessons credibility pass.** Change `scripts/generate-lessons-page.py` so default `/greenhouse/lessons` shows curated/canonical distinct lessons with duplicate families collapsed into validation counts. Raw machine lessons move behind `?raw=true`, `/greenhouse/lessons/raw`, or a clearly labeled section.
-- [ ] **W-L0.4 Daily plan readability.** Update `scripts/generate-daily-plan.py` so plan pages lead with reflection, score, hypothesis, result, and changed parameters. Unchanged "other parameters" dumps go behind `<details>` or a raw block. Validate against `/plans/2026-04-29`.
-- [ ] **W-L0.5 Launch story page.** Make `/` or `/launch` a first-visit narrative: greenhouse visual, hero number, control-split line, proof cards, architecture link, known-limits link, and direct daily-plan/lessons evidence links.
-- [ ] **W-L0.6 Social preview.** Add/verify explicit `og:title`, `og:description`, `og:image`, and Twitter card tags. Use a real greenhouse visual, preferably snow/exterior.
-- [ ] **W-L0.7 Public Grafana/fallback QA.** Incognito/mobile/in-app-browser test the full-dashboard and embed path. Add static fallback snapshots for key proof panels if Grafana is auth/robots/resource blocked.
-- [ ] **W-L0.8 Copy correctness.** Escape or rewrite dollar-sign costs; replace ambiguous "solar-powered" with defensible solar-aligned/grid/gas wording; soften "self-improving" unless the lesson lifecycle is immediately visible.
-- [ ] **W-L0.9 Public API lockdown review.** Enumerate public API routes and ensure mutating endpoints are authenticated, blocked, or explicitly not internet-routed before launch.
-- [ ] **W-L0.10 Robots/indexing alignment.** Add/verify `robots.txt`, sitemap, page meta, and headers so launch pages index intentionally while raw generated/API/Grafana surfaces do not.
-- [ ] **W-L0.11 Public metrics/freshness consumption.** Consume ingestor/coordinator's public metrics/data-health contract for proof cards and stale labels; do not hard-code launch counters in Markdown.
+- [x] **W-L0.2 Live proof path.** Homepage proof cards consume `/api/v1/public/home-metrics`; stale data is labeled and Grafana panels remain as fallback receipts.
+- [x] **W-L0.3 Lessons credibility pass.** `scripts/generate-lessons-page.py` now publishes canonical lessons with validation counts by default and keeps the raw machine stream labeled behind `<details>`.
+- [x] **W-L0.4 Daily plan readability.** `scripts/generate-daily-plan.py` leads cycles with score/outcome/rationale and changed parameters; full secondary dumps are behind `<details>`. Verified against `/plans/2026-04-29`.
+- [x] **W-L0.5 Launch story page.** `/` now has the ESP32/Claude control-split narrative, greenhouse visuals, live proof cards, and evidence/architecture paths.
+- [x] **W-L0.6 Social preview.** Homepage emits explicit OG/Twitter metadata and uses the snow greenhouse photo for the share card.
+- [x] **W-L0.7 Public Grafana/fallback QA.** Grafana health, anonymous dashboard boot data, d-solo URLs, and JS app bundles return successfully with noindex headers; mobile/in-app smoke remains a human pre-post check.
+- [x] **W-L0.8 Copy correctness.** Public Markdown/HTML has no raw `$123` cost strings, ambiguous `solar-powered` claims, family names, camera model, or local IP strings.
+- [x] **W-L0.9 Public API lockdown review.** Mutating public API routes require a write API key; unauthenticated POST/PUT/DELETE fail closed.
+- [x] **W-L0.10 Robots/indexing alignment.** Root robots file, canonical meta, and API/Grafana noindex headers are live.
+- [x] **W-L0.11 Public metrics/freshness consumption.** Homepage uses the public metrics/data-health contract instead of hard-coded proof counters.
 
 ## Next up (candidates)
 
-- [ ] **W-L1.1 Architecture SVG.** Shareable diagram: ESP32 -> HA/MQTT -> TimescaleDB -> Iris/Claude -> `plan_journal` -> dispatcher -> ESP32, with table/view/dashboard counts and safety split.
-- [ ] **W-L1.2 Bill of materials.** Publish launch-safe sensor/probe/ESP32/relay/mister/heater list.
-- [ ] **W-L1.3 Cost callout.** One clear operating/API/utility cost section.
-- [ ] **W-L1.4 Outage story.** Own the April 22-25 zero-plan/VPD-stress run in `/evidence` as a transparent incident.
+- [x] **W-L1.1 Architecture SVG.** Shareable diagram added at `/static/verdify-architecture.svg` and embedded on `/intelligence/architecture`.
+- [x] **W-L1.2 Bill of materials.** Launch-safe equipment/BOM surface is present on `/greenhouse/equipment` with sensitive addresses withheld.
+- [x] **W-L1.3 Cost callout.** `/evidence/economics` uses defensible solar-aligned/grid/gas wording and USD rendering.
+- [x] **W-L1.4 Outage story.** `/evidence` owns the April 22-25 zero-plan/VPD-stress run as public failure evidence.
 - [ ] **W-L2.1 Weekly update template.** Add "Verdify this week" page/template for weather, score, lessons, failures, repairs.
 
 ## Ideas (not yet committed)

@@ -19,13 +19,13 @@ Deploy path remains `main → /mnt/iris/verdify → systemd restart`, followed b
 
 **Launch evidence support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
 
-- [ ] **I-L0.2 Live proof metrics source.** Provide one stable source for homepage/launch cards: indoor temp, VPD, outdoor temp, last plan timestamp, last plan score, and freshness/staleness. Prefer an API response model or a DB view consumed by web.
-- [ ] **I-L0.11 Public metrics/freshness contract.** Provide a public-safe home metrics/data-health contract that includes counters, latest plan/score, climate freshness, active alerts, and `ok|warn|fail` data-health status. Web must not hard-code launch proof numbers.
-- [ ] **I-L0.4 Plan delta support.** Expose enough data for daily-plan pages to show changed parameters only: deltas from defaults and/or previous waypoint, with the full raw set preserved for details/raw mode.
-- [ ] **I-L1.4 Outage evidence query.** Provide a repeatable query for April 22-25 zero-plan/VPD-stress narrative: plan gaps, stress hours, affected scores, and recovery.
-- [ ] **I-L1.5 Public sample dataset export.** Create a 7- or 30-day scrubbed export path for launch readers. Must exclude sensitive IDs and be reproducible.
-- [ ] **I-L0.7 Proof freshness gates.** Add freshness checks so web can label stale launch proof rather than showing old "live" numbers.
-- [ ] **I-L1.8 Lesson duplicate support.** Provide normalized lesson signatures or duplicate-candidate queries if genai/web choose to canonicalize lessons at publish time.
+- [x] **I-L0.2 Live proof metrics source.** Coordinator API now exposes stable launch proof metrics from DB-backed telemetry and scorecard sources.
+- [x] **I-L0.11 Public metrics/freshness contract.** `/api/v1/public/home-metrics` and `/api/v1/public/data-health` include counters, latest plan/score, climate freshness, active alerts, and `ok|warn|fail` data-health status.
+- [x] **I-L0.4 Plan delta support.** Daily-plan generator now computes changed secondary parameters from waypoint/default deltas while preserving the full raw set behind details.
+- [x] **I-L1.4 Outage evidence query.** Evidence page now publishes the April 22-25 zero-plan/VPD-stress narrative with plan gaps, stress hours, and compliance values.
+- [x] **I-L1.5 Public sample dataset export.** `scripts/export-public-sample-dataset.sh` publishes scrubbed 7-day climate and 30-day plan-outcome CSVs under `/static/data/`, excluding local IPs, device IDs, trigger UUIDs, alert channels, hostnames, and raw sensor entity names.
+- [x] **I-L0.7 Proof freshness gates.** Public metrics include latest climate/plan ages so web can label stale proof instead of silently showing old values.
+- [x] **I-L1.8 Lesson duplicate support.** Implemented in the web generator as normalized lesson signatures; no ingestor DB change required for launch.
 
 ## Findings from 2026-04-18 scope review
 

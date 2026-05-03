@@ -6,12 +6,12 @@ Coordinator-owned queue. Items that span 2+ agent scopes, touch shared territory
 
 Launch work is tracked in [`docs/backlog/launch.md`](launch.md) with the command center in [`docs/launch/README.md`](../launch/README.md). Coordinator owns:
 
-- [ ] **Launch privacy/security gate.** Define and enforce the public scrub boundary before broad launch.
+- [x] **Launch privacy/security gate.** Public Markdown and generated HTML scrubbed for family names, local IPs, camera/security details, ambiguous solar/cloud claims, and raw dollar-sign rendering.
 - [ ] **Launch identity/code transparency decisions.** Jason decides attribution and repo/prompt visibility before HN/Reddit.
-- [ ] **Public API and indexing stance.** Coordinator decides which API/Grafana/site surfaces are publicly reachable and indexable before broad launch.
-- [ ] **Public proof contract.** Coordinate any DB view/schema/API contract needed for live homepage metrics and data-health freshness.
-- [ ] **Launch sequencing.** Hold broad launch until P0 gates are closed; approve any soft-launch exception explicitly.
-- [ ] **Cross-agent release train.** Keep web/genai/ingestor/firmware/saas launch tasks ordered and unblock handshakes.
+- [x] **Public API and indexing stance.** Public API is read-only for proof routes; writes require a key; API/Grafana are noindex while launch pages remain indexable.
+- [x] **Public proof contract.** Added public-safe home metrics and data-health response models/endpoints for launch proof cards.
+- [x] **Launch sequencing.** P0 hardening is deployed; remaining launch timing is Jason-owned attribution/copy/video availability.
+- [x] **Cross-agent release train.** Web/genai/ingestor/saas/coordinator launch work was closed as one coordinator-driven release.
 
 ## Schemas / contracts
 
