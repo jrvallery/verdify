@@ -189,7 +189,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -261,7 +261,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "watt",
+          "unit": "watt/m\u00b2",
           "decimals": 0,
           "color": {
             "mode": "thresholds"
@@ -379,7 +379,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -451,7 +452,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -502,7 +504,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -530,8 +533,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#EF5350"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1095,8 +1098,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1114,8 +1117,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "blue"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1133,8 +1136,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "yellow"
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1401,8 +1404,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1660,8 +1663,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1817,7 +1820,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },

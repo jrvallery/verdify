@@ -1,6 +1,6 @@
 {
   "uid": "site-greenhouse-crops",
-  "title": "Site: Greenhouse — Crops",
+  "title": "Site: Greenhouse \u2014 Crops",
   "editable": true,
   "panels": [
     {
@@ -11,7 +11,9 @@
       "description": "Shows vapor pressure deficit over time, one of the most important plant-stress signals in the greenhouse.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -33,9 +35,25 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 3,
@@ -64,7 +82,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "refId": "A"
         }
       ],
@@ -79,7 +97,9 @@
       "description": "Shows how many hours recent conditions spent above the crop-relevant heat-stress threshold.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -105,9 +125,25 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 3,
@@ -136,7 +172,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_heat,0))::numeric, 2) AS \"Heat Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "refId": "A"
         }
       ],
@@ -151,7 +187,9 @@
       "description": "Shows how many hours recent conditions spent below the crop-relevant cold-stress threshold.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -173,9 +211,25 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 3,
@@ -204,7 +258,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_cold,0))::numeric, 2) AS \"Cold Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "refId": "A"
         }
       ],
@@ -226,7 +280,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -276,7 +330,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -295,7 +349,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "blue",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               },
@@ -314,7 +368,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#66BB6A",
                   "mode": "fixed"
                 }
               },
@@ -333,7 +387,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -368,7 +422,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -514,7 +568,8 @@
             "lineWidth": 2,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           },
           "unit": "percent"
         },
@@ -531,7 +586,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -604,7 +659,24 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -687,8 +759,9 @@
               }
             ]
           },
-          "unit": "µS/cm"
-        }
+          "unit": "\u00b5S/cm"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -715,11 +788,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (µS/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (\u00b5S/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
           "refId": "A"
         }
       ],
-      "title": "Soil EC — South 1",
+      "title": "Soil EC \u2014 South 1",
       "type": "timeseries"
     },
     {
@@ -750,7 +823,8 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -787,7 +861,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "mol/m²/day",
+            "axisLabel": "mol/m\u00b2/day",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -825,7 +899,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "mol/m\u00b2/d"
         },
         "overrides": [
           {
@@ -837,7 +911,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -875,7 +949,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "green",
+                  "fixedColor": "#8C8C8C",
                   "mode": "fixed"
                 }
               },
@@ -1023,9 +1097,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": []
       },

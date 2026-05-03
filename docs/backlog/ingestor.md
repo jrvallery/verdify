@@ -26,6 +26,9 @@ Deploy path remains `main → /mnt/iris/verdify → systemd restart`, followed b
 - [x] **I-L1.5 Public sample dataset export.** `scripts/export-public-sample-dataset.sh` publishes scrubbed 7-day climate and 30-day plan-outcome CSVs under `/static/data/`, excluding local IPs, device IDs, trigger UUIDs, alert channels, hostnames, and raw sensor entity names.
 - [x] **I-L0.7 Proof freshness gates.** Public metrics include latest climate/plan ages so web can label stale proof instead of silently showing old values.
 - [x] **I-L1.8 Lesson duplicate support.** Implemented in the web generator as normalized lesson signatures; no ingestor DB change required for launch.
+- [ ] **I-L1.11 Baseline vs Iris metrics.** Provide a stable query or view for baseline/current comparison: temp compliance, VPD compliance, stress hours/day, water/day, energy/day, cost/day, and planner score. Coordinator/Jason choose the baseline period.
+- [ ] **I-L2.7 Daily lifecycle artifact data.** Export one representative lifecycle bundle: forecast rows, plan JSON/tunables, telemetry window, scorecard row, and lessons generated from the outcome.
+- [ ] **I-L2.8 Crop-steering roadmap data gaps.** Track missing substrate, pH/EC/DO, DLI correction, and shade-cloth automation signals as explicit data-readiness gaps rather than implied capabilities.
 
 ## Findings from 2026-04-18 scope review
 

@@ -101,7 +101,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -160,7 +161,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -326,7 +328,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -340,7 +344,7 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -585,8 +589,10 @@
               }
             ]
           },
-          "custom": {},
-          "unit": "h"
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -938,7 +944,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the underlying components feeding the overall system health score."
     }

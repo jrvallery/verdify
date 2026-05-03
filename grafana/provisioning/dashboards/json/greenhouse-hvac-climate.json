@@ -32,7 +32,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -76,7 +77,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               }
@@ -106,7 +107,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#B0BEC5",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -143,7 +144,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#B0BEC5",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -636,9 +637,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "kPa"
           },
-          "unit": "kPa"
+          "unit": "pressurekpa"
         },
         "overrides": [
           {
@@ -683,7 +685,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#90A4AE",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -720,7 +722,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#90A4AE",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1222,7 +1224,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -1236,7 +1239,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               }
@@ -1251,7 +1254,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#8C8C8C",
                   "mode": "fixed"
                 }
               }
@@ -1654,7 +1657,11 @@
       ],
       "title": "State Durations Today",
       "type": "table",
-      "description": "Shows how long the greenhouse has spent in each controller state."
+      "description": "Shows how long the greenhouse has spent in each controller state.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     },
     {
       "datasource": {
@@ -1684,7 +1691,11 @@
         }
       ],
       "title": "Plan Accuracy (Recent Plans)",
-      "type": "table"
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     }
   ],
   "refresh": "5m",

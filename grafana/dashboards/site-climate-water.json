@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-water",
-  "title": "Site: Climate — Water",
+  "title": "Site: Climate \u2014 Water",
   "editable": true,
   "panels": [
     {
@@ -36,7 +36,8 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -47,7 +48,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Water cost = gallons used × $0.00484/gal"
+      "description": "Water cost = gallons used \u00d7 $0.00484/gal"
     },
     {
       "id": 7,
@@ -82,7 +83,8 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -127,7 +129,8 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -153,7 +156,8 @@
             "spanNulls": true
           },
           "unit": "gal"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -198,7 +202,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -235,7 +239,7 @@
               }
             ]
           },
-          "unit": "pressurePascal",
+          "unit": "pressurekpa",
           "decimals": 2
         },
         "overrides": [
@@ -296,7 +300,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -331,7 +335,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -377,7 +381,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(239,83,80,0.7)",
+                  "fixedColor": "#CE93D8",
                   "mode": "fixed"
                 }
               },
@@ -400,7 +404,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,167,38,0.7)",
+                  "fixedColor": "#F48FB1",
                   "mode": "fixed"
                 }
               },
@@ -423,7 +427,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(171,71,188,0.7)",
+                  "fixedColor": "#E040FB",
                   "mode": "fixed"
                 }
               },
@@ -446,7 +450,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(126,87,194,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -677,7 +681,8 @@
             }
           },
           "unit": "min"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -751,7 +756,24 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -837,7 +859,24 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -920,8 +959,9 @@
               }
             ]
           },
-          "unit": "µS/cm"
-        }
+          "unit": "\u00b5S/cm"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -948,11 +988,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (µS/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), soil_ec_south_1 AS \"EC (\u00b5S/cm)\" FROM climate WHERE $__timeFilter(ts) AND soil_ec_south_1 IS NOT NULL ORDER BY ts",
           "refId": "A"
         }
       ],
-      "title": "Soil EC — South 1",
+      "title": "Soil EC \u2014 South 1",
       "type": "timeseries"
     },
     {
@@ -983,7 +1023,8 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -1009,7 +1050,7 @@
       "id": 218,
       "type": "timeseries",
       "title": "Soil Moisture vs VPD",
-      "description": "Root-zone moisture plotted against atmospheric demand. VPD is scaled to percent-like units (kPa × 25) so drawdown can be visually compared on one axis.",
+      "description": "Root-zone moisture plotted against atmospheric demand. VPD is scaled to percent-like units (kPa \u00d7 25) so drawdown can be visually compared on one axis.",
       "gridPos": {
         "h": 8,
         "w": 16,

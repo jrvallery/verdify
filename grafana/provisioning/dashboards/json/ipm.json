@@ -70,7 +70,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows current or recent botrytis disease risk based on greenhouse conditions.",
       "options": {}
@@ -118,7 +119,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows current or recent condensation risk based on greenhouse conditions.",
       "options": {}
@@ -142,7 +144,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "steps": [
               {
@@ -159,8 +161,11 @@
               }
             ]
           },
-          "custom": {}
-        }
+          "custom": {
+            "axisLabel": "Hours"
+          }
+        },
+        "overrides": []
       },
       "description": "Shows how many consecutive hours conditions stayed in a botrytis-risk state.",
       "options": {}
@@ -184,7 +189,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "steps": [
               {
@@ -201,8 +206,11 @@
               }
             ]
           },
-          "custom": {}
-        }
+          "custom": {
+            "axisLabel": "Hours"
+          }
+        },
+        "overrides": []
       },
       "description": "Shows how many consecutive hours conditions stayed in a condensation-risk state.",
       "options": {}
@@ -245,7 +253,8 @@
           "unit": "percent",
           "custom": {
             "lineWidth": 2,
-            "spanNulls": false
+            "spanNulls": false,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -261,7 +270,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -312,7 +321,8 @@
           "unit": "percent",
           "custom": {
             "lineWidth": 2,
-            "spanNulls": false
+            "spanNulls": false,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -328,7 +338,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -399,7 +409,7 @@
               },
               {
                 "id": "unit",
-                "value": "\u00b0F"
+                "value": "fahrenheit"
               }
             ]
           }
@@ -471,7 +481,8 @@
           "unit": "fahrenheit",
           "custom": {
             "lineWidth": 2,
-            "spanNulls": false
+            "spanNulls": false,
+            "axisLabel": "\u00b0F"
           }
         }
       },
@@ -543,7 +554,69 @@
             "lineWidth": 2,
             "spanNulls": false
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "East"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "North"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows relative humidity by zone to reveal localized disease pockets.",
       "options": {
@@ -595,7 +668,8 @@
         "defaults": {
           "noValue": "No treatments recorded",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the most recent plant treatments or interventions.",
       "options": {
@@ -623,7 +697,8 @@
         "defaults": {
           "noValue": "No observations recorded",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the most recent greenhouse observations logged into the system.",
       "options": {
@@ -735,7 +810,8 @@
             "lineWidth": 2,
             "spanNulls": false
           }
-        }
+        },
+        "overrides": []
       },
       "description": "Shows ventilation runtime as a proxy for air exchange activity.",
       "options": {

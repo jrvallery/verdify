@@ -27,8 +27,11 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 
 - [x] **G-L0.3 Lesson canonicalization semantics.** Implemented in `scripts/generate-lessons-page.py`: normalized signatures collapse near-duplicate machine lessons into canonical families with validation counts and raw visibility behind a labeled details section.
 - [x] **G-L0.4 Daily-plan story support.** Implemented in `scripts/generate-daily-plan.py`: default reading path leads with outcome/score/hypothesis/rationale and changed parameters, while raw secondary parameters stay behind `<details>`.
-- [ ] **G-L1.7 Launch response pack.** Prepare concise technical answers for HN/Reddit: why not PID, LLM not in real-time loop, ESP32 safety ownership, VPD physics, shade-cloth limits, and what "self-improving" does and does not mean.
+- [ ] **G-L1.7 Launch response pack.** Prepare concise technical answers for HN/Reddit: why not PID, LLM not in real-time loop, ESP32 safety ownership, VPD physics, shade-cloth limits, Mycodo/HAGR/Koidra/AgroNova/iGrow comparisons, related agentic-control literature, and what "self-improving" does and does not mean.
+- [ ] **G-L1.13 FAQ support.** Draft "Why not direct LLM control?", "Why not PID?", "Why not RL yet?", "What does self-correcting mean?", and "How are lessons validated?" answers for web publication.
 - [ ] **G-L2.1 Weekly proof cadence.** Define the weekly "Verdify this week" planner summary inputs: weather faced, planner score, stress windows, lessons graduated, failures, repairs.
+- [ ] **G-L2.6 Counterfactual replay roadmap.** Define planner-facing requirements for replaying recent telemetry with alternate tunables before any RL/simulator path.
+- [ ] **G-L2.7 Daily lifecycle artifact.** Help web publish one complete forecast -> plan -> tunables -> telemetry -> score -> lesson example with planner-side annotations.
 
 Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; genai's MCP boundary is typed.
 

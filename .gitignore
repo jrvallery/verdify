@@ -27,9 +27,14 @@ state/
 state
 logs/
 *.log
+traefik/logs/
 
 # Grafana
 grafana/data/
+
+# Runtime analytics output and credentials
+analytics/goaccess/
+analytics/umami-admin.txt
 
 # Backups
 *.dump
@@ -44,6 +49,8 @@ site/public
 
 # OS
 .DS_Store
+.nfs*
+*.nfs*
 reports/
 reports
 firmware/test/replay_overrides

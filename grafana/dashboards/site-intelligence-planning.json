@@ -132,7 +132,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(outcome_score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -231,7 +231,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -418,7 +418,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, c.avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.temp_avg) OVER (ORDER BY c.ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "refId": "B",
           "sql": {
             "columns": [
@@ -485,7 +485,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -672,7 +672,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, c.avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Actual Indoor VPD\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.vpd_avg) OVER (ORDER BY c.ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Actual Indoor VPD\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "refId": "B",
           "sql": {
             "columns": [
@@ -733,7 +733,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },

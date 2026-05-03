@@ -109,7 +109,7 @@
               }
             ]
           },
-          "unit": "kPa"
+          "unit": "pressurekpa"
         },
         "overrides": []
       },
@@ -148,6 +148,602 @@
       "type": "stat"
     },
     {
+      "id": 108,
+      "type": "stat",
+      "title": "$/Day Avg",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#78909C"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Average daily total cost across the selected period"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Daily cost stacked by utility type.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 15,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Electric"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Gas"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F44336",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Water"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 109,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_electric AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_gas AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_water AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
+          "refId": "C"
+        }
+      ],
+      "title": "Daily Cost by Type",
+      "type": "timeseries"
+    },
+    {
+      "description": "Greenhouse electrical load overlaid with available solar radiation. When solar is up, the greenhouse runs on sun.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 0,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Greenhouse (W)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 30
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Solar (W/m\u00b2)"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "solid"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 110,
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('30 minutes', e.ts) AS time, round(avg(watts_total)::numeric, 0) AS \"Greenhouse (W)\" FROM energy e WHERE $__timeFilter(e.ts) GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
+          "refId": "B"
+        }
+      ],
+      "title": "Greenhouse Power vs Solar Irradiance",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Daily percent of samples inside the temperature band, VPD band, and both bands at the same time. Percent units only; no stress-hour scaling.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 3,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Temp Compliance %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD Compliance %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Compliance %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 111,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time,\n       temp_compliance_pct AS \"Temp Compliance %\",\n       vpd_compliance_pct AS \"VPD Compliance %\",\n       compliance_pct AS \"Total Compliance %\"\nFROM v_planner_performance\nWHERE $__timeFilter((date + time '12:00')::timestamptz)\nORDER BY date"
+        }
+      ],
+      "title": "Planner Compliance Trend \u2014 Temp, VPD, Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Daily hours outside the temperature band, outside the VPD band, and total stress hours. Hours are time, not percent, and are not scaled.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "min": 0,
+          "max": null,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 35,
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 3,
+            "axisPlacement": "auto",
+            "axisLabel": "Hours",
+            "axisColorMode": "text",
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Temp Stress Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD Stress Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Stress Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFB74D",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Stress-Category Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFB74D",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 112,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time,\n       round((heat_stress_h + cold_stress_h)::numeric, 2) AS \"Temp Stress Hours\",\n       round((vpd_high_stress_h + vpd_low_stress_h)::numeric, 2) AS \"VPD Stress Hours\",\n       round(total_stress_h::numeric, 2) AS \"Total Stress-Category Hours\"\nFROM v_planner_performance\nWHERE $__timeFilter((date + time '12:00')::timestamptz)\nORDER BY date"
+        }
+      ],
+      "title": "Planner Stress-Category Hours \u2014 Temp, VPD, Total",
+      "type": "timeseries"
+    },
+    {
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
@@ -162,7 +758,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -256,7 +852,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -291,7 +887,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -331,7 +927,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m²"
+              "options": "Solar W/m\u00b2"
             },
             "properties": [
               {
@@ -359,7 +955,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -402,7 +998,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -433,7 +1029,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(50,150,255,0.7)",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -456,7 +1052,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(80,180,255,0.7)",
+                  "fixedColor": "#5C6BC0",
                   "mode": "fixed"
                 }
               },
@@ -479,7 +1075,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(200,100,255,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -502,7 +1098,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,80,50,0.7)",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               },
@@ -681,7 +1277,7 @@
           "format": "time_series",
           "rawQuery": true,
           "refId": "J",
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
         },
         {
           "datasource": {
@@ -768,7 +1364,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -862,7 +1458,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -897,7 +1493,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -943,7 +1539,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(239,83,80,0.7)",
+                  "fixedColor": "#CE93D8",
                   "mode": "fixed"
                 }
               },
@@ -966,7 +1562,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,167,38,0.7)",
+                  "fixedColor": "#F48FB1",
                   "mode": "fixed"
                 }
               },
@@ -989,7 +1585,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(171,71,188,0.7)",
+                  "fixedColor": "#E040FB",
                   "mode": "fixed"
                 }
               },
@@ -1012,7 +1608,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(126,87,194,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -1261,7 +1857,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -1282,7 +1878,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#73BF69",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -1292,7 +1888,7 @@
               },
               {
                 "id": "unit",
-                "value": "mol/m²"
+                "value": "mol/m\u00b2"
               }
             ]
           },
@@ -1325,7 +1921,7 @@
               },
               {
                 "id": "unit",
-                "value": "mol/m²"
+                "value": "mol/m\u00b2"
               }
             ]
           },
@@ -1370,7 +1966,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -1391,7 +1987,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,238,88,0.7)",
+                  "fixedColor": "#9CCC65",
                   "mode": "fixed"
                 }
               },
@@ -1414,7 +2010,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,241,118,0.7)",
+                  "fixedColor": "#C6FF00",
                   "mode": "fixed"
                 }
               },
@@ -1586,270 +2182,6 @@
       ],
       "title": "Light & DLI vs Target",
       "type": "timeseries"
-    },
-    {
-      "id": 108,
-      "type": "stat",
-      "title": "$/Day Avg",
-      "datasource": {
-        "uid": "verdify-tsdb",
-        "type": "grafana-postgresql-datasource"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 21,
-        "y": 4
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
-          },
-          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
-          "format": "table",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#78909C"
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "description": "Average daily total cost across the selected period"
-    },
-    {
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "verdify-tsdb"
-      },
-      "description": "Daily cost stacked by utility type.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 15,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "unit": "currencyUSD"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Electric"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FF9800",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Gas"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#F44336",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Water"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#2196F3",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 5
-      },
-      "id": 109,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_electric AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_gas AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_water AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
-          "refId": "C"
-        }
-      ],
-      "title": "Daily Cost by Type",
-      "type": "timeseries"
-    },
-    {
-      "description": "Greenhouse electrical load overlaid with available solar radiation. When solar is up, the greenhouse runs on sun.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 0,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Greenhouse (W)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#73BF69",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 30
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Solar (W/m²)"
-            },
-            "properties": [
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FADE2A",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 3
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "solid"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 8
-      },
-      "id": 110,
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', e.ts) AS time, round(avg(watts_total)::numeric, 0) AS \"Greenhouse (W)\" FROM energy e WHERE $__timeFilter(e.ts) GROUP BY 1 ORDER BY 1",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
-          "refId": "B"
-        }
-      ],
-      "title": "Greenhouse Power vs Solar Irradiance",
-      "type": "timeseries"
     }
   ],
   "annotations": {
@@ -1857,5 +2189,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "version": 2
 }

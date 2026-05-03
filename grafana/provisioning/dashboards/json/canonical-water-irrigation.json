@@ -59,7 +59,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -83,7 +84,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "gpm",
+          "unit": "gal/min",
           "decimals": 2,
           "thresholds": {
             "steps": [
@@ -98,7 +99,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows current or recent irrigation flow rate in gallons per minute."
@@ -132,7 +134,8 @@
           },
           "custom": {},
           "unit": "string"
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows when the wall drip zone last ran."
@@ -166,7 +169,8 @@
           },
           "custom": {},
           "unit": "string"
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows when the center drip zone last ran."
@@ -212,7 +216,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -246,7 +251,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -381,7 +386,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, cumulative_gallons_today AS \"Water Today\" FROM diagnostics WHERE ts > now() - interval '14 days' ORDER BY 1",
+          "rawSql": "SELECT ts AS time, mister_water_today AS \"Mister Water Today\" FROM climate WHERE ts > now() - interval '14 days' AND mister_water_today IS NOT NULL ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -525,7 +530,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='center'\n) s\n",
+          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_center'\n) s\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -591,7 +596,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -695,7 +701,24 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -766,7 +789,8 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -813,7 +837,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -863,7 +888,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -913,7 +939,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,

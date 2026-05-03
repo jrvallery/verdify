@@ -178,8 +178,10 @@
               }
             ]
           },
-          "unit": "h",
-          "custom": {}
+          "unit": "short",
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
         "overrides": []
       },
@@ -314,7 +316,7 @@
               }
             ]
           },
-          "unit": "deckbytes",
+          "unit": "kbytes",
           "custom": {}
         },
         "overrides": []
@@ -607,7 +609,7 @@
               }
             ]
           },
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "custom": {}
         },
         "overrides": []
@@ -813,7 +815,7 @@
               }
             ]
           },
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "custom": {}
         },
         "overrides": []
@@ -966,7 +968,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows how long the greenhouse has spent in each controller state."
     },
@@ -1067,7 +1070,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the currently active setpoint plan rows."
     },
@@ -1094,7 +1098,8 @@
                 "lineInterpolation": "smooth",
                 "lineWidth": 2,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisLabel": "\u00b0F"
               },
               "unit": "fahrenheit"
             },
@@ -1138,7 +1143,7 @@
                   {
                     "id": "color",
                     "value": {
-                      "fixedColor": "#FFA726",
+                      "fixedColor": "#AB47BC",
                       "mode": "fixed"
                     }
                   }
@@ -1262,7 +1267,8 @@
           "title": "Recent Alerts",
           "type": "table",
           "fieldConfig": {
-            "defaults": {}
+            "defaults": {},
+            "overrides": []
           }
         },
         {
@@ -1321,7 +1327,7 @@
                   },
                   {
                     "id": "unit",
-                    "value": "deckbytes"
+                    "value": "kbytes"
                   },
                   {
                     "id": "custom.axisPlacement",

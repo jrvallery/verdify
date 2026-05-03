@@ -199,7 +199,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "thresholds": {
             "steps": [
               {
@@ -432,7 +432,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -443,7 +443,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "Hours"
           },
           "unit": "fahrenheit"
         }
@@ -551,7 +552,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -565,7 +568,7 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -595,7 +598,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -609,7 +614,7 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -816,7 +821,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "steps": [
               {
@@ -833,7 +838,9 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
         "overrides": []
       },
@@ -973,7 +980,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -1086,8 +1094,10 @@
               }
             ]
           },
-          "custom": {},
-          "unit": "h"
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -1133,8 +1143,10 @@
               }
             ]
           },
-          "custom": {},
-          "unit": "h"
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -1899,7 +1911,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Plan Compliance \u2014 Did Reality Match the Plan?",
+      "title": "Plan Compliance \u2014 Did Reality Match the Plan?",
       "type": "timeseries",
       "description": "Shows whether key planned setpoints were actually achieved and by how far they missed when they were not."
     },
@@ -2073,7 +2085,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Controller Reliability \u2014 Reset Reasons Over Time",
+      "title": "Controller Reliability \u2014 Reset Reasons Over Time",
       "type": "timeseries",
       "description": "Marks watchdog and panic resets so reliability problems are visible instead of hidden in logs."
     },
@@ -2210,7 +2222,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(outcome_score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -2259,7 +2271,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Learning Loop \u2014 Plan Scores and Planning Volume",
+      "title": "Learning Loop \u2014 Plan Scores and Planning Volume",
       "type": "timeseries",
       "description": "Tracks whether the planner is producing plans and whether plan quality is improving or degrading over time."
     }

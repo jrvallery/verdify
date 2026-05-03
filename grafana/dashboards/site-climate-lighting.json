@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-lighting",
-  "title": "Site: Climate — Lighting",
+  "title": "Site: Climate \u2014 Lighting",
   "editable": true,
   "panels": [
     {
@@ -18,7 +18,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "mol/m²/day",
+            "axisLabel": "mol/m\u00b2/day",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -56,7 +56,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "mol/m\u00b2/d"
         },
         "overrides": [
           {
@@ -68,7 +68,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -106,7 +106,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "green",
+                  "fixedColor": "#8C8C8C",
                   "mode": "fixed"
                 }
               },
@@ -240,7 +240,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Maximum DLI reached each day — the final daily light integral",
+      "description": "Maximum DLI reached each day \u2014 the final daily light integral",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -281,7 +281,7 @@
               }
             ]
           },
-          "unit": "mol/m²/d"
+          "unit": "mol/m\u00b2/d"
         },
         "overrides": []
       },
@@ -352,13 +352,13 @@
               "mode": "off"
             }
           },
-          "unit": "watt/m²"
+          "unit": "watt/m\u00b2"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Forecast (W/m²)"
+              "options": "Forecast (W/m\u00b2)"
             },
             "properties": [
               {
@@ -395,7 +395,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Actual (W/m²)"
+              "options": "Actual (W/m\u00b2)"
             },
             "properties": [
               {
@@ -446,7 +446,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), solar_w_m2 AS \"Forecast (W/m²)\"\nFROM weather_forecast\nWHERE ts >= now() AND ts <= now() + interval '48 hours'\nORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_w_m2 AS \"Forecast (W/m\u00b2)\"\nFROM weather_forecast\nWHERE ts >= now() AND ts <= now() + interval '48 hours'\nORDER BY ts",
           "refId": "A"
         },
         {
@@ -455,7 +455,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Actual (W/m²)\"\nFROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Actual (W/m\u00b2)\"\nFROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "B"
         }
       ],
@@ -467,7 +467,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Sun angle and compass bearing. Altitude: 0°=horizon, 90°=zenith, negative=night. Azimuth: 0°=N, 90°=E, 180°=S, 270°=W.",
+      "description": "Sun angle and compass bearing. Altitude: 0\u00b0=horizon, 90\u00b0=zenith, negative=night. Azimuth: 0\u00b0=N, 90\u00b0=E, 180\u00b0=S, 270\u00b0=W.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -500,7 +500,7 @@
               },
               {
                 "id": "custom.axisLabel",
-                "value": "Altitude (°)"
+                "value": "Altitude (\u00b0)"
               },
               {
                 "id": "min",
@@ -535,7 +535,7 @@
               },
               {
                 "id": "custom.axisLabel",
-                "value": "Azimuth (°)"
+                "value": "Azimuth (\u00b0)"
               },
               {
                 "id": "min",
@@ -682,7 +682,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#C6FF00",
+                  "fixedColor": "#9CCC65",
                   "mode": "fixed"
                 }
               },
@@ -858,7 +858,8 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -869,7 +870,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Electric cost = Σ(equipment runtime × watts × $0.111/kWh)"
+      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)"
     },
     {
       "description": "Greenhouse electrical load overlaid with available solar radiation. When solar is up, the greenhouse runs on sun.",
@@ -910,7 +911,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar (W/m²)"
+              "options": "Solar (W/m\u00b2)"
             },
             "properties": [
               {
@@ -920,7 +921,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FADE2A",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -963,7 +964,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
           "refId": "B"
         }
       ],

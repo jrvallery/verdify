@@ -27,7 +27,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -75,7 +76,8 @@
           },
           "unit": "fahrenheit",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -123,7 +125,8 @@
           },
           "unit": "\u00b5S/cm",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -173,7 +176,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -221,7 +225,8 @@
           },
           "unit": "fahrenheit",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -271,7 +276,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -305,7 +311,24 @@
           "max": 100,
           "min": 0,
           "unit": "percent"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -349,10 +372,28 @@
           "custom": {
             "fillOpacity": 10,
             "lineWidth": 2,
-            "spanNulls": false
+            "spanNulls": false,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -399,7 +440,8 @@
             "spanNulls": false
           },
           "unit": "\u00b5S/cm"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -457,7 +499,8 @@
           "unit": "pressurekpa",
           "custom": {
             "lineWidth": 2,
-            "spanNulls": false
+            "spanNulls": false,
+            "axisLabel": "kPa"
           }
         }
       },

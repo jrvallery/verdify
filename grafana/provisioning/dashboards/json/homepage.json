@@ -11,9 +11,10 @@
         "defaults": {
           "custom": {
             "spanNulls": true,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "axisLabel": "\u00b0F"
           },
-          "unit": "\u00b0F"
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -63,7 +64,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#8C8C8C",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -302,7 +303,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               }
             ]
           },
@@ -393,7 +394,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               }
             ]
           },
@@ -420,7 +421,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               }
             ]
           },
@@ -455,7 +456,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               }
             ]
           },
@@ -482,7 +483,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               }
             ]
           }
@@ -583,7 +584,7 @@
             "spanNulls": true,
             "lineWidth": 2
           },
-          "unit": "watt"
+          "unit": "watt/m\u00b2"
         },
         "overrides": [
           {
@@ -609,7 +610,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               }
             ]
           },
@@ -622,7 +623,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EAB308",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },

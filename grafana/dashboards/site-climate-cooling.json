@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-cooling",
-  "title": "Site: Climate — Cooling",
+  "title": "Site: Climate \u2014 Cooling",
   "editable": true,
   "panels": [
     {
@@ -36,7 +36,8 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -47,7 +48,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Electric cost = Σ(equipment runtime × watts × $0.111/kWh)"
+      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)"
     },
     {
       "id": 5,
@@ -82,7 +83,8 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -93,7 +95,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Estimated kWh from equipment runtimes × rated wattages"
+      "description": "Estimated kWh from equipment runtimes \u00d7 rated wattages"
     },
     {
       "id": 8,
@@ -128,7 +130,8 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -176,13 +179,13 @@
               "mode": "off"
             }
           },
-          "unit": "watt/m²"
+          "unit": "watt/m\u00b2"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Forecast (W/m²)"
+              "options": "Forecast (W/m\u00b2)"
             },
             "properties": [
               {
@@ -219,7 +222,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Actual (W/m²)"
+              "options": "Actual (W/m\u00b2)"
             },
             "properties": [
               {
@@ -270,7 +273,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), solar_w_m2 AS \"Forecast (W/m²)\"\nFROM weather_forecast\nWHERE ts >= now() AND ts <= now() + interval '48 hours'\nORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_w_m2 AS \"Forecast (W/m\u00b2)\"\nFROM weather_forecast\nWHERE ts >= now() AND ts <= now() + interval '48 hours'\nORDER BY ts",
           "refId": "A"
         },
         {
@@ -279,7 +282,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Actual (W/m²)\"\nFROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Actual (W/m\u00b2)\"\nFROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "B"
         }
       ],
@@ -301,7 +304,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -408,7 +411,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -443,7 +446,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -464,7 +467,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m²"
+              "options": "Solar W/m\u00b2"
             },
             "properties": [
               {
@@ -492,7 +495,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -535,7 +538,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -681,7 +684,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "E"
         },
         {
@@ -717,7 +720,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "gradientMode": "none",
             "hideFrom": {
@@ -761,7 +764,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -985,7 +988,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "J"
         },
         {
@@ -1062,7 +1065,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1145,7 +1148,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -1180,7 +1183,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1220,7 +1223,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m²"
+              "options": "Solar W/m\u00b2"
             },
             "properties": [
               {
@@ -1248,7 +1251,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -1291,7 +1294,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -1322,7 +1325,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(50,150,255,0.7)",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -1345,7 +1348,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(80,180,255,0.7)",
+                  "fixedColor": "#5C6BC0",
                   "mode": "fixed"
                 }
               },
@@ -1368,7 +1371,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(200,100,255,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -1391,7 +1394,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,80,50,0.7)",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               },
@@ -1537,7 +1540,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#5794F2",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               }
@@ -1552,7 +1555,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#33A2FF",
+                  "fixedColor": "#5C6BC0",
                   "mode": "fixed"
                 }
               }
@@ -1567,7 +1570,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#73BF69",
+                  "fixedColor": "#FFCA28",
                   "mode": "fixed"
                 }
               }
@@ -1582,7 +1585,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#B877D9",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               }

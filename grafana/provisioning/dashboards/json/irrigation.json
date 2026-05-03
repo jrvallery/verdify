@@ -73,7 +73,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -115,7 +116,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -155,7 +157,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows operating cost behavior for this part of the greenhouse system."
@@ -189,7 +192,8 @@
           },
           "custom": {},
           "unit": "string"
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows when the wall drip zone last ran."
@@ -223,7 +227,8 @@
           },
           "custom": {},
           "unit": "string"
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows when the center drip zone last ran."
@@ -247,7 +252,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "gpm",
+          "unit": "gal/min",
           "decimals": 2,
           "thresholds": {
             "steps": [
@@ -262,7 +267,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows current or recent irrigation flow rate in gallons per minute."
@@ -312,7 +318,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -456,7 +463,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -509,7 +517,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -614,7 +623,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "kPa"
           },
           "unit": "pressurekpa"
         }
@@ -683,7 +693,8 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -723,7 +734,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "showHeader": true
@@ -792,7 +804,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the first south-zone irrigation probe."
@@ -842,7 +855,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the second south-zone irrigation probe."
@@ -892,7 +906,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the west-zone irrigation probe."
@@ -935,7 +950,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil EC from the first south-zone probe, useful for fertigation context."
@@ -1011,7 +1027,24 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -1072,15 +1105,33 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
             "lineWidth": 2,
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -1151,7 +1202,8 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -1235,7 +1287,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the first south-zone irrigation probe."
@@ -1287,7 +1340,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the second south-zone irrigation probe."
@@ -1339,7 +1393,24 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {},
       "description": "Shows soil moisture from the west-zone irrigation probe."
@@ -1368,7 +1439,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "showHeader": true
@@ -1426,7 +1498,24 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -1496,13 +1585,14 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
             "lineWidth": 2,
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -1579,7 +1669,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1714,7 +1804,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, cumulative_gallons_today AS \"Water Today\" FROM diagnostics WHERE ts > now() - interval '14 days' ORDER BY 1",
+          "rawSql": "SELECT ts AS time, mister_water_today AS \"Mister Water Today\" FROM climate WHERE ts > now() - interval '14 days' AND mister_water_today IS NOT NULL ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1791,7 +1881,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Water as Climate Control \u2014 Gallons, VPD, and Mister Activity",
+      "title": "Water as Climate Control \u2014 Gallons, VPD, and Mister Activity",
       "type": "timeseries",
       "description": "Shows that water usage is often tied to atmospheric control, not just irrigation."
     }

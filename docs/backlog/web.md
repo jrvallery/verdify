@@ -24,6 +24,13 @@ Owned by the [`web`](../agents/web.md) agent.
 - [x] **W-L1.3 Cost callout.** `/evidence/economics` uses defensible solar-aligned/grid/gas wording and USD rendering.
 - [x] **W-L1.4 Outage story.** `/evidence` owns the April 22-25 zero-plan/VPD-stress run as public failure evidence.
 - [ ] **W-L2.1 Weekly update template.** Add "Verdify this week" page/template for weather, score, lessons, failures, repairs.
+- [ ] **W-L1.9 Related Work page.** Add a verified public page positioning Verdify against AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA without overclaiming.
+- [ ] **W-L1.10 Safety Architecture page.** Add "Why the AI does not control relays" and keep the ESP32/dispatcher/LLM safety split above the fold.
+- [ ] **W-L1.11 Baseline vs Iris table.** Render a public baseline comparison once coordinator/Jason choose the comparison window and ingestor exposes the metric set.
+- [ ] **W-L1.12 Related-work comparison table.** Add a verified table for control style, AI role, public telemetry, scorecards, and lessons.
+- [ ] **W-L1.14 Builder path.** Add Build Notes / Reference Implementation with BOM, wiring/equipment overview, MQTT examples, DB overview, sample daily plan JSON, sample scorecard JSON, and explicit production-safety caveats.
+- [ ] **W-L1.15 Object-model diagram.** Add the Crop profile -> target bands -> plan -> tunables -> state machine -> telemetry -> scorecard -> lessons loop diagram.
+- [ ] **W-L2.8 Crop-steering roadmap.** Add grower vocabulary where accurate: day/night VPD bands, DLI target vs actual, dryback/irrigation windows, substrate sensing, pH/EC/DO, and shade cloth automation roadmap.
 
 ## Ideas (not yet committed)
 

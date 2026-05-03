@@ -104,3 +104,9 @@ Leaf MLX90614 (`leaf_temp_f` + computed `leaf_air_vpd_kpa`) is separately a hard
 - `make firmware-check` (ESPHome compile) must pass before commit; `make check` runs the full chain.
 - Any new override flag must land in `verdify_schemas/telemetry.OverrideEvent` and `firmware/lib/greenhouse_types.h` (`OverrideFlags` struct) — coordinate with coordinator first.
 - Any relay / switch rename touches `entity_map.py` — coordinate with ingestor.
+
+## Launch-support tasks from prior-art review
+
+- [ ] **F-L1.10 Safety Architecture facts.** Supply exact public-safe claims for "Why the AI does not control relays": loop cadence, local enforcement, relay ownership, safety rails, watchdog behavior, and what happens if cloud/Wi-Fi/planner fail.
+- [ ] **F-L1.14 Builder path facts.** Review BOM/wiring/equipment claims for ESP32, probes, relays, heaters, misters, and OTA safeguards before publication.
+- [ ] **F-L2.5 Progressive autonomy roadmap.** Define what firmware evidence is required before moving up an L1-L4 autonomy ladder; no roadmap item implies a launch-time OTA.

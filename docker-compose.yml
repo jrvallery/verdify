@@ -16,6 +16,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/logs:/var/log/traefik
     networks:
       - verdify-proxy
     restart: unless-stopped
@@ -224,6 +225,87 @@ services:
       - verdify-proxy
     restart: unless-stopped
 
+  # ── Public Website Analytics ────────────────────────────────
+  umami-db:
+    image: postgres:16-alpine
+    container_name: verdify-umami-db
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${UMAMI_DB_PASSWORD}
+    volumes:
+      - umami_db_data:/var/lib/postgresql/data
+    networks:
+      - verdify-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami -d umami"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    container_name: verdify-umami
+    environment:
+      DATABASE_URL: postgresql://umami:${UMAMI_DB_PASSWORD}@umami-db:5432/umami
+      DATABASE_TYPE: postgresql
+      APP_SECRET: ${UMAMI_APP_SECRET}
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    networks:
+      - verdify-proxy
+      - verdify-internal
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=verdify-proxy"
+      - "traefik.http.middlewares.umami-share-redirect.redirectregex.regex=^https://analytics\\.verdify\\.ai/$"
+      - "traefik.http.middlewares.umami-share-redirect.redirectregex.replacement=https://analytics.verdify.ai/share/dceaeb6aa6d60a01/Verdify"
+      - "traefik.http.middlewares.umami-share-redirect.redirectregex.permanent=false"
+      - "traefik.http.routers.umami-share.rule=Host(`analytics.verdify.ai`) && Path(`/`)"
+      - "traefik.http.routers.umami-share.entrypoints=websecure"
+      - "traefik.http.routers.umami-share.tls=true"
+      - "traefik.http.routers.umami-share.priority=200"
+      - "traefik.http.routers.umami-share.middlewares=umami-share-redirect@docker,api-security-headers@file"
+      - "traefik.http.routers.umami-share.service=umami"
+      - "traefik.http.routers.umami.rule=Host(`analytics.verdify.ai`)"
+      - "traefik.http.routers.umami.entrypoints=websecure"
+      - "traefik.http.routers.umami.tls=true"
+      - "traefik.http.routers.umami.middlewares=api-security-headers@file"
+      - "traefik.http.services.umami.loadbalancer.server.port=3000"
+
+  goaccess:
+    image: allinurl/goaccess:latest
+    container_name: verdify-goaccess
+    volumes:
+      - ./traefik/logs:/var/log/traefik:ro
+      - ./goaccess/goaccess.conf:/etc/goaccess/goaccess.conf:ro
+      - ./analytics/goaccess:/var/www/goaccess
+    entrypoint:
+      - /bin/sh
+      - -c
+      - while true; do goaccess /var/log/traefik/access.log -p /etc/goaccess/goaccess.conf --output=/var/www/goaccess/index.html --no-progress || true; sleep 60; done
+    restart: unless-stopped
+
+  goaccess-site:
+    image: nginx:alpine
+    container_name: verdify-goaccess-site
+    volumes:
+      - ./analytics/goaccess:/usr/share/nginx/html:ro
+    networks:
+      - verdify-proxy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=verdify-proxy"
+      - "traefik.http.routers.goaccess.rule=Host(`logs.verdify.ai`)"
+      - "traefik.http.routers.goaccess.entrypoints=websecure"
+      - "traefik.http.routers.goaccess.tls=true"
+      - "traefik.http.routers.goaccess.middlewares=api-security-headers@file"
+      - "traefik.http.services.goaccess.loadbalancer.server.port=80"
+
   # ── Promtail (log shipping to Loki) ────────────────────────────
   promtail:
     image: grafana/promtail:latest
@@ -246,3 +328,4 @@ volumes:
   grafana_data:
   mqtt_data:
   promtail_positions:
+  umami_db_data:

@@ -181,7 +181,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -385,7 +385,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -802,7 +802,8 @@
             "fillOpacity": 0,
             "pointSize": 5,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -901,6 +902,36 @@
                 "value": 1
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -956,7 +987,8 @@
             "pointSize": 5,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit",
           "color": {
@@ -1058,9 +1090,10 @@
                 "fillOpacity": 0,
                 "pointSize": 5,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisLabel": "kPa"
               },
-              "unit": "pressurekPa"
+              "unit": "pressurekpa"
             },
             "overrides": [
               {
@@ -1194,6 +1227,36 @@
                     "value": 1
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "VPD High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#EF5350",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "VPD Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#42A5F5",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -1252,7 +1315,8 @@
                 "pointSize": 5,
                 "showPoints": "never",
                 "spanNulls": true,
-                "axisPlacement": "auto"
+                "axisPlacement": "auto",
+                "axisLabel": "kPa"
               },
               "unit": "pressurekpa"
             },
@@ -2094,7 +2158,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -2107,8 +2172,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "yellow"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2332,13 +2397,14 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "custom": {
             "lineWidth": 2,
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "kPa"
           }
         },
         "overrides": [
@@ -2351,8 +2417,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "rgba(255,80,80,0.6)"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2384,8 +2450,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "rgba(100,150,255,0.6)"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2533,7 +2599,23 @@
           },
           "unit": "none"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {},
       "description": "Shows when the economiser logic is allowing or blocking vent-based dehumidification."
@@ -2662,7 +2744,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -2738,8 +2820,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "blue"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3014,7 +3096,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 March 25 \u2014 One Bad Day: Temp, VPD, Fog, and Misters",
+      "title": "March 25 \u2014 One Bad Day: Temp, VPD, Fog, and Misters",
       "type": "timeseries",
       "description": "Representative stress day showing outdoor heat, indoor heat, VPD pressure, and the system response. This is the clearest single-day proof of the greenhouse control problem."
     },
@@ -3148,8 +3230,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3273,7 +3355,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Temperature Story \u2014 Forecast vs Planned vs Actual",
+      "title": "Temperature Story \u2014 Forecast vs Planned vs Actual",
       "type": "timeseries",
       "description": "Forecast, planned temperature posture, and actual indoor outcome over the same window. Useful for showing whether planning is anticipatory or reactive."
     },
@@ -3407,8 +3489,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3532,7 +3614,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 VPD Story \u2014 Forecast vs Planned vs Actual",
+      "title": "VPD Story \u2014 Forecast vs Planned vs Actual",
       "type": "timeseries",
       "description": "Forecast dry-air pressure, planned VPD ceiling posture, and actual indoor VPD over time."
     }

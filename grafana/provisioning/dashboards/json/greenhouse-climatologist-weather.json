@@ -31,7 +31,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -45,7 +46,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               }
@@ -60,7 +61,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#8C8C8C",
                   "mode": "fixed"
                 }
               }
@@ -453,7 +454,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#26A69A",
+                  "fixedColor": "#8C8C8C",
                   "mode": "fixed"
                 }
               }
@@ -595,7 +596,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -609,7 +611,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1042,7 +1044,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -1073,7 +1076,7 @@
               }
             ]
           },
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "custom": {}
         },
         "overrides": []
@@ -1175,13 +1178,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFD600",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "custom.axisPlacement",
@@ -1238,7 +1241,8 @@
             "fillOpacity": 10,
             "showPoints": "never",
             "lineWidth": 2,
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -1371,7 +1375,8 @@
           "title": "Disease Risk (Last 12h)",
           "type": "table",
           "fieldConfig": {
-            "defaults": {}
+            "defaults": {},
+            "overrides": []
           }
         },
         {
@@ -1403,7 +1408,8 @@
           "title": "Mister Effectiveness (24h)",
           "type": "table",
           "fieldConfig": {
-            "defaults": {}
+            "defaults": {},
+            "overrides": []
           }
         }
       ],

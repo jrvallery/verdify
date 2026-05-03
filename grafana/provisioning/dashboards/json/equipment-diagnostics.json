@@ -314,7 +314,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -522,7 +522,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -677,13 +677,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#FF9800"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -701,7 +703,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -741,13 +760,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#E65100"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -765,7 +786,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -805,13 +843,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#42A5F5"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -829,7 +869,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -869,13 +926,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#1565C0"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -893,7 +952,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -933,13 +1009,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#009688"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -957,7 +1035,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -997,13 +1092,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#FFD740"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1021,7 +1118,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1061,13 +1175,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#66BB6A"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1085,7 +1201,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1236,7 +1369,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1246,7 +1379,9 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
         "overrides": [
           {
@@ -1359,6 +1494,186 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#78909C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drip Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drip Wall"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1588,6 +1903,111 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -1655,9 +2075,12 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "h",
+              "unit": "short",
               "color": {
                 "mode": "fixed"
+              },
+              "custom": {
+                "axisLabel": "Hours"
               }
             },
             "overrides": [
@@ -1695,6 +2118,36 @@
                     "value": {
                       "mode": "fixed",
                       "fixedColor": "#1565C0"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Fan 1"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#26A69A",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Fan 2"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#5C6BC0",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1760,7 +2213,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "h",
+              "unit": "short",
               "custom": {
                 "drawStyle": "line",
                 "lineInterpolation": "linear",
@@ -1773,7 +2226,8 @@
                 "pointSize": 5,
                 "showPoints": "auto",
                 "spanNulls": true,
-                "axisBorderShow": false
+                "axisBorderShow": false,
+                "axisLabel": "Hours"
               }
             },
             "overrides": [
@@ -2013,7 +2467,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "h",
+              "unit": "short",
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 80,
@@ -2021,7 +2475,8 @@
                 "stacking": {
                   "mode": "normal"
                 },
-                "spanNulls": false
+                "spanNulls": false,
+                "axisLabel": "Hours"
               }
             },
             "overrides": [
@@ -2049,8 +2504,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#E65100"
+                      "fixedColor": "#F4511E",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2064,8 +2519,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#42A5F5"
+                      "fixedColor": "#26A69A",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2079,8 +2534,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#1565C0"
+                      "fixedColor": "#5C6BC0",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2094,8 +2549,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#009688"
+                      "fixedColor": "#00ACC1",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2109,8 +2564,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#FFD740"
+                      "fixedColor": "#FFCA28",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2124,8 +2579,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#66BB6A"
+                      "fixedColor": "#9CCC65",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2230,7 +2685,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "deckbytes",
+              "unit": "kbytes",
               "custom": {
                 "drawStyle": "line",
                 "lineWidth": 1,
@@ -2659,13 +3114,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#CE93D8"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2683,7 +3140,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -2723,13 +3197,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#F48FB1"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2747,7 +3223,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -2787,13 +3280,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#E040FB"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2811,7 +3306,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -2851,13 +3363,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#4DD0E1"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2875,7 +3389,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drip Wall"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -2915,13 +3446,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 2,
           "color": {
             "mode": "fixed",
             "fixedColor": "#80DEEA"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2939,7 +3472,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drip Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -3003,7 +3553,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -3047,7 +3598,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the current on/off state of major greenhouse equipment."
     }

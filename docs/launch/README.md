@@ -4,13 +4,18 @@ Updated: 2026-05-02
 Launch owner: coordinator / iris-dev
 Launch posture: **P0 hardening deployed; broad-launch timing now depends on Jason's identity/copy/video decisions**
 
-Source triage: [`feedback-triage-2026-05-02.md`](feedback-triage-2026-05-02.md)
+Source triage:
+
+- [`feedback-triage-2026-05-02.md`](feedback-triage-2026-05-02.md)
+- [`prior-art-rollup-2026-05-03.md`](prior-art-rollup-2026-05-03.md)
 
 Verdify's public launch narrative is:
 
 > An ESP32 runs my greenhouse. Claude tunes its setpoints three times a day. The plans, telemetry, costs, failures, and lessons are public.
 
 This replaces weaker launch framing like "self-improving AI greenhouse" when addressing skeptical technical audiences. The safety split must stay above the fold: the LLM does not flip relays; it writes tactical parameters and the ESP32 enforces real-time control and safety.
+
+The prior-art posture is: Verdify is not claiming to be the first smart greenhouse, the biggest autonomous greenhouse deployment, or the best RL optimizer. Verdify's contribution is the public falsifiability loop: plan, telemetry, score, cost, failure, and lesson are all visible for a real physical greenhouse.
 
 ## Readiness Gates
 

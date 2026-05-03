@@ -877,7 +877,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1064,7 +1064,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('month', ts) AS time, sum(cost_total_usd) AS \"Monthly Cost\" FROM daily_summary WHERE ts > now() - interval '365 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month', date)::timestamptz AS time, sum(cost_total) AS \"Monthly Cost\" FROM daily_summary WHERE date >= CURRENT_DATE - 365 GROUP BY 1 ORDER BY 1",
           "refId": "C",
           "sql": {
             "columns": [

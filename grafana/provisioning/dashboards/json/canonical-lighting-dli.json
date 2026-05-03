@@ -361,7 +361,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "color": {
             "mode": "fixed",
             "fixedColor": "#C6FF00"
@@ -373,7 +373,8 @@
             "barMaxWidth": 20,
             "spanNulls": true,
             "lineInterpolation": "linear",
-            "showPoints": "never"
+            "showPoints": "never",
+            "axisLabel": "Hours"
           }
         },
         "overrides": []
@@ -457,7 +458,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -529,7 +531,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -607,7 +610,7 @@
               }
             ]
           },
-          "unit": "none",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1
         },
         "overrides": [
@@ -620,8 +623,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
                 }
               },
               {
@@ -658,8 +661,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1016,7 +1019,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "watt",
+          "unit": "watt/m\u00b2",
           "decimals": 0,
           "color": {
             "mode": "thresholds"
@@ -1336,8 +1339,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#C6FF00"
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
                 }
               },
               {

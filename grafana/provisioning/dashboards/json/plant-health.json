@@ -308,7 +308,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -512,7 +512,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -765,7 +765,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -774,7 +774,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -796,9 +796,27 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -833,7 +851,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_cold,0))::numeric, 2) AS \"Cold Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -842,7 +860,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -864,9 +882,27 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -942,7 +978,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reference DLI"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1045,7 +1097,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_heat,0))::numeric, 2) AS \"Heat Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1079,10 +1131,28 @@
               }
             ]
           },
-          "unit": "h",
-          "custom": {}
+          "unit": "short",
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1182,7 +1252,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1262,7 +1332,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "pressurekPa",
+              "unit": "pressurekpa",
               "custom": {
                 "drawStyle": "line",
                 "lineInterpolation": "smooth",
@@ -1273,7 +1343,8 @@
                 "spanNulls": true,
                 "thresholdsStyle": {
                   "mode": "line+area"
-                }
+                },
+                "axisLabel": "kPa"
               },
               "color": {
                 "mode": "continuous-RdYlGr"
@@ -1347,7 +1418,7 @@
             {
               "refId": "A",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_cold,0))::numeric, 2) AS \"Cold Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1356,7 +1427,7 @@
             {
               "refId": "B",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_heat,0))::numeric, 2) AS \"Heat Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1365,7 +1436,7 @@
             {
               "refId": "C",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1600,6 +1671,66 @@
                     ]
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Setpoint High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#EF5350",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Setpoint Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#42A5F5",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "VPD High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#EF5350",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "VPD Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#42A5F5",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -1635,7 +1766,7 @@
             {
               "refId": "A",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_heat,0))::numeric, 2) AS \"Heat Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1644,7 +1775,7 @@
             {
               "refId": "B",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_cold,0))::numeric, 2) AS \"Cold Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1653,7 +1784,7 @@
             {
               "refId": "C",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
@@ -1662,7 +1793,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "h",
+              "unit": "short",
               "custom": {
                 "drawStyle": "bars",
                 "barAlignment": 0,
@@ -1672,7 +1803,7 @@
                 "spanNulls": true,
                 "showPoints": "never",
                 "axisCenteredZero": false,
-                "axisLabel": ""
+                "axisLabel": "Hours"
               },
               "color": {
                 "mode": "palette-classic"
@@ -1741,6 +1872,51 @@
                     "value": {
                       "mode": "fixed",
                       "fixedColor": "#FFA726"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Setpoint High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#EF5350",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Setpoint Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#42A5F5",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "VPD High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#EF5350",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1860,8 +2036,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "yellow"
+                      "fixedColor": "#8C8C8C",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -2022,8 +2198,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "blue"
+                      "fixedColor": "#FDD835",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2084,7 +2260,8 @@
                 "fillOpacity": 10,
                 "lineWidth": 2,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisLabel": "Hours"
               },
               "color": {
                 "mode": "palette-classic"
@@ -2109,7 +2286,7 @@
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "h"
+                    "value": "short"
                   },
                   {
                     "id": "custom.axisPlacement",
@@ -2272,7 +2449,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "\u00b0F",
+              "unit": "fahrenheit",
               "custom": {
                 "drawStyle": "bars",
                 "barAlignment": 0,
@@ -2282,7 +2459,7 @@
                 "spanNulls": true,
                 "showPoints": "never",
                 "axisCenteredZero": true,
-                "axisLabel": ""
+                "axisLabel": "\u00b0F"
               },
               "color": {
                 "mode": "palette-classic"
@@ -2545,7 +2722,7 @@
             "showPoints": "never",
             "spanNulls": true
           },
-          "unit": "none"
+          "unit": "mol/m\u00b2/d"
         },
         "overrides": [
           {
@@ -2608,8 +2785,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2718,8 +2895,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2854,7 +3031,8 @@
             "fillOpacity": 10,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -2982,7 +3160,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the first south-zone probe."
@@ -3032,7 +3211,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the second south-zone probe."
@@ -3082,7 +3262,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil moisture from the west-zone probe."
@@ -3125,7 +3306,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {},
       "description": "Shows soil electrical conductivity from the EC-capable first south-zone probe."
@@ -3201,7 +3383,24 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -3262,15 +3461,33 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
             "lineWidth": 2,
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -3341,7 +3558,8 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -3607,7 +3825,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Zone Temperature Comparison \u2014 South vs East vs West",
+      "title": "Zone Temperature Comparison \u2014 South vs East vs West",
       "type": "timeseries",
       "description": "Direct temperature comparison for the three most important growing zones."
     },
@@ -3675,8 +3893,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3694,8 +3912,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "blue"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3713,8 +3931,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "yellow"
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3834,7 +4052,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Zone VPD Comparison \u2014 South vs East vs West",
+      "title": "Zone VPD Comparison \u2014 South vs East vs West",
       "type": "timeseries",
       "description": "Direct VPD comparison for the three main growing zones."
     },
@@ -3901,7 +4119,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='center'\n) s\n",
+          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_center'\n) s\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -3922,7 +4140,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Mister Effectiveness by Zone \u2014 Average VPD Drop per Pulse",
+      "title": "Mister Effectiveness by Zone \u2014 Average VPD Drop per Pulse",
       "type": "barchart",
       "description": "Average drop in VPD per mister pulse by zone. Useful for showing why the center zone underperforms."
     }

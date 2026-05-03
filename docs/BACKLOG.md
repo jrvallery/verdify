@@ -8,6 +8,8 @@ Broad launch is now a cross-agent release train. Canonical launch gates live in 
 
 Current launch posture: **not broad-launch ready** until the P0 gates are complete.
 
+2026-05-03 update: Jason's prior-art review is tracked in [`docs/launch/prior-art-rollup-2026-05-03.md`](launch/prior-art-rollup-2026-05-03.md). It adds post-P0 launch assets around Related Work, Safety Architecture, Baseline vs Iris, builder packaging, counterfactual replay, and progressive autonomy. These are P1/P2 credibility assets, not Track A firmware blockers.
+
 | Owner | Launch focus | Backlog |
 |---|---|---|
 | `coordinator` / Jason | Privacy/security scrub, launch sequencing, identity/code-transparency decisions, final copy approval | `docs/backlog/launch.md` |

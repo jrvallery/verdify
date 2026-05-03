@@ -1,6 +1,6 @@
 {
   "uid": "site-evidence-economics",
-  "title": "Site: Evidence — Economics",
+  "title": "Site: Evidence \u2014 Economics",
   "editable": true,
   "panels": [
     {
@@ -76,7 +76,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Electric cost = Σ(equipment runtime × watts × $0.111/kWh)",
+      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -137,7 +137,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Gas cost = heat2 runtime × 75K BTU × $0.83/therm",
+      "description": "Gas cost = heat2 runtime \u00d7 75K BTU \u00d7 $0.83/therm",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -198,7 +198,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Water cost = gallons used × $0.00484/gal",
+      "description": "Water cost = gallons used \u00d7 $0.00484/gal",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -782,7 +782,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 80,
@@ -792,7 +792,8 @@
             },
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -820,8 +821,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -835,8 +836,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -865,8 +866,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1040,8 +1041,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1100,7 +1101,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar (W/m²)"
+              "options": "Solar (W/m\u00b2)"
             },
             "properties": [
               {
@@ -1110,7 +1111,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FADE2A",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -1153,7 +1154,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL GROUP BY 1 ORDER BY 1",
           "refId": "B"
         }
       ],
@@ -1190,7 +1191,8 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1234,7 +1236,8 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1275,7 +1278,8 @@
             ]
           },
           "unit": "watt"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1316,7 +1320,8 @@
             ]
           },
           "unit": "watt"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1356,8 +1361,9 @@
               }
             ]
           },
-          "unit": "kWh"
-        }
+          "unit": "kwatth"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1397,8 +1403,9 @@
               }
             ]
           },
-          "unit": "watt"
-        }
+          "unit": "watt/m\u00b2"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1416,7 +1423,7 @@
           "rawSql": "SELECT now() as time, round(max(solar_irradiance_w_m2)::numeric, 0) as value FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL"
         }
       ],
-      "title": "Peak Solar (W/m²)",
+      "title": "Peak Solar (W/m\u00b2)",
       "type": "stat"
     },
     {
@@ -1639,7 +1646,8 @@
             "mode": "fixed",
             "fixedColor": "#FFD740"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1685,7 +1693,8 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1696,7 +1705,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Gas cost = heat2 runtime × 75K BTU × $0.83/therm"
+      "description": "Gas cost = heat2 runtime \u00d7 75K BTU \u00d7 $0.83/therm"
     },
     {
       "id": 204,
@@ -1731,7 +1740,8 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1742,7 +1752,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Water cost = gallons used × $0.00484/gal"
+      "description": "Water cost = gallons used \u00d7 $0.00484/gal"
     },
     {
       "id": 202,
@@ -1777,7 +1787,8 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1788,7 +1799,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Electric cost = Σ(equipment runtime × watts × $0.111/kWh)"
+      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)"
     }
   ],
   "annotations": {

@@ -157,7 +157,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "steps": [
               {
@@ -174,7 +174,9 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
         "overrides": []
       },
@@ -356,8 +358,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -615,8 +617,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -890,7 +892,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(outcome_score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1008,7 +1010,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },

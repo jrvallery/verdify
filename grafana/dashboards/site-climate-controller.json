@@ -1,6 +1,6 @@
 {
   "uid": "site-climate-controller",
-  "title": "Site: Climate — Controller",
+  "title": "Site: Climate \u2014 Controller",
   "editable": true,
   "panels": [
     {
@@ -43,7 +43,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -86,7 +87,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -113,7 +115,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -128,7 +131,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT temp_case AS \"°F\" FROM climate WHERE temp_case IS NOT NULL ORDER BY ts DESC LIMIT 1",
+          "rawSql": "SELECT temp_case AS \"\u00b0F\" FROM climate WHERE temp_case IS NOT NULL ORDER BY ts DESC LIMIT 1",
           "refId": "A",
           "format": "table",
           "datasource": {
@@ -139,7 +142,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "°F",
+          "unit": "fahrenheit",
           "thresholds": {
             "steps": [
               {
@@ -156,7 +159,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -198,7 +202,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -224,6 +229,10 @@
       ],
       "options": {
         "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
       }
     },
     {
@@ -275,7 +284,8 @@
           "custom": {
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "lineWidth": 2
           }
         }
       },
@@ -303,7 +313,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(ts), temp_case AS \"Case Temp (°F)\" FROM climate WHERE $__timeFilter(ts) AND temp_case IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), temp_case AS \"Case Temp (\u00b0F)\" FROM climate WHERE $__timeFilter(ts) AND temp_case IS NOT NULL ORDER BY ts",
           "refId": "A",
           "format": "time_series",
           "datasource": {
@@ -335,7 +345,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -344,7 +354,9 @@
           "custom": {
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "lineWidth": 2,
+            "axisLabel": "Hours"
           }
         }
       },
@@ -388,9 +400,11 @@
             "fillOpacity": 40,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "lineWidth": 2
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -424,12 +438,16 @@
             "type": "grafana-postgresql-datasource"
           }
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     },
     {
       "id": 45,
       "type": "heatmap",
-      "title": "Oscillation Heatmap (param × hour)",
+      "title": "Oscillation Heatmap (param \u00d7 hour)",
       "gridPos": {
         "h": 8,
         "w": 18,
@@ -455,6 +473,10 @@
           "scheme": "RdYlGn",
           "reverse": true
         }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
       }
     },
     {
@@ -508,7 +530,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "gradientMode": "none",
             "hideFrom": {
@@ -585,7 +607,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -620,7 +642,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -660,7 +682,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar W/m²"
+              "options": "Solar W/m\u00b2"
             },
             "properties": [
               {
@@ -688,7 +710,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -731,7 +753,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -762,7 +784,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(50,150,255,0.7)",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -785,7 +807,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(80,180,255,0.7)",
+                  "fixedColor": "#5C6BC0",
                   "mode": "fixed"
                 }
               },
@@ -808,7 +830,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(200,100,255,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -831,7 +853,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,80,50,0.7)",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               },
@@ -941,7 +963,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m²\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "J"
         },
         {
@@ -1027,7 +1049,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "gradientMode": "none",
@@ -1045,7 +1067,7 @@
               "mode": "off"
             }
           },
-          "unit": "pressurePascal",
+          "unit": "pressurekpa",
           "decimals": 2
         },
         "overrides": [
@@ -1106,7 +1128,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -1141,7 +1163,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1187,7 +1209,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(239,83,80,0.7)",
+                  "fixedColor": "#CE93D8",
                   "mode": "fixed"
                 }
               },
@@ -1210,7 +1232,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,167,38,0.7)",
+                  "fixedColor": "#F48FB1",
                   "mode": "fixed"
                 }
               },
@@ -1233,7 +1255,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(171,71,188,0.7)",
+                  "fixedColor": "#E040FB",
                   "mode": "fixed"
                 }
               },
@@ -1256,7 +1278,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(126,87,194,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -1386,7 +1408,7 @@
     {
       "id": 210,
       "type": "timeseries",
-      "title": "Enthalpy Delta (Outdoor − Indoor)",
+      "title": "Enthalpy Delta (Outdoor \u2212 Indoor)",
       "gridPos": {
         "h": 10,
         "w": 12,
@@ -1395,7 +1417,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT $__time(ts), enthalpy_delta AS \"ΔH (kJ/kg)\" FROM climate WHERE $__timeFilter(ts) AND enthalpy_delta IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), enthalpy_delta AS \"\u0394H (kJ/kg)\" FROM climate WHERE $__timeFilter(ts) AND enthalpy_delta IS NOT NULL ORDER BY ts",
           "refId": "A",
           "format": "time_series",
           "datasource": {
@@ -1411,14 +1433,15 @@
             "fillOpacity": 10,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "lineWidth": 2
           }
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "ΔH (kJ/kg)"
+              "options": "\u0394H (kJ/kg)"
             },
             "properties": [
               {
@@ -1479,7 +1502,24 @@
           "custom": {
             "fillOpacity": 80
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -1611,7 +1651,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(outcome_score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1703,7 +1743,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, avg_error AS \"Forecast bias (°F)\" FROM fn_forecast_correction('temp_f', 24)",
+          "rawSql": "SELECT now() AS time, avg_error AS \"Forecast bias (\u00b0F)\" FROM fn_forecast_correction('temp_f', 24)",
           "refId": "A"
         }
       ],

@@ -168,6 +168,11 @@ def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations
     denver_now = datetime.now(UTC).astimezone()
     # Sprint 22: frontmatter validated through ForecastVaultFrontmatter.
     fm = ForecastVaultFrontmatter(
+        title="Greenhouse Weather Forecast",
+        description=(
+            "Generated 72-hour Longmont weather forecast for Verdify's greenhouse planning loop, "
+            "including temperature, humidity, VPD, solar radiation, precipitation, and bias checks."
+        ),
         date=denver_now.date(),
         tags=["forecast", "auto-generated"],
         last_updated=denver_now.isoformat(timespec="seconds"),
@@ -176,13 +181,14 @@ def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations
         fm.model_dump(mode="json", exclude_none=True),
         sort_keys=False,
         default_flow_style=None,
+        width=1000,
     )
     lines = [
         "---",
         yaml_block.rstrip(),
         "---",
         "",
-        "# Forecast",
+        "# Greenhouse Weather Forecast",
         "",
         "*This page regenerates every 30 minutes from the latest Open-Meteo sync. "
         "Open-Meteo's biases are tracked and reported below; apply them to the raw "
