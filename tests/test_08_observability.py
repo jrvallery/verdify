@@ -720,7 +720,7 @@ class TestForecastPageGeneration:
     def test_forecast_page_has_sections(self):
         with open(self.PAGE_PATH) as f:
             body = f.read()
-        for section in ("# Forecast", "## Hourly — next 72 h", "## Days 4\u20137 outlook"):
+        for section in ("# Greenhouse Weather Forecast", "## Hourly — next 72 h", "## Days 4\u20137 outlook"):
             assert section in body, f"forecast page missing section: {section!r}"
 
 
