@@ -9,7 +9,7 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 **Launch support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
 
-- [x] **F-L1.1 Architecture fact review.** Public safety copy now uses the defensible wording: 7-mode deterministic controller evaluated every 5 seconds; Iris writes tactics and does not flip relays.
+- [x] **F-L1.1 Architecture fact review.** Public safety copy now uses the defensible wording: 8-state firmware controller evaluated every 5 seconds; Iris writes tactics and does not flip relays.
 - [x] **F-L1.2 Bill-of-materials fact pack.** `/intelligence/build-notes` links the public equipment inventory and uses launch-safe ESP32/probe/relay/heater/fan/vent/fog/mister facts.
 - [ ] **F-L0 Freeze discipline.** No launch-driven behavior-changing OTA. Firmware changes remain Track A only and must obey replay/invariant/freeze rules.
 

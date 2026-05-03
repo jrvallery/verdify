@@ -29,7 +29,7 @@ Verdify should launch as a public AI-control-system case study, not as a generic
 
 The working line remains:
 
-> An ESP32 runs my greenhouse. Claude tunes its setpoints three times a day. The plans, telemetry, costs, failures, and lessons are public.
+> An ESP32 runs my greenhouse locally. Iris uses Claude to write bounded tactical plans at solar milestones and event triggers. The ESP32 owns relay control and safety every 5 seconds. The plans, telemetry, costs, failures, and lessons are public.
 
 The sprint must keep three constraints visible:
 

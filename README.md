@@ -1,33 +1,33 @@
 # Verdify
 
-**What if a greenhouse could learn?**
+**A public AI-assisted greenhouse control loop.**
 
-367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95°F solar peaks. Six crops. One AI.
+367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95°F solar peaks. Mixed crops. One deterministic controller.
 
-172 sensors feed a 7-mode climate controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. An AI agent named Iris (Claude Opus 4.6) plans event-driven — adjusting 24 tunables at sunrise, sunset, and every transition in between. The system measures every outcome, scores every plan, and gets better.
+About 172 ESPHome entities feed an 8-state firmware controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Iris uses Claude through OpenClaw to write bounded tactical plans at solar milestones and event triggers. The system measures outcomes, scores plans, and feeds validated lessons into future planning.
 
 **[verdify.ai](https://verdify.ai)**
 
 ## Architecture
 
 ```
-ESP32 Controller (7-mode, greenhouse_logic.h, 5s loop)
+ESP32 Controller (8-state, greenhouse_logic.h, 5s loop)
   ├── aioesphomeapi ──→ Ingestor ──→ TimescaleDB (2.5M+ rows)
   ├── MQTT ──→ Mosquitto (state publishing + occupancy)
   └── HTTPS ──→ API (band-driven setpoints every 5 min)
 
-TimescaleDB (47 tables, 56 views, 100+ functions)
-  ├── Grafana (54 dashboards, anonymous read)
-  ├─��� FastAPI (crop catalog + ESP32 setpoints)
-  ├── MCP Server (9 tools for Iris agent)
+TimescaleDB (telemetry, views, scorecards, lessons)
+  ├── Grafana (public and private dashboards)
+  ├── FastAPI (crop catalog + ESP32 setpoints)
+  ├── MCP Server (typed tools for Iris)
   └── Quartz (static site with embedded panels)
 
-Iris Planner (Claude Opus 4.6, OpenClaw agent)
+Iris Planner (Claude via OpenClaw)
   └── Event-driven: sunrise, transitions, sunset, forecast, deviation
       → MCP tools → set_tunable() → Slack #greenhouse
 ```
 
-Everything runs on a single VM. No cloud infrastructure — just API keys.
+The greenhouse control core runs on a single VM. External APIs provide planning, weather, and public delivery support; real-time relay control stays local.
 
 ## Components
 
@@ -35,15 +35,15 @@ Everything runs on a single VM. No cloud infrastructure — just API keys.
 |-----------|------|
 | `ingestor/` | Python async service — ESP32 data capture, 15 periodic tasks, entity routing |
 | `api/` | FastAPI crop catalog + ESP32 setpoint endpoint |
-| `firmware/` | ESPHome YAML + C++ headers — 7-mode climate controller (greenhouse_logic.h) |
-| `mcp/` | FastMCP server — 9 tools for Iris agent (climate, scorecard, set_tunable, etc.) |
+| `firmware/` | ESPHome YAML + C++ headers — 8-state climate controller (greenhouse_logic.h) |
+| `mcp/` | FastMCP server — typed tools for Iris agent (climate, scorecard, set_tunable, etc.) |
 | `scripts/` | Operational scripts — planner, vision analysis, forecast sync, monitoring |
-| `provisioning/` | Grafana dashboard JSON (54 dashboards) + datasource config |
-| `db/` | Schema (44 tables, 55 views), migrations (002–077) |
+| `provisioning/` | Grafana dashboard JSON + datasource config |
+| `db/` | Schema, analytical views, functions, and migrations |
 | `templates/` | Jinja2 planner prompt + reference docs |
 | `config/` | AI model config, zone definitions |
-| `tests/` | 83 smoke tests — full-stack validation against live production |
-| `site/` | Quartz static site content (56 pages) |
+| `tests/` | Smoke, drift, and integration tests |
+| `site/` | Quartz static site source |
 
 ## Development
 
@@ -70,10 +70,10 @@ make help              # List all targets
 The control system has three layers:
 
 1. **Crop target band** — diurnal VPD/temperature profiles for active crops, computed from `fn_band_setpoints()` every 5 minutes
-2. **AI planner** — Claude Opus 4.6 reads live context (scorecard, forecast, lessons, sensors) and writes 72h tactical setpoint plans with performance targets
-3. **ESP32 state machine** — 48 climate states evaluated every 5 seconds, enforcing the band with fans, heaters, misters, and fog
+2. **AI planner** — Iris reads live context (scorecard, forecast, lessons, sensors) and writes 72h tactical setpoint plans with performance targets
+3. **ESP32 state machine** — 8 priority-ordered states evaluated every 5 seconds, enforcing the band with fans, heaters, misters, and fog
 
-The crops set the targets. The AI tunes the tactics. The controller enforces it. The telemetry proves what happened.
+The crops set the targets. The AI tunes the tactics. The controller enforces them. The telemetry proves what happened.
 
 ## KPIs
 

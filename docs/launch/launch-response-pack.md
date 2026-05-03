@@ -11,7 +11,7 @@ Verdify is a public AI-assisted physical-control experiment. The AI plans, the c
 
 Short version:
 
-> An ESP32 runs my greenhouse. Claude tunes its setpoints three times a day. The plans, telemetry, costs, failures, and lessons are public.
+> An ESP32 runs my greenhouse locally. Iris uses Claude to write bounded tactical plans at solar milestones and event triggers. The ESP32 owns relay control and safety every 5 seconds. The plans, telemetry, costs, failures, and lessons are public.
 
 Do not lead with:
 
@@ -22,7 +22,7 @@ Do not lead with:
 
 ## HN First Comment Draft
 
-I built this in a 367 sq ft greenhouse in Longmont, Colorado. The interesting part is the control split: Claude writes tactical plans and bounded setpoints, but an ESP32 owns deterministic relay control and safety every 5 seconds.
+I built this in a 367 sq ft greenhouse in Longmont, Colorado. The interesting part is the control split: Iris uses Claude to write tactical plans and bounded setpoints, but an ESP32 owns deterministic relay control and safety every 5 seconds.
 
 The site publishes the plan archive, telemetry, scorecards, costs, lessons, and known failures. I am trying to make the AI layer falsifiable: every plan says what it expects, the next cycle measures what happened, and useful findings become lessons.
 
@@ -82,7 +82,7 @@ AgroNova validates the edge-safe/cloud-smart architecture: local rule-based cont
 
 ### IOGRUCloud
 
-IOGRUCloud is a serious commercial-scale AI/IoT climate platform. Verdify should not compete on scale or deployment evidence. Verdify's value is transparent home-scale falsifiability.
+IOGRUCloud is a reported commercial-scale AI/IoT climate platform. Verdify should not compete on scale or deployment evidence. Verdify's value is transparent home-scale falsifiability.
 
 ### iGrow / GreenLight-Gym
 

@@ -1,6 +1,6 @@
 # Verdify Launch Command Center
 
-Updated: 2026-05-02
+Updated: 2026-05-03
 Launch owner: coordinator / iris-dev
 Launch posture: **P0 hardening deployed; broad-launch timing now depends on Jason's identity/copy/video decisions**
 
@@ -16,9 +16,9 @@ Active sprint:
 
 Verdify's public launch narrative is:
 
-> An ESP32 runs my greenhouse. Claude tunes its setpoints three times a day. The plans, telemetry, costs, failures, and lessons are public.
+> An ESP32 runs my greenhouse locally. Iris uses Claude to write bounded tactical plans at solar milestones and event triggers. The ESP32 owns relay control and safety every 5 seconds. The plans, telemetry, costs, failures, and lessons are public.
 
-This replaces weaker launch framing like "self-improving AI greenhouse" when addressing skeptical technical audiences. The safety split must stay above the fold: the LLM does not flip relays; it writes tactical parameters and the ESP32 enforces real-time control and safety.
+This replaces weaker launch framing like "self-improving AI greenhouse" or "Claude tunes setpoints three times a day" when addressing skeptical technical audiences. The safety split must stay above the fold: the LLM does not flip relays; it writes tactical parameters and the ESP32 enforces real-time control and safety.
 
 The prior-art posture is: Verdify is not claiming to be the first smart greenhouse, the biggest autonomous greenhouse deployment, or the best RL optimizer. Verdify's contribution is the public falsifiability loop: plan, telemetry, score, cost, failure, and lesson are all visible for a real physical greenhouse.
 
@@ -30,7 +30,7 @@ The prior-art posture is: Verdify is not claiming to be the first smart greenhou
 | L0.2 Public proof path | web + saas/coordinator | done | Homepage shows live read-only API proof cards for current temp, VPD, outdoor temp, planner score, plan count, and data-health status, with freshness/stale labeling. |
 | L0.3 Lessons credibility | web + genai | done | Default lessons page shows 20 canonical lessons distilled from active machine rows, with validation counts; raw machine stream is behind a labeled details section. |
 | L0.4 Daily plan readability | web + genai | done | Daily plan pages lead with cycle metrics, score/outcome, hypothesis/rationale, and changed secondary parameters; full secondary dumps are behind `<details>`. |
-| L0.5 Launch story page | web + Jason | done | Homepage now leads with the ESP32/Claude/control-split narrative, greenhouse visuals, live proof cards, Grafana fallbacks, and direct evidence/architecture paths. |
+| L0.5 Launch story page | web + Jason | done | Homepage now leads with the Iris/Claude planning + ESP32 safety split, greenhouse visuals, live proof cards, Grafana fallbacks, and direct evidence/architecture paths. |
 | L0.6 Social preview | web | done | Homepage emits explicit OG/Twitter tags and uses the real snow greenhouse photo for `og:image`. |
 | L0.7 Grafana public QA | web + saas/coordinator | done | Public dashboard and d-solo URLs return anonymous Viewer boot data; app bundles load with 200 responses; Grafana health and headers verified. Jason should still smoke-test mobile/in-app browsers before HN. |
 | L0.8 Launch assets | Jason + web | split | Architecture SVG, equipment/BOM surface, cost callout, and April 22-25 outage story exist. The 30-90s screen recording and final audience copy remain Jason-owned launch-day assets, not code blockers. |
@@ -81,7 +81,7 @@ Launch owner for safety and hardware truth, not for pre-launch OTA work.
 
 - No behavior-changing OTA is launch-blocking unless Track A greenhouse safety requires it.
 - Supply facts for the architecture/BOM/control-split page: ESP32 loop cadence, relay ownership, sensors, probes, misters, heaters, safety states.
-- Verify any public claim about "42 climate states", "every 5 seconds", and relay safety.
+- Verify any public claim about the 8-state firmware controller, "every 5 seconds", and relay safety.
 - Keep firmware freeze rules in force during marketing launch.
 
 ### SaaS / Infrastructure
@@ -121,7 +121,7 @@ Launch owner for sequencing and identity decisions.
 HN title candidates:
 
 - `Show HN: 40 days of public planning data from an LLM-tuned ESP32 greenhouse`
-- `Show HN: I let Claude tune my greenhouse three times a day; here are the receipts`
+- `Show HN: I let Claude write bounded plans for my ESP32 greenhouse; here are the receipts`
 
 Positioning line:
 

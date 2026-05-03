@@ -6,11 +6,13 @@ Per-agent backlogs live in `docs/backlog/{agent}.md`. This file is the index + "
 
 Broad launch is now a cross-agent release train. Canonical launch gates live in [`docs/launch/README.md`](launch/README.md); task tracking lives in [`docs/backlog/launch.md`](backlog/launch.md).
 
-Current launch posture: **not broad-launch ready** until the P0 gates are complete.
+Current launch posture: **engineering/content gates are complete; broad launch now depends on Jason-owned copy, video, identity, and calendar decisions.**
 
 2026-05-03 update: Jason's prior-art review is tracked in [`docs/launch/prior-art-rollup-2026-05-03.md`](launch/prior-art-rollup-2026-05-03.md). It adds post-P0 launch assets around Related Work, Safety Architecture, Baseline vs Iris, builder packaging, counterfactual replay, and progressive autonomy. These are P1/P2 credibility assets, not Track A firmware blockers.
 
 Current launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2026-05-03-l1-credibility.md). Engineering/content assets are complete: related work, safety architecture, baseline evidence, FAQ/response pack, builder path, and object-model diagram. Remaining broad-launch blockers are Jason-owned: operations clip, final HN copy, identity posture, launch calendar, and comment coverage.
+
+2026-05-03 content-QA update: launch pages and internal launch notes now use the same public story: Iris writes bounded tactical plans at solar milestones/event triggers; the ESP32 owns 8-state deterministic relay control every 5 seconds; telemetry, scorecards, costs, failures, and lessons make claims auditable.
 
 | Owner | Launch focus | Backlog |
 |---|---|---|
