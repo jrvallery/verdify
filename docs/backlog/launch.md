@@ -2,6 +2,14 @@
 
 Cross-agent launch board owned by coordinator / iris-dev. This file tracks launch-critical work that cuts across agent scopes. The canonical launch narrative and gates live in [`docs/launch/README.md`](../launch/README.md).
 
+## Active Sprint - L1 Credibility Package
+
+Sprint design: [`docs/launch/sprint-2026-05-03-l1-credibility.md`](../launch/sprint-2026-05-03-l1-credibility.md).
+
+Goal: move from P0-safe to broad-launch credible by closing the safety architecture, related-work positioning, baseline evidence, FAQ/response pack, builder path, object-model diagram, and Jason-owned launch decisions.
+
+This sprint is intentionally **not** a firmware behavior sprint, SaaS sprint, or RL/counterfactual implementation sprint. Firmware remains Track A only; the launch work should explain the existing safety architecture, not trigger an OTA.
+
 ## P0 — Launch Blockers
 
 | ID | Status | Owner | Task | Acceptance | Dependencies |

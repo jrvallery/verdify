@@ -9,6 +9,10 @@ Source triage:
 - [`feedback-triage-2026-05-02.md`](feedback-triage-2026-05-02.md)
 - [`prior-art-rollup-2026-05-03.md`](prior-art-rollup-2026-05-03.md)
 
+Active sprint:
+
+- [`sprint-2026-05-03-l1-credibility.md`](sprint-2026-05-03-l1-credibility.md) - closes Related Work, Safety Architecture, Baseline vs Iris, FAQ/response pack, builder path, and Jason-owned launch-day decisions.
+
 Verdify's public launch narrative is:
 
 > An ESP32 runs my greenhouse. Claude tunes its setpoints three times a day. The plans, telemetry, costs, failures, and lessons are public.
@@ -33,7 +37,7 @@ The prior-art posture is: Verdify is not claiming to be the first smart greenhou
 | L0.10 Robots/indexing policy | coordinator + web + saas | done | Root `robots.txt`, canonical metadata, API/Grafana noindex headers, and Traefik security headers are aligned. |
 | L0.11 Public metrics/freshness contract | ingestor + coordinator + web | done | `/api/v1/public/home-metrics` and `/api/v1/public/data-health` power live proof cards and stale-data status without hard-coded homepage counters. |
 
-Broad launch means HN/Reddit. The remaining launch decisions are attribution, public code stance, final HN/Reddit copy, and whether to record the short operations clip before posting.
+Broad launch means HN/Reddit. The remaining launch decisions are attribution, public code stance, baseline period, final HN/Reddit copy, and whether to record the short operations clip before posting.
 
 ## Agent Assignments
 
