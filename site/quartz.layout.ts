@@ -1,29 +1,6 @@
 import { PageLayout, SharedLayout } from "./quartz/cfg"
 import * as Component from "./quartz/components"
 
-// Shared explorer config — hide individual plan files from nav
-const explorerOpts = {
-  folderDefaultState: "open" as const,
-  folderClickBehavior: "link" as const,
-  filterFn: (node: any) => {
-    // Hide individual date-named plan files (e.g. plans/2026-03-31)
-    // Keep the "plans" folder itself visible as a link to the index
-    if (node.slugSegment && /^\d{4}-\d{2}-\d{2}$/.test(node.slugSegment)) {
-      return false
-    }
-    return true
-  },
-  sortFn: (a: any, b: any) => {
-    if ((!a.isFolder && !b.isFolder) || (a.isFolder && b.isFolder)) {
-      return a.displayName.localeCompare(b.displayName, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    }
-    return a.isFolder ? -1 : 1
-  },
-}
-
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
@@ -32,9 +9,9 @@ export const sharedPageComponents: SharedLayout = {
   footer: Component.Footer({
     links: {
       "Home": "/",
+      "AI Greenhouse": "/ai-greenhouse",
       "The Greenhouse": "/greenhouse",
       "Climate": "/climate",
-      "Intelligence": "/intelligence",
       "Evidence": "/evidence",
     },
   }),
@@ -47,7 +24,6 @@ export const defaultContentPageLayout: PageLayout = {
       component: Component.Breadcrumbs(),
       condition: (page) => page.fileData.slug !== "index",
     }),
-    Component.ArticleTitle(),
     Component.ContentMeta(),
     Component.TagList(),
   ],
@@ -64,14 +40,14 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    Component.Explorer(explorerOpts),
+    Component.SiteNav(),
   ],
   right: [],
 }
 
 // components for pages that display lists of pages  (e.g. tags or folders)
 export const defaultListPageLayout: PageLayout = {
-  beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
+  beforeBody: [Component.Breadcrumbs(), Component.ContentMeta()],
   left: [
     Component.PageTitle(),
     Component.MobileOnly(Component.Spacer()),
@@ -84,7 +60,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer(explorerOpts),
+    Component.SiteNav(),
   ],
   right: [],
 }

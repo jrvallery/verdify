@@ -32,14 +32,25 @@ def main():
 
     lines = [
         "---",
-        "title: Daily Plans",
+        "title: AI Greenhouse Planning Archive",
+        'description: "Daily archive and monthly summary of Iris, Verdify\'s AI greenhouse planner: experiments, scorecards, climate stress, costs, and lessons from each planning cycle."',
         "tags: [plans, greenhouse, ai]",
         f"date: {date.today()}",
         "---",
         "",
-        "# Daily Plans",
+        "# AI Greenhouse Planning Archive",
         "",
-        "Every day, Iris runs 3 planning cycles (6 AM, 12 PM, 6 PM MDT) to manage greenhouse setpoints.",
+        "Every day, Iris runs three planning cycles to manage greenhouse setpoints in response to weather, crop targets, resource limits, and validated lessons. This archive is the public lab notebook for that process.",
+        "",
+        "The individual daily pages are generated records, not polished articles. The important SEO-facing story is here: what the AI planned, what the greenhouse actually experienced, how much stress remained, and what the next plan learned.",
+        "",
+        "## What the Archive Shows",
+        "",
+        '<div class="metric-grid">',
+        '  <div class="metric-card"><strong>Plan frequency</strong><span>Up to 3 cycles/day</span><p>Morning, midday, and evening plans adjust temperature, VPD, misting, fog, ventilation, heat, and lighting tactics.</p></div>',
+        '  <div class="metric-card"><strong>Scorecard feedback</strong><span>Outcome-driven</span><p>Daily summaries compare stress hours, compliance, resource use, and experimental outcomes.</p></div>',
+        '  <div class="metric-card"><strong>Learning loop</strong><span>Validated lessons</span><p>Useful findings graduate into generated lessons that the planner reads before future cycles.</p></div>',
+        "</div>",
         "",
         "---",
         "",
@@ -55,7 +66,7 @@ def main():
             experiment = row[6].strip()[:80]
             lines.append(
                 f'  <div class="data-row"><strong>{link}</strong>'
-                f"<span>{escape(row[1].strip())} cycles; score {escape(row[7].strip())}; cost ${escape(row[4].strip())}</span>"
+                f"<span>{escape(row[1].strip())} cycles; score {escape(row[7].strip())}; cost USD {escape(row[4].strip())}</span>"
                 f"<p>VPD stress {escape(row[2].strip())}h; heat stress {escape(row[3].strip())}h; "
                 f"peak {escape(row[5].strip())}°F. Experiment: {escape(experiment)}.</p></div>"
             )

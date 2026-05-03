@@ -399,7 +399,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -797,7 +797,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -984,7 +984,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('month', ts) AS time, sum(cost_total_usd) AS \"Monthly Cost\" FROM daily_summary WHERE ts > now() - interval '365 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month', date)::timestamptz AS time, sum(cost_total) AS \"Monthly Cost\" FROM daily_summary WHERE date >= CURRENT_DATE - 365 GROUP BY 1 ORDER BY 1",
           "refId": "C",
           "sql": {
             "columns": [
@@ -1040,7 +1040,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1049,7 +1049,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1071,9 +1071,27 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1409,7 +1427,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, avg(outcome_score::numeric) AS \"Plan Score\" FROM plan_journal WHERE created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1490,7 +1508,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },

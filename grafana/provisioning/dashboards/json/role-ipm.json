@@ -48,7 +48,9 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -64,7 +66,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -114,7 +116,9 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -130,7 +134,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -249,7 +253,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -499,8 +503,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               },
               {
@@ -518,8 +522,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "blue"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               },
               {
@@ -537,8 +541,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "yellow"
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
                 }
               },
               {
@@ -733,7 +737,24 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -816,7 +837,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='center'\n) s\n",
+          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_center'\n) s\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -875,7 +896,8 @@
         "defaults": {
           "noValue": "No observations recorded",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the most recent greenhouse observations logged into the system.",
       "options": {
@@ -903,7 +925,8 @@
         "defaults": {
           "noValue": "No treatments recorded",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the most recent plant treatments or interventions.",
       "options": {

@@ -5,15 +5,16 @@ set -euo pipefail
 
 DATE=${1:-$(date +%Y-%m-%d)}
 LOG="/srv/verdify/state/publish.log"
+PYTHON=${PYTHON:-/srv/greenhouse/.venv/bin/python}
 
 echo "[$(date)] Generating daily plan for $DATE..." | tee -a "$LOG"
-python3 /srv/verdify/scripts/generate-daily-plan.py --date "$DATE" 2>&1 | tee -a "$LOG"
+"$PYTHON" /srv/verdify/scripts/generate-daily-plan.py --date "$DATE" 2>&1 | tee -a "$LOG"
 
 echo "[$(date)] Regenerating plans index..." | tee -a "$LOG"
 bash /srv/verdify/scripts/generate-plans-index.sh 2>&1 | tee -a "$LOG"
 
 echo "[$(date)] Regenerating lessons page..." | tee -a "$LOG"
-python3 /srv/verdify/scripts/generate-lessons-page.py 2>&1 | tee -a "$LOG"
+"$PYTHON" /srv/verdify/scripts/generate-lessons-page.py 2>&1 | tee -a "$LOG"
 
 echo "[$(date)] Regenerating planner static context..." | tee -a "$LOG"
 bash /srv/verdify/scripts/gather-static-context.sh 2>&1 | tee -a "$LOG"

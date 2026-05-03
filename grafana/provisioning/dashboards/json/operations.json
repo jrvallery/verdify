@@ -173,7 +173,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -380,7 +380,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -836,7 +836,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor Temp"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -907,7 +923,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor RH"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1262,7 +1294,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -1280,8 +1313,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E040FB"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1299,8 +1332,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#00B0FF"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1318,8 +1351,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFD740"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1337,8 +1370,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#00E5FF"
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1393,8 +1426,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#546E7A"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1484,6 +1517,36 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -1609,7 +1672,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisLabel": "kPa"
           },
           "unit": "pressurekpa"
         },
@@ -1627,8 +1691,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E040FB"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1646,8 +1710,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#00B0FF"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1665,8 +1729,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFD740"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1684,8 +1748,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#00E5FF"
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1868,6 +1932,111 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "East"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "North"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -2138,8 +2307,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#546E7A"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2304,8 +2473,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#009688"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2556,7 +2725,8 @@
             "fillOpacity": 0,
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "kPa"
           },
           "unit": "pressurekpa"
         },
@@ -3038,7 +3208,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "color": {
             "mode": "thresholds"
           },
@@ -3059,9 +3229,57 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -3344,7 +3562,8 @@
             "drawStyle": "bars",
             "fillOpacity": 60,
             "barMaxWidth": 20,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           }
         },
         "overrides": [
@@ -3426,7 +3645,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "short"
+                "value": "mol/m\u00b2/d"
               },
               {
                 "id": "color",
@@ -3536,9 +3755,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 1,
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -3556,7 +3777,99 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -3687,7 +4000,38 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -3958,8 +4302,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3998,8 +4342,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4038,8 +4382,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#1565C0"
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4078,8 +4422,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#009688"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4118,8 +4462,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFD740"
+                  "fixedColor": "#FFCA28",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4278,8 +4622,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#66BB6A"
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4318,8 +4662,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#AED581"
+                  "fixedColor": "#C6FF00",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4358,8 +4702,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#4DD0E1"
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4398,8 +4742,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#80DEEA"
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
                 }
               },
               {
@@ -4616,14 +4960,14 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "format": "time_series",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -4648,9 +4992,27 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -4858,7 +5220,7 @@
           },
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date"
         },
         {
           "datasource": {
@@ -4876,7 +5238,7 @@
           },
           "refId": "C",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_cold,0))::numeric, 2) AS \"Cold Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date"
         },
         {
           "datasource": {
@@ -4885,7 +5247,7 @@
           },
           "refId": "D",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_heat,0))::numeric, 2) AS \"Heat Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date"
         }
       ],
       "fieldConfig": {
@@ -4899,9 +5261,10 @@
             "fillOpacity": 0,
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": [
           {
@@ -4912,13 +5275,13 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               },
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF5252"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -4931,7 +5294,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               },
               {
                 "id": "color",
@@ -4950,7 +5313,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               },
               {
                 "id": "color",
@@ -4969,13 +5332,73 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#FF9100"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -5090,7 +5513,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "deckbytes",
+              "unit": "kbytes",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -6762,7 +7185,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -6805,7 +7229,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows how much VPD reduction each mister zone achieved over the last 24 hours."
     }

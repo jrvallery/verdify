@@ -150,6 +150,11 @@ def generate_page() -> str:
         sort_keys=False,
         default_flow_style=None,
     )
+    yaml_block = re.sub(r"^title: .*$", "title: AI Greenhouse Lessons Learned", yaml_block, flags=re.MULTILINE)
+    yaml_block += (
+        "description: \"Generated and validated lessons from Verdify's AI greenhouse planning cycles: "
+        'what worked, what failed, and what Iris reads before future plans."\n'
+    )
     parts.append("---")
     parts.append(yaml_block.rstrip())
     parts.append("---")
@@ -158,7 +163,7 @@ def generate_page() -> str:
     parts.append("")
 
     # Intro
-    parts.append("# Lessons Learned")
+    parts.append("# AI Greenhouse Lessons Learned")
     parts.append("")
     parts.append(
         "Findings validated through hypothesis-driven planning cycles. "

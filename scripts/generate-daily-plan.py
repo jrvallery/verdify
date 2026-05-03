@@ -545,6 +545,13 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
         default_flow_style=False,
         allow_unicode=True,
     )
+    description = (
+        f"Generated AI greenhouse planning log for {title}: {len(plans)} planning cycles, "
+        f"{stress['vpd_high_hours']}h high-VPD stress, {stress['heat_hours']}h heat stress, "
+        f"and ${cost['total']} total resource cost."
+    )
+    yaml_block += f'description: "{_yaml_escape(description)}"\n'
+    yaml_block += "noindex: true\n"
     lines = ["---", yaml_block.rstrip(), "---"]
     return "\n".join(lines)
 

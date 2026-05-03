@@ -176,7 +176,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -379,7 +379,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -1274,8 +1274,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1314,8 +1314,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1394,8 +1394,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1674,8 +1674,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#4DD0E1"
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1714,8 +1714,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#80DEEA"
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2024,8 +2024,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2054,8 +2054,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2610,7 +2610,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 15,
@@ -2620,7 +2620,8 @@
             },
             "spanNulls": true,
             "lineInterpolation": "linear",
-            "showPoints": "never"
+            "showPoints": "never",
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -2648,8 +2649,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2663,8 +2664,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2693,8 +2694,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2917,7 +2918,8 @@
             "showPoints": "never",
             "pointSize": 5,
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -2954,8 +2956,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -3679,13 +3681,14 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
             "lineWidth": 2,
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -3782,8 +3785,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "rgba(100,150,255,0.5)"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3864,7 +3867,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -4051,7 +4054,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('month', ts) AS time, sum(cost_total_usd) AS \"Monthly Cost\" FROM daily_summary WHERE ts > now() - interval '365 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month', date)::timestamptz AS time, sum(cost_total) AS \"Monthly Cost\" FROM daily_summary WHERE date >= CURRENT_DATE - 365 GROUP BY 1 ORDER BY 1",
           "refId": "C",
           "sql": {
             "columns": [
@@ -4072,7 +4075,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Seasonal Arc \u2014 Temperature, VPD, and Cost by Month",
+      "title": "Seasonal Arc \u2014 Temperature, VPD, and Cost by Month",
       "type": "timeseries",
       "description": "A seasonal summary of the greenhouse problem: temperature pressure, VPD pressure, and operating cost across the year."
     },
@@ -4152,7 +4155,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Cost of One Action \u2014 Intuitive Operating Cost Anchors",
+      "title": "Cost of One Action \u2014 Intuitive Operating Cost Anchors",
       "type": "barchart",
       "description": "A simple cost anchor chart for explaining what one hour of action actually costs."
     },
@@ -4331,7 +4334,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Cooling Pressure vs Cooling Opportunity",
+      "title": "Cooling Pressure vs Cooling Opportunity",
       "type": "timeseries",
       "description": "A first-pass comparison between solar pressure and the temperature delta available for fan-based cooling. This is a proxy, but useful for storytelling."
     }

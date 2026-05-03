@@ -315,7 +315,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -522,7 +522,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -766,14 +766,16 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "\u00b0F",
+              "unit": "fahrenheit",
               "custom": {
                 "drawStyle": "line",
                 "lineInterpolation": "smooth",
                 "fillOpacity": 0,
                 "pointSize": 5,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "lineWidth": 2,
+                "axisLabel": "\u00b0F"
               }
             },
             "overrides": [
@@ -911,7 +913,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "\u00b0F",
+              "unit": "fahrenheit",
               "custom": {
                 "drawStyle": "line",
                 "lineInterpolation": "smooth",
@@ -919,7 +921,8 @@
                 "pointSize": 5,
                 "showPoints": "never",
                 "spanNulls": true,
-                "lineWidth": 2
+                "lineWidth": 2,
+                "axisLabel": "\u00b0F"
               }
             },
             "overrides": [
@@ -1085,7 +1088,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "kPa",
+              "unit": "pressurekpa",
               "color": {
                 "mode": "thresholds"
               },
@@ -1248,8 +1251,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#FFCA28"
+                      "fixedColor": "#8C8C8C",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -1516,7 +1519,7 @@
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "h"
+                    "value": "degree"
                   },
                   {
                     "id": "custom.axisPlacement",
@@ -1590,7 +1593,7 @@
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "h",
+              "unit": "short",
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 80,
@@ -1601,7 +1604,8 @@
                   "mode": "normal",
                   "group": "A"
                 },
-                "spanNulls": true
+                "spanNulls": true,
+                "axisLabel": "Hours"
               }
             },
             "overrides": [
@@ -1629,8 +1633,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#E65100"
+                      "fixedColor": "#F4511E",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1644,8 +1648,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#42A5F5"
+                      "fixedColor": "#26A69A",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1659,8 +1663,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#1565C0"
+                      "fixedColor": "#5C6BC0",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1674,8 +1678,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#009688"
+                      "fixedColor": "#00ACC1",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1689,8 +1693,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#78909C"
+                      "fixedColor": "#FFCA28",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1775,8 +1779,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#E65100"
+                      "fixedColor": "#F4511E",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1790,8 +1794,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#42A5F5"
+                      "fixedColor": "#26A69A",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1805,8 +1809,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#1565C0"
+                      "fixedColor": "#5C6BC0",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1820,8 +1824,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#009688"
+                      "fixedColor": "#00ACC1",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1835,8 +1839,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#78909C"
+                      "fixedColor": "#FFCA28",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -1913,7 +1917,8 @@
                 "lineWidth": 2,
                 "pointSize": 5,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisLabel": "Hours"
               }
             },
             "overrides": [
@@ -1936,7 +1941,7 @@
                   },
                   {
                     "id": "unit",
-                    "value": "\u00b0F"
+                    "value": "fahrenheit"
                   },
                   {
                     "id": "custom.axisPlacement",
@@ -1963,7 +1968,7 @@
                   },
                   {
                     "id": "unit",
-                    "value": "h"
+                    "value": "short"
                   },
                   {
                     "id": "custom.axisPlacement",
@@ -2037,7 +2042,8 @@
                 "lineWidth": 2,
                 "pointSize": 5,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisLabel": "Hours"
               }
             },
             "overrides": [
@@ -2060,7 +2066,7 @@
                   },
                   {
                     "id": "unit",
-                    "value": "\u00b0F"
+                    "value": "fahrenheit"
                   },
                   {
                     "id": "custom.axisPlacement",
@@ -2087,7 +2093,7 @@
                   },
                   {
                     "id": "unit",
-                    "value": "h"
+                    "value": "short"
                   },
                   {
                     "id": "custom.axisPlacement",
@@ -2149,7 +2155,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows month-level rollups for the main greenhouse climate and operating metrics."
     }

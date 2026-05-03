@@ -26,6 +26,7 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 - Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope — already merged
   into an ingestor sprint commit (`47f8154`). Once the parent merges to
   main, genai's MCP boundary is fully typed.
+- Prior-art launch response pack — draft "why not direct LLM control?", "why not PID?", "why not RL yet?", "what does self-correcting mean?", and "how are lessons validated?" for web publication and HN/Reddit responses. See `docs/launch/prior-art-rollup-2026-05-03.md`.
 
 ## Tracked list
 

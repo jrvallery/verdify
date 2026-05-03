@@ -1,14 +1,12 @@
-import { QuartzComponentConstructor } from "./types"
+import { QuartzComponentConstructor } from "./types";
 
-// GrafanaEmbeds — progressive-enhancement upgrader for placeholder
+// GrafanaEmbeds - progressive-enhancement upgrader for placeholder
 // <div class="grafana-embed"> nodes emitted by the GrafanaDefer
-// transformer. iOS Safari OOM-crashes when too many live Grafana
-// React contexts allocate at once (the homepage has 8 panels), so on
-// iOS we render a static PNG from Grafana's `/render/d-solo/...`
-// endpoint and offer an "Open live panel" link. Desktop and Android
-// get the live iframe.
+// transformer. Desktop gets live Grafana iframes by default. iOS and
+// narrow touch/mobile devices get stable cached PNGs because many
+// Grafana React iframes can lay out poorly or exhaust memory there.
 //
-// The component itself emits no DOM (returns null) — the render is
+// The component itself emits no DOM (returns null) - the render is
 // done client-side by the afterDOMLoaded script below, which scans
 // for `.grafana-embed` placeholder divs and upgrades them in place.
 // The placeholder div carries data-iframe-src, data-image-src,
@@ -19,11 +17,11 @@ import { QuartzComponentConstructor } from "./types"
 // window.addCleanup so they don't leak across navigations.
 
 export default (() => {
-  function GrafanaEmbeds() {
-    return null
-  }
+    function GrafanaEmbeds() {
+        return null;
+    }
 
-  GrafanaEmbeds.css = `
+    GrafanaEmbeds.css = `
 .grafana-embed {
   width: 100%;
   margin: 0.5rem 0;
@@ -38,6 +36,18 @@ export default (() => {
   width: 100%;
   display: block;
   border: 0;
+}
+.grafana-embed__frame {
+  max-width: 100%;
+}
+.grafana-embed__img,
+.grafana-embed img.grafana-embed__img,
+article .grafana-embed .grafana-embed__img {
+  max-height: none;
+  object-fit: fill;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .grafana-embed__placeholder {
   display: flex;
@@ -60,48 +70,89 @@ export default (() => {
   color: var(--secondary);
   text-decoration: underline;
 }
-`
+.grafana-embed__actions button {
+  appearance: none;
+  margin: 0 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+`;
 
-  GrafanaEmbeds.afterDOMLoaded = `
+    GrafanaEmbeds.afterDOMLoaded = `
 (function () {
-  function isIOS() {
+  function shouldUseStaticImages() {
     if (typeof navigator === 'undefined') return false;
-    if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return true;
-    if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
-    return false;
+    var ua = navigator.userAgent || '';
+    var ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var mobile = /Android|Mobile/.test(ua);
+    var coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    var narrow = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 820px)').matches;
+    return ios || mobile || (coarse && narrow);
   }
 
-  function addCacheBust(url) {
+  function sizedRenderUrl(url, cssWidth, cssHeight) {
     try {
       var u = new URL(url, window.location.href);
-      u.searchParams.set('_qts', String(Date.now()));
+      var width = Math.max(320, Math.round(cssWidth || 0));
+      var height = Math.max(80, Math.round(cssHeight || 0));
+
+      // Keep a small set of stable render widths so Grafana/nginx can
+      // cache across devices instead of rendering a unique image for
+      // every exact viewport. Height follows the same aspect ratio as
+      // the CSS box, which prevents mobile squashing.
+      var bucket;
+      if (width <= 430) bucket = 800;
+      else if (width <= 620) bucket = 1000;
+      else if (width <= 860) bucket = 1200;
+      else bucket = 1440;
+      var assumedWidth = bucket === 800 ? 390 : bucket === 1000 ? 540 : bucket === 1200 ? 740 : 1000;
+      var renderHeight = Math.max(160, Math.round(height * (bucket / assumedWidth)));
+
+      u.searchParams.set('width', String(bucket));
+      u.searchParams.set('height', String(renderHeight));
       return u.toString();
     } catch (_) {
-      return url + (url.indexOf('?') >= 0 ? '&' : '?') + '_qts=' + Date.now();
+      return url;
     }
   }
 
-  function appendActions(el, liveSrc) {
+  function appendActions(el, liveSrc, loadInteractive) {
     if (!liveSrc) return;
     var actions = document.createElement('div');
     actions.className = 'grafana-embed__actions';
+
+    if (loadInteractive) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Load interactive panel';
+      b.addEventListener('click', function () {
+        loadInteractive();
+      });
+      actions.appendChild(b);
+    }
+
     var a = document.createElement('a');
     a.href = liveSrc;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    a.textContent = 'Open live Grafana panel ↗';
+    a.textContent = 'Open in Grafana';
     actions.appendChild(a);
     el.appendChild(actions);
   }
 
   function setup() {
-    var embeds = Array.from(document.querySelectorAll('.grafana-embed[data-iframe-src], .grafana-embed[data-image-src]'));
+    var embeds = Array.from(document.querySelectorAll('.grafana-embed:not([data-grafana-enhanced])[data-iframe-src], .grafana-embed:not([data-grafana-enhanced])[data-image-src]'));
     if (!embeds.length) return;
 
-    var ios = isIOS();
     var loaded = new WeakSet();
     var timers = [];
     var observer = null;
+    var staticImages = shouldUseStaticImages();
 
     // Client-side concurrency cap on PNG fetches. The grafana-image-
     // renderer + nginx cache can comfortably keep ~2 renders in
@@ -142,23 +193,26 @@ export default (() => {
       dequeueImg();
     }
 
-    function renderImage(el, imgSrc, liveSrc, title, height, refreshMs) {
+    function renderImage(el, imgSrc, iframeSrc, liveSrc, title, height, refreshMs) {
       el.innerHTML = '';
       el.style.minHeight = height + 'px';
 
       var img = document.createElement('img');
       img.className = 'grafana-embed__img';
       img.alt = title;
-      img.loading = 'lazy';
+      img.loading = 'eager';
       img.decoding = 'async';
+      img.width = el.clientWidth || Math.round(el.getBoundingClientRect().width) || window.innerWidth || 800;
       img.height = height;
+      img.style.height = height + 'px';
 
-      // The renderer can still 429/timeout under load even with the
-      // nginx cache and concurrency cap. Retry up to 3 times with
-      // exponential backoff (3s, 6s, 12s) before falling back to a
-      // placeholder with the "Open live panel" escape hatch. The
-      // retries themselves go through enqueueImg so they respect
-      // the IMG_MAX_INFLIGHT cap and don't dogpile.
+      var cssWidth = img.width;
+      var sizedSrc = sizedRenderUrl(imgSrc, cssWidth, height);
+
+      // The renderer can still 429/timeout under load. Retry up to
+      // 3 times with exponential backoff (3s, 6s, 12s) before falling
+      // back to a placeholder with the live-panel escape hatch. Retry
+      // requests use the same deterministic URL so cache hits work.
       var attempts = 0;
       var maxAttempts = 3;
       img.addEventListener('error', function () {
@@ -167,26 +221,28 @@ export default (() => {
           var backoff = 3000 * Math.pow(2, attempts - 1); // 3s, 6s, 12s
           window.setTimeout(function () {
             if (document.body.contains(el)) {
-              enqueueImg(img, addCacheBust(imgSrc));
+              enqueueImg(img, sizedSrc);
             }
           }, backoff);
         } else {
           var ph = document.createElement('div');
           ph.className = 'grafana-embed__placeholder';
           ph.style.height = height + 'px';
-          ph.textContent = 'Image render unavailable — tap below to open live panel.';
+          ph.textContent = 'Image render unavailable. Tap below to open live panel.';
           if (img.parentNode) img.parentNode.replaceChild(ph, img);
         }
       });
       el.appendChild(img);
-      enqueueImg(img, addCacheBust(imgSrc));
+      enqueueImg(img, sizedSrc);
 
-      appendActions(el, liveSrc);
+      appendActions(el, liveSrc, iframeSrc ? function () {
+        renderIframe(el, iframeSrc, liveSrc, title, height);
+      } : null);
 
       if (refreshMs > 0) {
         var t = window.setInterval(function () {
           if (document.body.contains(el)) {
-            enqueueImg(img, addCacheBust(imgSrc));
+            enqueueImg(img, sizedRenderUrl(imgSrc, el.clientWidth || cssWidth, height));
           }
         }, refreshMs);
         timers.push(t);
@@ -202,12 +258,13 @@ export default (() => {
       f.title = title;
       f.src = iframeSrc;
       f.height = String(height);
+      f.style.height = height + 'px';
       f.frameBorder = '0';
       f.loading = 'lazy';
       f.referrerPolicy = 'no-referrer-when-downgrade';
       el.appendChild(f);
 
-      appendActions(el, liveSrc);
+      appendActions(el, liveSrc, null);
     }
 
     function load(el) {
@@ -226,21 +283,22 @@ export default (() => {
         return;
       }
 
-      if (ios && imageSrc) {
-        renderImage(el, imageSrc, liveSrc, title, height, refreshMs);
+      if (staticImages && imageSrc) {
+        renderImage(el, imageSrc, iframeSrc, liveSrc, title, height, refreshMs);
       } else if (iframeSrc) {
         renderIframe(el, iframeSrc, liveSrc, title, height);
       } else {
-        renderImage(el, imageSrc, liveSrc, title, height, refreshMs);
+        renderImage(el, imageSrc, iframeSrc, liveSrc, title, height, refreshMs);
       }
     }
 
-    // Pre-fill placeholders with a "Loading…" state so layout is
+    // Pre-fill placeholders with a "Loading..." state so layout is
     // stable before each panel is upgraded.
     embeds.forEach(function (el) {
+      el.setAttribute('data-grafana-enhanced', 'true');
       var height = parseInt(el.getAttribute('data-height') || '300', 10);
       el.style.minHeight = height + 'px';
-      el.innerHTML = '<div class="grafana-embed__placeholder" style="height:' + height + 'px">Loading…</div>';
+      el.innerHTML = '<div class="grafana-embed__placeholder" style="height:' + height + 'px">Loading...</div>';
     });
 
     if ('IntersectionObserver' in window) {
@@ -268,7 +326,7 @@ export default (() => {
   document.addEventListener('nav', setup);
   if (document.readyState !== 'loading') setup();
 })();
-`
+`;
 
-  return GrafanaEmbeds
-}) satisfies QuartzComponentConstructor
+    return GrafanaEmbeds;
+}) satisfies QuartzComponentConstructor;

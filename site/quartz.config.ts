@@ -7,7 +7,11 @@ const config: QuartzConfig = {
     pageTitleSuffix: " — Verdify",
     enableSPA: true,
     enablePopovers: true,
-    analytics: null,
+    analytics: {
+      provider: "umami",
+      host: "https://analytics.verdify.ai",
+      websiteId: "bde6b2d3-31df-4d54-a86e-751ffb2571da",
+    },
     locale: "en-US",
     baseUrl: "verdify.ai",
     ignorePatterns: ["private", "templates", ".obsidian"],

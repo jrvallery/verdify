@@ -632,7 +632,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "watt",
+          "unit": "watt/m\u00b2",
           "decimals": 0,
           "color": {
             "mode": "thresholds"
@@ -725,7 +725,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -753,8 +754,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#EF5350"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -935,7 +936,8 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "linear",
-            "gradientMode": "scheme"
+            "gradientMode": "scheme",
+            "axisLabel": "\u00b0F"
           },
           "color": {
             "mode": "continuous-GrYlRd"
@@ -1145,7 +1147,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisLabel": "kPa"
           },
           "unit": "pressurekpa"
         },
@@ -1165,7 +1168,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               },
               {
                 "id": "custom.axisPlacement",
@@ -1188,7 +1191,7 @@
               },
               {
                 "id": "unit",
-                "value": "kPa"
+                "value": "pressurekpa"
               },
               {
                 "id": "custom.axisPlacement",
@@ -1945,8 +1948,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2051,7 +2054,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "watt",
+          "unit": "watt/m\u00b2",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -2787,8 +2790,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
                 }
               },
               {
@@ -3291,7 +3294,8 @@
                 "showPoints": "auto",
                 "pointSize": 4,
                 "spanNulls": false,
-                "lineInterpolation": "smooth"
+                "lineInterpolation": "smooth",
+                "axisLabel": "\u00b0F"
               },
               "color": {
                 "mode": "fixed",
@@ -3354,7 +3358,7 @@
           },
           "fieldConfig": {
             "defaults": {
-              "unit": "kPa",
+              "unit": "pressurekpa",
               "decimals": 2,
               "custom": {
                 "drawStyle": "line",
@@ -3363,7 +3367,8 @@
                 "showPoints": "auto",
                 "pointSize": 4,
                 "spanNulls": false,
-                "lineInterpolation": "smooth"
+                "lineInterpolation": "smooth",
+                "axisLabel": "kPa"
               },
               "color": {
                 "mode": "fixed",
@@ -3474,7 +3479,7 @@
           },
           "fieldConfig": {
             "defaults": {
-              "unit": "kPa",
+              "unit": "pressurekpa",
               "decimals": 2,
               "color": {
                 "mode": "thresholds"

@@ -90,7 +90,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -197,7 +197,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -232,7 +232,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -281,7 +281,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -324,7 +324,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -496,7 +496,8 @@
             "lineWidth": 2,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           },
           "unit": "percent"
         },
@@ -513,7 +514,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -586,7 +587,24 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -653,7 +671,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -703,7 +721,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -722,7 +740,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "blue",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               },
@@ -741,7 +759,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#66BB6A",
                   "mode": "fixed"
                 }
               },
@@ -760,7 +778,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -795,7 +813,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -941,7 +959,8 @@
             "lineWidth": 2,
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           },
           "unit": "percent"
         },
@@ -958,7 +977,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -1016,7 +1035,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "gradientMode": "none",
             "hideFrom": {
@@ -1093,7 +1112,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -1128,7 +1147,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1196,7 +1215,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -1239,7 +1258,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -1270,7 +1289,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(50,150,255,0.7)",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -1293,7 +1312,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(80,180,255,0.7)",
+                  "fixedColor": "#5C6BC0",
                   "mode": "fixed"
                 }
               },
@@ -1316,7 +1335,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(200,100,255,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -1339,7 +1358,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,80,50,0.7)",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               },
@@ -1535,7 +1554,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "gradientMode": "none",
@@ -1553,7 +1572,7 @@
               "mode": "off"
             }
           },
-          "unit": "pressurePascal",
+          "unit": "pressurekpa",
           "decimals": 2
         },
         "overrides": [
@@ -1614,7 +1633,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -1649,7 +1668,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1695,7 +1714,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(239,83,80,0.7)",
+                  "fixedColor": "#CE93D8",
                   "mode": "fixed"
                 }
               },
@@ -1718,7 +1737,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,167,38,0.7)",
+                  "fixedColor": "#F48FB1",
                   "mode": "fixed"
                 }
               },
@@ -1741,7 +1760,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(171,71,188,0.7)",
+                  "fixedColor": "#E040FB",
                   "mode": "fixed"
                 }
               },
@@ -1764,7 +1783,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(126,87,194,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -2086,7 +2105,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -2115,7 +2135,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -2291,7 +2311,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -2478,7 +2498,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, c.avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.temp_avg) OVER (ORDER BY c.ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "refId": "B",
           "sql": {
             "columns": [
@@ -2866,7 +2886,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -3048,7 +3068,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('month', ts) AS time, sum(cost_total_usd) AS \"Monthly Cost\" FROM daily_summary WHERE ts > now() - interval '365 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month', date)::timestamptz AS time, sum(cost_total) AS \"Monthly Cost\" FROM daily_summary WHERE date >= CURRENT_DATE - 365 GROUP BY 1 ORDER BY 1",
           "refId": "C",
           "sql": {
             "columns": [

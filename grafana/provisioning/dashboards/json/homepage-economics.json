@@ -94,7 +94,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows total operating cost for the selected period.",
       "options": {}
@@ -146,7 +147,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Electric"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows electric cost or electric usage for the selected period.",
       "options": {}
@@ -198,7 +216,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Gas"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F44336",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows gas cost or gas usage for the selected period.",
       "options": {}
@@ -250,7 +285,24 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Water"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows water cost or water usage for the selected period.",
       "options": {}
@@ -278,7 +330,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "kWh",
+          "unit": "kwatth",
           "decimals": 1,
           "custom": {},
           "thresholds": {
@@ -298,7 +350,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "description": "Shows electricity consumed over the selected period.",
       "options": {}
@@ -346,7 +399,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "description": "Shows gas consumed over the selected period.",
       "options": {}
@@ -394,7 +448,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "description": "Shows water consumed over the selected period.",
       "options": {}
@@ -442,7 +497,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "description": "Shows average daily greenhouse operating cost.",
       "options": {}
@@ -496,7 +552,8 @@
             "stacking": {
               "mode": "normal"
             },
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           }
         },
         "overrides": [
@@ -509,8 +566,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#EAB308"
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -524,8 +581,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#F44336",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -539,8 +596,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3B82F6"
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -615,7 +672,8 @@
               "mode": "normal"
             },
             "barMaxWidth": 40,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           }
         },
         "overrides": [
@@ -628,8 +686,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#EAB308"
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -643,8 +701,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#F44336",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -658,8 +716,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3B82F6"
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
                 }
               }
             ]

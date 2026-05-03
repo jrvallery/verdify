@@ -782,7 +782,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 80,
@@ -792,7 +792,8 @@
             },
             "lineInterpolation": "smooth",
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -820,8 +821,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -835,8 +836,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -865,8 +866,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1040,8 +1041,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1110,7 +1111,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FADE2A",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -1190,7 +1191,8 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1234,7 +1236,8 @@
             ]
           },
           "unit": "percent"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1275,7 +1278,8 @@
             ]
           },
           "unit": "watt"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1316,7 +1320,8 @@
             ]
           },
           "unit": "watt"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1356,8 +1361,9 @@
               }
             ]
           },
-          "unit": "kWh"
-        }
+          "unit": "kwatth"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1397,8 +1403,9 @@
               }
             ]
           },
-          "unit": "watt"
-        }
+          "unit": "watt/m\u00b2"
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 4,
@@ -1639,7 +1646,8 @@
             "mode": "fixed",
             "fixedColor": "#FFD740"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1685,7 +1693,8 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1731,7 +1740,8 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1777,7 +1787,8 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {

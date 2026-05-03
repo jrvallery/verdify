@@ -174,7 +174,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -381,7 +381,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -568,7 +568,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -640,7 +641,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -705,7 +707,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -784,7 +787,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -852,7 +856,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -1224,7 +1229,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -1377,7 +1383,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -1514,7 +1521,8 @@
             "fillOpacity": 10,
             "lineWidth": 2,
             "barMaxWidth": 20,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": true
           }
         },
         "overrides": [
@@ -1640,7 +1648,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the latest hydroponic water-quality and system readings."
     }

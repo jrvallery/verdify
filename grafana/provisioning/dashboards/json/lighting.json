@@ -493,13 +493,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "decimals": 1,
           "color": {
             "mode": "fixed",
             "fixedColor": "#C6FF00"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -659,8 +661,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF9800"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -802,8 +804,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "rgba(180,180,180,0.5)"
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
                 }
               },
               {
@@ -968,8 +970,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF9800"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1732,8 +1734,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#C6FF00"
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1970,7 +1972,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "color": {
             "mode": "fixed",
             "fixedColor": "#C6FF00"
@@ -1982,7 +1984,8 @@
             "barMaxWidth": 20,
             "spanNulls": true,
             "lineInterpolation": "linear",
-            "showPoints": "never"
+            "showPoints": "never",
+            "axisLabel": "Hours"
           }
         },
         "overrides": []
@@ -2205,7 +2208,7 @@
               }
             ]
           },
-          "unit": "none",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1
         },
         "overrides": [
@@ -2218,8 +2221,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2256,8 +2259,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2387,7 +2390,7 @@
           }
         }
       ],
-      "title": "REVIEW \u2014 Daily DLI \u2014 Sensor vs Estimated Actual vs Target",
+      "title": "Daily DLI \u2014 Sensor vs Estimated Actual vs Target",
       "type": "timeseries",
       "description": "Shows how badly the current lux sensor underreports actual plant light, relative to a corrected estimate and the target DLI line."
     }

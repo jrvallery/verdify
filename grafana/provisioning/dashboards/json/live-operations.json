@@ -312,7 +312,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -519,7 +519,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -663,7 +663,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -738,7 +738,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -931,7 +931,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reference DLI"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -975,7 +991,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1003,7 +1019,23 @@
           "noValue": "Sensor Offline",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1480,7 +1512,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor RH"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1548,7 +1596,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1569,7 +1617,9 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
         "overrides": []
       },
@@ -1686,7 +1736,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "%",
+          "unit": "percent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1788,7 +1838,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor Lux"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -1978,7 +2044,8 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
@@ -2021,8 +2088,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2099,8 +2166,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#78909C"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2210,14 +2277,15 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisLabel": "kPa"
           }
         },
         "overrides": [
@@ -2260,8 +2328,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -2468,8 +2536,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#FFA726"
+                      "fixedColor": "#AB47BC",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -2622,7 +2690,7 @@
           },
           "fieldConfig": {
             "defaults": {
-              "unit": "\u00b0F",
+              "unit": "fahrenheit",
               "color": {
                 "mode": "palette-classic"
               },
@@ -2631,7 +2699,8 @@
                 "fillOpacity": 0,
                 "showPoints": "never",
                 "spanNulls": true,
-                "lineInterpolation": "smooth"
+                "lineInterpolation": "smooth",
+                "axisLabel": "\u00b0F"
               }
             },
             "overrides": []
@@ -2851,8 +2920,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#E65100"
+                      "fixedColor": "#F4511E",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -2891,8 +2960,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#42A5F5"
+                      "fixedColor": "#26A69A",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -2931,8 +3000,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#1565C0"
+                      "fixedColor": "#5C6BC0",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -2971,8 +3040,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#009688"
+                      "fixedColor": "#00ACC1",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -3011,8 +3080,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#FFD740"
+                      "fixedColor": "#FFCA28",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -3171,8 +3240,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#66BB6A"
+                      "fixedColor": "#9CCC65",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -3211,8 +3280,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#AED581"
+                      "fixedColor": "#C6FF00",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -3251,8 +3320,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#4DD0E1"
+                      "fixedColor": "#4DB6AC",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -3291,8 +3360,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#80DEEA"
+                      "fixedColor": "#4FC3F7",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -3587,8 +3656,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "green"
+                      "fixedColor": "#8C8C8C",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -3626,6 +3695,21 @@
                     "value": {
                       "mode": "fixed",
                       "fixedColor": "blue"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Outdoor Lux"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#FDD835",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -4015,8 +4099,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#4DD0E1"
+                      "fixedColor": "#4DB6AC",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -4055,8 +4139,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#80DEEA"
+                      "fixedColor": "#4FC3F7",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -4095,8 +4179,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#009688"
+                      "fixedColor": "#00ACC1",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -4319,7 +4403,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -4391,7 +4476,8 @@
             "mode": "thresholds"
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -4455,7 +4541,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -4520,7 +4607,8 @@
             "spanNulls": true,
             "lineInterpolation": "smooth"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -4589,7 +4677,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows soil moisture from the first south-zone probe.",
       "options": {}
@@ -4639,7 +4728,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows soil moisture from the second south-zone probe.",
       "options": {}
@@ -4689,7 +4779,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows soil moisture from the west-zone probe.",
       "options": {}
@@ -4736,7 +4827,8 @@
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "description": "Shows soil electrical conductivity from the EC-capable south-zone probe.",
       "options": {}
@@ -4806,9 +4898,27 @@
             ]
           },
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows soil moisture readings from the installed root-zone probes.",
       "options": {
@@ -4869,11 +4979,30 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows soil temperature readings from the installed root-zone probes.",
       "options": {
@@ -4952,9 +5081,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [

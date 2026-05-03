@@ -36,7 +36,8 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -82,7 +83,8 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -127,7 +129,8 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -167,14 +170,16 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 80,
             "lineWidth": 0,
             "stacking": {
               "mode": "normal"
-            }
+            },
+            "axisLabel": "Hours",
+            "spanNulls": true
           }
         },
         "overrides": [
@@ -202,8 +207,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -217,8 +222,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -247,8 +252,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#26A69A"
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -383,7 +388,8 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "always",
-            "pointSize": 5
+            "pointSize": 5,
+            "spanNulls": true
           }
         },
         "overrides": [
@@ -419,8 +425,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -578,7 +584,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -661,7 +667,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -696,7 +702,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -764,7 +770,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -807,7 +813,7 @@
               },
               {
                 "id": "unit",
-                "value": "watt"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -838,7 +844,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(50,150,255,0.7)",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -861,7 +867,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(80,180,255,0.7)",
+                  "fixedColor": "#5C6BC0",
                   "mode": "fixed"
                 }
               },
@@ -884,7 +890,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(200,100,255,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -907,7 +913,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,80,50,0.7)",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               },
@@ -976,7 +982,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "\u00b0F",
             "axisPlacement": "auto",
             "gradientMode": "none",
             "hideFrom": {
@@ -1020,7 +1026,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -1192,7 +1198,10 @@
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 50,
-            "showPoints": "never"
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },

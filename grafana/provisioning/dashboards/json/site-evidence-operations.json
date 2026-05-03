@@ -122,7 +122,7 @@
               }
             ]
           },
-          "unit": "kPa"
+          "unit": "pressurekpa"
         },
         "overrides": []
       },
@@ -230,7 +230,8 @@
             ]
           },
           "unit": "dBm"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 3,
@@ -289,7 +290,8 @@
             ]
           },
           "unit": "kbytes"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 3,
@@ -747,7 +749,9 @@
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "steps": [
               {
@@ -764,7 +768,7 @@
               }
             ]
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -1000,7 +1004,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,

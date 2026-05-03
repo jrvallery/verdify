@@ -14,9 +14,11 @@ import concurrent.futures
 import json
 import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import quote
@@ -309,7 +311,31 @@ def table_freshness(tables: set[str]) -> dict[str, str]:
     return freshness
 
 
-def render_panel(panel: PanelAudit, timeout: int, retries: int = 3) -> tuple[str, int | None, int | None, int | None]:
+class RenderPacer:
+    """Small shared pacer to keep Grafana renderer parallelism below 429 territory."""
+
+    def __init__(self, min_interval_s: float) -> None:
+        self.min_interval_s = min_interval_s
+        self.lock = Lock()
+        self.next_start = 0.0
+
+    def wait(self) -> None:
+        if self.min_interval_s <= 0:
+            return
+        with self.lock:
+            now = time.monotonic()
+            if now < self.next_start:
+                time.sleep(self.next_start - now)
+                now = time.monotonic()
+            self.next_start = now + self.min_interval_s
+
+
+def render_panel(
+    panel: PanelAudit,
+    timeout: int,
+    retries: int = 3,
+    pacer: RenderPacer | None = None,
+) -> tuple[str, int | None, int | None, int | None]:
     url = (
         f"{GRAFANA_BASE}/render/d-solo/{quote(panel.dashboard_uid)}/"
         f"?orgId=1&panelId={panel.panel_id}&from=now-24h&to=now&width=800&height=360&theme=dark"
@@ -317,6 +343,8 @@ def render_panel(panel: PanelAudit, timeout: int, retries: int = 3) -> tuple[str
     start = time.monotonic()
     for attempt in range(retries + 1):
         try:
+            if pacer:
+                pacer.wait()
             req = Request(url, headers={"User-Agent": "verdify-grafana-audit/1.0"})
             with urlopen(req, timeout=timeout) as response:
                 body = response.read()
@@ -329,7 +357,7 @@ def render_panel(panel: PanelAudit, timeout: int, retries: int = 3) -> tuple[str
                 return f"bad-content-type:{content_type}", response.status, len(body), elapsed
         except HTTPError as exc:
             if exc.code == 429 and attempt < retries:
-                time.sleep(5 * (attempt + 1))
+                time.sleep(15 * (attempt + 1))
                 continue
             elapsed = int((time.monotonic() - start) * 1000)
             return f"error:HTTP Error {exc.code}: {exc.reason}", exc.code, None, elapsed
@@ -374,6 +402,15 @@ def audit(args: argparse.Namespace) -> dict[str, Any]:
         previous = {
             (panel["dashboard_uid"], int(panel["panel_id"])): panel for panel in previous_report.get("panels", [])
         }
+    if args.checkpoint_json and args.checkpoint_json.exists():
+        checkpoint_report = json.loads(args.checkpoint_json.read_text(encoding="utf-8"))
+        previous.update(
+            {
+                (panel["dashboard_uid"], int(panel["panel_id"])): panel
+                for panel in checkpoint_report.get("panels", [])
+                if panel.get("render_status") == "ok"
+            }
+        )
 
     dashboards: list[dict[str, Any]] = []
     panels: list[PanelAudit] = []
@@ -432,14 +469,55 @@ def audit(args: argparse.Namespace) -> dict[str, Any]:
         if render_scope(panel, args.render, embedded):
             to_render.append(panel)
     if to_render:
+        total = len(to_render)
+        completed = 0
+        ok_count = 0
+        fail_count = 0
+        last_checkpoint = time.monotonic()
+        pacer = RenderPacer(args.render_min_interval)
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.render_workers) as executor:
             future_map = {
-                executor.submit(render_panel, panel, args.render_timeout, args.render_retries): panel
+                executor.submit(render_panel, panel, args.render_timeout, args.render_retries, pacer): panel
                 for panel in to_render
             }
             for future in concurrent.futures.as_completed(future_map):
                 panel = future_map[future]
                 panel.render_status, panel.render_http, panel.render_bytes, panel.render_ms = future.result()
+                completed += 1
+                if panel.render_status == "ok":
+                    ok_count += 1
+                else:
+                    fail_count += 1
+                if args.render_progress and (
+                    completed == total
+                    or completed % args.render_progress_every == 0
+                    or time.monotonic() - last_checkpoint >= args.checkpoint_interval
+                ):
+                    print(
+                        f"rendered {completed}/{total} "
+                        f"(ok={ok_count}, fail={fail_count}, last={panel.dashboard_uid}:{panel.panel_id} {panel.render_status})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                if args.checkpoint_json and (
+                    completed == total
+                    or completed % args.checkpoint_every == 0
+                    or time.monotonic() - last_checkpoint >= args.checkpoint_interval
+                ):
+                    checkpoint = {
+                        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "dashboard_count": len(dashboards),
+                        "panel_count": len(panels),
+                        "render_mode": args.render,
+                        "dashboards": dashboards,
+                        "panels": [panel.__dict__ for panel in panels],
+                        "freshness": freshness,
+                    }
+                    args.checkpoint_json.write_text(
+                        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    last_checkpoint = time.monotonic()
 
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -537,6 +615,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--render-workers", type=int, default=4)
     parser.add_argument("--render-timeout", type=int, default=45)
     parser.add_argument("--render-retries", type=int, default=3)
+    parser.add_argument("--render-min-interval", type=float, default=0.35)
+    parser.add_argument("--render-progress", action="store_true")
+    parser.add_argument("--render-progress-every", type=int, default=25)
+    parser.add_argument("--checkpoint-json", type=Path, help="Write resumable render progress while rendering")
+    parser.add_argument("--checkpoint-every", type=int, default=25)
+    parser.add_argument("--checkpoint-interval", type=float, default=30.0)
     parser.add_argument("--resume-json", type=Path, help="Reuse prior ok render results and rerender the rest")
     return parser.parse_args()
 

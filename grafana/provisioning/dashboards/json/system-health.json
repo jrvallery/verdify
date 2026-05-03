@@ -170,7 +170,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "decimals": 2,
           "color": {
             "mode": "thresholds"
@@ -377,7 +377,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -528,7 +528,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -587,7 +588,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -646,7 +648,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -705,7 +708,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -773,7 +777,8 @@
           "color": {
             "mode": "thresholds"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -831,7 +836,8 @@
             "mode": "fixed",
             "fixedColor": "green"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -888,7 +894,8 @@
             "mode": "fixed",
             "fixedColor": "blue"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -947,7 +954,8 @@
           },
           "min": 0,
           "max": 100
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -1008,7 +1016,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the underlying components feeding the overall system health score."
     }

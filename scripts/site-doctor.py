@@ -85,6 +85,8 @@ class SemanticIframe:
 class PageInfo:
     path: str
     title: str = ""
+    description: str = ""
+    noindex: bool = False
     tags: list[str] = field(default_factory=list)
     aliases: list[str] = field(default_factory=list)
     iframe_count: int = 0
@@ -276,6 +278,8 @@ def collect_pages(
         source = generated_source(rel_path)
         marker = has_generated_marker(text)
         title = str(fm.get("title") or "")
+        description = str(fm.get("description") or "")
+        noindex = fm.get("noindex") is True or str(fm.get("noindex") or "").lower() == "true"
         tags = fm.get("tags") if isinstance(fm.get("tags"), list) else []
         aliases = fm.get("aliases") if isinstance(fm.get("aliases"), list) else []
         canonical_aliases = canonical_paths_for_page(rel_path)
@@ -309,6 +313,8 @@ def collect_pages(
             PageInfo(
                 path=rel_path,
                 title=title,
+                description=description,
+                noindex=noindex,
                 tags=[str(tag) for tag in tags],
                 aliases=[str(alias) for alias in aliases],
                 iframe_count=len(page_iframes),
@@ -326,6 +332,45 @@ def collect_pages(
                     message=f"{rel_path} is produced by {source} but has no clear generated/source marker",
                 )
             )
+        if not noindex and not rel_path.startswith("plans/20"):
+            if not title:
+                findings.append(Finding("error", "seo-title-missing", f"{rel_path} has no frontmatter title"))
+            elif len(title) < 18 and rel_path not in {"index.md"}:
+                findings.append(
+                    Finding(
+                        "warn",
+                        "seo-title-too-generic",
+                        f"{rel_path} title is short/generic: {title!r}",
+                    )
+                )
+            if not description:
+                findings.append(
+                    Finding("error", "seo-description-missing", f"{rel_path} has no frontmatter description")
+                )
+            elif len(description) < 80:
+                findings.append(
+                    Finding(
+                        "warn",
+                        "seo-description-short",
+                        f"{rel_path} description is short ({len(description)} chars)",
+                    )
+                )
+            elif len(description) > 220:
+                findings.append(
+                    Finding(
+                        "warn",
+                        "seo-description-long",
+                        f"{rel_path} description is long ({len(description)} chars)",
+                    )
+                )
+            if rel_path.startswith("plans/") and rel_path != "plans/index.md":
+                findings.append(
+                    Finding(
+                        "error",
+                        "seo-generated-plan-indexable",
+                        f"{rel_path} is an individual generated daily plan and should be noindex",
+                    )
+                )
         iframes.extend(page_iframes)
         images.extend(page_images)
         links.extend(page_links)
@@ -598,6 +643,54 @@ def check_public_output(vault_root: Path, public_root: Path) -> list[Finding]:
         time.sleep(REBUILD_RETRY_SLEEP_SEC)
     for rel in missing:
         findings.append(Finding("warn", "public-page-missing", f"source page has no built output: {rel}"))
+    findings.extend(check_public_seo(public_root))
+    return findings
+
+
+def check_public_seo(public_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    sitemap = public_root / "sitemap.xml"
+    sitemap_text = read_text(sitemap) if sitemap.exists() else ""
+    if not sitemap.exists():
+        findings.append(Finding("error", "seo-sitemap-missing", f"missing sitemap.xml in {public_root}"))
+    elif "tags/" in sitemap_text:
+        findings.append(Finding("error", "seo-tags-in-sitemap", "tag pages are present in sitemap.xml"))
+
+    for path in sorted(public_root.rglob("*.html")):
+        rel = path.relative_to(public_root).as_posix()
+        if rel == "404.html":
+            continue
+        text = read_text(path)
+        is_redirect = 'http-equiv="refresh"' in text or "noindex" in text and "<p>Redirecting to" in text
+        is_tag = rel.startswith("tags/")
+        is_plan_detail = re.match(r"plans/\d{4}-\d{2}-\d{2}\.html$", rel) is not None
+        robots_noindex = re.search(r'<meta\s+name=["\']robots["\'][^>]+content=["\'][^"\']*noindex', text, re.I)
+
+        if is_tag and not robots_noindex:
+            findings.append(Finding("error", "seo-tag-not-noindex", f"{rel} is a tag page without noindex"))
+        if is_plan_detail and not robots_noindex:
+            findings.append(
+                Finding("error", "seo-plan-detail-not-noindex", f"{rel} is an individual plan page without noindex")
+            )
+        if is_redirect:
+            continue
+
+        h1_count = len(re.findall(r"<h1\b", text, flags=re.I))
+        if not (is_tag or is_plan_detail) and h1_count != 1:
+            findings.append(Finding("error", "seo-h1-count", f"{rel} has {h1_count} H1 elements"))
+
+        desc = re.search(
+            r'<meta\s+name=["\']description["\'][^>]+content=(["\'])(.*?)\1',
+            text,
+            re.I | re.S,
+        )
+        if not (is_tag or is_plan_detail) and (not desc or len(desc.group(2).strip()) < 80):
+            findings.append(Finding("error", "seo-built-description", f"{rel} has missing/short meta description"))
+
+    for match in re.finditer(r"https://verdify\.ai/plans/\d{4}-\d{2}-\d{2}", sitemap_text):
+        findings.append(
+            Finding("error", "seo-plan-detail-in-sitemap", f"individual plan URL appears in sitemap: {match.group(0)}")
+        )
     return findings
 
 

@@ -186,7 +186,7 @@
               }
             ]
           },
-          "unit": "kPa",
+          "unit": "pressurekpa",
           "custom": {}
         },
         "overrides": []
@@ -390,7 +390,7 @@
               }
             ]
           },
-          "unit": "short",
+          "unit": "mol/m\u00b2/d",
           "custom": {}
         },
         "overrides": []
@@ -478,7 +478,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -550,7 +566,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "North"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -622,7 +654,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "East"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -694,7 +742,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -759,7 +823,8 @@
             "fillOpacity": 60,
             "gradientMode": "scheme",
             "showPoints": "never",
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           },
           "thresholds": {
             "mode": "absolute",
@@ -826,9 +891,11 @@
             "stacking": {
               "mode": "normal"
             },
-            "lineWidth": 2
+            "lineWidth": 2,
+            "axisLabel": "Hours",
+            "spanNulls": true
           },
-          "unit": "h"
+          "unit": "short"
         },
         "overrides": [
           {
@@ -855,7 +922,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               }
@@ -948,7 +1015,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -983,7 +1051,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -1023,7 +1092,11 @@
             }
           ],
           "title": "State Durations Today",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          }
         },
         {
           "datasource": {
@@ -1052,7 +1125,11 @@
             }
           ],
           "title": "Stress Hours Today",
-          "type": "table"
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          }
         }
       ],
       "title": "State Machine & Stress",

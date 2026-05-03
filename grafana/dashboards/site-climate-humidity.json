@@ -16,7 +16,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "gradientMode": "none",
@@ -34,7 +34,7 @@
               "mode": "off"
             }
           },
-          "unit": "pressurePascal",
+          "unit": "pressurekpa",
           "decimals": 2
         },
         "overrides": [
@@ -95,7 +95,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -130,7 +130,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -176,7 +176,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(239,83,80,0.7)",
+                  "fixedColor": "#CE93D8",
                   "mode": "fixed"
                 }
               },
@@ -199,7 +199,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,167,38,0.7)",
+                  "fixedColor": "#F48FB1",
                   "mode": "fixed"
                 }
               },
@@ -222,7 +222,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(171,71,188,0.7)",
+                  "fixedColor": "#E040FB",
                   "mode": "fixed"
                 }
               },
@@ -245,7 +245,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(126,87,194,0.7)",
+                  "fixedColor": "#00ACC1",
                   "mode": "fixed"
                 }
               },
@@ -439,7 +439,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "kPa",
             "axisPlacement": "auto",
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -489,7 +489,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -508,7 +508,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "blue",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               },
@@ -527,7 +527,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#66BB6A",
                   "mode": "fixed"
                 }
               },
@@ -546,7 +546,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -581,7 +581,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               },
@@ -783,7 +783,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE zone='center'\n) s\n",
+          "rawSql": "\nSELECT zone AS time, avg_delta_kpa AS \"Average VPD Drop\"\nFROM (\n  SELECT 'South'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_south'\n  UNION ALL\n  SELECT 'West'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_west'\n  UNION ALL\n  SELECT 'Center'::text AS zone, COALESCE(avg(vpd_delta),0) AS avg_delta_kpa FROM v_mister_effectiveness WHERE equipment='mister_center'\n) s\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -823,7 +823,8 @@
             }
           },
           "unit": "min"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,

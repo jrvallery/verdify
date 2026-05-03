@@ -40,7 +40,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_vpd_high,0) + COALESCE(stress_hours_vpd_low,0))::numeric, 2) AS \"VPD Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -49,7 +49,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -71,9 +71,27 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -108,7 +126,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_heat,0))::numeric, 2) AS \"Heat Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -142,10 +160,28 @@
               }
             ]
           },
-          "unit": "h",
-          "custom": {}
+          "unit": "short",
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -180,7 +216,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, ROUND((COALESCE(stress_hours_cold,0))::numeric, 2) AS \"Cold Stress Hours\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) ORDER BY date",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -189,7 +225,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -211,9 +247,27 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Setpoint Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -257,7 +311,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -602,8 +656,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
                 }
               },
               {
@@ -621,8 +675,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "blue"
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
                 }
               },
               {
@@ -640,8 +694,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "yellow"
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
                 }
               },
               {
@@ -892,7 +946,23 @@
           },
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reference DLI"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -956,7 +1026,7 @@
             "showPoints": "never",
             "spanNulls": true
           },
-          "unit": "none"
+          "unit": "mol/m\u00b2/d"
         },
         "overrides": [
           {
@@ -1019,8 +1089,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -1084,7 +1154,9 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -1100,7 +1172,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -1150,7 +1222,9 @@
         "defaults": {
           "unit": "percent",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "Hours"
           }
         },
         "overrides": [
@@ -1166,7 +1240,7 @@
               },
               {
                 "id": "unit",
-                "value": "h"
+                "value": "short"
               }
             ]
           }
@@ -1261,7 +1335,24 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -1332,7 +1423,8 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "tooltip": {
@@ -1379,7 +1471,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -1429,7 +1522,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -1479,7 +1573,8 @@
           },
           "unit": "percent",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -1536,7 +1631,8 @@
         "defaults": {
           "noValue": "No observations recorded",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the most recent greenhouse observations logged into the system.",
       "options": {
@@ -1564,7 +1660,8 @@
         "defaults": {
           "noValue": "No treatments recorded",
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the most recent plant treatments or interventions.",
       "options": {

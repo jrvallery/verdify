@@ -56,7 +56,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "mol/m\u00b2/d"
         },
         "overrides": [
           {
@@ -68,7 +68,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },
@@ -106,7 +106,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "green",
+                  "fixedColor": "#8C8C8C",
                   "mode": "fixed"
                 }
               },
@@ -682,7 +682,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#C6FF00",
+                  "fixedColor": "#9CCC65",
                   "mode": "fixed"
                 }
               },
@@ -858,7 +858,8 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -920,7 +921,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FADE2A",
+                  "fixedColor": "#FFA726",
                   "mode": "fixed"
                 }
               },

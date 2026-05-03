@@ -166,7 +166,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -238,7 +254,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "North"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -310,7 +342,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "East"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -382,7 +430,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -464,7 +528,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -648,7 +713,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -683,7 +749,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -731,7 +798,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -769,7 +837,23 @@
           "unit": "fahrenheit",
           "custom": {}
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outdoor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 5,
@@ -960,7 +1044,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the current hydroponic pod layout or occupancy map."
     },
@@ -982,7 +1067,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       }
     },
     {
@@ -1043,7 +1129,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows current soil moisture for the first south-zone probe.",
       "options": {}
@@ -1095,7 +1182,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows current soil moisture for the second south-zone probe.",
       "options": {}
@@ -1147,7 +1235,24 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows current soil moisture for the west-zone probe.",
       "options": {}
@@ -1176,7 +1281,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Summarizes current soil probe conditions across the monitored zones.",
       "options": {
@@ -1228,9 +1334,27 @@
           "min": 0,
           "max": 100,
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#66BB6A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Shows soil moisture readings from the installed root-zone probes.",
       "options": {
@@ -1300,9 +1424,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "\u00b0F",
+          "unit": "fahrenheit",
           "custom": {
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
           }
         },
         "overrides": [
