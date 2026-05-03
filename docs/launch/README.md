@@ -8,10 +8,11 @@ Source triage:
 
 - [`feedback-triage-2026-05-02.md`](feedback-triage-2026-05-02.md)
 - [`prior-art-rollup-2026-05-03.md`](prior-art-rollup-2026-05-03.md)
+- [`launch-response-pack.md`](launch-response-pack.md)
 
 Active sprint:
 
-- [`sprint-2026-05-03-l1-credibility.md`](sprint-2026-05-03-l1-credibility.md) - closes Related Work, Safety Architecture, Baseline vs Iris, FAQ/response pack, builder path, and Jason-owned launch-day decisions.
+- [`sprint-2026-05-03-l1-credibility.md`](sprint-2026-05-03-l1-credibility.md) - engineering/content assets are complete; Jason-owned video, final copy, identity posture, and launch calendar remain.
 
 Verdify's public launch narrative is:
 

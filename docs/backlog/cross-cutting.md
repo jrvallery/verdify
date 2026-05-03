@@ -12,8 +12,8 @@ Launch work is tracked in [`docs/backlog/launch.md`](launch.md) with the command
 - [x] **Public proof contract.** Added public-safe home metrics and data-health response models/endpoints for launch proof cards.
 - [x] **Launch sequencing.** P0 hardening is deployed; remaining launch timing is Jason-owned attribution/copy/video availability.
 - [x] **Cross-agent release train.** Web/genai/ingestor/saas/coordinator launch work was closed as one coordinator-driven release.
-- [ ] **Prior-art verification and positioning.** Verify publishable claims before adding Related Work copy for AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA comparators. Preserve Verdify's differentiation as public falsifiability, not "first" or largest deployment.
-- [ ] **Baseline period decision.** Choose the baseline window for "Baseline vs Iris" and document caveats so the comparison is useful without pretending to be a controlled academic trial.
+- [x] **Prior-art verification and positioning.** Added `/intelligence/related-work` using primary-source/public links for AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA comparators. Verdify is framed as public falsifiability, not first/largest/best.
+- [x] **Baseline period decision.** Selected 2026-04-22..25 planner-offline outage as baseline and 2026-04-26..2026-05-02 as the Iris-online comparison window; `/evidence/baseline-vs-iris` labels it as operational, not controlled A/B.
 
 ## Schemas / contracts
 

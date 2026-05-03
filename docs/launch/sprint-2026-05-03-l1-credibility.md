@@ -4,6 +4,11 @@ Date: 2026-05-03
 Owner: coordinator / iris-dev
 Target window: 3 working days, plus Jason-owned launch-day recording and comment coverage
 
+Implementation status, 2026-05-03:
+
+- Engineering/content assets completed: Related Work, Safety Architecture, Baseline vs Iris, FAQ, response pack, builder path, object-model diagram, and backlog status updates.
+- Remaining human-owned launch actions: 30-90s operations clip, final HN title/comment approval, launch identity posture, launch calendar, and comment-coverage availability. Waitlist/newsletter capture is explicitly deferred.
+
 ## Goal
 
 Verdify is past P0 hardening. The next sprint gets the public launch from "safe to show" to "hard to dismiss."

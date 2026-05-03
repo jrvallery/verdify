@@ -9,8 +9,8 @@ Owned by the [`firmware`](../agents/firmware.md) agent. Sprint counter is agent-
 
 **Launch support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
 
-- [ ] **F-L1.1 Architecture fact review.** Verify public claims for ESP32 loop cadence, relay/safety ownership, controller state count, sensor paths, and "LLM does not flip relays" wording.
-- [ ] **F-L1.2 Bill-of-materials fact pack.** Provide launch-safe list of ESP32 board, relay board, RS485 probes, soil sensors, misters, heaters, fans, vent actuator, flow meter, and sensor/entity counts.
+- [x] **F-L1.1 Architecture fact review.** Public safety copy now uses the defensible wording: 7-mode deterministic controller evaluated every 5 seconds; Iris writes tactics and does not flip relays.
+- [x] **F-L1.2 Bill-of-materials fact pack.** `/intelligence/build-notes` links the public equipment inventory and uses launch-safe ESP32/probe/relay/heater/fan/vent/fog/mister facts.
 - [ ] **F-L0 Freeze discipline.** No launch-driven behavior-changing OTA. Firmware changes remain Track A only and must obey replay/invariant/freeze rules.
 
 ## Recently landed
@@ -107,6 +107,6 @@ Leaf MLX90614 (`leaf_temp_f` + computed `leaf_air_vpd_kpa`) is separately a hard
 
 ## Launch-support tasks from prior-art review
 
-- [ ] **F-L1.10 Safety Architecture facts.** Supply exact public-safe claims for "Why the AI does not control relays": loop cadence, local enforcement, relay ownership, safety rails, watchdog behavior, and what happens if cloud/Wi-Fi/planner fail.
-- [ ] **F-L1.14 Builder path facts.** Review BOM/wiring/equipment claims for ESP32, probes, relays, heaters, misters, and OTA safeguards before publication.
-- [ ] **F-L2.5 Progressive autonomy roadmap.** Define what firmware evidence is required before moving up an L1-L4 autonomy ladder; no roadmap item implies a launch-time OTA.
+- [x] **F-L1.10 Safety Architecture facts.** `/intelligence/safety-architecture` documents loop cadence, local enforcement, relay ownership, safety rails, and what happens if cloud/Wi-Fi/planner fail.
+- [x] **F-L1.14 Builder path facts.** `/intelligence/build-notes` reviews BOM/wiring/equipment claims and says not to copy photos as wiring instructions.
+- [x] **F-L2.5 Progressive autonomy roadmap.** `/intelligence/safety-architecture` defines L1-L4 autonomy and states that no roadmap item bypasses firmware safety or implies launch-time OTA.

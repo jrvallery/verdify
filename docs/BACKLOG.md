@@ -10,7 +10,7 @@ Current launch posture: **not broad-launch ready** until the P0 gates are comple
 
 2026-05-03 update: Jason's prior-art review is tracked in [`docs/launch/prior-art-rollup-2026-05-03.md`](launch/prior-art-rollup-2026-05-03.md). It adds post-P0 launch assets around Related Work, Safety Architecture, Baseline vs Iris, builder packaging, counterfactual replay, and progressive autonomy. These are P1/P2 credibility assets, not Track A firmware blockers.
 
-Next launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2026-05-03-l1-credibility.md). It focuses on the assets that make the broad launch defensible: related work, safety architecture, baseline evidence, FAQ/response pack, builder path, object-model diagram, and Jason-owned launch decisions.
+Current launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2026-05-03-l1-credibility.md). Engineering/content assets are complete: related work, safety architecture, baseline evidence, FAQ/response pack, builder path, and object-model diagram. Remaining broad-launch blockers are Jason-owned: operations clip, final HN copy, identity posture, launch calendar, and comment coverage.
 
 | Owner | Launch focus | Backlog |
 |---|---|---|
