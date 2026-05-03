@@ -39,6 +39,7 @@ const groups: NavGroup[] = [
     links: [
       { label: "Planning Loop", href: "/intelligence/planning", slug: "intelligence/planning" },
       { label: "Planning Quality", href: "/evidence/planning-quality", slug: "evidence/planning-quality" },
+      { label: "Baseline vs Iris", href: "/evidence/baseline-vs-iris", slug: "evidence/baseline-vs-iris" },
       { label: "Operations", href: "/evidence/operations", slug: "evidence/operations" },
       { label: "Economics", href: "/evidence/economics", slug: "evidence/economics" },
       { label: "Forecast", href: "/forecast", slug: "forecast" },
@@ -49,7 +50,11 @@ const groups: NavGroup[] = [
     links: [
       { label: "Intelligence", href: "/intelligence", slug: "intelligence", exact: true },
       { label: "Architecture", href: "/intelligence/architecture", slug: "intelligence/architecture" },
+      { label: "Safety", href: "/intelligence/safety-architecture", slug: "intelligence/safety-architecture" },
       { label: "Data Model", href: "/intelligence/data", slug: "intelligence/data" },
+      { label: "Build Notes", href: "/intelligence/build-notes", slug: "intelligence/build-notes" },
+      { label: "Related Work", href: "/intelligence/related-work", slug: "intelligence/related-work" },
+      { label: "FAQ", href: "/intelligence/faq", slug: "intelligence/faq" },
       { label: "Lessons", href: "/greenhouse/lessons", slug: "greenhouse/lessons" },
       { label: "About", href: "/about", slug: "about" },
     ],
