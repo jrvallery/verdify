@@ -103,6 +103,8 @@ EQUIPMENT_BINARY_MAP: dict[str, str] = {
     "economiser_blocked": "economiser_blocked",
     "leak_detected": "leak_detected",  # SAFETY CRITICAL
     "water_flowing": "water_flowing",
+    "heap_pressure_warning": "heap_pressure_warning",
+    "heap_pressure_critical": "heap_pressure_critical",
     "fan_burst_active": "fan_burst_active",
     "fog_burst_active": "fog_burst_active",
     "vent_bypass_active": "vent_bypass_active",
@@ -154,6 +156,12 @@ STATE_MAP: dict[str, str] = {
     # or "none"). Ingestor also diffs transitions and writes one row per
     # start event to the override_events table.
     "active_overrides": "overrides_active",
+    # Sprint-15.1 fix 8: diagnostic trace — which branch of
+    # determine_mode() chose the current mode. Lets post-hoc queries
+    # distinguish `summer_vent_preempt` from `temp_vent` from
+    # `seal_enter` etc. Populated by controls.yaml from
+    # ctl_state.last_mode_reason on every cycle.
+    "mode_reason": "mode_reason",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -166,6 +174,7 @@ SETPOINT_MAP: dict[str, str] = {
     "__heat_stage_2__f": "d_heat_stage_2",
     "__cool_stage_2__f": "d_cool_stage_2",
     "temp_hysteresis__f": "temp_hysteresis",
+    "heat_hysteresis__f": "heat_hysteresis",
     "bias_heat__f": "bias_heat",
     "bias_cool__f": "bias_cool",
     # VPD band
@@ -175,6 +184,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Safety rails
     "safety_min__f": "safety_min",
     "safety_max__f": "safety_max",
+    "safety_seal_margin__f": "safety_max_seal_margin_f",
     "safety_vpd_min_kpa": "safety_vpd_min",
     "safety_vpd_max_kpa": "safety_vpd_max",
     # Mister
@@ -188,6 +198,9 @@ SETPOINT_MAP: dict[str, str] = {
     "mister_all_off__s_": "mister_all_off_s",
     "mister_water_budget__gal_": "mister_water_budget_gal",
     "mister_max_runtime__min_": "mister_max_runtime_min",
+    "max_relief_cycles": "max_relief_cycles",
+    "dehum_aggressive_kpa": "dehum_aggressive_kpa",
+    "vent_latch_timeout__ms_": "vent_latch_timeout_ms",
     # Equipment timing
     "min_heat_on__s_": "min_heat_on_s",
     "min_heat_off__s_": "min_heat_off_s",
@@ -202,6 +215,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Economiser
     "enthalpy_open__kj_kg_": "enthalpy_open",
     "enthalpy_close__kj_kg_": "enthalpy_close",
+    "econ_heat_margin__f": "econ_heat_margin_f",
     "site_pressure__hpa_": "site_pressure_hpa",
     # Irrigation wall
     "irrig_wall_start_hour": "irrig_wall_start_hour",
@@ -225,11 +239,13 @@ SETPOINT_MAP: dict[str, str] = {
     # Grow lights
     "gl_dli_target__mol_": "gl_dli_target",
     "gl_lux_threshold": "gl_lux_threshold",
+    "gl_lux_hysteresis": "gl_lux_hysteresis",
     "gl_start_hour": "gl_sunrise_hour",
     "gl_cutoff_hour": "gl_sunset_hour",
     # Switches (boolean, tracked as 0.0/1.0)
     "economiser_enabled": "sw_economiser_enabled",
     "fog_closes_vent": "sw_fog_closes_vent",
+    "mister_closes_vent": "sw_mister_closes_vent",  # sprint-15.1 fix 7: closes sprint-21 follow-up routing gap
     "gl_auto_mode": "sw_gl_auto_mode",
     "irrigation_enabled": "sw_irrigation_enabled",
     "irrigation_wall_enabled": "sw_irrigation_wall_enabled",
@@ -260,6 +276,19 @@ SETPOINT_MAP: dict[str, str] = {
     "fog_min_temp__f_": "fog_min_temp_f",
     "fog_window_start__hr_": "fog_time_window_start",
     "fog_window_end__hr_": "fog_time_window_end",
+    # Sprint-15: summer thermal-driven vent preference gate.
+    # 4 numerics + 1 switch. See docs/firmware-sprint-15-summer-vent-spec.md.
+    "vent_prefer_temp_delta__f_": "vent_prefer_temp_delta_f",
+    "vent_prefer_dp_delta__f_": "vent_prefer_dp_delta_f",
+    "outdoor_staleness_max__s_": "outdoor_staleness_max_s",
+    "summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
+    "summer_vent_enabled": "sw_summer_vent_enabled",
+    # Phase-2 dwell gate (plan firmware stabilization).
+    "dwell_gate__ms_": "dwell_gate_ms",
+    "dwell_gate_enabled": "sw_dwell_gate_enabled",
+    # Controller v2: band-first FSM.
+    "fsm_controller_enabled": "sw_fsm_controller_enabled",
+    "mist_backoff__s_": "mist_backoff_s",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -268,6 +297,8 @@ SETPOINT_MAP: dict[str, str] = {
 DIAGNOSTIC_MAP: dict[str, str] = {
     "wifi_signal": "wifi_rssi",  # SensorInfo, dBm
     "free_heap": "heap_bytes",  # SensorInfo
+    "minimum_free_heap": "heap_min_free_kb",  # SensorInfo, kB
+    "largest_free_heap_block": "heap_largest_free_block_kb",  # SensorInfo, kB
     "uptime": "uptime_s",  # SensorInfo
     "probe_health": "probe_health",  # TextSensorInfo
     "reset_reason": "reset_reason",  # TextSensorInfo
@@ -283,6 +314,12 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     # (vent_latch_timer_s). See migration 082.
     "relief_cycle_count": "relief_cycle_count",  # SensorInfo, 0-max_relief_cycles
     "vent_latch_timer_s": "vent_latch_timer_s",  # SensorInfo, 0-1800 s
+    # Controller v2 diagnostics (migration 094): expose the timers that drive
+    # SEALED_MIST entry/backoff plus the hot/dry vent moisture-assist flag.
+    "sealed_timer_s": "sealed_timer_s",
+    "vpd_watch_timer_s": "vpd_watch_timer_s",
+    "mist_backoff_timer_s": "mist_backoff_timer_s",
+    "vent_mist_assist_active": "vent_mist_assist_active",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -298,6 +335,11 @@ DAILY_ACCUM_MAP: dict[str, str] = {
     "cycles___vent__today_": "cycles_vent",
     "de_hum_cycles__today_": "cycles_dehum",
     "safety_de_hum_cycles__today_": "cycles_safety_dehum",
+    "cycles___mister_south__today_": "cycles_mister_south",
+    "cycles___mister_west__today_": "cycles_mister_west",
+    "cycles___mister_center__today_": "cycles_mister_center",
+    "cycles___drip_wall__today_": "cycles_drip_wall",
+    "cycles___drip_center__today_": "cycles_drip_center",
     # Runtime (relay minutes)
     "runtime___fan_1__min_today_": "runtime_fan1_min",
     "runtime___fan_2__min_today_": "runtime_fan2_min",
@@ -327,6 +369,7 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg_____heat_s2___f_": "d_heat_stage_2",
     "cfg_____cool_s2___f_": "d_cool_stage_2",
     "cfg___temp_hyst___f_": "temp_hysteresis",
+    "cfg___heat_hyst___f_": "heat_hysteresis",
     "cfg___vpd_low__kpa_": "vpd_low",
     "cfg___vpd_high__kpa_": "vpd_high",
     "cfg___vpd_hyst__kpa_": "vpd_hysteresis",
@@ -334,11 +377,13 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___bias_cool___f_": "bias_cool",
     "cfg___safety_min___f_": "safety_min",
     "cfg___safety_max___f_": "safety_max",
+    "cfg___safety_seal_margin___f_": "safety_max_seal_margin_f",
     "cfg___safety_vpd_min__kpa_": "safety_vpd_min",
     "cfg___safety_vpd_max__kpa_": "safety_vpd_max",
     "cfg___site_pressure__hpa_": "site_pressure_hpa",
     "cfg___enthalpy_open__kj_kg___": "enthalpy_open",
     "cfg___enthalpy_close__kj_kg___": "enthalpy_close",
+    "cfg___econ_heat_margin___f_": "econ_heat_margin_f",
     "cfg___fan_burst__min_": "fan_burst_min",
     "cfg___vent_bypass__min_": "vent_bypass_min",
     "cfg___fog_burst__min_": "fog_burst_min",
@@ -371,6 +416,45 @@ CFG_READBACK_MAP: dict[str, str] = {
     "mister_center_penalty": "mister_center_penalty",
     # Mister vent coordination
     "sw_mister_closes_vent": "sw_mister_closes_vent",
+    # Sprint-15: summer thermal-driven vent readbacks.
+    # 5 tunable readbacks (matching SETPOINT_MAP above) + 2 live outdoor
+    # readings (firmware exposes the Tempest-sourced values it's comparing).
+    # See docs/firmware-sprint-15-summer-vent-spec.md.
+    "cfg___vent_prefer_temp_delta__f_": "vent_prefer_temp_delta_f",
+    "cfg___vent_prefer_dp_delta__f_": "vent_prefer_dp_delta_f",
+    "cfg___outdoor_staleness_max__s_": "outdoor_staleness_max_s",
+    "cfg___summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
+    "cfg_summer_vent_enabled": "sw_summer_vent_enabled",
+    "cfg___outdoor_temp___f_": "outdoor_temp_f",
+    "cfg___outdoor_dewpoint___f_": "outdoor_dewpoint_f",
+    # Phase 1c: 10 fire-and-forget tunable readbacks. Dispatcher pushed
+    # these but firmware never echoed — alert_monitor couldn't verify
+    # landings. Same "Cfg • Foo Bar (unit)" → cfg___foo_bar__unit_
+    # slug pattern as sprint-15 block above.
+    "cfg_fsm_controller_enabled": "sw_fsm_controller_enabled",
+    "cfg___mist_backoff__s_": "mist_backoff_s",
+    "cfg___mister_pulse_on__s_": "mister_pulse_on_s",
+    "cfg___mister_pulse_gap__s_": "mister_pulse_gap_s",
+    "cfg___mister_water_budget__gal_": "mister_water_budget_gal",
+    "cfg___mister_vpd_weight": "mister_vpd_weight",
+    "cfg___vpd_watch_dwell__s_": "vpd_watch_dwell_s",
+    "cfg___mister_engage_delay__s_": "mister_engage_delay_s",
+    "cfg___mister_all_delay__s_": "mister_all_delay_s",
+    "cfg___min_fog_on__s_": "min_fog_on_s",
+    "cfg___min_fog_off__s_": "min_fog_off_s",
+    "cfg_dwell_gate_enabled": "sw_dwell_gate_enabled",
+    "cfg_dwell_gate_ms": "dwell_gate_ms",
+    "cfg___mist_vent_close_lead__s_": "mist_vent_close_lead_s",
+    "cfg___mist_max_closed_vent__s_": "mist_max_closed_vent_s",
+    "cfg___mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
+    "cfg___mist_thermal_relief__s_": "mist_thermal_relief_s",
+    "cfg___fog_escalation__kpa_": "fog_escalation_kpa",
+    "cfg___fog_window_start__hour_": "fog_time_window_start",
+    "cfg___fog_window_end__hour_": "fog_time_window_end",
+    "cfg___max_relief_cycles": "max_relief_cycles",
+    "cfg___dehum_aggressive__kpa_": "dehum_aggressive_kpa",
+    "cfg___vent_latch_timeout__ms_": "vent_latch_timeout_ms",
+    "cfg___gl_lux_hysteresis": "gl_lux_hysteresis",
 }
 
 # ──────────────────────────────────────────────────────────────

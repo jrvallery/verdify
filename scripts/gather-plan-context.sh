@@ -76,6 +76,19 @@ SELECT json_build_object(
   'flow_gpm', round(flow_gpm::numeric,2), 'water_total_gal', round(water_total_gal::numeric,0)
 ) FROM climate ORDER BY ts DESC LIMIT 1;
 "
+
+# Outdoor freshness — Tempest UPDATEs outdoor_* onto recent climate rows, so
+# MAX(ts) WHERE outdoor_temp_f IS NOT NULL ≈ last successful Tempest sync.
+# Lets the planner see whether outdoor inputs are stale before trusting them.
+$DB -c "
+SELECT 'OUTDOOR FRESHNESS: outdoor_data_age_s=' ||
+       COALESCE(extract(epoch FROM now() - MAX(ts))::int::text, 'NULL') ||
+       ' (>300s = stale, planner should de-weight outdoor signals)'
+FROM climate
+WHERE outdoor_temp_f IS NOT NULL
+  AND ts > now() - interval '30 minutes';
+" 2>/dev/null
+
 # Dynamic zone ranking with context
 $DB -c "SELECT 'ZONE VPD (current): ' || string_agg(z || '=' || v, ', ' ORDER BY v DESC)
 FROM (SELECT unnest(ARRAY['north','south','east','west']) AS z,
@@ -456,7 +469,7 @@ alerts AS (
   -- HEAT WARNING
   SELECT 1 AS ord, 'HEAT WARNING: forecast high ' || round(max_t::numeric,0) || '°F at '
     || to_char(peak_ts AT TIME ZONE 'America/Denver', 'HH:MI AM')
-    || '. Consider lowering temp_high or extending mister window.' AS alert
+    || '. Consider stronger cooling posture via bias_cool, fog_escalation_kpa, and mist timing.' AS alert
   FROM (SELECT max(temp_f) AS max_t, (array_agg(ts ORDER BY temp_f DESC))[1] AS peak_ts FROM fc WHERE temp_f > 90) h
   WHERE h.max_t IS NOT NULL
   UNION ALL
@@ -469,7 +482,7 @@ alerts AS (
   -- FROST RISK
   SELECT 3, 'FROST RISK: forecast low ' || round(min_t::numeric,0) || '°F at '
     || to_char(low_ts AT TIME ZONE 'America/Denver', 'HH:MI AM')
-    || '. Verify heaters operational, consider raising temp_low.'
+    || '. Verify heaters operational; consider bias_heat and bias_cool to prevent oscillation.'
   FROM (SELECT min(temp_f) AS min_t, (array_agg(ts ORDER BY temp_f ASC))[1] AS low_ts FROM fc WHERE temp_f < 35) c
   WHERE c.min_t IS NOT NULL
   UNION ALL
@@ -571,8 +584,14 @@ echo "Use this coarse forecast for day-level planning posture (conservative defa
 echo ""
 
 # ── 27. PLAN COVERAGE VALIDATION ─────────────────────────────────
+# validate-plan-coverage.sh returns exit 1 when any transition is missing
+# Tier 1 params. With `set -euo pipefail` active, the non-zero exit
+# aborted the whole script — sections 28-31 (including sprint-1's G10
+# completeness summary and sprint-4's delivery/clamp sections) never
+# ran. Trailing `|| true` keeps the coverage report visible without
+# killing downstream sections.
 echo "--- PLAN COVERAGE VALIDATION ---"
-bash /srv/verdify/scripts/validate-plan-coverage.sh 2>/dev/null
+bash /srv/verdify/scripts/validate-plan-coverage.sh 2>/dev/null || true
 echo ""
 
 # ── 28. FORECAST ACCURACY ─────────────────────────────────────────
@@ -616,6 +635,49 @@ WHERE ts > now() - interval '24 hours'
 ORDER BY ts DESC LIMIT 2;
 " 2>/dev/null
 echo "Crop health observations are informational. Note declining scores in your conditions_summary, but do not change tuning strategy based on visual observations alone — they may indicate nutrient, light, or root-zone issues outside this planner's control surface."
+echo ""
+
+# ── 30a. PLANNER DELIVERY HISTORY (sprint-4 G-Kn-D) ─────────────
+# plan_delivery_log (status column from sprint 24.9) captures every trigger
+# and its lifecycle. Surfacing the 24h histogram here lets Iris see her own
+# silent-drop pattern without needing the ops-side midnight_watch alert to
+# page Jason first. Counts >1 'pending'/'timed_out' in one event_type row
+# indicate a real silent-drop pattern; she should flag it in her Slack brief.
+echo "--- YOUR RECENT DELIVERIES (last 24h from plan_delivery_log) ---"
+$DB -c "
+SELECT event_type, status, count(*) AS n,
+  to_char(max(delivered_at) AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS most_recent
+FROM plan_delivery_log
+WHERE delivered_at > now() - interval '24 hours'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+" 2>/dev/null || echo "(plan_delivery_log unreachable)"
+echo "Legend: pending = waiting for plan or acknowledge_trigger; plan_written = plan landed;"
+echo "  acked = you recorded no-action-needed; timed_out = SLA breached; delivery_failed = gateway 4xx/5xx."
+echo "If one event_type shows many pending/timed_out: silent-drops are happening. Flag in Slack brief."
+echo ""
+
+# ── 30b. RECENT CLAMPS (sprint-4 G-Kn-C) ────────────────────────
+# setpoint_clamps records every time the dispatcher clamped a push to the
+# invariant-safe range. Without this visibility, Iris repeats the same
+# out-of-range push and wonders why the ESP32 never sees her value (her push
+# landed in setpoint_clamps, not setpoint_changes). Grouped so a repeating
+# clamp is obvious; full per-row detail would overwhelm the context.
+echo "--- RECENT CLAMPS (dispatcher rejections, last 24h, top 10 params) ---"
+$DB -c "
+SELECT parameter, count(*) AS n_clamped,
+  round(avg(requested)::numeric, 3) AS avg_requested,
+  round(avg(applied)::numeric, 3) AS avg_applied,
+  max(reason) AS reason,
+  to_char(max(ts) AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS most_recent
+FROM setpoint_clamps
+WHERE ts > now() - interval '24 hours'
+GROUP BY parameter
+ORDER BY n_clamped DESC LIMIT 10;
+" 2>/dev/null || echo "(setpoint_clamps unreachable or empty)"
+echo "If a param clamps repeatedly at the same requested value: the push source is out of the"
+echo "dispatcher's valid range. If YOU pushed that value, it reached setpoint_clamps but NOT the"
+echo "ESP32 — reconsider the value or reference the Tunable Dictionary for the actual range."
 echo ""
 
 # ── 31. CONTEXT COMPLETENESS SUMMARY (G10) ─────────────────────

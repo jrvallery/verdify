@@ -1155,7 +1155,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1274,7 +1274,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(kwh_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(kwh_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -1321,7 +1321,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(therms_estimated) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(therms_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }
@@ -1367,7 +1367,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(water_used_gal) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz)",
+          "rawSql": "SELECT now() AS time, COALESCE(SUM(water_used_gal), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
           "refId": "A"
         }

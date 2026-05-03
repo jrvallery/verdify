@@ -991,7 +991,8 @@
             "pointSize": 4,
             "showPoints": "never",
             "spanNulls": false
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -1284,7 +1285,8 @@
                 "lineWidth": 1,
                 "showPoints": "never",
                 "spanNulls": true
-              }
+              },
+              "unit": "currencyUSD"
             },
             "overrides": [
               {

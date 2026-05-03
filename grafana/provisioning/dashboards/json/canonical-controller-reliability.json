@@ -58,7 +58,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "string"
         },
         "overrides": []
       },
@@ -100,7 +101,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -159,7 +161,8 @@
             ]
           },
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -325,7 +328,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -338,7 +343,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -583,7 +589,10 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -659,7 +668,8 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never"
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -934,7 +944,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {}
-        }
+        },
+        "overrides": []
       },
       "description": "Shows the underlying components feeding the overall system health score."
     }

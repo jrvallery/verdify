@@ -4,27 +4,30 @@
 
 number:
   # --- Temperature band (°F) -----------------------------------------
+  # Wide min/max — dispatcher pushes real crop band each planner cycle.
   - platform: template
     id: num_temp_low
     name: "Set Temp Low °F"
-    min_value: 40
+    min_value: 30
     max_value: 80
     step: 0.5
     lambda: "return id(target_temp_low_f);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_temp_low_f) = x;
           id(num_temp_low).publish_state(x);
 
   - platform: template
     id: num_temp_high
     name: "Set Temp High °F"
-    min_value: 60
+    min_value: 40
     max_value: 100
     step: 0.5
     lambda: "return id(target_temp_high_f);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_temp_high_f) = x;
           id(num_temp_high).publish_state(x);
 
@@ -65,27 +68,42 @@ number:
           id(hyst_temp_f) = x;
           id(num_hyst_temp).publish_state(x);
 
+  - platform: template
+    id: num_heat_hysteresis
+    name: "Heat Hysteresis °F"
+    min_value: 0
+    max_value: 3
+    step: 0.1
+    lambda: "return id(heat_hysteresis_f);"
+    set_action:
+      - lambda: |
+          id(heat_hysteresis_f) = x;
+          id(num_heat_hysteresis).publish_state(x);
+
   # --- VPD set‑band (kPa) --------------------------------------------
+  # Wide min/max — dispatcher pushes real crop band each planner cycle.
   - platform: template
     id: num_vpd_low
     name: "Set VPD Low kPa"
-    min_value: 0.30
+    min_value: 0.10
     max_value: 1.00
     step: 0.05
     lambda: "return id(target_vpd_low_kpa);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_vpd_low_kpa) = x;
           id(num_vpd_low).publish_state(x);
   - platform: template
     id: num_vpd_high
     name: "Set VPD High kPa"
-    min_value: 1.00
+    min_value: 0.40
     max_value: 3.00
     step: 0.05
     lambda: "return id(target_vpd_high_kpa);"
     set_action:
       - lambda: |
+          id(cfg_first_pull_ok) = true;
           id(target_vpd_high_kpa) = x;
           id(num_vpd_high).publish_state(x);
   - platform: template
@@ -99,118 +117,6 @@ number:
       - lambda: |
           id(hyst_vpd_kpa) = x;
           id(num_hyst_vpd).publish_state(x);
-
-  # --- Sprint-10 0.3: day/night setpoint pairs (°F + kPa) -------------
-  - platform: template
-    id: num_temp_low_day
-    name: "Set Temp Low Day °F"
-    min_value: 40
-    max_value: 85
-    step: 0.5
-    lambda: "return id(target_temp_low_day_f);"
-    set_action:
-      - lambda: |
-          id(target_temp_low_day_f) = x;
-          id(num_temp_low_day).publish_state(x);
-  - platform: template
-    id: num_temp_high_day
-    name: "Set Temp High Day °F"
-    min_value: 60
-    max_value: 100
-    step: 0.5
-    lambda: "return id(target_temp_high_day_f);"
-    set_action:
-      - lambda: |
-          id(target_temp_high_day_f) = x;
-          id(num_temp_high_day).publish_state(x);
-  - platform: template
-    id: num_temp_low_night
-    name: "Set Temp Low Night °F"
-    min_value: 35
-    max_value: 80
-    step: 0.5
-    lambda: "return id(target_temp_low_night_f);"
-    set_action:
-      - lambda: |
-          id(target_temp_low_night_f) = x;
-          id(num_temp_low_night).publish_state(x);
-  - platform: template
-    id: num_temp_high_night
-    name: "Set Temp High Night °F"
-    min_value: 50
-    max_value: 95
-    step: 0.5
-    lambda: "return id(target_temp_high_night_f);"
-    set_action:
-      - lambda: |
-          id(target_temp_high_night_f) = x;
-          id(num_temp_high_night).publish_state(x);
-  - platform: template
-    id: num_vpd_low_day
-    name: "Set VPD Low Day kPa"
-    min_value: 0.30
-    max_value: 1.50
-    step: 0.05
-    lambda: "return id(target_vpd_low_day_kpa);"
-    set_action:
-      - lambda: |
-          id(target_vpd_low_day_kpa) = x;
-          id(num_vpd_low_day).publish_state(x);
-  - platform: template
-    id: num_vpd_high_day
-    name: "Set VPD High Day kPa"
-    min_value: 0.60
-    max_value: 2.50
-    step: 0.05
-    lambda: "return id(target_vpd_high_day_kpa);"
-    set_action:
-      - lambda: |
-          id(target_vpd_high_day_kpa) = x;
-          id(num_vpd_high_day).publish_state(x);
-  - platform: template
-    id: num_vpd_low_night
-    name: "Set VPD Low Night kPa"
-    min_value: 0.20
-    max_value: 1.20
-    step: 0.05
-    lambda: "return id(target_vpd_low_night_kpa);"
-    set_action:
-      - lambda: |
-          id(target_vpd_low_night_kpa) = x;
-          id(num_vpd_low_night).publish_state(x);
-  - platform: template
-    id: num_vpd_high_night
-    name: "Set VPD High Night kPa"
-    min_value: 0.50
-    max_value: 2.00
-    step: 0.05
-    lambda: "return id(target_vpd_high_night_kpa);"
-    set_action:
-      - lambda: |
-          id(target_vpd_high_night_kpa) = x;
-          id(num_vpd_high_night).publish_state(x);
-  - platform: template
-    id: num_photoperiod_start
-    name: "Photoperiod Start Hour"
-    min_value: 0
-    max_value: 23
-    step: 1
-    lambda: "return id(photoperiod_start_hour);"
-    set_action:
-      - lambda: |
-          id(photoperiod_start_hour) = (int)x;
-          id(num_photoperiod_start).publish_state((int)x);
-  - platform: template
-    id: num_photoperiod_end
-    name: "Photoperiod End Hour"
-    min_value: 0
-    max_value: 23
-    step: 1
-    lambda: "return id(photoperiod_end_hour);"
-    set_action:
-      - lambda: |
-          id(photoperiod_end_hour) = (int)x;
-          id(num_photoperiod_end).publish_state((int)x);
 
   # --- Relay min on/off timing (seconds) ------------------------------
   - platform: template
@@ -304,8 +210,8 @@ number:
   - platform: template
     id: num_enthalpy_open
     name: "Enthalpy Open (kJ⁄kg)"
-    min_value: -20
-    max_value: 5
+    min_value: -5
+    max_value: 0
     step: 0.5
     lambda: "return id(enthalpy_open_kjkg);"
     set_action:
@@ -324,10 +230,21 @@ number:
           id(enthalpy_close_kjkg) = x;
           id(num_enthalpy_close).publish_state(x);
   - platform: template
+    id: num_econ_heat_margin
+    name: "Econ Heat Margin °F"
+    min_value: 1
+    max_value: 15
+    step: 0.5
+    lambda: "return id(econ_heat_margin_f);"
+    set_action:
+      - lambda: |
+          id(econ_heat_margin_f) = x;
+          id(num_econ_heat_margin).publish_state(x);
+  - platform: template
     id: num_site_pressure
     name: "Site Pressure (hPa)"
     min_value: 700
-    max_value: 1050
+    max_value: 1100
     step: 1
     lambda: "return id(site_pressure_hpa);"
     set_action:
@@ -399,6 +316,18 @@ number:
           id(safety_max_f) = x;
           id(num_safety_max).publish_state(x);
 
+  - platform: template
+    id: num_safety_max_seal_margin
+    name: "Safety Seal Margin °F"
+    min_value: 1
+    max_value: 15
+    step: 0.5
+    lambda: "return id(safety_max_seal_margin_f);"
+    set_action:
+      - lambda: |
+          id(safety_max_seal_margin_f) = x;
+          id(num_safety_max_seal_margin).publish_state(x);
+
   # --- VPD SAFETY rails (kPa) ----------------------------------------
   - platform: template
     id: num_safety_vpd_min
@@ -443,14 +372,14 @@ number:
     id: num_vent_bypass
     name: "Vent Bypass (min)"
     min_value: 1
-    max_value: 30
+    max_value: 60
     step: 1
     lambda: "return id(vent_bypass_minutes);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
           if(val < 1) val = 1;
-          if(val > 30) val = 30;
+          if(val > 60) val = 60;
           id(vent_bypass_minutes) = val;
           id(num_vent_bypass).publish_state(val);
 
@@ -473,7 +402,7 @@ number:
   - platform: template
     id: num_mister_engage_kpa
     name: "VPD Mister Engage kPa"
-    min_value: 1.20
+    min_value: 0.50
     max_value: 2.50
     step: 0.05
     lambda: "return id(mister_engage_kpa);"
@@ -485,8 +414,8 @@ number:
   - platform: template
     id: num_mister_all_kpa
     name: "VPD Mister All kPa"
-    min_value: 1.50
-    max_value: 2.80
+    min_value: 1.00
+    max_value: 2.50
     step: 0.05
     lambda: "return id(mister_all_kpa);"
     set_action:
@@ -514,8 +443,8 @@ number:
   - platform: template
     id: num_mister_pulse_on
     name: "Mister Pulse ON (s)"
-    min_value: 15
-    max_value: 120
+    min_value: 30
+    max_value: 90
     step: 5
     lambda: "return id(mister_pulse_on_s);"
     set_action:
@@ -526,8 +455,8 @@ number:
   - platform: template
     id: num_mister_pulse_gap
     name: "Mister Pulse Gap (s)"
-    min_value: 15
-    max_value: 120
+    min_value: 10
+    max_value: 60
     step: 5
     lambda: "return id(mister_pulse_gap_s);"
     set_action:
@@ -538,8 +467,8 @@ number:
   - platform: template
     id: num_mister_vpd_weight
     name: "Mister VPD Weight"
-    min_value: 1.0
-    max_value: 3.0
+    min_value: 0.5
+    max_value: 5.0
     step: 0.5
     lambda: "return id(mister_vpd_weight);"
     set_action:
@@ -550,8 +479,8 @@ number:
   - platform: template
     id: num_vpd_target_south
     name: "VPD Target South (kPa)"
-    min_value: 0.5
-    max_value: 2.5
+    min_value: 0.3
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_south);"
     set_action:
@@ -562,8 +491,8 @@ number:
   - platform: template
     id: num_vpd_target_west
     name: "VPD Target West (kPa)"
-    min_value: 0.5
-    max_value: 2.5
+    min_value: 0.3
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_west);"
     set_action:
@@ -574,8 +503,8 @@ number:
   - platform: template
     id: num_vpd_target_east
     name: "VPD Target East (kPa)"
-    min_value: 0.5
-    max_value: 2.5
+    min_value: 0.3
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_east);"
     set_action:
@@ -586,8 +515,8 @@ number:
   - platform: template
     id: num_vpd_target_center
     name: "VPD Target Center (kPa)"
-    min_value: 0.3
-    max_value: 2.0
+    min_value: 0.1
+    max_value: 3.0
     step: 0.05
     lambda: "return id(vpd_target_center);"
     set_action:
@@ -692,6 +621,114 @@ number:
           id(num_fog_escalation_kpa).publish_state(x);
 
   - platform: template
+    id: num_max_relief_cycles
+    name: "Max Relief Cycles"
+    min_value: 1
+    max_value: 10
+    step: 1
+    lambda: "return id(max_relief_cycles);"
+    set_action:
+      - lambda: |
+          int v = (int)roundf(x);
+          if(v < 1) v = 1;
+          if(v > 10) v = 10;
+          id(max_relief_cycles) = v;
+          id(num_max_relief_cycles).publish_state(v);
+
+  - platform: template
+    id: num_dehum_aggressive_kpa
+    name: "Dehum Aggressive kPa"
+    min_value: 0.05
+    max_value: 1.0
+    step: 0.05
+    lambda: "return id(dehum_aggressive_kpa);"
+    set_action:
+      - lambda: |
+          id(dehum_aggressive_kpa) = x;
+          id(num_dehum_aggressive_kpa).publish_state(x);
+
+  - platform: template
+    id: num_vent_latch_timeout_ms
+    name: "Vent Latch Timeout (ms)"
+    min_value: 60000
+    max_value: 7200000
+    step: 60000
+    lambda: "return id(vent_latch_timeout_ms);"
+    set_action:
+      - lambda: |
+          uint32_t v = (uint32_t)x;
+          if(v < 60000) v = 60000;
+          if(v > 7200000) v = 7200000;
+          id(vent_latch_timeout_ms) = v;
+          id(num_vent_latch_timeout_ms).publish_state(v);
+
+  # ─── Sprint-15: summer thermal-driven vent gate tunables ───────────
+  # Operator-tunable. Spec: docs/firmware-sprint-15-summer-vent-spec.md.
+  - platform: template
+    id: num_vent_prefer_temp_delta
+    name: "Vent Prefer Temp Delta (F)"
+    min_value: 2
+    max_value: 15
+    step: 0.5
+    lambda: "return id(vent_prefer_temp_delta_f);"
+    set_action:
+      - lambda: |
+          id(vent_prefer_temp_delta_f) = x;
+          id(num_vent_prefer_temp_delta).publish_state(x);
+
+  - platform: template
+    id: num_vent_prefer_dp_delta
+    name: "Vent Prefer DP Delta (F)"
+    min_value: 2
+    max_value: 15
+    step: 0.5
+    lambda: "return id(vent_prefer_dp_delta_f);"
+    set_action:
+      - lambda: |
+          id(vent_prefer_dp_delta_f) = x;
+          id(num_vent_prefer_dp_delta).publish_state(x);
+
+  - platform: template
+    id: num_outdoor_staleness_max
+    name: "Outdoor Staleness Max (s)"
+    min_value: 120
+    max_value: 1800
+    step: 30
+    lambda: "return id(outdoor_staleness_max_s);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 120) v = 120; if(v > 1800) v = 1800;
+          id(outdoor_staleness_max_s) = v;
+          id(num_outdoor_staleness_max).publish_state(v);
+
+  - platform: template
+    id: num_summer_vent_min_runtime
+    name: "Summer Vent Min Runtime (s)"
+    min_value: 60
+    max_value: 600
+    step: 30
+    lambda: "return id(summer_vent_min_runtime_s);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 60) v = 60; if(v > 600) v = 600;
+          id(summer_vent_min_runtime_s) = v;
+          id(num_summer_vent_min_runtime).publish_state(v);
+
+  # ─── Phase-2 dwell gate tunable (plan firmware stabilization) ──────
+  - platform: template
+    id: num_dwell_gate_ms
+    name: "Dwell Gate (ms)"
+    min_value: 60000
+    max_value: 1800000
+    step: 30000
+    lambda: "return id(dwell_gate_ms);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 60000) v = 60000; if(v > 1800000) v = 1800000;
+          id(dwell_gate_ms) = v;
+          id(num_dwell_gate_ms).publish_state(v);
+
+  - platform: template
     id: num_mist_vent_reopen_delay
     name: "Mist Vent Reopen Delay (s)"
     min_value: 0
@@ -702,6 +739,19 @@ number:
       - lambda: |
           id(mist_vent_reopen_delay_s) = x;
           id(num_mist_vent_reopen_delay).publish_state(x);
+
+  - platform: template
+    id: num_mist_backoff_s
+    name: "Mist Backoff (s)"
+    min_value: 60
+    max_value: 3600
+    step: 60
+    lambda: "return id(mist_backoff_s);"
+    set_action:
+      - lambda: |
+          int v = (int)x; if(v < 60) v = 60; if(v > 3600) v = 3600;
+          id(mist_backoff_s) = v;
+          id(num_mist_backoff_s).publish_state(v);
 
   - platform: template
     id: num_mist_thermal_relief
@@ -842,7 +892,7 @@ number:
   - platform: template
     id: num_mister_water_budget
     name: "Mister Water Budget (gal)"
-    min_value: 20
+    min_value: 100
     max_value: 600
     step: 10
     lambda: "return id(mister_water_budget_gal);"
@@ -854,15 +904,15 @@ number:
   - platform: template
     id: num_mister_max_runtime
     name: "Mister Max Runtime (min)"
-    min_value: 30
-    max_value: 300
+    min_value: 5
+    max_value: 480
     step: 10
     lambda: "return id(mister_max_runtime_min);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
-          if(val < 30) val = 30;
-          if(val > 300) val = 300;
+          if(val < 5) val = 5;
+          if(val > 480) val = 480;
           id(mister_max_runtime_min) = val;
           id(num_mister_max_runtime).publish_state(val);
 
@@ -901,7 +951,7 @@ number:
     id: num_irrig_wall_duration
     name: "Irrig Wall Duration (min)"
     min_value: 1
-    max_value: 60
+    max_value: 120
     step: 1
     lambda: "return id(irrig_wall_duration_min);"
     set_action:
@@ -914,14 +964,14 @@ number:
   - platform: template
     id: num_irrig_wall_fert_duration
     name: "Irrig Wall Fert Duration (min)"
-    min_value: 1
+    min_value: 0
     max_value: 60
     step: 1
     lambda: "return id(irrig_wall_fert_duration_min);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
-          if(val < 1) val = 1;
+          if(val < 0) val = 0;
           id(irrig_wall_fert_duration_min) = val;
           id(num_irrig_wall_fert_duration).publish_state(val);
 
@@ -929,7 +979,7 @@ number:
     id: num_irrig_wall_fert_every_n
     name: "Irrig Wall Fert Every N Cycles"
     min_value: 0
-    max_value: 14
+    max_value: 30
     step: 1
     lambda: "return id(irrig_wall_fert_every_n);"
     set_action:
@@ -942,7 +992,7 @@ number:
     id: num_irrig_wall_flush
     name: "Irrig Wall Flush (min)"
     min_value: 0
-    max_value: 10
+    max_value: 30
     step: 1
     lambda: "return id(irrig_wall_flush_min);"
     set_action:
@@ -955,7 +1005,7 @@ number:
     id: num_irrig_wall_interval
     name: "Irrig Wall Interval (days)"
     min_value: 1
-    max_value: 7
+    max_value: 14
     step: 1
     lambda: "return id(irrig_wall_interval_days);"
     set_action:
@@ -996,7 +1046,7 @@ number:
     id: num_irrig_center_duration
     name: "Irrig Center Duration (min)"
     min_value: 1
-    max_value: 60
+    max_value: 120
     step: 1
     lambda: "return id(irrig_center_duration_min);"
     set_action:
@@ -1009,14 +1059,14 @@ number:
   - platform: template
     id: num_irrig_center_fert_duration
     name: "Irrig Center Fert Duration (min)"
-    min_value: 1
+    min_value: 0
     max_value: 60
     step: 1
     lambda: "return id(irrig_center_fert_duration_min);"
     set_action:
       - lambda: |
           int val = int(roundf(x));
-          if(val < 1) val = 1;
+          if(val < 0) val = 0;
           id(irrig_center_fert_duration_min) = val;
           id(num_irrig_center_fert_duration).publish_state(val);
 
@@ -1024,7 +1074,7 @@ number:
     id: num_irrig_center_fert_every_n
     name: "Irrig Center Fert Every N Cycles"
     min_value: 0
-    max_value: 14
+    max_value: 30
     step: 1
     lambda: "return id(irrig_center_fert_every_n);"
     set_action:
@@ -1037,7 +1087,7 @@ number:
     id: num_irrig_center_flush
     name: "Irrig Center Flush (min)"
     min_value: 0
-    max_value: 10
+    max_value: 30
     step: 1
     lambda: "return id(irrig_center_flush_min);"
     set_action:
@@ -1050,7 +1100,7 @@ number:
     id: num_irrig_center_interval
     name: "Irrig Center Interval (days)"
     min_value: 1
-    max_value: 7
+    max_value: 14
     step: 1
     lambda: "return id(irrig_center_interval_days);"
     set_action:
@@ -1065,7 +1115,7 @@ number:
     id: num_irrig_vpd_boost_pct
     name: "Irrig VPD Boost %"
     min_value: 0
-    max_value: 100
+    max_value: 200
     step: 5
     lambda: "return id(irrig_vpd_boost_pct);"
     set_action:
@@ -1077,8 +1127,8 @@ number:
   - platform: template
     id: num_irrig_vpd_boost_threshold
     name: "Irrig VPD Boost Threshold (hrs)"
-    min_value: 0.5
-    max_value: 12.0
+    min_value: 0
+    max_value: 24.0
     step: 0.5
     lambda: "return id(irrig_vpd_boost_threshold_hrs);"
     set_action:
@@ -1090,8 +1140,8 @@ number:
   - platform: template
     id: num_gl_lux_threshold
     name: "GL Lux Threshold"
-    min_value: 500
-    max_value: 10000
+    min_value: 100
+    max_value: 50000
     step: 500
     lambda: "return id(gl_lux_threshold);"
     set_action:
@@ -1101,10 +1151,23 @@ number:
           ESP_LOGI("grow_light","Lux threshold set to %.0f", x);
 
   - platform: template
+    id: num_gl_lux_hysteresis
+    name: "GL Lux Hysteresis"
+    min_value: 0
+    max_value: 10000
+    step: 250
+    lambda: "return id(gl_lux_hysteresis);"
+    set_action:
+      - lambda: |
+          id(gl_lux_hysteresis) = x;
+          id(num_gl_lux_hysteresis).publish_state(x);
+          ESP_LOGI("grow_light","Lux hysteresis set to %.0f", x);
+
+  - platform: template
     id: num_gl_dli_target
     name: "GL DLI Target (mol)"
-    min_value: 5
-    max_value: 30
+    min_value: 1
+    max_value: 50
     step: 1
     lambda: "return id(gl_dli_target);"
     set_action:
@@ -1116,8 +1179,8 @@ number:
   - platform: template
     id: num_gl_sunrise_hour
     name: "GL Start Hour"
-    min_value: 5
-    max_value: 12
+    min_value: 0
+    max_value: 23
     step: 1
     lambda: "return id(gl_sunrise_hour);"
     set_action:
@@ -1128,7 +1191,7 @@ number:
   - platform: template
     id: num_gl_sunset_hour
     name: "GL Cutoff Hour"
-    min_value: 16
+    min_value: 0
     max_value: 23
     step: 1
     lambda: "return id(gl_sunset_hour);"
@@ -1282,6 +1345,58 @@ switch:
       - lambda: |
           id(occupancy_inhibit_enabled) = false;
           id(sw_occupancy_inhibit).publish_state(false);
+
+  # Sprint-15: master enable for the summer thermal-driven vent gate.
+  # Default ON (firmware behavior is wrong in summer without it; explicit
+  # opt-out is the safer default). Operator can disable in winter or
+  # when the screen door is closed via this switch.
+  - platform: template
+    id: sw_summer_vent_enabled_switch
+    name: "Summer Vent Enabled"
+    icon: "mdi:home-thermometer"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(sw_summer_vent_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(sw_summer_vent_enabled) = true;
+          id(sw_summer_vent_enabled_switch).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(sw_summer_vent_enabled) = false;
+          id(sw_summer_vent_enabled_switch).publish_state(false);
+
+  # Phase-2 dwell gate master switch. Default OFF (shadow-mode bake).
+  # After 14d of replay + shadow validation per plan Phase 2 gate,
+  # planner flips this to ON to activate the 5-min mode-dwell hold.
+  - platform: template
+    id: sw_dwell_gate_enabled_switch
+    name: "Dwell Gate Enabled"
+    icon: "mdi:timer-lock"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(sw_dwell_gate_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(sw_dwell_gate_enabled) = true;
+          id(sw_dwell_gate_enabled_switch).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(sw_dwell_gate_enabled) = false;
+          id(sw_dwell_gate_enabled_switch).publish_state(false);
+
+  - platform: template
+    id: sw_fsm_controller_enabled_switch
+    name: "FSM Controller Enabled"
+    icon: "mdi:state-machine"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(sw_fsm_controller_enabled);'
+    turn_on_action:
+      - lambda: |
+          id(sw_fsm_controller_enabled) = true;
+          id(sw_fsm_controller_enabled_switch).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(sw_fsm_controller_enabled) = false;
+          id(sw_fsm_controller_enabled_switch).publish_state(false);
 
 # ─── IRRIGATION MANUAL TRIGGER BUTTONS ────────────────────────────────────────
 button:

@@ -1129,7 +1129,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_grow_light_min > 0\nORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_grow_light_min > 0\nORDER BY date",
           "refId": "A"
         }
       ],

@@ -21,23 +21,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
-sys.path.insert(0, "/mnt/iris/verdify")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import asyncpg
 import paho.mqtt.client as paho_mqtt
 import shared
 from aioesphomeapi import APIClient, APIConnectionError, LogLevel
-from pydantic import ValidationError
-
-# verdify_schemas lives one level up at /mnt/iris/verdify
-# (loaded via sys.path in shared.py / entrypoint). Import at module load.
-try:
-    from verdify_schemas import ClimateRow, EquipmentStateEvent
-except ImportError:
-    # During dev / first-run before verdify_schemas is on path, fall back gracefully.
-    ClimateRow = None
-    EquipmentStateEvent = None
 from aioesphomeapi.model import (
     BinarySensorInfo,
     NumberInfo,
@@ -56,6 +47,7 @@ from entity_map import (
     SETPOINT_MAP,
     STATE_MAP,
 )
+from esp32_push import push_to_esp32
 from pydantic import ValidationError
 from tasks import (
     alert_monitor,
@@ -86,6 +78,7 @@ from verdify_schemas import (
     SetpointSnapshot,
     SystemStateRow,
 )
+from verdify_schemas.tunable_registry import get as get_tunable
 
 # ──────────────────────────────────────────────────────────────
 # Config
@@ -145,9 +138,6 @@ class State:
         self.setpoints: dict[str, float] = {}
         self.diagnostics: dict[str, Any] = {}
         self.daily: dict[str, float] = {}
-
-        # Debounce: recently pushed params (suppress ESP32 echo)
-        self.recently_pushed: dict[str, float] = {}  # param → timestamp
 
         # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot)
         self.cfg_readback: dict[str, float] = {}  # param → value
@@ -399,13 +389,17 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO diagnostics (
-                   ts, wifi_rssi, heap_bytes, uptime_s, probe_health, reset_reason,
-                   firmware_version, active_probe_count, relief_cycle_count, vent_latch_timer_s
+                   ts, wifi_rssi, heap_bytes, heap_min_free_kb, heap_largest_free_block_kb,
+                   uptime_s, probe_health, reset_reason,
+                   firmware_version, active_probe_count, relief_cycle_count, vent_latch_timer_s,
+                   sealed_timer_s, vpd_watch_timer_s, mist_backoff_timer_s, vent_mist_assist_active
                )
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)""",
             ts,
             diag.wifi_rssi,
             diag.heap_bytes,
+            diag.heap_min_free_kb,
+            diag.heap_largest_free_block_kb,
             diag.uptime_s,
             diag.probe_health,
             diag.reset_reason,
@@ -413,6 +407,10 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
             diag.active_probe_count,
             diag.relief_cycle_count,
             diag.vent_latch_timer_s,
+            diag.sealed_timer_s,
+            diag.vpd_watch_timer_s,
+            diag.mist_backoff_timer_s,
+            diag.vent_mist_assist_active,
         )
     log.debug("diagnostics row written")
 
@@ -463,12 +461,21 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
         return
 
     fairness = d.get("mister_fairness_overrides_today")
+    zone_cycles = {
+        "cycles_mister_south": d.get("cycles_mister_south"),
+        "cycles_mister_west": d.get("cycles_mister_west"),
+        "cycles_mister_center": d.get("cycles_mister_center"),
+        "cycles_drip_wall": d.get("cycles_drip_wall"),
+        "cycles_drip_center": d.get("cycles_drip_center"),
+    }
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO daily_summary (
                 date,
                 cycles_fan1, cycles_fan2, cycles_heat1, cycles_heat2,
                 cycles_fog, cycles_vent, cycles_dehum, cycles_safety_dehum,
+                cycles_mister_south, cycles_mister_west, cycles_mister_center,
+                cycles_drip_wall, cycles_drip_center,
                 runtime_fan1_min, runtime_fan2_min, runtime_heat1_min, runtime_heat2_min,
                 runtime_fog_min, runtime_vent_min,
                 runtime_mister_south_h, runtime_mister_west_h, runtime_mister_center_h,
@@ -477,7 +484,7 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9,
                 $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22
+                $19, $20, $21, $22, $23, $24, $25, $26, $27
             ) ON CONFLICT (date) DO UPDATE SET
                 cycles_fan1 = EXCLUDED.cycles_fan1,
                 cycles_fan2 = EXCLUDED.cycles_fan2,
@@ -487,6 +494,11 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
                 cycles_vent = EXCLUDED.cycles_vent,
                 cycles_dehum = EXCLUDED.cycles_dehum,
                 cycles_safety_dehum = EXCLUDED.cycles_safety_dehum,
+                cycles_mister_south = EXCLUDED.cycles_mister_south,
+                cycles_mister_west = EXCLUDED.cycles_mister_west,
+                cycles_mister_center = EXCLUDED.cycles_mister_center,
+                cycles_drip_wall = EXCLUDED.cycles_drip_wall,
+                cycles_drip_center = EXCLUDED.cycles_drip_center,
                 runtime_fan1_min = EXCLUDED.runtime_fan1_min,
                 runtime_fan2_min = EXCLUDED.runtime_fan2_min,
                 runtime_heat1_min = EXCLUDED.runtime_heat1_min,
@@ -511,6 +523,11 @@ async def write_daily_summary(pool: asyncpg.Pool) -> None:
             int(d.get("cycles_vent") or 0),
             int(d.get("cycles_dehum") or 0),
             int(d.get("cycles_safety_dehum") or 0),
+            int(zone_cycles["cycles_mister_south"]) if zone_cycles["cycles_mister_south"] is not None else None,
+            int(zone_cycles["cycles_mister_west"]) if zone_cycles["cycles_mister_west"] is not None else None,
+            int(zone_cycles["cycles_mister_center"]) if zone_cycles["cycles_mister_center"] is not None else None,
+            int(zone_cycles["cycles_drip_wall"]) if zone_cycles["cycles_drip_wall"] is not None else None,
+            int(zone_cycles["cycles_drip_center"]) if zone_cycles["cycles_drip_center"] is not None else None,
             d.get("runtime_fan1_min"),
             d.get("runtime_fan2_min"),
             d.get("runtime_heat1_min"),
@@ -618,6 +635,19 @@ _SETPOINT_RANGES = {
 # to prevent firmware defaults from polluting the DB
 _BOOT_WINDOW_S = 60
 
+# ESPHome number entities often echo a direct push on their next state
+# publish, which can arrive well after the command returns. Suppress those
+# delayed echoes so setpoint_changes does not notify-listener push them back.
+_PUSH_ECHO_SUPPRESS_S = 900
+
+
+def _same_pushed_value(param: str, value: float) -> bool:
+    pushed_value = shared.recently_pushed_values.get(param)
+    if pushed_value is None:
+        return False
+    return abs(pushed_value - value) / max(abs(value), 1e-3) < 0.01
+
+
 # F10 (Sprint 24-alignment): firmware emits mister_state + mister_selected_zone
 # as numeric template sensors (state_class=measurement), not text. Map the int
 # codes to human-readable names before routing to system_state so Grafana
@@ -673,6 +703,20 @@ def _accept_setpoint(param: str, value: float) -> bool:
     return True
 
 
+def _accept_outbound_setpoint(param: str, value: float) -> bool:
+    """Return True if a DB-origin setpoint is inside registry bounds."""
+    spec = get_tunable(param)
+    if spec is None or spec.kind != "numeric":
+        return True
+    if spec.min is not None and value < spec.min:
+        log.warning("Rejecting outbound setpoint %s=%.3f below registry min %.3f", param, value, spec.min)
+        return False
+    if spec.max is not None and value > spec.max:
+        log.warning("Rejecting outbound setpoint %s=%.3f above registry max %.3f", param, value, spec.max)
+        return False
+    return True
+
+
 # ──────────────────────────────────────────────────────────────
 # ESP32 callbacks
 # ──────────────────────────────────────────────────────────────
@@ -689,10 +733,27 @@ def on_state_change(entity_state) -> None:
         if val is None or (isinstance(val, float) and math.isnan(val)):
             return
 
-        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot)
+        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot).
+        # Sprint 24.9 (G-1, HO-2): apply the same physical-range validation
+        # as the setpoint_changes path. Pre-first-push firmware init can
+        # report cfg_safety_min_f=0 etc.; without this gate those zero rows
+        # pollute setpoint_snapshot and break 30-day range reports (see
+        # firmware sprint-13 tunable-cascade doc §Historical impact).
         cfg_param = CFG_READBACK_MAP.get(obj_id)
         if cfg_param:
+            if cfg_param in _SETPOINT_RANGES:
+                lo, hi = _SETPOINT_RANGES[cfg_param]
+                if val < lo or val > hi:
+                    log.warning(
+                        "cfg_readback rejected out-of-range: %s=%.3f (valid %s-%s)",
+                        cfg_param,
+                        val,
+                        lo,
+                        hi,
+                    )
+                    return
             state.cfg_readback[cfg_param] = val
+            shared.cfg_readback[cfg_param] = float(val)
             return
 
         col = CLIMATE_MAP.get(obj_id)
@@ -797,11 +858,11 @@ def on_state_change(entity_state) -> None:
             old = state.setpoints.get(param)
             state.setpoints[param] = val
             if old != val:
-                # Suppress echo: if we pushed this param in the last 5s, skip DB write
+                # Suppress same-value echoes from delayed ESPHome number-state publishes.
                 import time as _time
 
-                pushed_at = state.recently_pushed.get(param, 0)
-                if _time.time() - pushed_at < 5.0:
+                pushed_at = shared.recently_pushed.get(param, 0)
+                if _time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S and _same_pushed_value(param, val):
                     return
                 state.pending_setpoints.append((param, val))
             return
@@ -840,6 +901,9 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
             # FW-4 (Sprint 20): same pass also closes the confirmation loop —
             # any setpoint_changes row whose value matches the cfg readback
             # within the 1% dispatcher dead-band gets confirmed_at = now().
+            # Backfill a short historical window too: when firmware gains a
+            # new cfg_* readback, otherwise-matching rows pushed before that
+            # sensor existed should not stay permanently "unconfirmed".
             # Rows that never match stay NULL; the setpoint_confirmation_monitor
             # task in tasks.py (FB-1) alerts after 5 min.
             if state.cfg_readback:
@@ -860,16 +924,28 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                         # FW-4 confirmation loop — one UPDATE per readback param
                         # (tiny batch; no worse than the INSERT above).
                         # Dead-band: abs(sc.value - cfg_val) / max(|cfg_val|, 1e-3) < 0.01
-                        # — same math as ingestor.tasks._should_skip.
+                        # — same math as ingestor.tasks._should_skip. Avoid
+                        # confirming through a later differing request for the
+                        # same greenhouse/parameter; those older rows were
+                        # superseded, not proven by the current readback.
                         await conn.executemany(
                             """
-                            UPDATE setpoint_changes
+                            UPDATE setpoint_changes sc
                                SET confirmed_at = now()
-                             WHERE parameter = $1
-                               AND confirmed_at IS NULL
-                               AND ts > now() - interval '30 minutes'
-                               AND abs(value - $2::double precision)
+                             WHERE sc.parameter = $1
+                               AND sc.confirmed_at IS NULL
+                               AND sc.ts > now() - interval '7 days'
+                               AND abs(sc.value - $2::double precision)
                                      / greatest(abs($2::double precision), 1e-3) < 0.01
+                               AND NOT EXISTS (
+                                   SELECT 1
+                                     FROM setpoint_changes newer
+                                    WHERE newer.parameter = sc.parameter
+                                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                                      AND newer.ts > sc.ts
+                                      AND abs(newer.value - $2::double precision)
+                                            / greatest(abs($2::double precision), 1e-3) >= 0.01
+                               )
                             """,
                             [(param, val) for param, val in state.cfg_readback.items()],
                         )
@@ -932,7 +1008,7 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
 
     On disconnect, logs the gap duration and reconnects automatically.
     """
-    last_connected_at = None
+    last_disconnected_at: datetime | None = None
 
     while True:
         log.info(f"Connecting to ESP32 at {ESP32_HOST}:{ESP32_PORT}...")
@@ -945,9 +1021,12 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
 
         # Event that fires when the connection drops (set by on_stop callback or ping failure)
         connection_lost = asyncio.Event()
+        disconnected_at: datetime | None = None
 
         async def on_stop(expected_disconnect: bool) -> None:
             """Called by aioesphomeapi when connection drops."""
+            nonlocal disconnected_at
+            disconnected_at = datetime.now(UTC)
             if expected_disconnect:
                 log.info("ESP32 disconnected (expected)")
             else:
@@ -958,18 +1037,20 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             await client.connect(on_stop=on_stop, login=True)
             connected_at = datetime.now(UTC)
 
-            # Log reconnect gap and backfill if applicable
-            if last_connected_at:
-                gap = (connected_at - last_connected_at).total_seconds()
-                log.info(f"Connected to ESP32 (gap: {gap:.0f}s since last connection)")
+            # Log reconnect gap and backfill if applicable. Use the actual
+            # disconnect timestamp, not the previous connect timestamp, so
+            # data_gaps represents missing telemetry rather than uptime.
+            if last_disconnected_at:
+                gap = (connected_at - last_disconnected_at).total_seconds()
+                log.info(f"Connected to ESP32 (gap: {gap:.0f}s since disconnect)")
                 if gap > 120:  # >2 min gap — record and backfill
                     try:
-                        await backfill_gap(pool, last_connected_at, connected_at)
+                        await backfill_gap(pool, last_disconnected_at, connected_at)
                     except Exception as e:
                         log.error(f"Gap backfill failed: {e}")
             else:
                 log.info("Connected to ESP32")
-            last_connected_at = connected_at
+            last_disconnected_at = None
 
             # Enumerate entities to build key→object_id map
             entities, services = await client.list_entities_services()
@@ -1027,6 +1108,7 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             try:
                 from tasks import setpoint_dispatcher
 
+                await asyncio.sleep(2)
                 await setpoint_dispatcher(pool)
                 log.info("Post-reconnect setpoint dispatch complete")
             except Exception as e:
@@ -1046,17 +1128,24 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
                         await asyncio.wait_for(client.device_info(), timeout=10.0)
                     except (TimeoutError, Exception) as ping_err:
                         log.warning(f"Keepalive ping failed: {ping_err}")
+                        if disconnected_at is None:
+                            disconnected_at = datetime.now(UTC)
                         connection_lost.set()
                         break
 
             log.warning("Connection lost — will reconnect")
+            last_disconnected_at = disconnected_at or datetime.now(UTC)
             shared.esp32["client"] = None
 
         except APIConnectionError as e:
             log.warning(f"ESP32 connection error: {e}. Reconnecting in 30s...")
+            if last_disconnected_at is None:
+                last_disconnected_at = datetime.now(UTC)
             await asyncio.sleep(30)
         except Exception as e:
             log.error(f"Unexpected error: {e}. Reconnecting in 30s...")
+            if last_disconnected_at is None:
+                last_disconnected_at = datetime.now(UTC)
             await asyncio.sleep(30)
         finally:
             try:
@@ -1111,46 +1200,6 @@ async def task_loop(pool: asyncpg.Pool) -> None:
                     log.error("Task %s timed out (120s)", name)
                 except Exception as e:
                     log.error("Task %s failed: %s", name, e)
-
-
-# ──────────────────────────────────────────────────────────────
-# Shared ESP32 client (set by esp32_loop, used by dispatcher)
-# ──────────────────────────────────────────────────────────────
-async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
-    """Push setpoint changes directly via the shared ESP32 connection.
-    changes: [(esp32_object_id, value, 'number'|'switch'), ...]
-    Returns number successfully pushed. Non-blocking: returns 0 if disconnected.
-    """
-    client = shared.esp32["client"]
-    keys = shared.esp32["keys"]
-    if client is None:
-        return 0
-    pushed = 0
-    for obj_id, val, etype in changes:
-        key = keys.get(obj_id)
-        if not key:
-            log.warning("push_to_esp32: no key for '%s' (%d keys)", obj_id, len(keys))
-            continue
-        try:
-            if etype == "number":
-                result = client.number_command(key, val)
-                if asyncio.iscoroutine(result):
-                    await result
-            elif etype == "switch":
-                result = client.switch_command(key, val > 0.5)
-                if asyncio.iscoroutine(result):
-                    await result
-            pushed += 1
-            # Mark as recently pushed to suppress echo (Bug #3 fix)
-            import time as _time
-
-            db_param = SETPOINT_MAP.get(obj_id)
-            if db_param:
-                state.recently_pushed[db_param] = _time.time()
-        except Exception as e:
-            log.warning("ESP32 push failed for %s: %s", obj_id, e)
-            break
-    return pushed
 
 
 # ──────────────────────────────────────────────────────────────
@@ -1223,6 +1272,9 @@ async def mqtt_loop(pool: asyncpg.Pool) -> None:
 # ──────────────────────────────────────────────────────────────
 async def setpoint_listener(pool: asyncpg.Pool) -> None:
     """Listen for DB setpoint changes and push to ESP32 in real-time."""
+    import json
+    import time as _time
+
     from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
 
     _ALIASES = {
@@ -1235,9 +1287,19 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
     }
 
     async def _on_notify(conn, pid, channel, payload):
-        if "=" not in payload:
-            return
-        param, val_str = payload.split("=", 1)
+        source = None
+        if payload.startswith("{"):
+            try:
+                event = json.loads(payload)
+                param = str(event.get("parameter") or "")
+                val_str = str(event.get("value") or "")
+                source = str(event.get("source") or "")
+            except (TypeError, ValueError):
+                return
+        else:
+            if "=" not in payload:
+                return
+            param, val_str = payload.split("=", 1)
         try:
             val = float(val_str)
         except ValueError:
@@ -1245,6 +1307,15 @@ async def setpoint_listener(pool: asyncpg.Pool) -> None:
 
         # Normalize param name
         param = _ALIASES.get(param, param)
+        if source == "esp32":
+            log.debug("RT push suppressed for ESP32 echo %s", param)
+            return
+        if not _accept_outbound_setpoint(param, val):
+            return
+        pushed_at = shared.recently_pushed.get(param, 0)
+        if _time.time() - pushed_at < _PUSH_ECHO_SUPPRESS_S and _same_pushed_value(param, val):
+            log.debug("RT push suppressed for recently pushed %s", param)
+            return
 
         # Look up ESP32 entity
         if param.startswith("sw_"):

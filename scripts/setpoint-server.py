@@ -43,6 +43,106 @@ LIGHTS = {
     "grow": {"ha_entity": "light.greenhouse_grow", "equipment": "grow_light_grow"},
 }
 
+FIRMWARE_SETPOINT_PARAMS = {
+    "bias_cool",
+    "bias_heat",
+    "d_cool_stage_2",
+    "d_heat_stage_2",
+    "dwell_gate_ms",
+    "east_adjacency_factor",
+    "enthalpy_close",
+    "enthalpy_open",
+    "fan_burst_min",
+    "heat_hysteresis",
+    "fog_burst_min",
+    "fog_escalation_kpa",
+    "fog_min_temp_f",
+    "fog_rh_ceiling_pct",
+    "fog_time_window_end",
+    "fog_time_window_start",
+    "gl_dli_target",
+    "gl_lux_threshold",
+    "gl_sunrise_hour",
+    "gl_sunset_hour",
+    "irrig_center_duration_min",
+    "irrig_center_fert_duration_min",
+    "irrig_center_fert_every_n",
+    "irrig_center_flush_min",
+    "irrig_center_interval_days",
+    "irrig_center_start_hour",
+    "irrig_center_start_min",
+    "irrig_vpd_boost_pct",
+    "irrig_vpd_boost_threshold_hrs",
+    "irrig_wall_duration_min",
+    "irrig_wall_fert_duration_min",
+    "irrig_wall_fert_every_n",
+    "irrig_wall_flush_min",
+    "irrig_wall_interval_days",
+    "irrig_wall_start_hour",
+    "irrig_wall_start_min",
+    "lead_rotate_s",
+    "min_fan_off_s",
+    "min_fan_on_s",
+    "min_fog_off_s",
+    "min_fog_on_s",
+    "min_heat_off_s",
+    "min_heat_on_s",
+    "min_vent_off_s",
+    "min_vent_on_s",
+    "mist_backoff_s",
+    "mist_max_closed_vent_s",
+    "mist_thermal_relief_s",
+    "mist_vent_close_lead_s",
+    "mist_vent_reopen_delay_s",
+    "mister_all_delay_s",
+    "mister_all_kpa",
+    "mister_all_off_s",
+    "mister_all_on_s",
+    "mister_center_penalty",
+    "mister_engage_delay_s",
+    "mister_engage_kpa",
+    "mister_max_runtime_min",
+    "mister_off_s",
+    "mister_on_s",
+    "mister_pulse_gap_s",
+    "mister_pulse_on_s",
+    "mister_vpd_weight",
+    "mister_water_budget_gal",
+    "outdoor_staleness_max_s",
+    "safety_max",
+    "safety_min",
+    "safety_vpd_max",
+    "safety_vpd_min",
+    "site_pressure_hpa",
+    "summer_vent_min_runtime_s",
+    "sw_dwell_gate_enabled",
+    "sw_economiser_enabled",
+    "sw_fog_closes_vent",
+    "sw_fsm_controller_enabled",
+    "sw_gl_auto_mode",
+    "sw_irrigation_center_enabled",
+    "sw_irrigation_enabled",
+    "sw_irrigation_wall_enabled",
+    "sw_irrigation_weather_skip",
+    "sw_mister_closes_vent",
+    "sw_occupancy_inhibit",
+    "sw_summer_vent_enabled",
+    "temp_high",
+    "temp_hysteresis",
+    "temp_low",
+    "vent_bypass_min",
+    "vent_prefer_dp_delta_f",
+    "vent_prefer_temp_delta_f",
+    "vpd_high",
+    "vpd_hysteresis",
+    "vpd_low",
+    "vpd_target_center",
+    "vpd_target_east",
+    "vpd_target_south",
+    "vpd_target_west",
+    "vpd_watch_dwell_s",
+}
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [setpoint-server] %(levelname)s %(message)s",
@@ -178,7 +278,6 @@ def get_setpoint_text_sync() -> str:
             params[k.strip()] = v.strip()
 
     # Step 2: Overlay active plan values (v_active_plan resolves supersession by created_at DESC)
-    has_plan = False
     result = subprocess.run(
         db_cmd + ["SELECT parameter, value FROM v_active_plan"], capture_output=True, text=True, timeout=5
     )
@@ -186,26 +285,10 @@ def get_setpoint_text_sync() -> str:
         if "=" in line:
             k, v = line.split("=", 1)
             params[k.strip()] = v.strip()
-            has_plan = True
 
-    # Step 3: Build output
-    lines = [f"{k}={v}" for k, v in sorted(params.items())]
-    lines.append(f"source={'merged' if has_plan else 'fallback'}")
-
-    # Next upcoming change
-    result = subprocess.run(
-        db_cmd
-        + ["SELECT ts || '|' || parameter || '|' || value FROM setpoint_plan WHERE ts > now() ORDER BY ts LIMIT 1"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    if result.stdout.strip():
-        parts = result.stdout.strip().split("|")
-        if len(parts) == 3:
-            lines.append(f"next_ts={parts[0]}")
-            lines.append(f"next_param={parts[1]}")
-            lines.append(f"next_value={parts[2]}")
+    # Step 3: Keep this ESP32 endpoint small and numeric. Metadata such as
+    # source/next_* used to bloat the response and triggered malformed parses.
+    params = {k: v for k, v in params.items() if k in FIRMWARE_SETPOINT_PARAMS}
 
     # Occupancy state (real-time from system_state, written by occupancy-bridge.py)
     result = subprocess.run(
@@ -215,7 +298,7 @@ def get_setpoint_text_sync() -> str:
         timeout=5,
     )
     occ = result.stdout.strip()
-    lines.append(f"occupancy={'1' if occ == 'occupied' else '0'}")
+    params["occupancy"] = "1" if occ == "occupied" else "0"
 
     # Outdoor conditions (from Tempest via climate table — for ESP32 enthalpy computation)
     result = subprocess.run(
@@ -231,9 +314,10 @@ def get_setpoint_text_sync() -> str:
     outdoor = result.stdout.strip()
     if "|" in outdoor:
         parts = outdoor.split("|")
-        lines.append(f"outdoor_temp={parts[0]}")
-        lines.append(f"outdoor_rh={parts[1]}")
+        params["outdoor_temp"] = parts[0]
+        params["outdoor_rh"] = parts[1]
 
+    lines = [f"{k}={v}" for k, v in sorted(params.items())]
     return "\n".join(lines) + "\n"
 
 

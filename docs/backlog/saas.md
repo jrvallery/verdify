@@ -10,6 +10,17 @@ Owned by the [`saas`](../agents/saas.md) agent. Cloud migration, multi-tenancy, 
 
 ---
 
+## Launch Support — Public Proof + Capture
+
+Coordinated through [`docs/backlog/launch.md`](launch.md). These are launch support tasks, not a replacement for Sprint 10 cloud hardening.
+
+- [x] **S-L0.7 Public Grafana access QA.** Server-side checks verify anonymous Grafana health, dashboard boot data, d-solo routes, and JS bundle availability; Jason should still do final mobile/in-app smoke before posting.
+- [x] **S-L0.9 Public API lockdown.** Mutating crop/event/harvest/light routes now require `X-Verdify-API-Key`; unauthenticated writes fail closed, `/docs` is hidden by default, and `/openapi.json` remains noindexed for contract checks.
+- [x] **S-L0.10 Robots/indexing alignment.** Traefik/API/Grafana headers and site `robots.txt` are aligned: launch pages index, raw/API/Grafana surfaces noindex.
+- [ ] **S-L2.2 Waitlist/newsletter decision.** Propose the lowest-risk capture path: static form provider, Cloud Run endpoint, or explicit no-capture decision. No secrets in repo or static site.
+- [x] **S-L1.3 Public cost callout support.** Economics page now uses defensible solar-aligned/grid/gas wording and clean USD rendering.
+- [x] **S-L0.1 Public infra scrub.** Public site scrubbed for local IPs, camera/security details, family names, and ambiguous cloud/no-cloud claims; API/Grafana noindex headers added.
+
 ## Sprint 7: SaaS Foundation — COMPLETE ✅
 
 All items done. `greenhouse_id` on all tables, `greenhouses` registry table, parameterized scripts, greenhouse-scoped API endpoints.

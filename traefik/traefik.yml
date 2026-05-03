@@ -11,6 +11,10 @@ ping: {}
 log:
   level: INFO
 
+accessLog:
+  filePath: "/var/log/traefik/access.log"
+  format: common
+
 entryPoints:
   websecure:
     address: ":443"

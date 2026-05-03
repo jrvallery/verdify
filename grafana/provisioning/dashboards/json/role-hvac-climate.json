@@ -152,7 +152,8 @@
               }
             }
           ],
-          "custom": {}
+          "custom": {},
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -799,7 +800,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -812,7 +815,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },

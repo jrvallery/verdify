@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # sensor-health-sweep.sh — Layer 3 of the Firmware Change Protocol.
 # Post-deploy validation: every probe on the Modbus bus answered, no new
-# sensor_offline alerts fired, no Task WDT resets, no override-event storm.
+# sensor_offline alerts fired, no recent Task WDT resets, no override-event storm.
 # Auto-invoked by `make firmware-deploy`. Also runnable standalone via
 # `make sensor-health` or directly: `./scripts/sensor-health-sweep.sh [--since "5 min ago"]`
 #
@@ -11,14 +11,18 @@
 set -uo pipefail
 
 SINCE="${SINCE:-5 minutes}"
+EXPECTED_FW_VERSION="${EXPECTED_FW_VERSION:-}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --since) SINCE="$2"; shift 2 ;;
+        --expected-fw) EXPECTED_FW_VERSION="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [--since 'PG INTERVAL']"
+            echo "Usage: $0 [--since 'PG INTERVAL'] [--expected-fw VERSION]"
             echo "  --since takes a PostgreSQL interval string: '5 minutes', '1 hour',"
             echo "  '2 days', etc.  The leading ago is handled — do NOT append 'ago'."
             echo "  SINCE env var is equivalent."
+            echo "  --expected-fw, or EXPECTED_FW_VERSION, fails the sweep if the latest"
+            echo "  diagnostics row still reports a different firmware version."
             exit 0 ;;
         *) echo "Unknown arg: $1" >&2; exit 2 ;;
     esac
@@ -108,21 +112,29 @@ fi
 # but persistent < 4 is worth investigating.
 section "Active probe count (zone aggregation health)"
 
-PROBE_COUNT=$($DB "SELECT active_probe_count FROM diagnostics WHERE active_probe_count IS NOT NULL AND ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null | tr -d ' ')
-if [[ -z "$PROBE_COUNT" ]]; then
+PROBE_ROW=$($DB "SELECT active_probe_count || '|' || COALESCE(uptime_s::text, '?') FROM diagnostics WHERE active_probe_count IS NOT NULL AND ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null | tr -d ' ')
+if [[ -z "$PROBE_ROW" ]]; then
     warn "No active_probe_count reading in last 5 min (firmware may predate FW-10)"
-elif [[ "$PROBE_COUNT" -eq 4 ]]; then
-    pass "4/4 zone probes active"
-elif [[ "$PROBE_COUNT" -ge 2 ]]; then
-    warn "Only $PROBE_COUNT/4 zone probes active — aggregates are a partial view"
 else
-    fail "Only $PROBE_COUNT/4 zone probes active — aggregates untrustworthy"
+    IFS='|' read -r PROBE_COUNT PROBE_UPTIME <<< "$PROBE_ROW"
+    STARTUP_SETTLING=$(awk -v u="$PROBE_UPTIME" 'BEGIN { print (u != "?" && u < 120) ? 1 : 0 }')
+    if [[ "$PROBE_COUNT" -eq 4 ]]; then
+        pass "4/4 zone probes active"
+    elif [[ "$STARTUP_SETTLING" -eq 1 ]]; then
+        warn "Only $PROBE_COUNT/4 zone probes active at uptime ${PROBE_UPTIME}s — startup settling"
+    elif [[ "$PROBE_COUNT" -ge 2 ]]; then
+        warn "Only $PROBE_COUNT/4 zone probes active — aggregates are a partial view"
+    else
+        fail "Only $PROBE_COUNT/4 zone probes active — aggregates untrustworthy"
+    fi
 fi
 
 # ── 3. ESP32 DIAGNOSTICS ───────────────────────────────────────────
 # After a firmware deploy we expect uptime to be small (ESP32 just
-# rebooted) and reset_reason NOT to be a Task WDT. Absence of diagnostics
-# row in 5 min is itself a failure.
+# rebooted) and reset_reason NOT to be a Task WDT. Outside the immediate
+# post-boot window, reset_reason is sticky across the whole uptime; a WDT from
+# many hours ago should warn but not permanently fail every later sweep.
+# Absence of diagnostics row in 5 min is itself a failure.
 section "ESP32 diagnostics"
 
 DIAG=$($DB "SELECT reset_reason || '|' || COALESCE(firmware_version, '?') || '|' || COALESCE(wifi_rssi::text, '?') || '|' || COALESCE(uptime_s::text, '?') FROM diagnostics WHERE ts > now() - interval '5 min' ORDER BY ts DESC LIMIT 1" 2>/dev/null)
@@ -132,11 +144,24 @@ if [[ -z "$DIAG" ]]; then
 else
     IFS='|' read -r reset_reason fw_ver rssi uptime <<< "$DIAG"
     if [[ "$reset_reason" == "Task WDT" ]]; then
-        fail "reset_reason = Task WDT (watchdog-induced reboot — investigate!)"
+        WDT_RECENT=$(awk -v u="$uptime" 'BEGIN { print (u != "?" && u + 0 >= 21600) ? 0 : 1 }')
+        if [[ "$WDT_RECENT" -eq 1 ]]; then
+            fail "reset_reason = Task WDT with uptime ${uptime}s (recent watchdog-induced reboot — investigate!)"
+        else
+            warn "reset_reason = Task WDT, but uptime ${uptime}s >= 21600s (sticky reset cause, not a recent reboot)"
+        fi
     else
         pass "reset_reason = $reset_reason"
     fi
-    pass "firmware_version = $fw_ver"
+    if [[ -n "$EXPECTED_FW_VERSION" ]]; then
+        if [[ "$fw_ver" == "$EXPECTED_FW_VERSION" ]]; then
+            pass "firmware_version = $fw_ver (expected)"
+        else
+            fail "firmware_version = $fw_ver (expected $EXPECTED_FW_VERSION)"
+        fi
+    else
+        pass "firmware_version = $fw_ver"
+    fi
     pass "wifi_rssi = $rssi dBm"
     pass "uptime = $uptime s"
 fi
@@ -146,7 +171,7 @@ fi
 # regression — means a sensor went dark right around the deploy.
 section "Alerts opened during the deploy window ('$SINCE')"
 
-NEW_ALERTS=$($DB "SELECT alert_type || ' :: ' || COALESCE(sensor_id, '?') FROM alert_log WHERE ts >= now() - interval '$SINCE' AND disposition = 'open' AND alert_type IN ('sensor_offline', 'esp32_reboot', 'esp32_push_failed', 'band_fn_null')" 2>/dev/null)
+NEW_ALERTS=$($DB "SELECT alert_type || ' :: ' || COALESCE(sensor_id, '?') FROM alert_log WHERE ts >= now() - interval '$SINCE' AND disposition = 'open' AND alert_type IN ('sensor_offline', 'esp32_reboot', 'esp32_push_failed', 'band_fn_null', 'heap_pressure_critical')" 2>/dev/null)
 
 if [[ -z "$NEW_ALERTS" ]]; then
     pass "No new sensor_offline / esp32_reboot / push / band alerts opened in window"

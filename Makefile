@@ -6,8 +6,11 @@ PYTHON := $(VENV)/bin/python
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(VENV)/bin/ruff
 ESPHOME := $(VENV)/bin/esphome
+ESP32_DEVICE ?= 192.168.10.111
+FIRMWARE_ESPHOME := scripts/firmware-esphome-worktree.sh
+FIRMWARE_OTA_BIN := firmware/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin
 
-.PHONY: help test lint format check firmware-check smoke clean
+.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all smoke clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -48,6 +51,26 @@ test-replay-overrides: ## Validate evaluate_overrides() against full history + s
 	bash scripts/export-replay-overrides.sh
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp && ./test/replay_overrides test/data/replay_overrides.csv
 
+firmware-invariants: ## Phase-0: run 15 invariants from invariants.h against the replay corpus (pass = bulletproof gate green)
+	test -f firmware/test/data/replay_overrides.csv \
+	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_invariants test/replay_invariants.cpp
+	./firmware/test/replay_invariants firmware/test/data/replay_overrides.csv
+
+firmware-replay: ## Phase-0: dual-ref diff of firmware mode/relay decisions between OLD and NEW git refs
+	@if [ -z "$(OLD)" ] || [ -z "$(NEW)" ]; then \
+	    echo "Usage: make firmware-replay OLD=<ref> NEW=<ref>"; \
+	    echo "       (e.g. OLD=HEAD~5 NEW=HEAD)"; \
+	    exit 2; \
+	fi
+	bash scripts/firmware-replay-diff.sh "$(OLD)" "$(NEW)"
+
+firmware-dwell-preview: ## Phase-2: replay corpus with dwell-gate ON vs OFF, quantify whipsaw reduction
+	test -f firmware/test/data/replay_overrides.csv \
+	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_emit test/replay_emit.cpp
+	bash scripts/firmware-dwell-preview.sh
+
 replay-corpus-refresh: ## Refresh the replay corpus .csv.gz from live DB + validate no regression
 	@bash -c '\
 		set -euo pipefail; \
@@ -75,8 +98,13 @@ test-v: ## Run tests with verbose output
 
 # ── Firmware ────────────────────────────────────────────────────────
 
-firmware-check: ## Compile ESP32 firmware (validate only, no deploy)
-	cd /srv/greenhouse/esphome && $(ESPHOME) compile greenhouse.yaml
+firmware-check: ## Compile ESP32 firmware from this git worktree (validate only, no deploy)
+	$(FIRMWARE_ESPHOME) compile
+
+firmware-check-worktree: firmware-check ## Back-compat alias; firmware-check already uses this worktree
+
+firmware-check-all: firmware-check ## Compile firmware from the only supported deploy source
+	@echo "✓ Worktree firmware config compiles"
 
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
@@ -86,19 +114,25 @@ site-doctor: ## Audit verdify.ai source, build output, and Grafana embeds
 
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
-	@FW_VERSION="$$(date +%Y.%-m.%-d).$$(git rev-parse --short HEAD)"; \
+	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
+	FW_VERSION="$$(date +%Y.%-m.%-d.%H%M).$$(git rev-parse --short HEAD)$$DIRTY"; \
+	echo "$$FW_VERSION" > firmware/artifacts/pending-fw-version.txt; \
 	echo "─── Deploying fw_version=$$FW_VERSION ───"; \
-	cd /srv/greenhouse/esphome && $(ESPHOME) -s fw_version "$$FW_VERSION" compile greenhouse.yaml && \
-	$(ESPHOME) -s fw_version "$$FW_VERSION" upload --device 192.168.10.111 greenhouse.yaml
+	$(FIRMWARE_ESPHOME) -s fw_version "$$FW_VERSION" compile && \
+	$(FIRMWARE_ESPHOME) -s fw_version "$$FW_VERSION" upload --device "$(ESP32_DEVICE)"
 	@echo ""
 	@echo "Waiting 60s for ESP32 reboot + ingestor reconnect + first diagnostics cycle..."
 	@sleep 60
 	# FW-15 (Sprint 17): sensor-health decides whether this deploy is accepted.
 	# Pass → promote new binary to last-good (rollback target for next deploy).
 	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
-	@if $(MAKE) sensor-health SINCE='5 minutes'; then \
-		cp /srv/greenhouse/esphome/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin firmware/artifacts/last-good.ota.bin ; \
-		echo "✓ Deploy accepted. Promoted new binary to firmware/artifacts/last-good.ota.bin (rollback target for next deploy)." ; \
+	@if bash scripts/wait-for-firmware-version.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" --timeout 180 && \
+		EXPECTED_FW_VERSION="$$(cat firmware/artifacts/pending-fw-version.txt)" $(MAKE) sensor-health SINCE='5 minutes'; then \
+		cp $(FIRMWARE_OTA_BIN) firmware/artifacts/last-good.ota.bin ; \
+		cp firmware/artifacts/pending-fw-version.txt firmware/artifacts/last-good.version ; \
+		mkdir -p /srv/verdify/state ; \
+		cp firmware/artifacts/pending-fw-version.txt /srv/verdify/state/expected-firmware-version ; \
+		echo "✓ Deploy accepted. Promoted new binary + expected firmware pin (rollback target for next deploy)." ; \
 	else \
 		echo "" ; \
 		echo "▓▓▓  SENSOR-HEALTH FAILED POST-OTA  —  initiating auto-rollback  ▓▓▓" ; \
@@ -115,7 +149,7 @@ firmware-rollback: ## Manually flash the saved last-good.ota.bin back onto the E
 	bash scripts/firmware-rollback.sh firmware/artifacts/last-good.ota.bin
 
 sensor-health: ## Run sensor health sweep (layer 3 of Firmware Change Protocol)
-	SINCE='$(or $(SINCE),5 minutes)' bash scripts/sensor-health-sweep.sh
+	SINCE='$(or $(SINCE),5 minutes)' EXPECTED_FW_VERSION='$(EXPECTED_FW_VERSION)' bash scripts/sensor-health-sweep.sh
 
 # ── Planner (event-driven via Iris agent) ────────────────────────────
 

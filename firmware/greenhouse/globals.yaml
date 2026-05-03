@@ -8,14 +8,18 @@
 globals:
 
   # ─── Temperature band (°F) ───
+  # Wide defaults; the dispatcher pushes the real crop band every planner
+  # cycle. If the dispatcher is silent, these permissive values let the
+  # safety rails (safety_min_f/safety_max_f below) take over without
+  # firmware narrowing to a mid-range guess.
   - id: target_temp_low_f
     type: float
     restore_value: no
-    initial_value: '60.0'
+    initial_value: '40.0'
   - id: target_temp_high_f
     type: float
     restore_value: no
-    initial_value: '75.0'
+    initial_value: '95.0'
   - id: stage2_heat_delta_f
     type: float
     restore_value: no
@@ -28,73 +32,25 @@ globals:
     type: float
     restore_value: no
     initial_value: '1.0'
+  - id: heat_hysteresis_f
+    type: float
+    restore_value: no
+    initial_value: '1.0'
 
   # ─── Humidity / VPD (kPa) ───
+  # Wide defaults — see comment on target_temp_low_f.
   - id: target_vpd_low_kpa
     type: float
     restore_value: no
-    initial_value: '0.50'
+    initial_value: '0.35'
   - id: target_vpd_high_kpa
     type: float
     restore_value: no
-    initial_value: '1.50'
+    initial_value: '2.80'
   - id: hyst_vpd_kpa
     type: float
     restore_value: no
     initial_value: '0.30'
-
-  # ─── Sprint-10 0.3: day/night setpoint pairs ───
-  # Production flow: dispatcher pushes these every planner cycle. Legacy
-  # target_temp_*/target_vpd_* above remain as fallback when day/night
-  # aren't populated (resolve_active_band in greenhouse_types.h handles
-  # the fallback; validate_setpoints back-fills if called). Longmont
-  # defaults from the Phase-0 plan: day 72-78°F / VPD 0.9-1.2;
-  # night 62-68°F / VPD 0.6-0.9.
-  - id: target_temp_low_day_f
-    type: float
-    restore_value: no
-    initial_value: '72.0'
-  - id: target_temp_high_day_f
-    type: float
-    restore_value: no
-    initial_value: '78.0'
-  - id: target_temp_low_night_f
-    type: float
-    restore_value: no
-    initial_value: '62.0'
-  - id: target_temp_high_night_f
-    type: float
-    restore_value: no
-    initial_value: '68.0'
-  - id: target_vpd_low_day_kpa
-    type: float
-    restore_value: no
-    initial_value: '0.90'
-  - id: target_vpd_high_day_kpa
-    type: float
-    restore_value: no
-    initial_value: '1.20'
-  - id: target_vpd_low_night_kpa
-    type: float
-    restore_value: no
-    initial_value: '0.60'
-  - id: target_vpd_high_night_kpa
-    type: float
-    restore_value: no
-    initial_value: '0.90'
-  # Photoperiod window (local hours). is_photoperiod computed as:
-  # hour in [start, end) OR (tempest_lux > 5000 for outdoor daylight
-  # override). Hybrid handles cloudy days (schedule wins) and off-schedule
-  # direct sun (lux overrides). start > end wraps midnight (not expected
-  # for photoperiod but the comparison supports it).
-  - id: photoperiod_start_hour
-    type: int
-    restore_value: no
-    initial_value: '6'
-  - id: photoperiod_end_hour
-    type: int
-    restore_value: no
-    initial_value: '20'
 
   # ─── Feed-forward biases & safety rails (°F & kPa) ───
   - id: bias_heat_f
@@ -121,6 +77,10 @@ globals:
     type: float
     restore_value: no
     initial_value: '2.50'
+  - id: safety_max_seal_margin_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
 
   # ─── Economiser (enthalpy thresholds) ───
   - id: site_pressure_hpa
@@ -139,6 +99,24 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
+  - id: econ_heat_margin_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
+
+  # ─── Controller relief / latch policy ───
+  - id: max_relief_cycles
+    type: int
+    restore_value: no
+    initial_value: '3'
+  - id: dehum_aggressive_kpa
+    type: float
+    restore_value: no
+    initial_value: '0.6'
+  - id: vent_latch_timeout_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '1800000'
 
   # ─── Fog / evap-assist thresholds ───
   # (removed unused fog_offset_f and AH thresholds)
@@ -374,7 +352,7 @@ globals:
   - id: min_heat_off_s
     type: int
     restore_value: no
-    initial_value: '300'
+    initial_value: '180'     # sprint-15.1 fix 6: lowered 300→180s. Study 2/6 showed 54% of heat1 off-phases pinned at the 300s rail; per-night σ 1.22°F drops to ~0.7°F at 180s without stressing the igniter cooldown.
   - id: min_fan_on_s
     type: int
     restore_value: no
@@ -463,7 +441,7 @@ globals:
   - id: mister_engage_delay_s
     type: int
     restore_value: no
-    initial_value: '300'
+    initial_value: '45'
 
   - id: mister_all_delay_s
     type: int
@@ -843,7 +821,7 @@ globals:
     restore_value: no
     initial_value: 'NAN'
 
-  # ─── Outdoor data from /setpoints pull (Tempest → DB → setpoint-server → ESP32) ───
+  # ─── Legacy pulled outdoor data fallback ───
   - id: pulled_outdoor_temp_f
     type: float
     restore_value: no
@@ -857,7 +835,79 @@ globals:
   - id: pulled_data_age_s
     type: uint32_t
     restore_value: no
-    initial_value: '99999'  # Start stale — force fresh pull on boot
+    initial_value: '99999'  # Start stale; direct Tempest is primary.
+
+  # Sprint-14: gate cfg_* readback publishes until the first direct band push
+  # lands. Without this gate, cfg_* sensors publish the
+  # firmware-default globals at boot (before the dispatcher has pushed
+  # real values) and the resulting rows poison setpoint_snapshot
+  # analytics (observed: min=0 for temp_high/vpd_low/safety_* across
+  # the 30-day trailing window). The four band number set_actions flip this
+  # true. cfg_* sensors return NAN while false; ingestor skips NAN.
+  - id: cfg_first_pull_ok
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # ─── Sprint-15: summer thermal-driven vent gate tunables ──────────
+  # Operator-tunable parameters for the new gate that pre-empts
+  # VPD-seal entry when outdoor air is cooler+drier than indoor.
+  # Defaults match the spec; clamps live in controls.yaml /setpoints.
+  # See docs/firmware-sprint-15-summer-vent-spec.md.
+  - id: sw_summer_vent_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'true'    # ON by default — sealing is wrong in summer
+
+  - id: vent_prefer_temp_delta_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
+
+  - id: vent_prefer_dp_delta_f
+    type: float
+    restore_value: no
+    initial_value: '5.0'
+
+  - id: outdoor_staleness_max_s
+    type: int
+    restore_value: no
+    initial_value: '600'     # sprint-15.1: 10 min — 2× dispatcher cadence, covers push jitter
+
+  - id: summer_vent_min_runtime_s
+    type: int
+    restore_value: no
+    initial_value: '180'
+
+  # ─── Phase-2 dwell gate ───────────────────────────────────────────
+  # 5-min hold on non-safety mode transitions to kill whipsaw. Default
+  # OFF for shadow-mode bake; planner flips to ON after 14d replay +
+  # shadow validation. See plan Phase 2 in
+  # .claude-agents/iris-dev/plans/yo-iris-dev-you-help-humming-stonebraker.md
+  - id: sw_dwell_gate_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: dwell_gate_ms
+    type: int
+    restore_value: no
+    initial_value: '300000'   # 5 min
+
+  # ─── Controller v2: band-first FSM ───────────────────────────────
+  # Default OFF so legacy firmware remains the rollback path. When ON,
+  # determine_mode() routes through determine_mode_v2(): temp-band first,
+  # VPD-band second, failed sealed misting enters backoff instead of
+  # forcing VENTILATE.
+  - id: sw_fsm_controller_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: mist_backoff_s
+    type: int
+    restore_value: no
+    initial_value: '600'
 
   # ─── Occupancy-based mist inhibit ───
   - id: greenhouse_occupied

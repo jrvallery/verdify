@@ -354,7 +354,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_grow_light_min > 0\nORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_grow_light_min > 0\nORDER BY date",
           "format": "time_series",
           "refId": "A"
         }
@@ -817,7 +817,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
           "format": "time_series",
           "refId": "A"
         }

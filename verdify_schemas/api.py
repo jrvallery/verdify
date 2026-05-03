@@ -12,6 +12,7 @@ and auto-populates the OpenAPI spec at /docs.
 from __future__ import annotations
 
 from datetime import date as DateType
+from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -27,6 +28,71 @@ class APIStatus(BaseModel):
     active_crops: int = Field(..., ge=0)
     observations: int = Field(..., ge=0)
     latest_climate_ts: AwareDatetime | None = None
+
+
+class PublicDataHealthCheck(BaseModel):
+    """One public-safe data-health check row."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    status: Literal["ok", "warn", "fail"]
+    metric_value: float | None = None
+    threshold_value: float | None = None
+    details: str | None = None
+
+
+class PublicPipelineHealthSource(BaseModel):
+    """Freshness/null-rate summary for one telemetry source."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    source: str
+    rows_1h: int = Field(..., ge=0)
+    rows_24h: int = Field(..., ge=0)
+    age_s: int | None = Field(default=None, ge=0)
+    null_pct_1h: float | None = Field(default=None, ge=0, le=100)
+
+
+class PublicDataHealthResponse(BaseModel):
+    """GET /api/v1/public/data-health."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    generated_at: AwareDatetime
+    overall_status: Literal["ok", "warn", "fail"]
+    checks: list[PublicDataHealthCheck]
+    pipeline_sources: list[PublicPipelineHealthSource]
+
+
+class PublicHomeMetrics(BaseModel):
+    """GET /api/v1/public/home-metrics — launch-safe proof counters."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    generated_at: AwareDatetime
+    greenhouse_id: str
+    climate_rows: int = Field(..., ge=0)
+    climate_days: float = Field(..., ge=0)
+    active_crops: int = Field(..., ge=0)
+    plan_count: int = Field(..., ge=0)
+    lesson_count: int = Field(..., ge=0)
+    latest_climate_ts: AwareDatetime | None = None
+    latest_climate_age_s: int | None = Field(default=None, ge=0)
+    indoor_temp_f: float | None = None
+    indoor_vpd_kpa: float | None = None
+    outdoor_temp_f: float | None = None
+    outdoor_rh_pct: float | None = None
+    last_plan_id: str | None = None
+    last_plan_created_at: AwareDatetime | None = None
+    last_plan_age_s: int | None = Field(default=None, ge=0)
+    planner_score_today: float | None = None
+    compliance_pct_today: float | None = None
+    cost_today_usd: float | None = None
+    water_today_gal: float | None = None
+    open_critical_high_alerts: int = Field(..., ge=0)
+    data_health_status: Literal["ok", "warn", "fail"]
+    data_health_warnings: list[PublicDataHealthCheck] = Field(default_factory=list)
 
 
 class ZoneListItem(BaseModel):

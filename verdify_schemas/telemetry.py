@@ -19,7 +19,24 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+OVERRIDE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "occupancy_blocks_moisture",
+        "fog_gate_rh",
+        "fog_gate_temp",
+        "fog_gate_window",
+        "relief_cycle_breaker",
+        "seal_blocked_temp",
+        "vpd_dry_override",
+        # Firmware field is summer_vent_active; controls.yaml publishes the
+        # historical short tag to override_events.
+        "summer_vent",
+        "vent_mist_assist",
+        "fog_heat_assist",
+    }
+)
 
 
 class ClimateRow(BaseModel):
@@ -144,6 +161,8 @@ class Diagnostics(BaseModel):
     greenhouse_id: str = "vallery"
     wifi_rssi: float | None = Field(default=None, ge=-120, le=0)
     heap_bytes: float | None = Field(default=None, ge=0)
+    heap_min_free_kb: float | None = Field(default=None, ge=0)
+    heap_largest_free_block_kb: float | None = Field(default=None, ge=0)
     uptime_s: float | None = Field(default=None, ge=0)
     probe_health: str | None = None
     reset_reason: str | None = None
@@ -152,6 +171,10 @@ class Diagnostics(BaseModel):
     active_probe_count: int | None = Field(default=None, ge=0, le=4)
     relief_cycle_count: int | None = Field(default=None, ge=0)
     vent_latch_timer_s: int | None = Field(default=None, ge=0, le=1800)
+    sealed_timer_s: int | None = Field(default=None, ge=0)
+    vpd_watch_timer_s: int | None = Field(default=None, ge=0)
+    mist_backoff_timer_s: int | None = Field(default=None, ge=0)
+    vent_mist_assist_active: int | None = Field(default=None, ge=0, le=1)
 
 
 # Every equipment_state row asserts one of these. Must cover every value in
@@ -202,6 +225,8 @@ EquipmentId = Literal[
     # Firmware gates / health (ESP32 BinarySensor)
     "mister_budget_exceeded",
     "economiser_blocked",
+    "heap_pressure_warning",
+    "heap_pressure_critical",
     "sntp_status",
     # Config switches (ESP32 Switch / HA switch sync)
     "economiser_enabled",
@@ -272,3 +297,14 @@ class OverrideEvent(BaseModel):
     mode: str | None = None  # controller mode at emission (SEALED_MIST, VENTILATE, ...)
     details: dict | None = None
     greenhouse_id: str = "vallery"
+
+    @field_validator("override_type")
+    @classmethod
+    def known_override_type(cls, v: str) -> str:
+        parts = [part.strip() for part in v.split(",") if part.strip()]
+        if not parts or parts == ["none"]:
+            raise ValueError("override_type must contain at least one active override flag")
+        unknown = sorted(part for part in parts if part not in OVERRIDE_EVENT_TYPES)
+        if unknown:
+            raise ValueError(f"Unknown override_type(s): {unknown}; expected one of {sorted(OVERRIDE_EVENT_TYPES)}")
+        return v

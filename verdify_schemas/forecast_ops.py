@@ -31,6 +31,8 @@ class ForecastActionLog(BaseModel):
     old_value: Decimal | None = None
     new_value: Decimal | None = None
     outcome: str | None = None
+    outcome_evaluated_at: AwareDatetime | None = None
+    outcome_metrics: dict | None = None
     greenhouse_id: str = "vallery"
 
 

@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from verdify_schemas.telemetry import (
+    OVERRIDE_EVENT_TYPES,
     ClimateRow,
     Diagnostics,
     EnergySample,
@@ -66,6 +67,8 @@ class TestDiagnostics:
             ts=NOW,
             wifi_rssi=-47.0,
             heap_bytes=180000.0,
+            heap_min_free_kb=17.6,
+            heap_largest_free_block_kb=13.0,
             uptime_s=3600.0,
             probe_health="4/4 ok",
             reset_reason="Software reset",
@@ -73,12 +76,20 @@ class TestDiagnostics:
             active_probe_count=4,
             relief_cycle_count=0,
             vent_latch_timer_s=0,
+            sealed_timer_s=0,
+            vpd_watch_timer_s=60,
+            mist_backoff_timer_s=0,
+            vent_mist_assist_active=0,
         )
         assert d.active_probe_count == 4
 
     def test_rejects_rssi_above_zero(self):
         with pytest.raises(ValidationError):
             Diagnostics(ts=NOW, wifi_rssi=10.0)
+
+    def test_rejects_negative_heap_fragmentation_metric(self):
+        with pytest.raises(ValidationError):
+            Diagnostics(ts=NOW, heap_largest_free_block_kb=-1.0)
 
     def test_rejects_probe_count_over_4(self):
         with pytest.raises(ValidationError):
@@ -87,6 +98,10 @@ class TestDiagnostics:
     def test_rejects_vent_latch_above_1800(self):
         with pytest.raises(ValidationError):
             Diagnostics(ts=NOW, vent_latch_timer_s=5000)
+
+    def test_rejects_vent_mist_assist_above_one(self):
+        with pytest.raises(ValidationError):
+            Diagnostics(ts=NOW, vent_mist_assist_active=2)
 
 
 class TestEquipmentStateEvent:
@@ -124,3 +139,21 @@ class TestOverrideEvent:
             details={"rh": 82.0, "occupancy": True},
         )
         assert ov.details["rh"] == 82.0
+
+    def test_accepts_every_known_override_type(self):
+        for override_type in OVERRIDE_EVENT_TYPES:
+            ov = OverrideEvent(ts=NOW, override_type=override_type)
+            assert ov.override_type == override_type
+
+    def test_accepts_comma_separated_known_override_types(self):
+        ov = OverrideEvent(ts=NOW, override_type="summer_vent,vent_mist_assist,fog_heat_assist")
+        assert ov.override_type == "summer_vent,vent_mist_assist,fog_heat_assist"
+
+    def test_rejects_unknown_override_type(self):
+        with pytest.raises(ValidationError, match="Unknown override_type"):
+            OverrideEvent(ts=NOW, override_type="summer_vent,renamed_flag")
+
+    def test_rejects_empty_or_none_override_type(self):
+        for override_type in ("", "none", " , "):
+            with pytest.raises(ValidationError, match="at least one active override flag"):
+                OverrideEvent(ts=NOW, override_type=override_type)

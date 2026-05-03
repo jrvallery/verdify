@@ -16,7 +16,9 @@ Output: /srv/verdify/verdify-site/content/plans/YYYY-MM-DD.md
 """
 
 import argparse
+import hashlib
 import json
+import re
 import subprocess
 import sys
 from datetime import date, datetime
@@ -64,6 +66,17 @@ def db_query_json(sql: str) -> dict | list | None:
         return None
 
 
+def _sql_literal(value: object) -> str:
+    if value is None:
+        return "NULL"
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def public_text(value: object) -> str:
+    """Avoid Quartz/Markdown dollar-sign math parsing on public pages."""
+    return re.sub(r"\$(\d)", r"USD \1", str(value or ""))
+
+
 def get_daily_summary(d: date) -> dict:
     """Get daily_summary row as dict."""
     return (
@@ -86,42 +99,82 @@ def get_daily_summary(d: date) -> dict:
     )
 
 
+def record_plan_archive_audit(d: date, output: Path, plans: list[dict], summary: dict, content: str) -> None:
+    """Store a DB-side self-check row for generated daily plan pages."""
+    db_plan_count_raw = db_query(f"""
+        SELECT count(*) FROM plan_journal
+        WHERE plan_id LIKE 'iris-{d.strftime("%Y%m%d")}%'
+          AND plan_id NOT LIKE 'iris-reactive%'
+          AND plan_id NOT LIKE 'iris-fix%'
+    """)
+    try:
+        db_plan_count = int(db_plan_count_raw or "0")
+    except ValueError:
+        db_plan_count = len(plans)
+    generated_cost = _num(summary.get("cost_total"), 2)
+    generated_water = _num(summary.get("water_used_gal"), 2)
+    checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    stale = "false" if db_plan_count == len(plans) else "true"
+    db_query(
+        f"""
+        INSERT INTO daily_plan_archive_audit (
+            date, generated_at, page_path, generated_plan_count, db_plan_count,
+            generated_cost_total, db_cost_total, generated_water_gal, db_water_gal,
+            content_checksum, stale, notes
+        )
+        VALUES (
+            '{d}'::date, now(), {_sql_literal(output)}, {len(plans)}, {db_plan_count},
+            {generated_cost if generated_cost is not None else "NULL"},
+            {generated_cost if generated_cost is not None else "NULL"},
+            {generated_water if generated_water is not None else "NULL"},
+            {generated_water if generated_water is not None else "NULL"},
+            {_sql_literal(checksum)}, {stale}, 'scripts/generate-daily-plan.py'
+        )
+        ON CONFLICT (date) DO UPDATE SET
+            generated_at = EXCLUDED.generated_at,
+            page_path = EXCLUDED.page_path,
+            generated_plan_count = EXCLUDED.generated_plan_count,
+            db_plan_count = EXCLUDED.db_plan_count,
+            generated_cost_total = EXCLUDED.generated_cost_total,
+            db_cost_total = EXCLUDED.db_cost_total,
+            generated_water_gal = EXCLUDED.generated_water_gal,
+            db_water_gal = EXCLUDED.db_water_gal,
+            content_checksum = EXCLUDED.content_checksum,
+            stale = EXCLUDED.stale,
+            notes = EXCLUDED.notes
+        """
+    )
+
+
 def get_plans_for_date(d: date) -> list[dict]:
     """Get all plan_journal entries whose plan_id references this date."""
     date_str = d.strftime("%Y%m%d")
-    rows = db_query_rows(f"""
-        SELECT plan_id,
-               to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
-               conditions_summary, hypothesis, experiment, expected_outcome,
-               actual_outcome, outcome_score, lesson_extracted,
-               array_to_string(params_changed, ','),
-               CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END,
-               COALESCE(hypothesis_structured::text, '')
-        FROM plan_journal
-        WHERE plan_id LIKE 'iris-{date_str}%'
-          AND plan_id NOT LIKE 'iris-reactive%'
-        ORDER BY created_at
+    rows = (
+        db_query_json(f"""
+        SELECT COALESCE(json_agg(row_to_json(p)), '[]'::json)
+        FROM (
+            SELECT plan_id,
+                   to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
+                   COALESCE(conditions_summary, '') AS conditions_summary,
+                   COALESCE(hypothesis, '') AS hypothesis,
+                   COALESCE(experiment, '') AS experiment,
+                   COALESCE(expected_outcome, '') AS expected_outcome,
+                   COALESCE(actual_outcome, '') AS actual_outcome,
+                   COALESCE(outcome_score::text, '') AS outcome_score,
+                   COALESCE(lesson_extracted, '') AS lesson_extracted,
+                   COALESCE(array_to_string(params_changed, ','), '') AS params_changed,
+                   CASE WHEN validated_at IS NULL THEN 'pending' ELSE 'validated' END AS status,
+                   COALESCE(hypothesis_structured::text, '') AS hypothesis_structured
+            FROM plan_journal
+            WHERE plan_id LIKE 'iris-{date_str}%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY created_at
+        ) p
     """)
-    plans = []
-    for row in rows:
-        if len(row) >= 12:
-            plans.append(
-                {
-                    "plan_id": row[0].strip(),
-                    "created": row[1].strip(),
-                    "conditions_summary": row[2].strip(),
-                    "hypothesis": row[3].strip(),
-                    "experiment": row[4].strip(),
-                    "expected_outcome": row[5].strip(),
-                    "actual_outcome": row[6].strip(),
-                    "outcome_score": row[7].strip(),
-                    "lesson_extracted": row[8].strip(),
-                    "params_changed": row[9].strip(),
-                    "status": row[10].strip(),
-                    "hypothesis_structured": row[11].strip(),
-                }
-            )
-    return plans
+        or []
+    )
+    return [{k: str(v or "").strip() for k, v in row.items()} for row in rows]
 
 
 def get_waypoints_for_plan(plan_id: str) -> list[dict]:
@@ -338,7 +391,7 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
         )
         if conds.get("notes"):
             lines.append("")
-            lines.append(f"> {conds['notes']}")
+            lines.append(f"> {public_text(conds['notes'])}")
     sw = s.get("stress_windows") or []
     if sw:
         lines.append("")
@@ -350,7 +403,7 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
                 (
                     w.get("kind", "?"),
                     f"{w.get('severity', '?')} · {w.get('start', '?')} to {w.get('end', '?')}",
-                    w.get("mitigation", ""),
+                    public_text(w.get("mitigation", "")),
                 )
             )
         lines.append(data_table(rows))
@@ -365,7 +418,11 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
             new = r_.get("new_value")
             change = f"{old} → {new}" if old is not None else f"{new}"
             rows.append(
-                (r_.get("parameter", "?"), f"{change}; {r_.get('forecast_anchor', '')}", r_.get("expected_effect", ""))
+                (
+                    r_.get("parameter", "?"),
+                    public_text(f"{change}; {r_.get('forecast_anchor', '')}"),
+                    public_text(r_.get("expected_effect", "")),
+                )
             )
         lines.append(data_table(rows))
     lines.append("")
@@ -424,13 +481,40 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
     if current_day is not None:
         lines.append("</div>")
 
-    # Also include non-core params as a separate small table
-    non_core = [wp for wp in waypoints if wp["parameter"] not in CORE_PARAMS]
-    if non_core:
-        rows = []
-        for wp in non_core:
-            rows.append((wp["time"][11:16], wp["parameter"], f"Value {wp['value']}."))
-        lines.extend(["", "**Other parameters:**", "", data_table(rows)])
+    # Secondary parameters are noisy when every waypoint repeats the full
+    # controller state. Lead with deltas; keep the raw dump auditable.
+    changed_non_core_rows = []
+    raw_non_core_rows = []
+    last_seen: dict[str, str] = {}
+    for t in times:
+        vals = by_time[t]
+        time_str = t[11:16] if len(t) > 11 else t
+        for param in sorted(vals):
+            if param in CORE_PARAMS:
+                continue
+            value = vals[param]
+            previous = last_seen.get(param)
+            raw_non_core_rows.append((time_str, param, f"Value {value}."))
+            if previous != value:
+                change = f"{previous} → {value}" if previous is not None else f"initial {value}"
+                changed_non_core_rows.append((time_str, param, change))
+            last_seen[param] = value
+
+    if changed_non_core_rows:
+        lines.extend(["", "**Changed secondary parameters:**", "", data_table(changed_non_core_rows)])
+
+    if raw_non_core_rows:
+        lines.extend(
+            [
+                "",
+                "<details>",
+                "<summary>Full secondary parameter dump</summary>",
+                "",
+                data_table(raw_non_core_rows),
+                "",
+                "</details>",
+            ]
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -516,9 +600,9 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
     experiment = None
     if latest_plan:
         experiment = {
-            "hypothesis": latest_plan.get("hypothesis", ""),
-            "test": latest_plan.get("experiment", ""),
-            "expected_outcome": latest_plan.get("expected_outcome", ""),
+            "hypothesis": public_text(latest_plan.get("hypothesis", "")),
+            "test": public_text(latest_plan.get("experiment", "")),
+            "expected_outcome": public_text(latest_plan.get("expected_outcome", "")),
             "outcome_score": latest_plan.get("outcome_score", ""),
             "status": latest_plan.get("status", "pending"),
         }
@@ -548,7 +632,7 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
     description = (
         f"Generated AI greenhouse planning log for {title}: {len(plans)} planning cycles, "
         f"{stress['vpd_high_hours']}h high-VPD stress, {stress['heat_hours']}h heat stress, "
-        f"and ${cost['total']} total resource cost."
+        f"and USD {cost['total']} total resource cost."
     )
     yaml_block += f'description: "{_yaml_escape(description)}"\n'
     yaml_block += "noindex: true\n"
@@ -562,29 +646,28 @@ def get_previous_plan(plan_created: str) -> dict | None:
     This is used by the Reflection section to show what hypothesis was being tested
     before the current plan validated it.
     """
-    rows = db_query_rows(f"""
-        SELECT plan_id,
-               to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
-               conditions_summary, hypothesis, experiment, expected_outcome,
-               actual_outcome, outcome_score, lesson_extracted
-        FROM plan_journal
-        WHERE created_at < '{plan_created}'::timestamptz
-          AND plan_id NOT LIKE 'iris-reactive%'
-        ORDER BY created_at DESC LIMIT 1
+    row = db_query_json(f"""
+        SELECT row_to_json(p)
+        FROM (
+            SELECT plan_id,
+                   to_char(created_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') as created,
+                   COALESCE(conditions_summary, '') AS conditions_summary,
+                   COALESCE(hypothesis, '') AS hypothesis,
+                   COALESCE(experiment, '') AS experiment,
+                   COALESCE(expected_outcome, '') AS expected_outcome,
+                   COALESCE(actual_outcome, '') AS actual_outcome,
+                   COALESCE(outcome_score::text, '') AS outcome_score,
+                   COALESCE(lesson_extracted, '') AS lesson_extracted
+            FROM plan_journal
+            WHERE created_at < '{plan_created}'::timestamptz
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY created_at DESC LIMIT 1
+        ) p
     """)
-    if rows and len(rows[0]) >= 9:
-        row = rows[0]
-        return {
-            "plan_id": row[0].strip(),
-            "created": row[1].strip(),
-            "hypothesis": row[3].strip(),
-            "experiment": row[4].strip(),
-            "expected_outcome": row[5].strip(),
-            "actual_outcome": row[6].strip(),
-            "outcome_score": row[7].strip(),
-            "lesson_extracted": row[8].strip(),
-        }
-    return None
+    if not isinstance(row, dict):
+        return None
+    return {k: str(v or "").strip() for k, v in row.items()}
 
 
 def get_cycle_label(plan: dict) -> tuple[str, str]:
@@ -632,6 +715,28 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     plan_id = plan.get("plan_id", "")
     lines = [f"## {label} — `{plan_id}`", ""]
 
+    changed_params = [p.strip() for p in plan.get("params_changed", "").split(",") if p.strip()]
+    score = plan.get("outcome_score", "")
+    lines.append(
+        metric_grid(
+            [
+                ("Status", plan.get("status", "pending")),
+                ("Outcome score", f"{score}/10" if score else "pending"),
+                (
+                    "Changed parameters",
+                    ", ".join(changed_params[:8]) + (" ..." if len(changed_params) > 8 else "")
+                    if changed_params
+                    else "none recorded",
+                ),
+            ]
+        )
+    )
+    actual = plan.get("actual_outcome", "")
+    if actual:
+        lines.append("")
+        lines.append(f"> **Result:** {public_text(actual)}")
+    lines.append("")
+
     # --- Reflection: validates the previous cycle ---
     lines.append("### Reflection")
     lines.append("")
@@ -649,7 +754,7 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
         prev_hypothesis = prev_plan.get("hypothesis", "")
         if prev_hypothesis:
-            lines.append(f"**Previous hypothesis:** {prev_hypothesis}")
+            lines.append(f"**Previous hypothesis:** {public_text(prev_hypothesis)}")
         else:
             lines.append("**Previous hypothesis:** *(not recorded)*")
 
@@ -657,14 +762,14 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
         actual = plan.get("actual_outcome", "")
         score = plan.get("outcome_score", "")
         if actual:
-            lines.append(f"**Result:** {actual}")
+            lines.append(f"**Result:** {public_text(actual)}")
         if score:
             lines.append(f"**Score:** {score}/10")
         lines.append("")
 
         lesson = plan.get("lesson_extracted", "")
         if lesson:
-            lines.append(f"> **New finding:** {lesson} → Added to [Lessons Learned](/greenhouse/lessons)")
+            lines.append(f"> **New finding:** {public_text(lesson)} → Added to [Lessons Learned](/greenhouse/lessons)")
             lines.append("")
     else:
         # First ever cycle or no previous plan found
@@ -677,15 +782,15 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
     conditions = plan.get("conditions_summary", "")
     if conditions:
-        lines.append(f"**Conditions:** {conditions}")
+        lines.append(f"**Conditions:** {public_text(conditions)}")
 
     experiment = plan.get("experiment", "")
     if experiment:
-        lines.append(f"**Testing:** {experiment}")
+        lines.append(f"**Testing:** {public_text(experiment)}")
 
     expected = plan.get("expected_outcome", "")
     if expected:
-        lines.append(f"**Expected outcome:** {expected}")
+        lines.append(f"**Expected outcome:** {public_text(expected)}")
     lines.append("")
 
     # Sprint 20 Phase 5: structured hypothesis block (typed conditions /
@@ -762,10 +867,10 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
             "",
             metric_grid(
                 [
-                    ("Electric", f"${r(summary.get('cost_electric'), 2)}"),
-                    ("Gas", f"${r(summary.get('cost_gas'), 2)}"),
-                    ("Water", f"${r(summary.get('cost_water'), 3)}"),
-                    ("Total", f"${r(summary.get('cost_total'), 2)}"),
+                    ("Electric", f"USD {r(summary.get('cost_electric'), 2)}"),
+                    ("Gas", f"USD {r(summary.get('cost_gas'), 2)}"),
+                    ("Water", f"USD {r(summary.get('cost_water'), 3)}"),
+                    ("Total", f"USD {r(summary.get('cost_total'), 2)}"),
                 ]
             ),
             "",
@@ -947,6 +1052,8 @@ def backfill():
             output = CONTENT_DIR / f"{d}.md"
             output.write_text(content)
             plans = get_plans_for_date(d)
+            summary = get_daily_summary(d)
+            record_plan_archive_audit(d, output, plans, summary, content)
             print(f"OK ({len(plans)} plans, {len(content)} chars)")
         except Exception as e:
             print(f"ERROR: {e}")
@@ -970,6 +1077,9 @@ def main():
         content = generate_day(d)
         output = CONTENT_DIR / f"{d}.md"
         output.write_text(content)
+        plans = get_plans_for_date(d)
+        summary = get_daily_summary(d)
+        record_plan_archive_audit(d, output, plans, summary, content)
         print(f"Generated {output} ({len(content)} chars)")
     else:
         parser.print_help()

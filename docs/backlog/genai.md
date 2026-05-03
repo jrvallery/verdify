@@ -23,10 +23,17 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 
 ## In flight
 
-- Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope — already merged
-  into an ingestor sprint commit (`47f8154`). Once the parent merges to
-  main, genai's MCP boundary is fully typed.
-- Prior-art launch response pack — draft "why not direct LLM control?", "why not PID?", "why not RL yet?", "what does self-correcting mean?", and "how are lessons validated?" for web publication and HN/Reddit responses. See `docs/launch/prior-art-rollup-2026-05-03.md`.
+**Launch narrative + lesson credibility support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
+
+- [x] **G-L0.3 Lesson canonicalization semantics.** Implemented in `scripts/generate-lessons-page.py`: normalized signatures collapse near-duplicate machine lessons into canonical families with validation counts and raw visibility behind a labeled details section.
+- [x] **G-L0.4 Daily-plan story support.** Implemented in `scripts/generate-daily-plan.py`: default reading path leads with outcome/score/hypothesis/rationale and changed parameters, while raw secondary parameters stay behind `<details>`.
+- [ ] **G-L1.7 Launch response pack.** Prepare concise technical answers for HN/Reddit: why not PID, LLM not in real-time loop, ESP32 safety ownership, VPD physics, shade-cloth limits, Mycodo/HAGR/Koidra/AgroNova/iGrow comparisons, related agentic-control literature, and what "self-improving" does and does not mean.
+- [ ] **G-L1.13 FAQ support.** Draft "Why not direct LLM control?", "Why not PID?", "Why not RL yet?", "What does self-correcting mean?", and "How are lessons validated?" answers for web publication.
+- [ ] **G-L2.1 Weekly proof cadence.** Define the weekly "Verdify this week" planner summary inputs: weather faced, planner score, stress windows, lessons graduated, failures, repairs.
+- [ ] **G-L2.6 Counterfactual replay roadmap.** Define planner-facing requirements for replaying recent telemetry with alternate tunables before any RL/simulator path.
+- [ ] **G-L2.7 Daily lifecycle artifact.** Help web publish one complete forecast -> plan -> tunables -> telemetry -> score -> lesson example with planner-side annotations.
+
+Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; genai's MCP boundary is typed.
 
 ## Tracked list
 
@@ -48,7 +55,14 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 | G12 | Either populate or drop `plan_journal.conditions_summary` (propose migration to coordinator) | Coordinator handshake | — | S | pending |
 | G13 | Scorecard "why did we fail": when `planner_score < 80`, compute top-2 contributing stress windows + include in next plan context | Prompt + MCP | unblocked by G3 | M | pending |
 | G14 | One-line clarification in `docs/agents/genai.md`: vault-writer scripts (`generate-*`) are `web` scope; genai owns the data models they consume | Doc | — | XS | **done** (600b7b9) |
-| G15 | **Infra drift**: `db/migrations/076-078` and `db/schema.sql` are stale vs live `fn_planner_scorecard()` (live emits 25 metrics incl. temp/vpd_compliance_pct, kwh/therms/water_gal/mister_water_gal, cost_electric/gas/water; migrations don't). Route to coordinator for a resync migration | Coordinator handshake | — | S | pending |
+| G15 | **Infra drift**: `db/migrations/076-078` and `db/schema.sql` are stale vs live `fn_planner_scorecard()` (live emits 25 metrics incl. temp/vpd_compliance_pct, kwh/therms/water_gal/mister_water_gal, cost_electric/gas/water; migrations don't). Resynced by coordinator migration 096 + schema dump update | Coordinator handshake | — | S | **done** |
+| G-Kn-B | **Expand `_PLANNER_CORE` tunable table from 24 → 86.** Current Tier 1 table covers high-frequency params but leaves 62 (irrigation, per-zone VPD, switches, fog safety gates) undocumented to Iris even though she can push them. Absorb `docs/tunable-cascade.md` structure into a compact name/unit/range/default/readback-flag format | Prompt | — | M | **done this sprint** (sprint-4) |
+| G-Kn-C | **Surface recent clamps to Iris** — new section in `gather-plan-context.sh` showing top-10 clamped params (24h) with count/avg-requested/avg-applied/reason. Without this Iris repeats the same out-of-range push and wonders why it never lands | Context script | — | S | **done this sprint** (sprint-4) |
+| G-Kn-D | **Surface delivery history to Iris** — new section in `gather-plan-context.sh` showing 24h `plan_delivery_log` grouped by (event_type, status) so Iris sees her own silent-drop pattern | Context script | — | S | **done this sprint** (sprint-4) |
+| G-Kn-E | **Prompt drift fixed** — tunable content in `_PLANNER_KNOWLEDGE` was mechanically linked to `docs/tunable-cascade.md` (now referenced as canonical). Semantics kept in sync manually; future editors update cascade + prompt in same PR | Prompt + doc | — | XS | **done this sprint** (sprint-4) |
+| G-Kn-Fix | **Section-27 bug**: `gather-plan-context.sh` aborted at `validate-plan-coverage.sh` non-zero exit because of `set -euo pipefail`, silently killing sections 28–31 (including sprint-1's G10 completeness header). Trailing `|| true` unblocks downstream sections. Real production-signal gap — context was being truncated for months | Context script | — | XS | **done this sprint** (sprint-4) |
+| G-Kn-A | Wire coordinator's `v_tunable_dynamics` view into `gather-plan-context.sh` (avg/min/max/stddev per tunable over 7d window). Closes Gap A from iris-dev's trace | Context script | blocks on `v_tunable_dynamics` coordinator PR | M | pending |
+| G-Kn-F | Per-tunable variance awareness in prompt — derived from G-Kn-A's dynamics view. Warn Iris when her pushes show zero effect (stddev unchanged post-push) | Prompt + script | depends on G-Kn-A | S | pending |
 | G16 | **`planner_stale` alert threshold 8h→14h.** False alarm 2026-04-19 14:27 UTC misled a sibling agent into reporting Iris as hung. Iris was fine — alert threshold sits below the SUNSET↔SUNRISE cadence (~12.7h) guaranteeing a daily false-positive. Cross-scope PR into ingestor (`ingestor/tasks.py:666` + `scripts/alert-monitor.py:284`, both `28800`→`50400`) | Cross-scope (ingestor) | — | XS | **done this sprint** |
 | G17 | Planning-cadence note at top of `docs/planner/greenhouse-playbook.md` explaining SUNRISE/SUNSET-only full plans + what a genuine stall looks like (no SUNRISE in 14h AND no `set_tunable` in 8h AND OpenClaw failing). Prevents future sibling agents from misdiagnosing the gap as an incident | Doc | — | XS | **done this sprint** |
 | G18 | (follow-up to G16) Replace flat `plan_age > 50400` check with a two-factor semantic check: no SUNRISE/SUNSET event delivered in 14h AND no `setpoint_changes WHERE source='iris' AND ts > now() - interval '8 hours'`. More accurate than a single age threshold. Ingestor may want to own this outright | Cross-scope (ingestor) | — | M | pending |

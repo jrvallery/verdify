@@ -7,12 +7,14 @@
 #
 # Uses ESPHome's espota2 module directly (the same transport esphome
 # upload uses) to flash an arbitrary .ota.bin over the network without
-# recompiling. The rollback target is /mnt/iris/verdify/firmware/artifacts/
-# previous.ota.bin — saved by firmware-deploy before each OTA.
+# recompiling. By default, the rollback target is this repo worktree's
+# firmware/artifacts/last-good.ota.bin, promoted by firmware-deploy after
+# post-OTA sensor health passes.
 
 set -uo pipefail
 
-ROLLBACK_BIN="${1:-/mnt/iris/verdify/firmware/artifacts/last-good.ota.bin}"
+REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+ROLLBACK_BIN="${1:-$REPO_ROOT/firmware/artifacts/last-good.ota.bin}"
 ESP32_HOST="${ESP32_HOST:-192.168.10.111}"
 ESP32_OTA_PORT="${ESP32_OTA_PORT:-3232}"
 SECRETS_YAML="${SECRETS_YAML:-/srv/greenhouse/esphome/secrets.yaml}"

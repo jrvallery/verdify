@@ -195,7 +195,8 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         },
         "overrides": [
           {
@@ -273,7 +274,39 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "UNKNOWN",
+                  "color": "red"
+                },
+                "0": {
+                  "text": "IDLE",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "VENT",
+                  "color": "blue"
+                },
+                "2": {
+                  "text": "COOL",
+                  "color": "blue"
+                },
+                "3": {
+                  "text": "HEAT",
+                  "color": "orange"
+                },
+                "4": {
+                  "text": "FOG",
+                  "color": "purple"
+                }
+              }
+            }
+          ],
+          "unit": "none"
         },
         "overrides": []
       },
@@ -292,7 +325,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1",
+          "rawSql": "SELECT now() AS time, CASE value WHEN 'IDLE' THEN 0 WHEN 'VENT' THEN 1 WHEN 'COOL' THEN 2 WHEN 'HEAT' THEN 3 WHEN 'FOG' THEN 4 ELSE -1 END AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1",
           "refId": "A"
         }
       ],

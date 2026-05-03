@@ -11,17 +11,22 @@ import asyncio
 import json
 import logging
 import sys
+import time
 import urllib.error
 import urllib.request
+import uuid
 from datetime import UTC, datetime
 from datetime import timedelta as _td
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-# verdify_schemas lives one level up at /mnt/iris/verdify/verdify_schemas
-sys.path.insert(0, "/mnt/iris/verdify")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import asyncpg
 import shared
+from esp32_push import push_to_esp32
 from pydantic import ValidationError
 
 from verdify_schemas import (
@@ -32,6 +37,7 @@ from verdify_schemas import (
     HAEntityState,
     OpenMeteoForecastResponse,
     PlanDeliveryLogRow,
+    SetpointChange,
     SystemStateRow,
 )
 
@@ -39,6 +45,8 @@ log = logging.getLogger("tasks")
 
 # ── Shared config (from config.py / environment) ────────────────
 from config import (
+    EXPECTED_FIRMWARE_VERSION,
+    EXPECTED_FIRMWARE_VERSION_FILE,
     HA_TOKEN_FILE,
     HA_URL,
     SLACK_CHANNEL,
@@ -49,6 +57,37 @@ from config import (
 from config import (
     load_token as _load_token,
 )
+
+# Crop-band params are not planner-owned waypoints. The dispatcher derives all
+# four from fn_band_setpoints(now()) every cycle and pushes them to firmware.
+# A missing setpoint_plan row for vpd_low is therefore not a firmware fallback:
+# vpd_low is explicit in the band contract here.
+BAND_DRIVEN_PARAMS = frozenset(
+    {
+        "temp_high",
+        "temp_low",
+        "vpd_high",
+        "vpd_low",
+        "vpd_target_south",
+        "vpd_target_west",
+        "vpd_target_east",
+        "vpd_target_center",
+    }
+)
+
+
+def _expected_firmware_version() -> str | None:
+    """Return the firmware version pin alert_monitor should enforce."""
+    if EXPECTED_FIRMWARE_VERSION.strip():
+        return EXPECTED_FIRMWARE_VERSION.strip()
+    path = Path(EXPECTED_FIRMWARE_VERSION_FILE)
+    try:
+        if path.exists():
+            value = path.read_text().strip()
+            return value or None
+    except OSError as exc:
+        log.warning("Could not read expected firmware version pin %s: %s", path, exc)
+    return None
 
 
 def _ha_state(states: dict[str, dict], eid: str) -> HAEntityState | None:
@@ -204,6 +243,7 @@ async def matview_refresh(pool: asyncpg.Pool) -> None:
     async with pool.acquire() as conn:
         await conn.execute("SELECT refresh_relay_stuck(0, '{}'::jsonb)")
         await conn.execute("SELECT refresh_climate_merged(0, '{}'::jsonb)")
+        await conn.execute("SELECT refresh_greenhouse_state(0, '{}'::jsonb)")
     log.debug("Materialized views refreshed")
 
 
@@ -523,29 +563,110 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             )
 
         # 2. relay_stuck
+        # v_relay_stuck is derived from commanded switch state, not independent
+        # relay feedback. Treat long heater runtime as normal when current
+        # climate still demands heat; only alert when heat remains commanded
+        # above the active band where it is physically contradictory.
+        relay_context = await conn.fetchrow(
+            """
+            SELECT temp_avg, sp_temp_high, heat1, heat2, greenhouse_mode, ts
+              FROM v_greenhouse_state
+             WHERE ts >= now() - interval '10 minutes'
+             ORDER BY ts DESC
+             LIMIT 1
+            """
+        )
         for r in await conn.fetch(
             "SELECT equipment, hours_on, threshold_hours FROM v_relay_stuck WHERE is_stuck = true"
         ):
+            equipment = r["equipment"]
+            details = {
+                "hours_on": float(r["hours_on"]),
+                "threshold_hours": float(r["threshold_hours"]),
+                "state_source": "commanded_equipment_state",
+            }
+            if equipment in ("heat1", "heat2") and relay_context:
+                temp_avg = relay_context["temp_avg"]
+                sp_temp_high = relay_context["sp_temp_high"]
+                heat_commanded = bool(relay_context[equipment])
+                details.update(
+                    {
+                        "temp_avg": float(temp_avg) if temp_avg is not None else None,
+                        "sp_temp_high": float(sp_temp_high) if sp_temp_high is not None else None,
+                        "greenhouse_mode": relay_context["greenhouse_mode"],
+                        "context_ts": relay_context["ts"].isoformat() if relay_context["ts"] else None,
+                    }
+                )
+                if (
+                    heat_commanded
+                    and temp_avg is not None
+                    and sp_temp_high is not None
+                    and float(temp_avg) <= float(sp_temp_high) + 0.5
+                ):
+                    continue
+                message = (
+                    f"Heater `{equipment}` commanded ON for {r['hours_on']:.1f}h "
+                    f"while temp is not below the active band"
+                )
+            else:
+                message = f"Relay `{equipment}` commanded ON for {r['hours_on']:.1f}h without an OFF command"
             alerts.append(
                 {
                     "alert_type": "relay_stuck",
                     "severity": "warning",
                     "category": "equipment",
-                    "sensor_id": f"equipment.{r['equipment']}",
+                    "sensor_id": f"equipment.{equipment}",
                     "zone": None,
-                    "message": f"Relay `{r['equipment']}` stuck ON for {r['hours_on']:.1f}h",
-                    "details": {"hours_on": float(r["hours_on"])},
+                    "message": message,
+                    "details": details,
                     "metric_value": float(r["hours_on"]),
                     "threshold_value": float(r["threshold_hours"]),
                 }
             )
 
         # 3. VPD stress
+        # Daily cumulative stress belongs in the scorecard; an open alert
+        # should represent a condition that is still active. Gate the daily
+        # >2h threshold by the last 15 minutes so recovered VPD auto-resolves.
         row = await conn.fetchrow(
-            "SELECT vpd_stress_hours FROM v_stress_hours_today WHERE date >= date_trunc('day', now() AT TIME ZONE 'America/Denver') ORDER BY date DESC LIMIT 1"
+            """
+            WITH daily AS (
+                SELECT vpd_stress_hours::float AS vpd_stress_hours
+                  FROM v_stress_hours_today
+                 WHERE date >= date_trunc('day', now() AT TIME ZONE 'America/Denver')
+                 ORDER BY date DESC
+                 LIMIT 1
+            ),
+            recent AS (
+                SELECT count(*)::int AS samples,
+                       count(*) FILTER (WHERE vpd_avg > fn_setpoint_at('vpd_high', ts))::int AS high_samples,
+                       avg(vpd_avg)::float AS avg_vpd,
+                       avg(fn_setpoint_at('vpd_high', ts))::float AS avg_vpd_high
+                  FROM climate
+                 WHERE ts >= now() - interval '15 minutes'
+                   AND vpd_avg IS NOT NULL
+            )
+            SELECT daily.vpd_stress_hours,
+                   recent.samples,
+                   recent.high_samples,
+                   recent.avg_vpd,
+                   recent.avg_vpd_high,
+                   CASE WHEN recent.samples > 0
+                        THEN recent.high_samples::float / recent.samples
+                        ELSE 0.0
+                   END AS recent_high_fraction
+              FROM daily CROSS JOIN recent
+            """
         )
-        if row and row["vpd_stress_hours"] and float(row["vpd_stress_hours"]) > 2.0:
+        if (
+            row
+            and row["vpd_stress_hours"]
+            and float(row["vpd_stress_hours"]) > 2.0
+            and int(row["samples"] or 0) >= 3
+            and float(row["recent_high_fraction"] or 0.0) >= 0.5
+        ):
             hrs = float(row["vpd_stress_hours"])
+            high_fraction = float(row["recent_high_fraction"] or 0.0)
             alerts.append(
                 {
                     "alert_type": "vpd_stress",
@@ -553,8 +674,15 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "category": "climate",
                     "sensor_id": "climate.vpd_avg",
                     "zone": None,
-                    "message": f"VPD stress: {hrs:.1f} hours today",
-                    "details": {"vpd_stress_hours": hrs},
+                    "message": f"VPD stress active: {hrs:.1f} hours today, {high_fraction:.0%} high in last 15m",
+                    "details": {
+                        "vpd_stress_hours": hrs,
+                        "recent_samples": int(row["samples"] or 0),
+                        "recent_high_samples": int(row["high_samples"] or 0),
+                        "recent_high_fraction": high_fraction,
+                        "avg_vpd_15m": float(row["avg_vpd"]) if row["avg_vpd"] is not None else None,
+                        "avg_vpd_high_15m": float(row["avg_vpd_high"]) if row["avg_vpd_high"] is not None else None,
+                    },
                     "metric_value": hrs,
                     "threshold_value": 2.0,
                 }
@@ -687,6 +815,164 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "details": {"age_s": plan_age, "age_h": round(age_h, 1)},
                     "metric_value": round(age_h, 1),
                     "threshold_value": 14.0,
+                }
+            )
+
+        # 7a. Planner gateway delivery failures. A failed OpenClaw POST is a
+        # first-class outage, not a pending planner action. Keep the lookback
+        # short so transient restarts auto-resolve once deliveries recover.
+        gateway_failures = await conn.fetch(
+            """
+            WITH last_success AS (
+                SELECT max(delivered_at) AS ts
+                  FROM plan_delivery_log
+                 WHERE delivered_at > now() - interval '2 hours'
+                   AND gateway_status BETWEEN 200 AND 299
+            )
+            SELECT id, event_type, event_label, instance, gateway_status, delivered_at, gateway_body
+              FROM plan_delivery_log, last_success
+             WHERE delivered_at > now() - interval '2 hours'
+               AND (last_success.ts IS NULL OR delivered_at > last_success.ts)
+               AND (
+                    status = 'delivery_failed'
+                    OR gateway_status = 0
+                    OR gateway_status >= 400
+               )
+             ORDER BY delivered_at DESC
+             LIMIT 10
+            """
+        )
+        if gateway_failures:
+            failures = [
+                {
+                    "id": int(r["id"]),
+                    "event_type": r["event_type"],
+                    "event_label": r["event_label"],
+                    "instance": r["instance"],
+                    "gateway_status": int(r["gateway_status"]) if r["gateway_status"] is not None else None,
+                    "delivered_at": r["delivered_at"].isoformat(),
+                    "gateway_body": (r["gateway_body"] or "")[:300],
+                }
+                for r in gateway_failures
+            ]
+            required_failed = any(f["event_type"] in ("SUNRISE", "SUNSET", "MIDNIGHT") for f in failures)
+            host_down = any(f["gateway_status"] == 0 for f in failures)
+            severity = "critical" if required_failed or host_down or len(failures) >= 3 else "warning"
+            first = failures[0]
+            alerts.append(
+                {
+                    "alert_type": "planner_gateway_delivery_failed",
+                    "severity": severity,
+                    "category": "system",
+                    "sensor_id": "system.openclaw",
+                    "zone": None,
+                    "message": (
+                        f"{len(failures)} planner gateway delivery failure(s) in 2h; "
+                        f"latest {first['event_type']}/{first['event_label']} "
+                        f"status={first['gateway_status']}"
+                    ),
+                    "details": {"failures": failures},
+                    "metric_value": float(len(failures)),
+                    "threshold_value": 0.0,
+                }
+            )
+
+        # 7b. Required SUNRISE/SUNSET plans. These triggers must produce a
+        # plan_journal row within their SLA; otherwise the prior plan governs
+        # across a new diurnal period with no explicit planner review.
+        required_misses = await conn.fetch(
+            """
+            WITH latest_required AS (
+                SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body,
+                       row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC) AS rn
+                  FROM plan_delivery_log
+                 WHERE event_type IN ('SUNRISE', 'SUNSET')
+                   AND delivered_at > now() - interval '18 hours'
+            )
+            SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body
+              FROM latest_required
+             WHERE rn = 1
+               AND delivered_at < now() - interval '15 minutes'
+               AND status <> 'plan_written'
+             ORDER BY delivered_at DESC
+            """
+        )
+        if required_misses:
+            misses = [
+                {
+                    "id": int(r["id"]),
+                    "event_type": r["event_type"],
+                    "event_label": r["event_label"],
+                    "instance": r["instance"],
+                    "status": r["status"],
+                    "gateway_status": int(r["gateway_status"]) if r["gateway_status"] is not None else None,
+                    "delivered_at": r["delivered_at"].isoformat(),
+                    "gateway_body": (r["gateway_body"] or "")[:300],
+                }
+                for r in required_misses
+            ]
+            latest = misses[0]
+            alerts.append(
+                {
+                    "alert_type": "planner_required_plan_missed",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "system.planner_required_plan",
+                    "zone": None,
+                    "message": (
+                        f"{latest['event_type']} did not produce a plan within 15 minutes "
+                        f"(status={latest['status']}, gateway={latest['gateway_status']})"
+                    ),
+                    "details": {"misses": misses},
+                    "metric_value": float(len(misses)),
+                    "threshold_value": 0.0,
+                }
+            )
+
+        # 7c. Planner band ownership drift. Crop-band params are dispatcher-
+        # owned read-only context; active rows in setpoint_plan can outrank the
+        # crop-profile band function and create repeated clamp storms.
+        band_owned_rows = await conn.fetch(
+            """
+            SELECT parameter,
+                   coalesce(plan_id, '<null>') AS plan_id,
+                   coalesce(source, '<null>') AS source,
+                   count(*)::int AS rows
+              FROM setpoint_plan
+             WHERE is_active = true
+               AND parameter IN ('temp_low', 'temp_high', 'vpd_low', 'vpd_high')
+             GROUP BY parameter, coalesce(plan_id, '<null>'), coalesce(source, '<null>')
+             ORDER BY parameter, plan_id, source
+            """
+        )
+        if band_owned_rows:
+            offenders = [
+                {
+                    "parameter": r["parameter"],
+                    "plan_id": r["plan_id"],
+                    "source": r["source"],
+                    "rows": int(r["rows"]),
+                }
+                for r in band_owned_rows
+            ]
+            total_rows = sum(r["rows"] for r in offenders)
+            sample = ", ".join(f"{r['parameter']}:{r['plan_id']}({r['rows']})" for r in offenders[:4])
+            alerts.append(
+                {
+                    "alert_type": "planner_band_ownership_drift",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "system.planner_band_ownership",
+                    "zone": None,
+                    "message": (
+                        f"{total_rows} active planner row(s) contain dispatcher-owned crop-band params: {sample}"
+                    ),
+                    "details": {
+                        "band_owned_params": ["temp_low", "temp_high", "vpd_low", "vpd_high"],
+                        "offenders": offenders,
+                    },
+                    "metric_value": float(total_rows),
+                    "threshold_value": 0.0,
                 }
             )
 
@@ -826,9 +1112,33 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
              ORDER BY ts DESC LIMIT 1
             """
         )
+        # OBS-3 cooldown (Tier 2b): firmware_relief_ceiling and
+        # firmware_vent_latched flap rapidly when the metric oscillates near
+        # threshold during stress windows. After a recent auto-resolve, hold
+        # off re-firing for 10 min so the alert log + Slack don't accumulate
+        # the same incident as 17+ separate rows/day. The auto-resolve loop
+        # below still clears genuinely-cleared alerts on the same monitor pass.
+        relief_recent_resolve = await conn.fetchval(
+            """
+            SELECT 1 FROM alert_log
+             WHERE alert_type = 'firmware_relief_ceiling'
+               AND disposition = 'resolved'
+               AND resolved_at > now() - interval '10 minutes'
+             LIMIT 1
+            """
+        )
+        latch_recent_resolve = await conn.fetchval(
+            """
+            SELECT 1 FROM alert_log
+             WHERE alert_type = 'firmware_vent_latched'
+               AND disposition = 'resolved'
+               AND resolved_at > now() - interval '10 minutes'
+             LIMIT 1
+            """
+        )
         if obs3_row:
             relief = obs3_row["relief_cycle_count"]
-            if relief is not None and relief >= 2:
+            if relief is not None and relief >= 2 and not relief_recent_resolve:
                 # Warning at ceiling-1 (nearing); critical at ceiling (3) or beyond.
                 severity = "critical" if relief >= 3 else "warning"
                 alerts.append(
@@ -849,7 +1159,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
             latch = obs3_row["vent_latch_timer_s"]
-            if latch is not None and latch >= 600:
+            if latch is not None and latch >= 600 and not latch_recent_resolve:
                 # Warning at 10 min latched; critical at 20 min (schema max 1800s).
                 severity = "critical" if latch >= 1200 else "warning"
                 alerts.append(
@@ -870,6 +1180,312 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     }
                 )
 
+        # 12. Firmware version mismatch. The deploy path writes
+        # STATE_DIR/expected-firmware-version only after sensor-health accepts
+        # an OTA. If diagnostics later report a different build, the operator
+        # may be validating the wrong binary or an out-of-band OTA happened.
+        expected_fw = _expected_firmware_version()
+        if expected_fw:
+            latest_fw = await conn.fetchrow(
+                """
+                SELECT firmware_version, ts
+                  FROM diagnostics
+                 WHERE ts >= now() - interval '10 minutes'
+                   AND firmware_version IS NOT NULL
+                 ORDER BY ts DESC
+                 LIMIT 1
+                """
+            )
+            live_fw = latest_fw["firmware_version"] if latest_fw else None
+            if live_fw and live_fw != expected_fw:
+                alerts.append(
+                    {
+                        "alert_type": "firmware_version_mismatch",
+                        "severity": "high",
+                        "category": "system",
+                        "sensor_id": "diag.firmware_version",
+                        "zone": None,
+                        "message": (f"ESP32 firmware_version={live_fw} does not match expected pin {expected_fw}"),
+                        "details": {
+                            "expected_firmware_version": expected_fw,
+                            "live_firmware_version": live_fw,
+                            "diagnostics_ts": latest_fw["ts"].isoformat() if latest_fw else None,
+                            "pin_source": EXPECTED_FIRMWARE_VERSION_FILE
+                            if not EXPECTED_FIRMWARE_VERSION.strip()
+                            else "EXPECTED_FIRMWARE_VERSION",
+                        },
+                        "metric_value": None,
+                        "threshold_value": None,
+                    }
+                )
+
+        # 13. ESP32 heap pressure watchdogs. Firmware publishes debounced
+        # binary sensors; route them into alert_log so heap exhaustion has the
+        # same lifecycle and Slack path as the other system-owned alerts.
+        heap_rows = await conn.fetch(
+            """
+            SELECT equipment,
+                   (array_agg(state ORDER BY ts DESC, state ASC))[1] AS latest_state,
+                   max(ts) AS latest_ts,
+                   bool_or(state) FILTER (WHERE ts > now() - interval '30 minutes') AS recent_true,
+                   max(ts) FILTER (WHERE state) AS last_true_ts
+              FROM equipment_state
+             WHERE equipment IN ('heap_pressure_warning', 'heap_pressure_critical')
+             GROUP BY equipment
+            """
+        )
+        heap_log = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (
+                       WHERE message ILIKE '%Heap pressure CRITICAL%'
+                   ) AS critical_logs,
+                   max(ts) FILTER (
+                       WHERE message ILIKE '%Heap pressure CRITICAL%'
+                   ) AS last_critical_ts,
+                   (array_agg(message ORDER BY ts DESC) FILTER (
+                       WHERE message ILIKE '%Heap pressure CRITICAL%'
+                   ))[1] AS last_critical_message,
+                   count(*) FILTER (
+                       WHERE message ILIKE '%Heap pressure WARNING%'
+                   ) AS warning_logs,
+                   max(ts) FILTER (
+                       WHERE message ILIKE '%Heap pressure WARNING%'
+                   ) AS last_warning_ts,
+                   (array_agg(message ORDER BY ts DESC) FILTER (
+                       WHERE message ILIKE '%Heap pressure WARNING%'
+                   ))[1] AS last_warning_message
+              FROM esp32_logs
+             WHERE ts > now() - interval '30 minutes'
+               AND message ILIKE '%Heap pressure%'
+            """
+        )
+        heap_diag = await conn.fetchrow(
+            """
+            SELECT heap_bytes, uptime_s, ts
+              FROM diagnostics
+             WHERE heap_bytes IS NOT NULL
+             ORDER BY ts DESC
+             LIMIT 1
+            """
+        )
+        heap_state = {r["equipment"]: r for r in heap_rows}
+        heap_critical = heap_state.get("heap_pressure_critical")
+        heap_warning = heap_state.get("heap_pressure_warning")
+        heap_bytes = float(heap_diag["heap_bytes"]) if heap_diag and heap_diag["heap_bytes"] is not None else None
+        critical_logs = int(heap_log["critical_logs"] or 0) if heap_log else 0
+        warning_logs = int(heap_log["warning_logs"] or 0) if heap_log else 0
+        last_critical_event_ts = max(
+            [
+                ts
+                for ts in (
+                    heap_critical["last_true_ts"] if heap_critical else None,
+                    heap_log["last_critical_ts"] if heap_log else None,
+                )
+                if ts is not None
+            ],
+            default=None,
+        )
+        last_warning_event_ts = max(
+            [
+                ts
+                for ts in (
+                    heap_warning["last_true_ts"] if heap_warning else None,
+                    heap_log["last_warning_ts"] if heap_log else None,
+                )
+                if ts is not None
+            ],
+            default=None,
+        )
+        healthy_after_critical = 0
+        healthy_after_warning = 0
+        if last_critical_event_ts:
+            healthy_after_critical = await conn.fetchval(
+                """
+                SELECT count(*)
+                  FROM diagnostics
+                 WHERE ts > $1
+                   AND heap_bytes >= 35.0
+                """,
+                last_critical_event_ts,
+            )
+        if last_warning_event_ts:
+            healthy_after_warning = await conn.fetchval(
+                """
+                SELECT count(*)
+                  FROM diagnostics
+                 WHERE ts > $1
+                   AND heap_bytes >= 35.0
+                """,
+                last_warning_event_ts,
+            )
+        startup_heap_grace = False
+        if last_critical_event_ts and heap_diag and heap_diag["uptime_s"] is not None:
+            boot_ts = heap_diag["ts"] - _td(seconds=float(heap_diag["uptime_s"]))
+            age_after_boot_s = (last_critical_event_ts - boot_ts).total_seconds()
+            # ESPHome/API reconnect and reconnect setpoint reconciliation can
+            # transiently dip heap during the first boot minute. Keep those
+            # events out of critical alerting once the current heap sample is
+            # healthy; sustained pressure still alerts after startup.
+            startup_heap_grace = 0 <= age_after_boot_s <= 180
+        critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
+        warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
+        if heap_bytes is not None:
+            # The binary sensors and diagnostics can arrive at the same second;
+            # a recent true event still matters even if a same-second false
+            # event or later diagnostic sample recovered. Alert on the
+            # transient for 30 min, then let the normal lifecycle resolve it.
+            if heap_bytes < 15.0:
+                critical_active = True
+                warning_active = False
+            elif heap_bytes < 30.0 and not critical_active:
+                critical_active = False
+                warning_active = True
+            elif heap_bytes >= 35.0 and heap_diag:
+                # Recovery is explicit once firmware publishes a false binary
+                # event after the last true/log event and the numeric heap
+                # sample is healthy after that false. This preserves real
+                # transients while preventing stale log lines from holding a
+                # critical alert open after observed recovery.
+                if (
+                    critical_active
+                    and last_critical_event_ts
+                    and heap_diag["ts"] > last_critical_event_ts
+                    and healthy_after_critical >= 2
+                    and not (
+                        heap_critical
+                        and heap_critical["latest_state"] is True
+                        and heap_critical["latest_ts"] >= last_critical_event_ts
+                    )
+                ):
+                    critical_active = False
+                if (
+                    warning_active
+                    and last_warning_event_ts
+                    and heap_diag["ts"] > last_warning_event_ts
+                    and healthy_after_warning >= 2
+                    and not (
+                        heap_warning
+                        and heap_warning["latest_state"] is True
+                        and heap_warning["latest_ts"] >= last_warning_event_ts
+                    )
+                ):
+                    warning_active = False
+            if critical_active and startup_heap_grace and heap_bytes >= 35.0:
+                critical_active = False
+        if critical_active:
+            alerts.append(
+                {
+                    "alert_type": "heap_pressure_critical",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "equipment.heap_pressure_critical",
+                    "zone": None,
+                    "message": "ESP32 heap pressure critical: free heap dropped below firmware critical threshold",
+                    "details": {
+                        "equipment": "heap_pressure_critical",
+                        "equipment_ts": heap_critical["latest_ts"].isoformat() if heap_critical else None,
+                        "last_true_ts": heap_critical["last_true_ts"].isoformat()
+                        if heap_critical and heap_critical["last_true_ts"]
+                        else None,
+                        "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
+                        "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
+                        "critical_logs_30m": critical_logs,
+                        "healthy_heap_samples_after_event": healthy_after_critical,
+                        "last_critical_log_ts": heap_log["last_critical_ts"].isoformat()
+                        if heap_log and heap_log["last_critical_ts"]
+                        else None,
+                        "last_critical_log_message": heap_log["last_critical_message"] if heap_log else None,
+                    },
+                    "metric_value": heap_bytes,
+                    "threshold_value": 15.0,
+                }
+            )
+        elif warning_active:
+            alerts.append(
+                {
+                    "alert_type": "heap_pressure_warning",
+                    "severity": "warning",
+                    "category": "system",
+                    "sensor_id": "equipment.heap_pressure_warning",
+                    "zone": None,
+                    "message": "ESP32 heap pressure warning: free heap stayed below firmware warning threshold",
+                    "details": {
+                        "equipment": "heap_pressure_warning",
+                        "equipment_ts": heap_warning["latest_ts"].isoformat() if heap_warning else None,
+                        "last_true_ts": heap_warning["last_true_ts"].isoformat()
+                        if heap_warning and heap_warning["last_true_ts"]
+                        else None,
+                        "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
+                        "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
+                        "warning_logs_30m": warning_logs,
+                        "healthy_heap_samples_after_event": healthy_after_warning,
+                        "last_warning_log_ts": heap_log["last_warning_ts"].isoformat()
+                        if heap_log and heap_log["last_warning_ts"]
+                        else None,
+                        "last_warning_log_message": heap_log["last_warning_message"] if heap_log else None,
+                    },
+                    "metric_value": heap_bytes,
+                    "threshold_value": 30.0,
+                }
+            )
+
+        # 14. Tunable zero-variance detection (Sprint 24.9, G-9).
+        # Firmware sprint-13 30-day scan flagged vpd_target_west pinned at
+        # 1.2 kPa across 33k samples — either fn_zone_vpd_targets has a
+        # west-zone default/bug or the west zone has no active crop. Catching
+        # this class of issue automatically (any dispatcher-owned tunable with
+        # stddev=0 over 7 days) surfaces the condition without waiting for
+        # an operator to notice.
+        active_crop_zones = {
+            str(r["zone"])
+            for r in await conn.fetch("SELECT DISTINCT zone FROM crops WHERE is_active = true AND zone IS NOT NULL")
+        }
+        zone_target_params = {
+            "vpd_target_south": "south",
+            "vpd_target_west": "west",
+            "vpd_target_east": "east",
+            "vpd_target_center": "center",
+        }
+        zero_var_params = [
+            "temp_low",
+            "temp_high",
+            "vpd_low",
+            "vpd_high",
+            *[param for param, zone in zone_target_params.items() if zone in active_crop_zones],
+        ]
+        for r in await conn.fetch(
+            """
+            SELECT parameter, count(*) AS n, stddev(value) AS sd, avg(value) AS mean
+              FROM setpoint_snapshot
+             WHERE parameter = ANY($1::text[])
+               AND ts > now() - interval '7 days'
+             GROUP BY parameter
+            HAVING count(*) > 100 AND (stddev(value) IS NULL OR stddev(value) = 0)
+            """,
+            list(zero_var_params),
+        ):
+            alerts.append(
+                {
+                    "alert_type": "tunable_zero_variance",
+                    "severity": "warning",
+                    "category": "system",
+                    "sensor_id": f"setpoint.{r['parameter']}",
+                    "zone": None,
+                    "message": (
+                        f"Tunable `{r['parameter']}` has zero variance over 7 days "
+                        f"(n={r['n']}, pinned at {float(r['mean']):.3f}). "
+                        "Check dispatcher source (band / zone function / crop profile)."
+                    ),
+                    "details": {
+                        "parameter": r["parameter"],
+                        "sample_count": int(r["n"]),
+                        "pinned_value": float(r["mean"]),
+                    },
+                    "metric_value": 0.0,
+                    "threshold_value": None,
+                }
+            )
+
         # Reactive trigger marker removed in Sprint 5 P6 — deviation monitor handles replans
 
         # ── Deduplicate + insert + resolve ──
@@ -883,7 +1499,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # open↔resolved every alert_monitor cycle.
         open_rows = await conn.fetch(
             "SELECT id, alert_type, severity, sensor_id, slack_ts FROM alert_log "
-            "WHERE disposition = 'open' AND source = 'system'"
+            "WHERE disposition IN ('open', 'acknowledged') AND resolved_at IS NULL AND source = 'system'"
         )
         open_keys = {(r["alert_type"], r["sensor_id"]): r for r in open_rows}
 
@@ -893,25 +1509,34 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         for a in alerts:
             key = (a["alert_type"], a["sensor_id"])
             if key in open_keys:
-                # F14 (Sprint 24.6): escalate severity in place. If the new
-                # envelope is critical and the open row is warning/info,
-                # upgrade and re-notify. Only planner_stale uses this path
-                # today; the pattern is general.
                 existing = open_keys[key]
-                if a["severity"] == "critical" and existing["severity"] != "critical":
-                    try:
-                        env = AlertEnvelope.model_validate(a)
-                    except ValidationError as e:
-                        log.error("alert escalation skipped (validation failed: %s): %r", e, a)
-                        continue
-                    await conn.execute(
-                        "UPDATE alert_log SET severity=$1, message=$2, details=$3, metric_value=$4 WHERE id=$5",
-                        env.severity,
-                        env.message,
-                        json.dumps(env.details) if env.details else None,
-                        env.metric_value,
-                        existing["id"],
-                    )
+                try:
+                    env = AlertEnvelope.model_validate(a)
+                except ValidationError as e:
+                    log.error("alert refresh skipped (validation failed: %s): %r", e, a)
+                    continue
+                is_escalation = env.severity == "critical" and existing["severity"] != "critical"
+                await conn.execute(
+                    """
+                    UPDATE alert_log
+                       SET severity=$1,
+                           message=$2,
+                           details=$3,
+                           metric_value=$4,
+                           threshold_value=$5
+                     WHERE id=$6
+                    """,
+                    env.severity,
+                    env.message,
+                    json.dumps(env.details) if env.details else None,
+                    env.metric_value,
+                    env.threshold_value,
+                    existing["id"],
+                )
+                # F14 (Sprint 24.6): escalate severity in place and re-notify.
+                # Same-severity updates intentionally stay quiet but keep DB
+                # context fresh for dashboards and deploy preflights.
+                if is_escalation:
                     if slack_token is None:
                         try:
                             slack_token = _load_token(SLACK_TOKEN_FILE)
@@ -1079,22 +1704,20 @@ def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: f
 
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     global _last_pushed
-    # On ESP32 reconnect, clear the cache so ALL values get re-pushed
+    # On ESP32 reconnect, rebuild the cache from firmware cfg_* readbacks.
+    # Values already confirmed by the device do not need to be pushed again;
+    # params without a readback still flow through as a conservative fallback.
     if shared.force_setpoint_push.is_set():
         shared.force_setpoint_push.clear()
         _last_pushed.clear()
-        log.info("Dispatcher: force-push — cleared _last_pushed cache (ESP32 reconnect)")
-    # Parameters driven by the target band curve, not the AI planner
-    BAND_DRIVEN = {
-        "temp_high",
-        "temp_low",
-        "vpd_high",
-        "vpd_low",
-        "vpd_target_south",
-        "vpd_target_west",
-        "vpd_target_east",
-        "vpd_target_center",
-    }
+        seeded = 0
+        for param, val in shared.cfg_readback.items():
+            _last_pushed[param] = float(val)
+            seeded += 1
+        log.info(
+            "Dispatcher: reconnect reconcile — seeded %d cfg readbacks; pushing drift/missing setpoints",
+            seeded,
+        )
     async with pool.acquire() as conn:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
@@ -1193,7 +1816,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         # Process planner setpoints (tactical knobs — skip band params already handled)
         for row in planned or []:
             param, planned_val = row["parameter"], row["value"]
-            if param.startswith("plan_") or param in BAND_DRIVEN:
+            if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue
 
             last = _last_pushed.get(param)
@@ -1220,7 +1843,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             "mister_center_penalty",
         }
         for param, val in changes:
-            if param in BAND_DRIVEN:
+            if param in BAND_DRIVEN_PARAMS:
                 source = "band"
             elif param in SAFETY_PARAMS and param not in planner_params:
                 source = "band"
@@ -1228,6 +1851,30 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source = "band"
             else:
                 source = "plan"
+            # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
+            # Defense-in-depth: MCP's PlanTransition.params already validates
+            # at write time, but a regression there would silently corrupt
+            # setpoint_changes. Drift-surface the mismatch here where it's
+            # cheap (one row at a time) vs. downstream where it blows up a
+            # grafana panel or planner scorecard.
+            try:
+                SetpointChange(ts=datetime.now(UTC), parameter=param, value=float(val), source=source)
+            except ValidationError as e:
+                log.error(
+                    "dispatcher setpoint_change skipped (validation failed: %s): param=%s value=%s source=%s",
+                    e,
+                    param,
+                    val,
+                    source,
+                )
+                continue
+            # Mark before INSERT so the LISTEN/NOTIFY real-time listener
+            # suppresses this dispatcher-origin row. The dispatcher performs
+            # its own retried batch push below; without this pre-mark, reconnect
+            # force-pushes duplicate every command and can drive ESP32 heap
+            # into critical-pressure transients.
+            shared.recently_pushed[param] = time.time()
+            shared.recently_pushed_values[param] = float(val)
             await conn.execute(
                 "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
                 param,
@@ -1256,14 +1903,12 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         log.info(
             "Dispatcher: pushed %d setpoint changes (%d band, %d plan)",
             len(changes),
-            sum(1 for p, _ in changes if p in BAND_DRIVEN),
-            sum(1 for p, _ in changes if p not in BAND_DRIVEN),
+            sum(1 for p, _ in changes if p in BAND_DRIVEN_PARAMS),
+            sum(1 for p, _ in changes if p not in BAND_DRIVEN_PARAMS),
         )
 
     # Direct ESP32 push via shared ingestor connection (non-blocking optimization)
     # Tier 1 #4: retry on failure, escalate to alert_log after exhausted attempts.
-    from ingestor import push_to_esp32
-
     esp32_changes = []
     for param, val in changes:
         if param.startswith("sw_"):
@@ -1299,16 +1944,23 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     "SELECT id FROM alert_log WHERE alert_type = 'esp32_push_failed' AND disposition = 'open' LIMIT 1"
                 )
                 if existing is None:
+                    alert = AlertEnvelope.model_validate(
+                        {
+                            "alert_type": "esp32_push_failed",
+                            "severity": "warning",
+                            "category": "system",
+                            "message": f"ESP32 direct push failed after 3 attempts: {last_err}",
+                            "details": {
+                                "error": str(last_err),
+                                "change_count": len(esp32_changes),
+                            },
+                        }
+                    )
                     await conn.execute(
                         "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
                         "VALUES ('esp32_push_failed', 'warning', 'system', $1, $2, 'dispatcher')",
-                        f"ESP32 direct push failed after 3 attempts: {last_err}",
-                        json.dumps(
-                            {
-                                "error": str(last_err),
-                                "change_count": len(esp32_changes),
-                            }
-                        ),
+                        alert.message,
+                        json.dumps(alert.details),
                     )
 
     (STATE_DIR / "setpoint-dispatcher.log").touch()
@@ -1526,8 +2178,10 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
                 cycles_fan1=$14, cycles_fan2=$15, cycles_heat1=$16, cycles_heat2=$17,
                 cycles_fog=$18, cycles_vent=$19,
                 cycles_grow_light=$20,
-                kwh_estimated=$21, therms_estimated=$22,
-                cost_electric=$23, cost_gas=$24, cost_water=$25, cost_total=$26
+                cycles_mister_south=$21, cycles_mister_west=$22, cycles_mister_center=$23,
+                cycles_drip_wall=$24, cycles_drip_center=$25,
+                kwh_estimated=$26, therms_estimated=$27,
+                cost_electric=$28, cost_gas=$29, cost_water=$30, cost_total=$31
             WHERE date = $1
         """,
             yesterday,
@@ -1550,12 +2204,35 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
             rt.get("fog", (0, 0))[1],
             rt.get("vent", (0, 0))[1],
             rt.get("grow_light_main", (0, 0))[1] + rt.get("grow_light_grow", (0, 0))[1],
+            rt.get("mister_south", (0, 0))[1],
+            rt.get("mister_west", (0, 0))[1],
+            rt.get("mister_center", (0, 0))[1],
+            rt.get("drip_wall", (0, 0))[1],
+            rt.get("drip_center", (0, 0))[1],
             round(kwh, 2),
             round(therms, 3),
             ce,
             cg,
             cw,
             ct,
+        )
+        await conn.execute(
+            """
+            UPDATE daily_summary ds
+               SET kwh_total = ed.measured_kwh::double precision,
+                   peak_kw = (ed.peak_watts / 1000.0)::double precision,
+                   cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
+                   cost_total = round((
+                       COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
+                       + COALESCE(ds.cost_gas::numeric, 0)
+                       + COALESCE(ds.cost_water::numeric, 0)
+                   ), 2)::double precision
+              FROM v_energy_daily ed
+             WHERE ds.date = $1
+               AND ed.date = ds.date
+               AND ed.measured_kwh IS NOT NULL
+            """,
+            yesterday,
         )
 
     log.info("Daily summary (%s): %.1f kWh, %.3f therms, $%.2f", yesterday, kwh, therms, ct)
@@ -1824,11 +2501,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT MIN(temp_avg) AS temp_min, MAX(temp_avg) AS temp_max, AVG(temp_avg) AS temp_avg,
                    MIN(vpd_avg) AS vpd_min, MAX(vpd_avg) AS vpd_max, AVG(vpd_avg) AS vpd_avg,
                    MIN(rh_avg) AS rh_min, MAX(rh_avg) AS rh_max, AVG(rh_avg) AS rh_avg,
+                   MIN(outdoor_temp_f) AS outdoor_temp_min, MAX(outdoor_temp_f) AS outdoor_temp_max,
                    AVG(co2_ppm) AS co2_avg, MAX(dli_today) AS dli_final,
                    MAX(mister_water_today) AS mister_water_gal
             FROM climate
-            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND temp_avg IS NOT NULL
         """,
             today,
@@ -1841,7 +2519,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT parameter, value, ts
             FROM setpoint_changes
             WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
-              AND ts <= ($1::date + 1) AT TIME ZONE 'America/Denver'
+              AND ts <= ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND CASE
                   WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
                   WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
@@ -1868,8 +2546,8 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         readings = await conn.fetch(
             """
             SELECT ts, temp_avg, vpd_avg FROM climate
-            WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
+            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
               AND temp_avg IS NOT NULL
             ORDER BY ts
             """,
@@ -1945,11 +2623,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         rt_rows = await conn.fetch(
             """
             WITH day_bounds AS (
-                SELECT $1::date AT TIME ZONE 'America/Denver' AS day_start,
-                       ($1::date + 1) AT TIME ZONE 'America/Denver' AS day_end
+                SELECT $1::date::timestamp AT TIME ZONE 'America/Denver' AS day_start,
+                       ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver' AS day_end
             ),
             transitions AS (
                 SELECT equipment, ts, state,
+                       lag(state) OVER (PARTITION BY equipment ORDER BY ts) AS prev_state,
                        lead(ts) OVER (PARTITION BY equipment ORDER BY ts) AS next_ts
                 FROM equipment_state, day_bounds
                 WHERE ts >= day_bounds.day_start AND ts < day_bounds.day_end
@@ -1958,7 +2637,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             SELECT equipment,
                    round(sum(extract(epoch FROM
                        coalesce(next_ts, (SELECT day_end FROM day_bounds)) - ts
-                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes
+                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes,
+                   count(*) FILTER (
+                       WHERE state IS TRUE
+                         AND COALESCE(prev_state, FALSE) IS FALSE
+                   ) AS cycles
             FROM transitions
             GROUP BY equipment
         """,
@@ -1966,6 +2649,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             list(_RT_EQUIP),
         )
         rt = {r["equipment"]: float(r["on_minutes"] or 0) for r in rt_rows}
+        cycles = {r["equipment"]: int(r["cycles"] or 0) for r in rt_rows}
 
         # Energy from runtimes
         kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
@@ -1975,10 +2659,14 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         water_gal = (
             await conn.fetchval(
                 """
-            SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
-            FROM climate WHERE ts >= $1::date AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1) AT TIME ZONE 'America/Denver'
-              AND water_total_gal > 0
+            SELECT COALESCE(
+                (SELECT used_gal FROM v_water_daily WHERE day::date = $1 ORDER BY day DESC LIMIT 1),
+                (SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
+                   FROM climate
+                  WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+                    AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
+                    AND water_total_gal > 0)
+            )
         """,
                 today,
             )
@@ -1998,23 +2686,30 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             UPDATE daily_summary SET
                 temp_min=$2, temp_max=$3, temp_avg=$4,
                 vpd_min=$5, vpd_max=$6, vpd_avg=$7,
-                rh_min=$8, rh_max=$9,
-                co2_avg=$10, dli_final=$11,
-                stress_hours_heat=$12, stress_hours_vpd_high=$13,
-                stress_hours_cold=$14, stress_hours_vpd_low=$15,
-                runtime_fan1_min=$16, runtime_fan2_min=$17,
-                runtime_heat1_min=$18, runtime_heat2_min=$19,
-                runtime_fog_min=$20, runtime_vent_min=$21,
-                runtime_grow_light_min=$22,
-                runtime_mister_south_h=$23, runtime_mister_west_h=$24, runtime_mister_center_h=$25,
-                runtime_drip_wall_h=$26, runtime_drip_center_h=$27,
-                kwh_estimated=$28, therms_estimated=$29,
-                cost_electric=$30, cost_gas=$31, cost_water=$32, cost_total=$33,
-                water_used_gal=$34, mister_water_gal=$35,
-                min_dp_margin_f=$36, dp_risk_hours=$37,
-                compliance_pct=$38,
-                temp_compliance_pct=$39,
-                vpd_compliance_pct=$40
+                rh_min=$8, rh_max=$9, rh_avg=$10,
+                co2_avg=$11, dli_final=$12,
+                outdoor_temp_min=$13, outdoor_temp_max=$14,
+                stress_hours_heat=$15, stress_hours_vpd_high=$16,
+                stress_hours_cold=$17, stress_hours_vpd_low=$18,
+                runtime_fan1_min=$19, runtime_fan2_min=$20,
+                runtime_heat1_min=$21, runtime_heat2_min=$22,
+                runtime_fog_min=$23, runtime_vent_min=$24,
+                runtime_grow_light_min=$25,
+                runtime_mister_south_h=$26, runtime_mister_west_h=$27, runtime_mister_center_h=$28,
+                runtime_drip_wall_h=$29, runtime_drip_center_h=$30,
+                kwh_estimated=$31, therms_estimated=$32,
+                cost_electric=$33, cost_gas=$34, cost_water=$35, cost_total=$36,
+                water_used_gal=$37, mister_water_gal=$38,
+                min_dp_margin_f=$39, dp_risk_hours=$40,
+                compliance_pct=$41,
+                temp_compliance_pct=$42,
+                vpd_compliance_pct=$43,
+                cycles_mister_south=$44,
+                cycles_mister_west=$45,
+                cycles_mister_center=$46,
+                cycles_drip_wall=$47,
+                cycles_drip_center=$48,
+                captured_at=now()
             WHERE date = $1
         """,
             today,
@@ -2026,8 +2721,11 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             climate["vpd_avg"] if climate else None,
             climate["rh_min"] if climate else None,
             climate["rh_max"] if climate else None,
+            climate["rh_avg"] if climate else None,
             climate["co2_avg"] if climate else None,
             climate["dli_final"] if climate else None,
+            climate["outdoor_temp_min"] if climate else None,
+            climate["outdoor_temp_max"] if climate else None,
             float(stress["heat"]) if stress else 0,
             float(stress["vpd_high"]) if stress else 0,
             float(stress["cold"]) if stress else 0,
@@ -2057,6 +2755,30 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             compliance_pct,
             temp_compliance_pct,
             vpd_compliance_pct,
+            cycles.get("mister_south", 0),
+            cycles.get("mister_west", 0),
+            cycles.get("mister_center", 0),
+            cycles.get("drip_wall", 0),
+            cycles.get("drip_center", 0),
+        )
+        await conn.execute(
+            """
+            UPDATE daily_summary ds
+               SET kwh_total = ed.measured_kwh::double precision,
+                   peak_kw = (ed.peak_watts / 1000.0)::double precision,
+                   cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
+                   cost_total = round((
+                       COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
+                       + COALESCE(ds.cost_gas::numeric, 0)
+                       + COALESCE(ds.cost_water::numeric, 0)
+                   ), 2)::double precision,
+                   captured_at = now()
+              FROM v_energy_daily ed
+             WHERE ds.date = $1
+               AND ed.date = ds.date
+               AND ed.measured_kwh IS NOT NULL
+            """,
+            today,
         )
 
     log.info(
@@ -2073,7 +2795,12 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
 
 from astral import LocationInfo
 from astral.sun import sun as _sun
-from iris_planner import gather_context, send_to_iris
+from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
+from planner_routing import (
+    SeverityContext,
+    classify_severity,
+    pick_instance,
+)
 
 _LOCATION = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
 _DENVER = ZoneInfo("America/Denver")
@@ -2156,7 +2883,12 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
     """F14 (Sprint 24.6): persist a send_to_iris result to plan_delivery_log
     for later delivery→plan correlation. Validated through PlanDeliveryLogRow
     before INSERT; a ValidationError here means an unexpected event_type
-    (not in the Literal) or wake_mode — safer to drop than bleed bad data."""
+    (not in the Literal) or wake_mode — safer to drop than bleed bad data.
+
+    Sprint 24.9 (G-7): honor an explicit `status` in the result dict when
+    present (e.g., 'delivery_failed' from the context-gather stub path).
+    When absent, the DB default 'pending' applies — unchanged from before.
+    """
     row = {
         "event_type": result["event_type"],
         "event_label": result.get("event_label"),
@@ -2170,28 +2902,100 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
     except ValidationError as e:
         log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
         return
+    explicit_status = result.get("status")
+    if explicit_status is None and result.get("delivered") is False:
+        explicit_status = "delivery_failed"
+    # Contract v1.4 §2.D — both columns now populated on every INSERT so
+    # correlation queries can match deliveries to plans by uuid (not
+    # just the 2h time-window fallback in _resolve_delivery_log).
+    trigger_id = result.get("trigger_id")
+    instance = result.get("instance")
     async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO plan_delivery_log
-              (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            row["event_type"],
-            row["event_label"],
-            row["session_key"],
-            row["wake_mode"],
-            row["gateway_status"],
-            row["gateway_body"],
-        )
+        if explicit_status:
+            await conn.execute(
+                """
+                INSERT INTO plan_delivery_log
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status, trigger_id, instance)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9)
+                """,
+                row["event_type"],
+                row["event_label"],
+                row["session_key"],
+                row["wake_mode"],
+                row["gateway_status"],
+                row["gateway_body"],
+                explicit_status,
+                trigger_id,
+                instance,
+            )
+        else:
+            await conn.execute(
+                """
+                INSERT INTO plan_delivery_log
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, trigger_id, instance)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
+                """,
+                row["event_type"],
+                row["event_label"],
+                row["session_key"],
+                row["wake_mode"],
+                row["gateway_status"],
+                row["gateway_body"],
+                trigger_id,
+                instance,
+            )
 
 
-async def _deliver_and_log(pool: asyncpg.Pool, event_type: str, label: str, context: str) -> None:
+async def _deliver_and_log(
+    pool: asyncpg.Pool,
+    event_type: str,
+    label: str,
+    context: str,
+    instance: str = "opus",
+) -> None:
     """Call send_to_iris in the executor and persist the outcome to
     plan_delivery_log. Called from every milestone/forecast/deviation path
-    so F14 correlation is complete regardless of trigger source."""
+    so F14 correlation is complete regardless of trigger source.
+
+    Sprint 24.9 (G-7): if context gathering failed upstream, skip the POST
+    entirely and log a plan_delivery_log row with status='delivery_failed'.
+    Previously the failure string was spliced into the prompt and Iris
+    received gibberish context — the 2026-04-19 incident had gather failures
+    that still produced 200 OK dispatches but no useful plan.
+    """
+    if context == CONTEXT_GATHER_FAILED_SENTINEL:
+        log.warning(
+            "Skipping %s/%s dispatch: context gathering failed (see alert_log plan_context_failed)",
+            event_type,
+            label,
+        )
+        # Write a stub plan_delivery_log row so the outage is visible in
+        # operational queries alongside successful deliveries. Generate a
+        # trigger_id even for the sentinel path so context-gather failures
+        # are countable and individually traceable.
+        stub_result = {
+            "delivered": False,
+            "event_type": event_type,
+            "event_label": label,
+            "session_key": None,
+            "wake_mode": None,
+            "gateway_status": None,
+            "gateway_body": "context_gather_failed",
+            "status": "delivery_failed",
+            "trigger_id": str(uuid.uuid4()),
+            "instance": instance,
+        }
+        await _log_plan_delivery(pool, stub_result)
+        return
+
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, send_to_iris, event_type, label, context)
+    # Threaded executor + kwargs: use a lambda so `instance` propagates
+    # through to send_to_iris cleanly (run_in_executor doesn't accept
+    # kwargs directly).
+    result = await loop.run_in_executor(
+        None,
+        lambda: send_to_iris(event_type, label, context, instance=instance),
+    )
     await _log_plan_delivery(pool, result)
 
 
@@ -2200,15 +3004,43 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
     a plan_journal entry created after it and within a 2-hour window. Updates
     `resulting_plan_id` + `plan_written_at`. Bounded to the last 6 hours and
     events that can produce plans (SUNRISE/SUNSET/DEVIATION always do;
-    TRANSITION/FORECAST only when Iris chooses to update)."""
+    TRANSITION/FORECAST only when Iris chooses to update).
+
+    Sprint 24.9 (G-3): also set status='plan_written' so consumers querying
+    `SELECT status, count(*)` see consistent state. Contract v1.4 §2.D
+    defines status as the authoritative lifecycle column; resulting_plan_id
+    is the join key. Keep them in sync.
+    """
     async with pool.acquire() as conn:
+        # Contract v1.4 primary path: exact UUID correlation. This is the
+        # only reliable join when local/opus may both receive routine
+        # triggers inside the old 2h fallback window.
         await conn.execute(
             """
             UPDATE plan_delivery_log pdl
                SET resulting_plan_id = pj.plan_id,
-                   plan_written_at   = pj.created_at
+                   plan_written_at   = pj.created_at,
+                   status            = 'plan_written'
               FROM plan_journal pj
              WHERE pdl.resulting_plan_id IS NULL
+               AND pdl.status = 'pending'
+               AND pdl.gateway_status BETWEEN 200 AND 299
+               AND pdl.trigger_id IS NOT NULL
+               AND pj.trigger_id = pdl.trigger_id
+            """,
+        )
+        # Legacy fallback for pre-v1.4 rows or planner cycles where Iris did
+        # not pass the audit kwargs through to set_plan().
+        await conn.execute(
+            """
+            UPDATE plan_delivery_log pdl
+               SET resulting_plan_id = pj.plan_id,
+                   plan_written_at   = pj.created_at,
+                   status            = 'plan_written'
+              FROM plan_journal pj
+             WHERE pdl.resulting_plan_id IS NULL
+               AND pdl.status = 'pending'
+               AND pdl.gateway_status BETWEEN 200 AND 299
                AND pdl.delivered_at > now() - interval '6 hours'
                AND pj.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
                AND pj.created_at = (
@@ -2253,10 +3085,15 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
 
             log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
 
-            # Gather context and send to Iris (blocking — runs in executor)
+            # Gather context and send to Iris (blocking — runs in executor).
+            # SUNRISE/SUNSET/MIDNIGHT always route to opus per contract;
+            # TRANSITION routes to local. classify_severity is a no-op for
+            # those types so SeverityContext stays default.
             loop = asyncio.get_event_loop()
             context = await loop.run_in_executor(None, gather_context)
-            await _deliver_and_log(pool, event_type, label, context)
+            severity = classify_severity(event_type, SeverityContext())
+            instance = pick_instance(event_type, severity)
+            await _deliver_and_log(pool, event_type, label, context, instance=instance)
 
     # ── 3. Check for forecast changes ──
     global _last_forecast_fetch
@@ -2269,7 +3106,19 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("New forecast detected (fetched_at=%s), notifying Iris", latest_fetch)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await _deliver_and_log(pool, "FORECAST", "New forecast data", context)
+                # Severity inputs from latest forecast vs previous (Δvpd, Δtemp).
+                # Until those deltas are wired in here, classify_severity returns
+                # 'minor' so FORECAST routes to local — the cheap peer handles
+                # routine forecast refreshes; opus only fires on majors.
+                severity = classify_severity("FORECAST", SeverityContext())
+                instance = pick_instance("FORECAST", severity)
+                await _deliver_and_log(
+                    pool,
+                    "FORECAST",
+                    "New forecast data",
+                    context,
+                    instance=instance,
+                )
             _last_forecast_fetch = latest_fetch
 
     # ── 4. Check for deviations (route to Iris instead of trigger file) ──
@@ -2287,7 +3136,24 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 log.info("Deviation trigger found, routing to Iris: %s", reason)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
-                await _deliver_and_log(pool, "DEVIATION", deviations_str, context)
+                # Pull severity hints from the trigger payload if present.
+                # max_abs_deviation comes from alert_monitor's deviation
+                # writer (alert_monitor stamps it on the trigger when the
+                # band excursion exceeds 0.15 normalized). Falling back to
+                # 'minor' routes to local; majors escalate to opus.
+                severity_ctx = SeverityContext(
+                    max_abs_deviation=trigger_data.get("max_abs_deviation"),
+                    consecutive_deviation_cycles=trigger_data.get("consecutive_cycles"),
+                )
+                severity = classify_severity("DEVIATION", severity_ctx)
+                instance = pick_instance("DEVIATION", severity)
+                await _deliver_and_log(
+                    pool,
+                    "DEVIATION",
+                    deviations_str,
+                    context,
+                    instance=instance,
+                )
 
                 trigger_file.unlink(missing_ok=True)
             except Exception as e:
@@ -2404,9 +3270,10 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
     pass, confirmed setpoints would leave zombie open alerts forever.
     """
     async with pool.acquire() as conn:
-        # Pass 1: auto-resolve open alerts whose underlying setpoint_changes
-        # row is now confirmed_at NOT NULL. Matches on sensor_id's `setpoint.*`
-        # suffix back to the parameter name.
+        # Pass 1: auto-resolve unresolved alerts whose underlying
+        # setpoint_changes row is now confirmed_at NOT NULL. Acknowledged
+        # alerts still block deploy preflight until resolved_at is set.
+        # Matches on sensor_id's `setpoint.*` suffix back to the parameter.
         resolved = await conn.fetch(
             """
             UPDATE alert_log al
@@ -2416,35 +3283,66 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    resolution  = 'auto-resolved: confirmation landed'
               FROM (
                   SELECT DISTINCT ON (sc.parameter)
-                         sc.parameter, sc.confirmed_at
+                         sc.parameter, sc.ts, sc.confirmed_at
                     FROM setpoint_changes sc
                    WHERE sc.confirmed_at IS NOT NULL
-                     AND sc.ts > now() - interval '2 hours'
                    ORDER BY sc.parameter, sc.ts DESC
-              ) confirmed
+             ) confirmed
              WHERE al.alert_type = 'setpoint_unconfirmed'
-               AND al.disposition = 'open'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
                AND al.source = 'ingestor'
                AND al.sensor_id = 'setpoint.' || confirmed.parameter
+               AND confirmed.ts >= COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
             RETURNING al.id
             """,
         )
         if resolved:
             log.info("setpoint_unconfirmed: auto-resolved %d alert(s) after confirmation", len(resolved))
 
+        superseded = await conn.fetch(
+            """
+            UPDATE alert_log al
+               SET disposition = 'resolved',
+                   resolved_at = now(),
+                   resolved_by = 'system',
+                   resolution  = 'auto-resolved: superseded by newer setpoint'
+             WHERE al.alert_type = 'setpoint_unconfirmed'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
+               AND al.source = 'ingestor'
+               AND EXISTS (
+                   SELECT 1
+                     FROM setpoint_changes newer
+                   WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
+                      AND newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
+               )
+            RETURNING al.id
+            """,
+        )
+        if superseded:
+            log.info("setpoint_unconfirmed: auto-resolved %d superseded alert(s)", len(superseded))
+
         # Pass 2: scan for still-unconfirmed rows that need alerting.
         rows = await conn.fetch(
             """
-            SELECT parameter,
-                   value,
-                   ts,
-                   EXTRACT(EPOCH FROM (now() - ts))::int AS age_s
-              FROM setpoint_changes
-             WHERE confirmed_at IS NULL
-               AND ts < now() - interval '5 minutes'
-               AND ts > now() - interval '1 hour'
-               AND parameter = ANY($1::text[])
-             ORDER BY ts DESC
+            SELECT sc.parameter,
+                   sc.value,
+                   sc.ts,
+                   EXTRACT(EPOCH FROM (now() - sc.ts))::int AS age_s
+              FROM setpoint_changes sc
+             WHERE sc.confirmed_at IS NULL
+               AND sc.ts < now() - interval '5 minutes'
+               AND sc.ts > now() - interval '1 hour'
+               AND sc.parameter = ANY($1::text[])
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM setpoint_changes newer
+                    WHERE newer.parameter = sc.parameter
+                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                      AND newer.ts > sc.ts
+               )
+             ORDER BY sc.ts DESC
             """,
             _READBACKABLE_PARAMS,
         )
@@ -2466,53 +3364,69 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
             existing = await conn.fetchval(
                 "SELECT id FROM alert_log "
                 "WHERE alert_type='setpoint_unconfirmed' "
-                "  AND disposition='open' "
+                "  AND resolved_at IS NULL "
                 "  AND sensor_id=$1",
                 f"setpoint.{r['parameter']}",
             )
             if existing is not None:
                 # Already alerted — escalate severity only if crossed the 15-min threshold
                 if severity == "critical":
-                    await conn.execute(
-                        "UPDATE alert_log SET severity='critical', message=$2, details=$3 WHERE id=$1",
-                        existing,
-                        (
-                            f"Setpoint unconfirmed >15 min: {r['parameter']}={float(r['value']):.3f} "
-                            f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
-                            f"{last_cfg if last_cfg is not None else '(none)'}"
-                        ),
-                        json.dumps(
-                            {
+                    alert = AlertEnvelope.model_validate(
+                        {
+                            "alert_type": "setpoint_unconfirmed",
+                            "severity": severity,
+                            "category": "system",
+                            "sensor_id": f"setpoint.{r['parameter']}",
+                            "message": (
+                                f"Setpoint unconfirmed >15 min: {r['parameter']}={float(r['value']):.3f} "
+                                f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
+                                f"{last_cfg if last_cfg is not None else '(none)'}"
+                            ),
+                            "details": {
                                 "parameter": r["parameter"],
                                 "requested_value": float(r["value"]),
                                 "last_cfg_readback": last_cfg,
                                 "age_s": age_s,
                                 "pushed_at": r["ts"].isoformat(),
-                            }
-                        ),
+                            },
+                        }
+                    )
+                    await conn.execute(
+                        "UPDATE alert_log SET severity='critical', message=$2, details=$3 WHERE id=$1",
+                        existing,
+                        alert.message,
+                        json.dumps(alert.details),
                     )
                 continue
 
-            await conn.execute(
-                "INSERT INTO alert_log "
-                "(alert_type, severity, category, sensor_id, message, details, source) "
-                "VALUES ('setpoint_unconfirmed', $1, 'system', $2, $3, $4::jsonb, 'ingestor')",
-                severity,
-                f"setpoint.{r['parameter']}",
-                (
-                    f"Setpoint unconfirmed >5 min: {r['parameter']}={float(r['value']):.3f} "
-                    f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
-                    f"{last_cfg if last_cfg is not None else '(none)'}"
-                ),
-                json.dumps(
-                    {
+            alert = AlertEnvelope.model_validate(
+                {
+                    "alert_type": "setpoint_unconfirmed",
+                    "severity": severity,
+                    "category": "system",
+                    "sensor_id": f"setpoint.{r['parameter']}",
+                    "message": (
+                        f"Setpoint unconfirmed >5 min: {r['parameter']}={float(r['value']):.3f} "
+                        f"pushed at {r['ts']:%H:%M:%S} UTC, last cfg readback "
+                        f"{last_cfg if last_cfg is not None else '(none)'}"
+                    ),
+                    "details": {
                         "parameter": r["parameter"],
                         "requested_value": float(r["value"]),
                         "last_cfg_readback": last_cfg,
                         "age_s": age_s,
                         "pushed_at": r["ts"].isoformat(),
-                    }
-                ),
+                    },
+                }
+            )
+            await conn.execute(
+                "INSERT INTO alert_log "
+                "(alert_type, severity, category, sensor_id, message, details, source) "
+                "VALUES ('setpoint_unconfirmed', $1, 'system', $2, $3, $4::jsonb, 'ingestor')",
+                alert.severity,
+                alert.sensor_id,
+                alert.message,
+                json.dumps(alert.details),
             )
 
         log.info("Setpoint confirmation monitor: %d unconfirmed row(s)", len(rows))

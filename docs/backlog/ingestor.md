@@ -6,7 +6,29 @@ Full delivery plan with reasoning, cross-agent branch survey, and risk register 
 
 ## In flight
 
-Nothing. Sprint 24 + hotfix + alignment all shipped and live-gate-green as of 2026-04-19 12:54. Deploy path: `main → /mnt/iris/verdify → systemd restart`. See "Recent history" for commit chain.
+**Sprint 25.1 — Operational recovery** (`ingestor/sprint-25.1-operational-recovery`) is closing the 2026-04-27 full-review findings:
+
+- [x] Branch rebased onto current `origin/main` so topology/tunable registry/heap-pressure alignment is present.
+- [x] `data_gaps` now measures actual disconnect→reconnect windows, not previous-connect→current-connect uptime.
+- [x] Direct ESP32 push moved out of `ingestor.py` to avoid split module state under `python ingestor.py`; echo suppression now uses `shared.recently_pushed`.
+- [x] Ingestor modules use repo-relative schema imports instead of hardcoding `/mnt/iris/verdify`.
+- [x] Regression coverage added for push helper wiring, gap timestamp source, import path, and live active-plan pushability.
+- [x] Gates passed before deploy: `make lint`; `pytest --import-mode=importlib verdify_schemas/tests/test_drift_guards.py`; `make test` (`248 passed, 1 xfailed`).
+
+Deploy path remains `main → /mnt/iris/verdify → systemd restart`, followed by a 5+ minute journal tail and DB freshness checks.
+
+**Launch evidence support** (coordinated through [`docs/backlog/launch.md`](launch.md)).
+
+- [x] **I-L0.2 Live proof metrics source.** Coordinator API now exposes stable launch proof metrics from DB-backed telemetry and scorecard sources.
+- [x] **I-L0.11 Public metrics/freshness contract.** `/api/v1/public/home-metrics` and `/api/v1/public/data-health` include counters, latest plan/score, climate freshness, active alerts, and `ok|warn|fail` data-health status.
+- [x] **I-L0.4 Plan delta support.** Daily-plan generator now computes changed secondary parameters from waypoint/default deltas while preserving the full raw set behind details.
+- [x] **I-L1.4 Outage evidence query.** Evidence page now publishes the April 22-25 zero-plan/VPD-stress narrative with plan gaps, stress hours, and compliance values.
+- [x] **I-L1.5 Public sample dataset export.** `scripts/export-public-sample-dataset.sh` publishes scrubbed 7-day climate and 30-day plan-outcome CSVs under `/static/data/`, excluding local IPs, device IDs, trigger UUIDs, alert channels, hostnames, and raw sensor entity names.
+- [x] **I-L0.7 Proof freshness gates.** Public metrics include latest climate/plan ages so web can label stale proof instead of silently showing old values.
+- [x] **I-L1.8 Lesson duplicate support.** Implemented in the web generator as normalized lesson signatures; no ingestor DB change required for launch.
+- [ ] **I-L1.11 Baseline vs Iris metrics.** Provide a stable query or view for baseline/current comparison: temp compliance, VPD compliance, stress hours/day, water/day, energy/day, cost/day, and planner score. Coordinator/Jason choose the baseline period.
+- [ ] **I-L2.7 Daily lifecycle artifact data.** Export one representative lifecycle bundle: forecast rows, plan JSON/tunables, telemetry window, scorecard row, and lessons generated from the outcome.
+- [ ] **I-L2.8 Crop-steering roadmap data gaps.** Track missing substrate, pH/EC/DO, DLI correction, and shade-cloth automation signals as explicit data-readiness gaps rather than implied capabilities.
 
 ## Findings from 2026-04-18 scope review
 
@@ -22,7 +44,7 @@ Seven concrete gaps from the initial scope review; one (F9) surfaced when topolo
 - **F9 — LOW (new, surfaced by topology):** `alert_log.zone_id` column exists (topology migration 086) and `AlertEnvelope.zone_id: int | None` is wired, but `ingestor/tasks.py::alert_monitor` never populates it — every built alert has `"zone": None` and implicitly `zone_id=None`. No data-loss risk (column is nullable), but an opportunity for richer alert routing once the topology tables are populated. Sprint 27+ candidate.
 - **F10 — MEDIUM (surfaced by firmware's live-controller report):** `mister_state` + `mister_selected_zone` emitted as numeric template sensors (state_class=measurement), not text — `on_state_change` sensor branch had no STATE_MAP check so both routes went stale 27+ days. ✅ Sprint 24-alignment (`3b1d93a`) — added `_MISTER_STATE_NAMES` + `_MISTER_ZONE_NAMES` decoder tables, new branch in sensor path decodes codes (0=WATCH, 1=S1, 2=S2, 3=FOG; 0=none, 1=south, 2=west, 3=center) → routes to `system_state`. Live gate exercised WATCH/S1/S2 + none/south/west/center.
 - **F11 — MEDIUM (firmware sprint-2 gap):** `mister_fairness_overrides_today` firmware sensor had no DB home → 7-day watchdog validation would require journalctl scraping. ✅ Sprint 24-alignment — migration `091-fairness-counter.sql` adds `daily_summary.mister_fairness_overrides_today`, schema + entity_map + `write_daily_summary` INSERT all wired. First midnight snapshot ~00:05 Apr 20 will land today's count.
-- **F12 — LOW (documented, not fixed):** `v_stress_hours_today` uses `2.0/60.0` per-row coefficient assuming 30s climate cadence; actual cadence is 60s → 2x over-reporting. Fix is one-character view update but planner scorecard is calibrated to current values; coordinated flip required. Logged for cross-cutting backlog (needs coordinator + genai handshake).
+- **F12 — LOW:** `v_stress_hours_today` fixed by coordinator migration 095. The view is now time-weighted from actual sample deltas instead of assuming a fixed 2-minute cadence.
 - **F13 — LOW (surfaced by Sprint 24-alignment live gate):** `setpoint_confirmation_monitor` has no mechanism to age out "pre-readback-era" unconfirmed rows — old `setpoint_changes` pushed before firmware's cfg sensors existed never confirm and periodically re-fire alerts (observed: 1 stale critical for `vpd_target_south=1.530` from 18:04:33 UTC, before firmware sprint-3). Fix: age out unconfirmed rows >N hours old OR supersede: when newer same-param row confirms, backdate older. Sprint 27 candidate.
 
 F8 (staleness window in `write_climate`) investigated and dismissed as correct.
@@ -56,9 +78,9 @@ Closed F1/F2/F3/F4/F6/F7. Hotfix `4a89844` closed surface bugs in topology's `Eq
 
 Scope reduced from the original plan: `EquipmentStateEvent.equipment: EquipmentId` was delivered by topology Sprint 22 upstream. Sprint 25 now covers the alert union only.
 
-- [ ] **Schema PR (coordinator, blocking)** Split `AlertEnvelope` into discriminated union keyed by `alert_type`. 13 types today: `sensor_offline`, `relay_stuck`, `vpd_stress`, `temp_safety`, `vpd_extreme`, `leak_detected`, `esp32_reboot`, `planner_stale`, `safety_invalid`, `heat_manual_override`, `soil_sensor_offline`, `heat_staging_inversion`, `setpoint_unconfirmed`. Each gets a typed `*Details` subtype with `extra="forbid"`.
-- [ ] **S25.1** Migrate `alert_monitor` (`tasks.py::alert_monitor`) to per-type typed builders
-- [ ] **S25.2** Migrate `setpoint_confirmation_monitor` alert build
+- [x] **Schema PR (coordinator, blocking)** Split `AlertEnvelope` into discriminated union keyed by `alert_type`. Delivered as a backward-compatible schema wrapper over a tagged per-alert registry; current coverage is 25 alert types, including later planner/heap/firmware additions beyond the original 13-type spec. Each `*Details` subtype uses `extra="forbid"` and drift tests scan current write paths for unregistered alert types.
+- [x] **S25.1** Migrate `alert_monitor` (`tasks.py::alert_monitor`) to per-type typed builders. The monitor's existing envelope validation now dispatches through the typed registry, so every active alert detail payload is validated before insert/update without changing runtime behavior.
+- [x] **S25.2** Migrate `setpoint_confirmation_monitor` alert build. Creation and escalation now validate through `AlertEnvelope` before writing `setpoint_unconfirmed` details.
 - [ ] **S25.3** Migrate `forecast_deviation_check` trigger write into unified `AlertEnvelope` path (supersedes the cross-cutting "deviation → structured alerts" item)
 
 **Milestone M2:** alerts are type-checked at build time. Deviation monitor uses the unified alert path.
@@ -116,7 +138,7 @@ All Sprint 24 blockers cleared and applied.
 ## Candidate / Sprint 27+ (not yet committed)
 
 - **F9 follow-up — alert `zone_id` population.** `alert_log.zone_id` (topology migration 086) is NULL on every ingestor-emitted alert today. Once topology tables are populated downstream, `alert_monitor` can resolve sensor/equipment → zone and tag alerts. Touches `tasks.py::alert_monitor` + lightweight `zone_of(sensor_id)` helper. Low priority until web/genai consume `zone_id`.
-- **F12 — `v_stress_hours_today` coefficient fix.** One-char view change (`2.0/60.0` → `1.0/60.0`). Needs coordinator + genai handshake because planner scorecard is calibrated to the current 2x-reporting values.
+- **F12 — `v_stress_hours_today` semantics follow-up.** The fixed view is time-weighted by sample deltas. Remaining work, if any, is only to validate planner thresholds after several days of lower stress-hour values.
 - **F13 — age out or supersede stale `setpoint_unconfirmed` alerts.** When a newer same-param `setpoint_changes` row confirms, either backdate older rows' `confirmed_at` or filter them from `setpoint_confirmation_monitor`'s candidate set so pre-readback-era rows stop re-firing alerts.
 - Replace `docker exec verdify-timescaledb` wrappers in smoke tests with asyncpg (cross-cutting item; ~15s off test suite).
 - Dispatcher self-health heartbeat — emit one row every 5 min proving loop is alive.

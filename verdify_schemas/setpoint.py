@@ -33,6 +33,9 @@ class SetpointChange(BaseModel):
     # from X-Planner-Instance + X-Trigger-Id headers; NULL on pre-v1.4 rows.
     planner_instance: str | None = None
     trigger_id: UUID | None = None
+    delivery_status: str | None = None
+    expired_at: AwareDatetime | None = None
+    superseded_by_ts: AwareDatetime | None = None
 
 
 class SetpointPlanRow(BaseModel):

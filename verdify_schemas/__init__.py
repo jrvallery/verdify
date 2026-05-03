@@ -7,6 +7,7 @@ partial-writing.
 """
 
 from .alerts import (
+    ALERT_TYPES,
     AlertAckPayload,
     AlertAction,
     AlertCategory,
@@ -15,6 +16,7 @@ from .alerts import (
     AlertLogRow,
     AlertResolvePayload,
     AlertSeverity,
+    AlertType,
 )
 from .api import (
     APIStatus,
@@ -24,6 +26,10 @@ from .api import (
     CropRecentObservation,
     HealthTrendPoint,
     ObservationWithCrop,
+    PublicDataHealthCheck,
+    PublicDataHealthResponse,
+    PublicHomeMetrics,
+    PublicPipelineHealthSource,
     ZoneDetail,
     ZoneListItem,
     ZoneObservation,
@@ -126,6 +132,7 @@ from .system_infra import (
     UtilityCost,
 )
 from .telemetry import (
+    OVERRIDE_EVENT_TYPES,
     ClimateRow,
     Diagnostics,
     EnergySample,
@@ -197,6 +204,7 @@ from .views import (
 
 __all__ = [
     "ALL_TUNABLES",
+    "ALERT_TYPES",
     "AlertAckPayload",
     "AlertAction",
     "AlertCategory",
@@ -206,6 +214,7 @@ __all__ = [
     "APIStatus",
     "AlertResolvePayload",
     "AlertSeverity",
+    "AlertType",
     "ClampActivity24h",
     "ClimateRow",
     "ClimateSnapshot",
@@ -291,6 +300,7 @@ __all__ = [
     "ObservationWithCrop",
     "OpenMeteoForecastResponse",
     "OpenMeteoHourly",
+    "OVERRIDE_EVENT_TYPES",
     "OverrideActivity24h",
     "OverrideEvent",
     "ParamRationale",
@@ -310,6 +320,10 @@ __all__ = [
     "PlanTransition",
     "PlannerLesson",
     "PlannerPerformance",
+    "PublicDataHealthCheck",
+    "PublicDataHealthResponse",
+    "PublicHomeMetrics",
+    "PublicPipelineHealthSource",
     "ScorecardResponse",
     "SWITCH_TUNABLES",
     "SensorRegistry",

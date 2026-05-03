@@ -110,7 +110,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -281,7 +281,8 @@
               }
             }
           ],
-          "custom": {}
+          "custom": {},
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -552,7 +553,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_electric)::numeric,2) AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_electric)::numeric,2) AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         },
@@ -561,7 +562,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_gas)::numeric,2) AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_gas)::numeric,2) AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "B"
         },
@@ -570,7 +571,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_water)::numeric,2) AS \"Water\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_water)::numeric,2) AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "C"
         }
@@ -677,7 +678,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), ROUND((cost_electric/NULLIF(cost_total,0)*100)::numeric,1) AS \"Electric %\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((cost_electric/NULLIF(cost_total,0)*100)::numeric,1) AS \"Electric %\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND cost_total > 0 ORDER BY date",
           "format": "time_series",
           "refId": "A"
         },
@@ -686,7 +687,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), ROUND((cost_gas/NULLIF(cost_total,0)*100)::numeric,1) AS \"Gas %\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((cost_gas/NULLIF(cost_total,0)*100)::numeric,1) AS \"Gas %\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND cost_total > 0 ORDER BY date",
           "format": "time_series",
           "refId": "B"
         },
@@ -695,7 +696,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), ROUND((cost_water/NULLIF(cost_total,0)*100)::numeric,1) AS \"Water %\"\nFROM daily_summary WHERE $__timeFilter(date::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((cost_water/NULLIF(cost_total,0)*100)::numeric,1) AS \"Water %\"\nFROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND cost_total > 0 ORDER BY date",
           "format": "time_series",
           "refId": "C"
         }

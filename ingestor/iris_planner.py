@@ -13,15 +13,40 @@ trigger invocations, building up operational memory over time.
 import json
 import logging
 import subprocess
+import sys
+import time
 import urllib.error
 import urllib.request
+import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo
 
-from config import OPENCLAW_SESSION_KEY, OPENCLAW_TOKEN, OPENCLAW_URL
+from config import (
+    ENABLE_LOCAL_PLANNER,
+    OPENCLAW_LOCAL_AGENT_ID,
+    OPENCLAW_LOCAL_SESSION_KEY,
+    OPENCLAW_OPUS_AGENT_ID,
+    OPENCLAW_OPUS_SESSION_KEY,
+    OPENCLAW_TOKEN,
+    OPENCLAW_URL,
+)
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from verdify_schemas import AlertEnvelope  # noqa: E402
 
 log = logging.getLogger("iris_planner")
+
+# Planner peer instances. Added in sprint-3 for dual-Iris routing per
+# docs/iris-planner-contract.md v1.3. "opus" = cloud Claude Opus session
+# (full knowledge). "local" = on-host vLLM gemma session (trimmed lite
+# variant ≤60k gemma tokens). Callers pass instance explicitly; no
+# implicit failover per contract §2.G.
+PlannerInstance = Literal["opus", "local"]
 
 DENVER = ZoneInfo("America/Denver")
 GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
@@ -45,11 +70,12 @@ if not PLANNER_PLAYBOOK_PATH.exists():  # pragma: no cover — host-path check
 _STANDING_DIRECTIVES = """
 ## Standing Directives (MANDATORY — read before every action)
 
-1. **Use MCP tools ONLY.** You have 17 tools:
+1. **Use MCP tools ONLY.** You have 22 tools:
    **Monitoring:** `climate`, `scorecard`, `equipment_state`, `forecast`, `history`
-   **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `plan_status`, `plan_evaluate`
+   **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `acknowledge_trigger`, `plan_status`, `plan_evaluate`
    **Knowledge:** `lessons`, `lessons_manage`
    **Crops:** `crops`, `observations`
+   **Topology:** `topology`, `position_current`, `crop_history`, `crop_lifecycle`
    **Operations:** `alerts`, `query`
    **Meta:** `plan_run` — operator-triggered ad-hoc planning. You normally do NOT
      call this; you are already inside a planning cycle when you see this prompt.
@@ -69,14 +95,40 @@ _STANDING_DIRECTIVES = """
 
 5. **To adjust a tunable,** call `set_tunable(parameter, value, reason)`.
    The dispatcher pushes changes to the ESP32 within 5 minutes.
+
+6. **If a routine FORECAST/TRANSITION/HEARTBEAT needs no change,** call
+   `acknowledge_trigger(trigger_id, reason, planner_instance)` using the
+   audit values at the bottom of this prompt. This closes the delivery SLA
+   without writing a fake plan.
 """
 
-# ── Planner knowledge (shared across all event types) ────────────
+# ── Planner knowledge — split for dual-Iris routing (sprint-3, G6) ──
+#
+# Two layers. Both are static per planner-session → opus-cacheable. The
+# order matters for Anthropic prompt-caching (stable prefix first, drop-in
+# addendum after). Local instance sends only _STANDING_DIRECTIVES + CORE;
+# opus sends directives + CORE + EXTENDED.
+#
+#   _PLANNER_CORE      — must-send for both opus and local. Decision
+#                        precedence, KPIs, the tactical Tier 1 tunables table,
+#                        stress-type definitions, data quality rules, and
+#                        the structured-hypothesis format (G7). Without
+#                        these, neither instance can plan safely.
+#
+#   _PLANNER_EXTENDED  — opus-only reference material. Stress interpretation
+#                        long-form, controller modes, mist stages, vent
+#                        oscillation pattern, condensation safety, physical
+#                        reference, utility rates, full validated lessons.
+#                        Gemma-local gets the tables; it looks up the prose
+#                        in docs/planner/greenhouse-playbook.md if it needs
+#                        detail beyond the Tier 1 reference.
+#
+# Contract: docs/iris-planner-contract.md §2.B, §2.G.
 
-_PLANNER_KNOWLEDGE = """
+_PLANNER_CORE = """
 ## Greenhouse Planner Knowledge
 
-You are the greenhouse supervisory planner. You adjust Tier 1 tunables that shape
+You are the greenhouse supervisory planner. You adjust registry-approved tunables that shape
 HOW the ESP32 controller responds to conditions. You do not control relays directly.
 
 **Full operational playbook:** Read `skills/greenhouse-planner.md` for detailed workflows,
@@ -87,6 +139,17 @@ The skills/ copy is an agent-host mirror kept in sync by deploy.)
 **Planning cycle:** READ (scorecard + climate + forecast) → DIAGNOSE (which compliance axis
 is the bottleneck, which stress type dominates) → DECIDE (apply lessons, then forecast) →
 ACT (set_tunable for immediate, set_plan for 72h waypoints) → REPORT (Slack brief).
+
+### Recent firmware behavior (read once, then assume)
+
+The control logic you're tuning was changed in late April 2026. These are
+**shipped** and the running firmware (`2026.4.26.x`) reflects them — do not
+reason about pre-change behavior.
+
+- **PR-A (2026-04-25): VENTILATE fog trigger lowered** to `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today). Concurrent vent+fog is now intentional during hot-dry stress; fog no longer waits for the safety ceiling. `fog_escalation_kpa` (default 0.5) is the primary knob — lower = more aggressive fog inside VENTILATE.
+- **PR #35 (2026-04-22): THERMAL_RELIEF preempts the dwell gate.** When you flip `sw_dwell_gate_enabled` ON, the gate holds non-safety modes for `dwell_gate_ms` (default 5 min) but does NOT bind THERMAL_RELIEF — its 90s heat-flush still fires. SAFETY_COOL, SAFETY_HEAT, SENSOR_FAULT also preempt.
+- **Phase 1c (2026-04-22): cfg_* readbacks** are now flowing. Every Tier 1 tunable you push has a firmware-side echo into `setpoint_snapshot` so push-corruption is detectable. `setpoint_confirmation_monitor` alerts if the ESP32 doesn't confirm within 5 min.
+- **Phase 2 dwell gate is shipped but currently OFF** in production (`sw_dwell_gate_enabled=0`). Replay validates the gate eliminates ~70% of mode-class transitions in stress windows. Flip ON when whipsaw is the dominant pattern in the current hour's transition log.
 
 ### Decision Precedence
 
@@ -133,6 +196,154 @@ Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to foc
 - `cold_stress`: temp < temp_low — often caused by VENT OSCILLATION, not insufficient heating
 - `vpd_high_stress`: VPD > vpd_high — misting too conservative or vent open during dry air
 - `vpd_low_stress`: VPD < vpd_low — over-humidification or fog overshoot
+
+### Tunable Dictionary — Tactical Tier 1 + Read-Only Bands
+
+Push via `set_tunable(param, value, reason)` or as a transition key in
+`set_plan`. Ranges are dispatcher clamp bounds; pushing outside clamps
+lands in `setpoint_clamps` (audited, rejected). Every Tier 1 knob below
+is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
+drops within one planner cycle.
+
+The full registry (103 live tunables + clamps + push owners + readback
+status) is defined in `verdify_schemas/tunable_registry.py`. For Tier 2
+escape-hatch params (irrigation schedules, economiser site constants,
+per-zone VPD targets, sw_* toggles you rarely touch, safety rails —
+operator-owned) see `docs/tunable-cascade.md` or read the registry.
+**If you need a tier-2 param, state the reason and push it; the registry
+and firmware clamp are the source of truth.**
+
+**Crop band (read-only context; crop profiles + dispatcher own these):**
+- `temp_low` °F — lower band edge; HEAT_S1 target. Do not emit in plans.
+- `temp_high` °F — upper band edge; VENTILATE trigger. Do not emit in plans.
+- `vpd_low` kPa — DEHUM_VENT trigger. Do not emit in plans.
+- `vpd_high` kPa — SEALED_MIST trigger. Do not emit in plans.
+
+If a plan includes `temp_low`, `temp_high`, `vpd_low`, or `vpd_high`, MCP drops
+them before persistence. Old plans containing them create dispatcher clamps.
+Use tactical knobs below to shift behavior instead.
+
+**Band-adjacent tactical knob:**
+- `vpd_hysteresis` kPa, [0.05-1.0], def 0.3 — larger = fewer mist cycles
+
+**Bias (daytime vs overnight posture):**
+- `bias_heat` °F, [-10 to +10], def 0 — adds to temp_low for internal Tlow
+- `bias_cool` °F, [-10 to +10], def 0 — adds to temp_high-bias. +3 = delay cooling
+
+**Staging:**
+- `d_heat_stage_2` °F, [2-15], def 5 — heat2 latches below the interior heating target minus this; lower before cold nights
+- `heat_hysteresis` °F, [0-3], def 1 — heat-stage clear margin above the interior heating target; higher holds heat longer
+- `temp_hysteresis` °F, [0.5-3], def 1.5 — temp transition deadband; lower tightens band compliance, higher reduces churn
+- `d_cool_stage_2` °F, [2-15], def 3 — fan2 engages at Thigh + this
+
+**Mister engagement:**
+- `mister_engage_kpa` kPa, [0.6-2.5], def 1.2 — SEALED_MIST S1 entry
+- `mister_all_kpa` kPa, [0.9-3.0], def 1.8 — S2 escalation (all zones)
+- `mister_engage_delay_s` s, [0-120], def 0 — dwell before S1
+- `mister_all_delay_s` s, [0-300], def 0 — dwell before S2
+
+**Mister pulse + budget:**
+- `mister_pulse_on_s` s, [30-90], def 60 — mister burst duration
+- `mister_pulse_gap_s` s, [10-60], def 45 — evaporation dwell; 15-20s dry, 45s humid
+- `mister_water_budget_gal` gal/d, [200-500], def 500 — daily water cap
+- `mister_vpd_weight` ×, [1.0-3.0], def 1.5 — driest-zone-first weighting
+
+**VPD state-machine + sealed-vent coordination (hot-dry-day oscillation):**
+- `vpd_watch_dwell_s` s, [30-120], def 60 — dwell in VPD_WATCH before sealing
+- `mist_vent_close_lead_s` s, [0-60], def 15 — vent closes before misters start
+- `mist_max_closed_vent_s` s, [120-900], def 600 — max sealed time → THERMAL_RELIEF
+- `mist_vent_reopen_delay_s` s, [0-120], def 45 — vent held closed after misting
+- `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration
+- `mist_backoff_s` s, [60-3600], def 600 — v2 lockout after a sealed mist attempt times out; prevents immediate reseal loops
+
+**Fog (AquaFog XE 2000 — 7× mister; firmware-gated by RH/temp/time window):**
+- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.5 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
+- `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle
+- `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles
+
+**Vent + heat timing (anti-chatter):**
+- `min_vent_on_s` s, [30-300], def 60 — min vent open duration
+- `min_vent_off_s` s, [30-300], def 60 — min vent closed duration
+- `min_heat_on_s` s, [60-300], def 120 — min heater on (ignition protection)
+- `min_heat_off_s` s, [120-600], def 300 — min gap between heater cycles
+
+**Economiser (outdoor-air coupling):**
+- `enthalpy_open` kJ/kg Δ — vent opens when outdoor enthalpy better by this much
+- `enthalpy_close` kJ/kg Δ — vent closes when outdoor enthalpy worse
+
+**Summer thermal-driven vent gate (sprint-15 — short-circuits VPD-seal when outdoor is cooler+drier):**
+- `sw_summer_vent_enabled` — master switch; default ON
+- `vent_prefer_temp_delta_f` °F, [2-15], def 5 — outdoor must be ≥ N°F cooler than indoor
+- `vent_prefer_dp_delta_f` °F, [2-15], def 5 — outdoor dewpoint ≥ N°F below indoor DP
+
+**Phase-2 dwell gate (whipsaw reduction; firmware shipped, currently OFF in production):**
+- `sw_dwell_gate_enabled` — master switch; firmware is shipped (default OFF). PR #35 (2026-04-22) made THERMAL_RELIEF exempt from the gate so the 90s heat-flush behavior is preserved when you flip the switch. Safe to enable on hot-dry days when whipsaw shows in the recent transition log; revert if relief_cycle_count climbs.
+- `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions. Does NOT bind THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, or SENSOR_FAULT — those preempt the gate.
+
+**Controller v2 gate:**
+- `sw_fsm_controller_enabled` — master switch for the band-first FSM. Keep ON for v2 validation; flip OFF only to return to the legacy cascade.
+
+### Tier 2 escape hatch
+
+If diagnosis calls for a tier-2 param (per-zone VPD rebalance, irrigation
+schedule change, safety rail adjust, occupancy inhibit, fog window shift,
+economiser site pressure, fan-lead rotation, etc.) name it in your
+reasoning and push via `set_tunable`/`set_plan` — the registry will
+validate and the dispatcher will route. Do not push params absent from
+the registry; they will be rejected.
+
+### Data Quality
+
+- Zone VPD null: fall back to avg VPD. Don't hallucinate zone priorities from nulls.
+- Setpoint values = 0 after reboot: corrupt flash. Dispatcher auto-corrects within 5 min.
+- Solar = 0 at night: normal. Not a sensor failure.
+
+### Structured hypothesis (required on SUNRISE plans)
+
+When you call `set_plan()`, the `hypothesis` field should include a fenced
+```json``` block following the `PlanHypothesisStructured` shape. `set_plan()`
+extracts and validates it, stores it in `plan_journal.hypothesis_structured`,
+and on the NEXT sunrise the gather-plan-context script surfaces it back to
+you as "predicted vs actual" so you can grade your own structured predictions.
+
+Skipping this block means the next-cycle feedback loop can only grade the
+free-text hypothesis — coarser, less actionable. Always include it on
+SUNRISE plans. Optional on TRANSITION adjustments.
+
+Minimal valid block (all three sections required):
+```json
+{
+  "conditions": {
+    "outdoor_temp_peak_f": 82.0,
+    "outdoor_rh_min_pct": 12.0,
+    "solar_peak_w_m2": 900,
+    "cloud_cover_avg_pct": 15,
+    "notes": "hot dry spring day, clear skies"
+  },
+  "stress_windows": [
+    {"kind": "vpd_high", "start": "2026-04-19T10:00:00-06:00",
+     "end": "2026-04-19T16:00:00-06:00", "severity": "high",
+     "mitigation": "fog_escalation_kpa 0.25, mister_pulse_gap_s 20"}
+  ],
+  "rationale": [
+    {"parameter": "fog_escalation_kpa", "old_value": 0.4, "new_value": 0.25,
+     "forecast_anchor": "RH < 15% from 10:00-16:00",
+     "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0"}
+  ]
+}
+```
+
+`stress_windows` can be empty on mild days. `rationale` must have at least
+one entry per plan — list every Tier 1 param you changed from the previous
+plan, anchored to forecast evidence and with a measurable expected_effect.
+"""
+
+_PLANNER_EXTENDED = """
+## Extended Reference (opus only)
+
+The following sections are reference material the full-context instance
+gets on top of CORE. The local gemma instance sees only CORE; it consults
+`docs/planner/greenhouse-playbook.md` for detail when it needs it.
 
 ### Interpreting Stress Types
 
@@ -186,48 +397,6 @@ vent flush) → cycle repeats. You control the cycle timing with tunables.
 - Blocked above fog_rh_ceiling (90%), below fog_min_temp, outside fog time window (07:00-17:00)
 - Fog ALWAYS closes vent. Do not assume fog availability outside the window.
 
-### 24 Tier 1 Tunables (your controls)
-
-**VPD response + misting:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| vpd_hysteresis | kPa | 0.1-0.5 | 0.3 | Band exit dead zone. Larger = fewer mist cycles |
-| vpd_watch_dwell_s | s | 30-120 | 60 | Observation time before sealing. Prevents transient triggers |
-| mister_engage_kpa | kPa | 1.0-1.8 | 1.6 | VPD threshold for south misters |
-| mister_all_kpa | kPa | 1.3-2.2 | 1.9 | VPD threshold for all-zone rotation |
-| mister_pulse_on_s | s | 30-90 | 60 | Mister burst duration |
-| mister_pulse_gap_s | s | 10-60 | 45 | Evaporation dwell. 15-20s dry days, 45s humid days |
-| mister_vpd_weight | x | 1.0-3.0 | 1.5 | Driest-zone-first weighting |
-| mister_water_budget_gal | gal/d | 200-500 | 500 | Daily water limit. Never the bottleneck |
-
-**Vent coordination:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| mist_vent_close_lead_s | s | 0-60 | 15 | Close vent before misters start |
-| mist_max_closed_vent_s | s | 120-900 | 600 | Max sealed time before thermal relief |
-| mist_vent_reopen_delay_s | s | 0-120 | 45 | Hold vent closed after misting |
-| mist_thermal_relief_s | s | 30-300 | 90 | Mandatory vent opening duration |
-| enthalpy_open | kJ/kg | -5 to 0 | -2 | Prefer ventilation when outdoor enthalpy better |
-| enthalpy_close | kJ/kg | 0 to +5 | 1 | Prefer sealing when outdoor enthalpy worse |
-| min_vent_on_s | s | 30-300 | 60 | Min vent open time (anti-chatter) |
-| min_vent_off_s | s | 30-300 | 60 | Min vent closed time |
-
-**Fog:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| min_fog_on_s | s | 15-300 | 60 | Min fog on-time per cycle |
-| min_fog_off_s | s | 15-300 | 60 | Min gap between fog cycles |
-| fog_escalation_kpa | kPa | 0.2-0.8 | 0.4 | VPD above band to trigger fog. Lower = more fog |
-
-**Thermal + biases:**
-| Parameter | Unit | Range | Default | What it does |
-|-----------|------|-------|---------|-------------|
-| d_cool_stage_2 | F | 2-5 | 3 | Gap between single-fan and dual-fan cooling |
-| bias_heat | F | -5 to +5 | 0 | Shift heating floor. +2 = pre-heat earlier |
-| bias_cool | F | -5 to +5 | 0 | Shift cooling ceiling. +3 = delay cooling (prevents vent oscillation) |
-| min_heat_on_s | s | 60-300 | 120 | Min heater on-time (ignition protection) |
-| min_heat_off_s | s | 120-600 | 300 | Min gap between heater cycles |
-
 ### Greenhouse Physical Reference
 
 - 367 sqft, 3,614 cuft volume, elongated hexagon, 5,090 ft elevation (Longmont CO)
@@ -256,52 +425,36 @@ Gas heating is 3.9x cheaper per BTU than electric.
 8. **Water budget 500 gal:** Must never be the bottleneck.
 9. **Vent during misting:** Never happens — SEALED_MIST structurally closes vent. Validated.
 10. **Dew point:** Keep margin >5F. bias warmer on cold clear nights (radiative cooling risk).
-
-### Data Quality
-
-- Zone VPD null: fall back to avg VPD. Don't hallucinate zone priorities from nulls.
-- Setpoint values = 0 after reboot: corrupt flash. Dispatcher auto-corrects within 5 min.
-- Solar = 0 at night: normal. Not a sensor failure.
-
-### Structured hypothesis (required on SUNRISE plans)
-
-When you call `set_plan()`, the `hypothesis` field should include a fenced
-```json``` block following the `PlanHypothesisStructured` shape. `set_plan()`
-extracts and validates it, stores it in `plan_journal.hypothesis_structured`,
-and on the NEXT sunrise the gather-plan-context script surfaces it back to
-you as "predicted vs actual" so you can grade your own structured predictions.
-
-Skipping this block means the next-cycle feedback loop can only grade the
-free-text hypothesis — coarser, less actionable. Always include it on
-SUNRISE plans. Optional on TRANSITION adjustments.
-
-Minimal valid block (all three sections required):
-```json
-{
-  "conditions": {
-    "outdoor_temp_peak_f": 82.0,
-    "outdoor_rh_min_pct": 12.0,
-    "solar_peak_w_m2": 900,
-    "cloud_cover_avg_pct": 15,
-    "notes": "hot dry spring day, clear skies"
-  },
-  "stress_windows": [
-    {"kind": "vpd_high", "start": "2026-04-19T10:00:00-06:00",
-     "end": "2026-04-19T16:00:00-06:00", "severity": "high",
-     "mitigation": "fog_escalation_kpa 0.25, mister_pulse_gap_s 20"}
-  ],
-  "rationale": [
-    {"parameter": "fog_escalation_kpa", "old_value": 0.4, "new_value": 0.25,
-     "forecast_anchor": "RH < 15% from 10:00-16:00",
-     "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0"}
-  ]
-}
-```
-
-`stress_windows` can be empty on mild days. `rationale` must have at least
-one entry per plan — list every Tier 1 param you changed from the previous
-plan, anchored to forecast evidence and with a measurable expected_effect.
 """
+
+
+def _compose_preamble(instance: PlannerInstance = "opus") -> str:
+    """Compose the prompt preamble for a given planner instance.
+
+    The returned string is the stable, per-session prefix that the event
+    builder prepends to the per-cycle context. Order is intentional so
+    Anthropic prompt-caching gets a clean break on opus:
+
+        _STANDING_DIRECTIVES  (always — trigger handling rules)
+        _PLANNER_CORE         (always — must-know tables + hypothesis format)
+        _PLANNER_EXTENDED     (opus only — reference long-form)
+        {per-cycle context}   (appended by event builder; never cached)
+
+    `local` gets directives + core only, so the gemma prompt stays under
+    the contract's ≤60k gemma-token budget (≈ ≤52k Claude tokens with a
+    15% safety cushion for gemma's heavier encoding).
+    """
+    if instance == "local":
+        return _STANDING_DIRECTIVES + _PLANNER_CORE
+    return _STANDING_DIRECTIVES + _PLANNER_CORE + _PLANNER_EXTENDED
+
+
+# Legacy alias — any caller referring to `_PLANNER_KNOWLEDGE` as one blob
+# now gets both halves in the order they were concatenated before the
+# split. Kept so planner-dry and external spot-checks that grep for
+# "## Greenhouse Planner Knowledge" keep working until sub-scope B
+# threads the `instance` kwarg through every caller.
+_PLANNER_KNOWLEDGE = _PLANNER_CORE + _PLANNER_EXTENDED
 
 # ── Event prompt templates ────────────────────────────────────────
 
@@ -330,7 +483,9 @@ today's forecast, and set the daytime posture.
 6. **Check alerts** — call `alerts`. Acknowledge or resolve any that are stale.
 7. **Write today's plan** — use `set_plan(plan_id, hypothesis, transitions)` with 5-8 waypoints
    anchored to solar milestones (dawn, morning ramp, peak stress, decline, evening).
-   Each transition includes ALL 24 Tier 1 params. Include a hypothesis and experiment.
+   Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
+   (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
+   dwell, and hysteresis knobs to shift behavior. Include a hypothesis and experiment.
    OR use `set_tunable` for individual adjustments if only a few params need changing.
 7. **Post morning brief to #greenhouse** — include:
    - Yesterday's scorecard: score, temp vs VPD compliance, stress breakdown, utility cost + trend
@@ -368,7 +523,9 @@ and set the overnight posture.
 5. **Check alerts** — call `alerts`. Resolve any from today.
 6. **Write overnight plan** — use `set_plan(plan_id, hypothesis, transitions)` with 3-5 waypoints
    anchored to evening/overnight milestones (evening_settle, midnight_posture, pre_dawn).
-   Each transition includes ALL 24 Tier 1 params. Include a hypothesis about tonight's
+   Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
+   (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
+   dwell, and hysteresis knobs to shift behavior. Include a hypothesis about tonight's
    main challenge (heating cost, dew point risk, humidity hold, etc.).
    Key overnight tuning:
    - `bias_cool` +2 to +4 if heaters expected (prevents vent oscillation)
@@ -468,27 +625,30 @@ Post to #greenhouse with what deviated, your diagnosis, and what you changed."""
 
 # ── Prompt router ─────────────────────────────────────────────────
 
-_PREAMBLE = _STANDING_DIRECTIVES + _PLANNER_KNOWLEDGE
+# _PREAMBLE keeps the opus-full preamble for any caller that still treats
+# the preamble as a module-level constant. Instance-aware callers should
+# use _compose_preamble(instance) instead.
+_PREAMBLE = _compose_preamble("opus")
 
 _PROMPT_BUILDERS = {
-    "SUNRISE": lambda ctx, lbl: _PREAMBLE + _sunrise_prompt(ctx),
-    "SUNSET": lambda ctx, lbl: _PREAMBLE + _sunset_prompt(ctx),
-    "TRANSITION": lambda ctx, lbl: _PREAMBLE + _transition_prompt(ctx, lbl),
-    "FORECAST": lambda ctx, lbl: _PREAMBLE + _forecast_prompt(ctx),
-    "DEVIATION": lambda ctx, lbl: _PREAMBLE + _deviation_prompt(ctx, lbl),
+    "SUNRISE": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _sunrise_prompt(ctx),
+    "SUNSET": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _sunset_prompt(ctx),
+    "TRANSITION": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _transition_prompt(ctx, lbl),
+    "FORECAST": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _forecast_prompt(ctx),
+    "DEVIATION": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _deviation_prompt(ctx, lbl),
 }
 
 
 # ── Context gathering ────────────────────────────────────────────
 
 
-def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None) -> None:
-    """IN-10 (Sprint 19): route gather-plan-context.sh failures into alert_log so
-    the 18 known errors stop disappearing silently. Uses docker exec psql to
-    avoid introducing a sync DB driver into this sync module."""
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _run_alert_sql(sql: str) -> None:
+    """Run a small alert_log lifecycle statement without adding a sync DB driver."""
     try:
-        details = json.dumps({"reason": reason, "stderr": stderr[:500], "exit_code": exit_code})
-        message = f"gather-plan-context.sh failed: {reason}"
         subprocess.run(
             [
                 "docker",
@@ -501,9 +661,7 @@ def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None
                 "-d",
                 "verdify",
                 "-c",
-                "INSERT INTO alert_log (alert_type, severity, category, message, details, source) "
-                f"VALUES ('plan_context_failed', 'warning', 'system', '{message.replace(chr(39), chr(39) * 2)}', "
-                f"'{details.replace(chr(39), chr(39) * 2)}'::jsonb, 'iris_planner')",
+                sql,
             ],
             capture_output=True,
             text=True,
@@ -511,11 +669,72 @@ def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None
             check=False,
         )
     except Exception as e:  # never let observability failures crash the planner
-        log.warning("failed to record plan_context_failed alert: %s", e)
+        log.warning("failed to update plan_context_failed alert lifecycle: %s", e)
+
+
+def _record_plan_context_failure(reason: str, stderr: str, exit_code: int | None) -> None:
+    """Route gather-plan-context.sh failures into alert_log without duplicates."""
+    alert = AlertEnvelope.model_validate(
+        {
+            "alert_type": "plan_context_failed",
+            "severity": "warning",
+            "category": "system",
+            "message": f"gather-plan-context.sh failed: {reason}",
+            "details": {"reason": reason, "stderr": stderr[:500], "exit_code": exit_code},
+        }
+    )
+    details = json.dumps(alert.details)
+    _run_alert_sql(
+        f"""
+        WITH updated AS (
+            UPDATE alert_log
+               SET severity = 'warning',
+                   message = {_sql_literal(alert.message)},
+                   details = {_sql_literal(details)}::jsonb
+             WHERE alert_type = 'plan_context_failed'
+               AND disposition = 'open'
+               AND source = 'iris_planner'
+            RETURNING id
+        )
+        INSERT INTO alert_log (alert_type, severity, category, message, details, source)
+        SELECT 'plan_context_failed', 'warning', 'system', {_sql_literal(alert.message)},
+               {_sql_literal(details)}::jsonb, 'iris_planner'
+         WHERE NOT EXISTS (SELECT 1 FROM updated)
+        """
+    )
+
+
+def _resolve_plan_context_failures() -> None:
+    """Close stale context-gather alerts after a successful gather."""
+    _run_alert_sql(
+        """
+        UPDATE alert_log
+           SET disposition = 'resolved',
+               resolved_at = now(),
+               resolved_by = 'system',
+               resolution = 'auto-resolved: context gather succeeded'
+         WHERE alert_type = 'plan_context_failed'
+           AND disposition = 'open'
+           AND source = 'iris_planner'
+        """
+    )
+
+
+# Sprint 24.9 (G-7): sentinel that tasks.py's _deliver_and_log checks to
+# decide whether to skip the actual /hooks/agent POST and mark the
+# plan_delivery_log row status='delivery_failed'. Before 24.9 the failure
+# string was spliced into the prompt and Iris received gibberish context.
+CONTEXT_GATHER_FAILED_SENTINEL = "__CONTEXT_GATHER_FAILED__"
 
 
 def gather_context() -> str:
-    """Run gather-plan-context.sh and return its output."""
+    """Run gather-plan-context.sh and return its output.
+
+    On failure returns CONTEXT_GATHER_FAILED_SENTINEL. Callers must detect
+    this and either skip the dispatch or mark the resulting
+    plan_delivery_log row as delivery_failed — DO NOT pass the sentinel to
+    send_to_iris (it would otherwise land in the prompt and confuse Iris).
+    """
     try:
         result = subprocess.run(
             ["/bin/bash", GATHER_SCRIPT],
@@ -526,41 +745,76 @@ def gather_context() -> str:
         if result.returncode != 0:
             log.error("gather-plan-context.sh failed: %s", result.stderr[:200])
             _record_plan_context_failure("nonzero_exit", result.stderr, result.returncode)
-            return f"(context gathering failed: {result.stderr[:200]})"
+            return CONTEXT_GATHER_FAILED_SENTINEL
+        _resolve_plan_context_failures()
         return result.stdout
     except subprocess.TimeoutExpired as e:
         log.error("gather-plan-context.sh timed out (60s)")
         _record_plan_context_failure("timeout", str(e), None)
-        return "(context gathering timed out)"
+        return CONTEXT_GATHER_FAILED_SENTINEL
 
 
 # ── Gateway delivery ─────────────────────────────────────────────
 
 
-def send_to_iris(event_type: str, label: str, context: str | None = None) -> dict:
+def send_to_iris(
+    event_type: str,
+    label: str,
+    context: str | None = None,
+    instance: PlannerInstance = "opus",
+) -> dict:
     """Send a planning event to Iris's planner session via OpenClaw gateway.
 
     Args:
         event_type: One of SUNRISE, SUNSET, TRANSITION, FORECAST, DEVIATION
         label: Human-readable event label (e.g. "Peak stress", deviation details)
         context: Pre-gathered context string. If None, runs gather-plan-context.sh.
+        instance: 'opus' (cloud Claude — default) or 'local' (gemma-host).
+            Routes via session-key suffix and X-Planner-Instance header.
 
     Returns:
-        Sprint 24.6 (F14): a result dict the caller writes to plan_delivery_log.
-        Keys: delivered (bool), event_type, event_label, session_key, wake_mode,
-        gateway_status (int|None), gateway_body (str, truncated to 2k chars).
-        `delivered=True` means gateway returned 2xx; it does NOT mean Iris
-        wrote a plan (that's verified separately by planning_heartbeat's
-        30-min pass).
+        Result dict the caller writes to plan_delivery_log. Keys: delivered,
+        event_type, event_label, session_key, wake_mode, gateway_status,
+        gateway_body, trigger_id, instance.
+
+        `delivered=True` means gateway returned 2xx — it does NOT mean Iris
+        wrote a plan (verified separately by planning_heartbeat's 30-min pass).
+
+        `gateway_status` semantics:
+          0    — bare exception (Iris host down or network reset; see body)
+          200  — gateway accepted; Iris woken
+          4xx/5xx — gateway-level rejection
+          None — request never attempted (caller short-circuit)
+
+        `trigger_id` is a uuid4 generated per-call; mirrored into
+        plan_delivery_log.trigger_id for SLA + audit correlation. Sent on the
+        wire as X-Trigger-Id; MCP write tools (set_plan, set_tunable) extract
+        it and stamp plan_journal / setpoint_changes.
     """
+    trigger_id = str(uuid.uuid4())
+    # Per-instance routing (contract v1.4 §2.G): map opus|local to the
+    # OpenClaw agentId + sessionKey pair. Until local Iris is provisioned
+    # (ENABLE_LOCAL_PLANNER=false), fall the actual delivery back to opus
+    # but keep `instance` in the result so plan_delivery_log records the
+    # routing decision that WOULD have been made — once local is ready,
+    # flipping the env var activates the real routing without code change.
+    routed_instance = instance if (instance == "opus" or ENABLE_LOCAL_PLANNER) else "opus"
+    if routed_instance == "local":
+        agent_id = OPENCLAW_LOCAL_AGENT_ID
+        session_key = OPENCLAW_LOCAL_SESSION_KEY
+    else:
+        agent_id = OPENCLAW_OPUS_AGENT_ID
+        session_key = OPENCLAW_OPUS_SESSION_KEY
     result = {
         "delivered": False,
         "event_type": event_type,
         "event_label": label,
-        "session_key": OPENCLAW_SESSION_KEY,
+        "session_key": session_key,
         "wake_mode": None,
         "gateway_status": None,
         "gateway_body": None,
+        "trigger_id": trigger_id,
+        "instance": instance,
     }
 
     if context is None:
@@ -572,7 +826,24 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
         result["gateway_body"] = f"unknown event_type: {event_type}"
         return result
 
-    message = builder(context, label)
+    message = builder(context, label, instance)
+
+    # Contract v1.4 §2.A — embed trigger_id + instance in the per-cycle
+    # message body so Iris can pass them as kwargs to set_plan() and
+    # set_tunable(). Stamping these on the writes lets us correlate
+    # plan_journal ↔ plan_delivery_log by uuid (not 2h time-window) and
+    # filter "all plans from opus" vs "all plans from local". Banner sits
+    # AFTER the cached preamble so prompt-cache breakpoints stay clean.
+    audit_banner = (
+        "\n\n---\n"
+        f"**Audit headers** — pass these to `set_plan` and `set_tunable` so the\n"
+        f"plan-journal and setpoint-changes rows record which trigger and which\n"
+        f"planner instance produced them.\n\n"
+        f"- `trigger_id={trigger_id}`\n"
+        f"- `planner_instance={instance!r}`\n"
+        f"---\n\n"
+    )
+    message = message + audit_banner
 
     # If Iris's agent-host playbook is missing, prepend a warning so she
     # knows detailed tuning guidance isn't available this cycle and flags
@@ -599,8 +870,8 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
 
     payload = {
         "message": message,
-        "agentId": "iris-planner",
-        "sessionKey": OPENCLAW_SESSION_KEY,
+        "agentId": agent_id,
+        "sessionKey": session_key,
         "wakeMode": result["wake_mode"],
         "deliver": False,
     }
@@ -613,28 +884,78 @@ def send_to_iris(event_type: str, label: str, context: str | None = None) -> dic
         headers={
             "Authorization": f"Bearer {OPENCLAW_TOKEN}",
             "Content-Type": "application/json",
+            # Contract v1.4 §2.A — propagate to MCP tool context so
+            # plan_journal / setpoint_changes writes can stamp the
+            # originating trigger and the planner instance.
+            "X-Trigger-Id": trigger_id,
+            "X-Planner-Instance": instance,
+            "X-Planner-Type": event_type,
         },
         method="POST",
     )
 
+    # Sprint 25 (Fix 2): structured request/response logging so the
+    # NULL-gateway_status pattern is queryable. Pre-fix, bare-exception
+    # paths (Connection refused / reset) left `gateway_status` NULL —
+    # indistinguishable in plan_delivery_log from "row never reached
+    # gateway_status assignment." Post-fix, gateway_status=0 means
+    # "no HTTP response received" (Iris's host down or restarting),
+    # so SLA monitors and ops queries can split that from real 4xx/5xx.
+    t_start = time.monotonic()
+    payload_bytes = len(data)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             status = resp.getcode()
             body = resp.read().decode("utf-8", errors="replace")
+            elapsed_ms = int((time.monotonic() - t_start) * 1000)
             result["gateway_status"] = status
             result["gateway_body"] = body[:2000]
             if status < 300:
-                log.info("Iris planner: %s/%s delivered (status %d)", event_type, label, status)
+                log.info(
+                    "Iris planner: %s/%s delivered (status=%d, elapsed=%dms, payload=%dB)",
+                    event_type,
+                    label,
+                    status,
+                    elapsed_ms,
+                    payload_bytes,
+                )
                 result["delivered"] = True
             else:
-                log.error("Iris planner: %s/%s rejected (status %d): %s", event_type, label, status, body[:200])
+                log.error(
+                    "Iris planner: %s/%s rejected (status=%d, elapsed=%dms): %s",
+                    event_type,
+                    label,
+                    status,
+                    elapsed_ms,
+                    body[:200],
+                )
     except urllib.error.HTTPError as e:
+        elapsed_ms = int((time.monotonic() - t_start) * 1000)
         body_s = e.read().decode(errors="replace")[:2000]
-        log.error("Iris planner HTTP error: %s %s — %d %s", event_type, label, e.code, body_s[:200])
+        log.error(
+            "Iris planner HTTP error: %s/%s — status=%d elapsed=%dms body=%s",
+            event_type,
+            label,
+            e.code,
+            elapsed_ms,
+            body_s[:200],
+        )
         result["gateway_status"] = e.code
         result["gateway_body"] = body_s
     except Exception as e:
-        log.error("Iris planner delivery failed: %s %s — %s", event_type, label, e)
+        elapsed_ms = int((time.monotonic() - t_start) * 1000)
+        # Distinguish "no HTTP response" from "no attempt logged" — set
+        # status=0 so plan_delivery_log queries can identify host-down
+        # / network-reset cases without hunting through journalctl.
+        log.error(
+            "Iris planner delivery failed: %s/%s — exception=%s elapsed=%dms err=%s",
+            event_type,
+            label,
+            type(e).__name__,
+            elapsed_ms,
+            e,
+        )
+        result["gateway_status"] = 0
         result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
 
     return result

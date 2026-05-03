@@ -78,6 +78,8 @@ jobs:
         run: pytest verdify_schemas/tests/ -v --ignore=verdify_schemas/tests/test_drift_guards.py --ignore=verdify_schemas/tests/test_vault_writers.py --ignore=verdify_schemas/tests/test_views.py
       - name: Drift guards (against CI Postgres)
         run: pytest verdify_schemas/tests/test_drift_guards.py -v
+      - name: Database smoke tests (against CI Postgres)
+        run: VERDIFY_DB_QUERY_MODE=direct pytest tests/test_02_database.py::TestSchemaIntegrity -q
 
   firmware:
     name: Firmware Compile Check
@@ -96,3 +98,156 @@ jobs:
           esphome config greenhouse.yaml
         # Note: full compile requires ESP-IDF toolchain (~1.5GB)
         # Config validation catches YAML errors and missing references
+
+  # ─── Phase-0 stabilization gates ────────────────────────────────────────
+  # Background: the plan at
+  #   .claude-agents/iris-dev/plans/yo-iris-dev-you-help-humming-stonebraker.md
+  # calls for a test-harness + CI net landing BEFORE the next firmware change,
+  # so that the sprint-15 gate / sprint-15.1 interlock / plan-vs-tunable gap
+  # class of regression is caught pre-merge. These jobs implement that net.
+
+  firmware-logic:
+    name: Firmware Logic Tests + Replay + Invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install g++
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make
+      - name: Native firmware unit tests
+        run: |
+          cd firmware
+          g++ -std=c++17 -I lib -o test/test_greenhouse test/test_greenhouse_logic.cpp
+          ./test/test_greenhouse
+      - name: Unpack replay corpus
+        run: |
+          test -f firmware/test/data/replay_overrides.csv \
+            || gunzip -k firmware/test/data/replay_overrides.csv.gz
+      - name: Replay (OBS-1e evaluate_overrides validation)
+        run: |
+          cd firmware
+          g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp
+          ./test/replay_overrides test/data/replay_overrides.csv | tail -30
+      - name: Replay invariants (15 bulletproof gates)
+        # Binary exits 2 with a clear message when the corpus predates the
+        # Phase-0 schema extension — that's expected until the first corpus
+        # refresh with the new schema. Non-zero count < 10 => real failures.
+        run: |
+          cd firmware
+          g++ -std=c++17 -O2 -I lib -o test/replay_invariants test/replay_invariants.cpp
+          set +e
+          ./test/replay_invariants test/data/replay_overrides.csv
+          rc=$?
+          if [ "$rc" -eq 2 ]; then
+            echo "::warning::replay corpus predates Phase-0 schema extension; skipping invariants this run"
+            exit 0
+          fi
+          exit $rc
+
+  firmware-replay-diff:
+    name: Firmware Replay Diff (behavioral regression gate)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history for merge-base worktree
+      - name: Install g++
+        run: sudo apt-get install -y g++
+      - name: Unpack replay corpus
+        run: |
+          test -f firmware/test/data/replay_overrides.csv \
+            || gunzip -k firmware/test/data/replay_overrides.csv.gz
+      - name: Run replay diff (PR HEAD vs merge-base)
+        # THRESHOLD_PCT=0 default => any mode/relay divergence blocks the PR.
+        # Per CLAUDE.md rule 8: intentional divergence (e.g. Phase 2 dwell-gate
+        # rollout, PR-A fog threshold lowering) requires coordinator approval
+        # + explicit threshold override. Override marker must appear in PR body
+        # as `REPLAY_DIFF_THRESHOLD_PCT: <N>` on its own line; CI parses it.
+        run: |
+          set +e
+          BASE=$(git merge-base HEAD origin/${{ github.base_ref }})
+          if [ -z "$BASE" ] || [ "$BASE" = "$(git rev-parse HEAD)" ]; then
+            echo "No merge-base change; skipping replay diff"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- \
+            firmware/lib/greenhouse_logic.h \
+            firmware/lib/greenhouse_types.h \
+            firmware/greenhouse/controls.yaml)
+          if [ -z "$CHANGED" ]; then
+            echo "No firmware-logic diff in PR; skipping replay diff"
+            exit 0
+          fi
+          # Parse PR body for threshold override
+          PR_BODY=$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH")
+          OVERRIDE=$(printf '%s' "$PR_BODY" | grep -oE '^REPLAY_DIFF_THRESHOLD_PCT:[[:space:]]*[0-9]+' | awk -F: '{gsub(/[[:space:]]/,"",$2); print $2}' | head -1)
+          THRESHOLD_PCT="${OVERRIDE:-${THRESHOLD_PCT:-0}}"
+          echo "Using THRESHOLD_PCT=$THRESHOLD_PCT"
+          THRESHOLD_PCT="$THRESHOLD_PCT" bash scripts/firmware-replay-diff.sh "$BASE" HEAD
+
+  no-new-fire-and-forget:
+    name: No new tunables without readback
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for new tunables without cfg_* readback
+        run: |
+          BASE=$(git merge-base HEAD origin/${{ github.base_ref }})
+          NEW_IDS=$(git diff "$BASE" HEAD -- firmware/greenhouse/tunables.yaml 2>/dev/null \
+            | awk '/^\+[[:space:]]+- id:/ {print $3}' | sort -u || true)
+          if [ -z "$NEW_IDS" ]; then
+            echo "No new tunable entities in PR"
+            exit 0
+          fi
+          echo "New tunable IDs in PR: $NEW_IDS"
+          MISSING=""
+          for id in $NEW_IDS; do
+            if ! grep -qE "(id: cfg_${id}|id\\(${id}\\))" firmware/greenhouse/sensors.yaml 2>/dev/null; then
+              MISSING="$MISSING $id"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::New tunables without cfg_* readback:$MISSING"
+            echo "Per plan Appendix B freeze rule, every new tunable needs a readback."
+            exit 1
+          fi
+          echo "All new tunables have readback coverage"
+
+  service-restart-drift-guard:
+    name: Service restart hygiene (schema → runtime)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Flag schema changes without restart documentation
+        # Observed need from 2026-04-21 MCP staleness incident — MCP ran
+        # 40+ hours with stale schema because nobody restarted it post-merge.
+        # Forces PR authors to document which services bounce post-merge.
+        # Reads PR body via jq from $GITHUB_EVENT_PATH (not shell-interpolated
+        # ${{ github.event.pull_request.body }}) so arbitrary PR-body content
+        # including backticks/parens/quotes doesn't break the script.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          BASE=$(git merge-base HEAD "origin/${BASE_REF}")
+          SCHEMA_CHANGED=$(git diff --name-only "$BASE" HEAD -- \
+            'verdify_schemas/**' 'ingestor/entity_map.py' 'mcp/server.py' 2>/dev/null | head -1)
+          if [ -z "$SCHEMA_CHANGED" ]; then
+            echo "No schema files changed"
+            exit 0
+          fi
+          echo "Schema-touching files changed: $SCHEMA_CHANGED"
+          PR_BODY=$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH")
+          if ! printf '%s' "$PR_BODY" | grep -iqE '(restart|bounce|service|systemctl)'; then
+            echo "::error::PR touches schema/entity_map/mcp but PR body doesn't mention service restart."
+            echo "Add a 'Post-merge restart' line listing which services need to bounce (e.g. verdify-mcp, verdify-ingestor)."
+            exit 1
+          fi
+          echo "PR body documents service restart"

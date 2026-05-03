@@ -144,14 +144,44 @@ async def check_conditions(conn) -> list[dict]:
             }
         )
 
-    # 3. VPD stress > 2 hours today
+    # 3. VPD stress > 2 hours today, still active in the last 15 minutes.
     row = await conn.fetchrow("""
-        SELECT vpd_stress_hours FROM v_stress_hours_today
-        WHERE date >= date_trunc('day', now() AT TIME ZONE 'America/Denver')
-        ORDER BY date DESC LIMIT 1
+        WITH daily AS (
+            SELECT vpd_stress_hours::float AS vpd_stress_hours
+              FROM v_stress_hours_today
+             WHERE date >= date_trunc('day', now() AT TIME ZONE 'America/Denver')
+             ORDER BY date DESC
+             LIMIT 1
+        ),
+        recent AS (
+            SELECT count(*)::int AS samples,
+                   count(*) FILTER (WHERE vpd_avg > fn_setpoint_at('vpd_high', ts))::int AS high_samples,
+                   avg(vpd_avg)::float AS avg_vpd,
+                   avg(fn_setpoint_at('vpd_high', ts))::float AS avg_vpd_high
+              FROM climate
+             WHERE ts >= now() - interval '15 minutes'
+               AND vpd_avg IS NOT NULL
+        )
+        SELECT daily.vpd_stress_hours,
+               recent.samples,
+               recent.high_samples,
+               recent.avg_vpd,
+               recent.avg_vpd_high,
+               CASE WHEN recent.samples > 0
+                    THEN recent.high_samples::float / recent.samples
+                    ELSE 0.0
+               END AS recent_high_fraction
+          FROM daily CROSS JOIN recent
     """)
-    if row and row["vpd_stress_hours"] and float(row["vpd_stress_hours"]) > 2.0:
+    if (
+        row
+        and row["vpd_stress_hours"]
+        and float(row["vpd_stress_hours"]) > 2.0
+        and int(row["samples"] or 0) >= 3
+        and float(row["recent_high_fraction"] or 0.0) >= 0.5
+    ):
         hrs = float(row["vpd_stress_hours"])
+        high_fraction = float(row["recent_high_fraction"] or 0.0)
         alerts.append(
             {
                 "alert_type": "vpd_stress",
@@ -159,8 +189,15 @@ async def check_conditions(conn) -> list[dict]:
                 "category": "climate",
                 "sensor_id": "climate.vpd_avg",
                 "zone": None,
-                "message": f"VPD stress: {hrs:.1f} hours today (threshold: 2h)",
-                "details": {"vpd_stress_hours": hrs},
+                "message": f"VPD stress active: {hrs:.1f} hours today, {high_fraction:.0%} high in last 15m",
+                "details": {
+                    "vpd_stress_hours": hrs,
+                    "recent_samples": int(row["samples"] or 0),
+                    "recent_high_samples": int(row["high_samples"] or 0),
+                    "recent_high_fraction": high_fraction,
+                    "avg_vpd_15m": float(row["avg_vpd"]) if row["avg_vpd"] is not None else None,
+                    "avg_vpd_high_15m": float(row["avg_vpd_high"]) if row["avg_vpd_high"] is not None else None,
+                },
                 "metric_value": hrs,
                 "threshold_value": 2.0,
             }

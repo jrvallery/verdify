@@ -1,34 +1,466 @@
 """alert_log row + alert envelope schemas.
 
-- AlertLogRow: 1:1 onto the alert_log table (full persisted shape).
-- AlertEnvelope: the dict shape that tasks.py builds up across 8 alert types
-  before batch INSERT. Today it's dict-of-anything; typing it surfaces
-  inconsistencies the moment they're introduced.
+- AlertLogRow: permissive 1:1 shape for historical alert_log rows.
+- AlertEnvelope: writable alert envelope validated against per-alert detail
+  payloads before INSERT.
 - AlertAction: MCP `alerts` tool envelope — replaces free-form (action, data: str).
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
-AlertSeverity = Literal["info", "warning", "critical"]
+from .tunables import TunableParameter
+
+AlertSeverity = Literal["info", "warning", "high", "critical"]
 AlertCategory = Literal["sensor", "equipment", "climate", "water", "system"]
-AlertDisposition = Literal["open", "acknowledged", "resolved"]
+AlertDisposition = Literal["open", "acknowledged", "resolved", "suppressed"]
+AlertType = Literal[
+    "band_fn_null",
+    "esp32_push_failed",
+    "esp32_reboot",
+    "firmware_relief_ceiling",
+    "firmware_vent_latched",
+    "firmware_version_mismatch",
+    "heap_pressure_critical",
+    "heap_pressure_warning",
+    "heat_manual_override",
+    "heat_staging_inversion",
+    "leak_detected",
+    "plan_context_failed",
+    "planner_band_ownership_drift",
+    "planner_gateway_delivery_failed",
+    "planner_required_plan_missed",
+    "planner_stale",
+    "relay_stuck",
+    "safety_invalid",
+    "sensor_offline",
+    "setpoint_unconfirmed",
+    "soil_sensor_offline",
+    "temp_safety",
+    "tunable_zero_variance",
+    "vpd_extreme",
+    "vpd_stress",
+]
+
+ALERT_TYPES: tuple[str, ...] = (
+    "band_fn_null",
+    "esp32_push_failed",
+    "esp32_reboot",
+    "firmware_relief_ceiling",
+    "firmware_vent_latched",
+    "firmware_version_mismatch",
+    "heap_pressure_critical",
+    "heap_pressure_warning",
+    "heat_manual_override",
+    "heat_staging_inversion",
+    "leak_detected",
+    "plan_context_failed",
+    "planner_band_ownership_drift",
+    "planner_gateway_delivery_failed",
+    "planner_required_plan_missed",
+    "planner_stale",
+    "relay_stuck",
+    "safety_invalid",
+    "sensor_offline",
+    "setpoint_unconfirmed",
+    "soil_sensor_offline",
+    "temp_safety",
+    "tunable_zero_variance",
+    "vpd_extreme",
+    "vpd_stress",
+)
+
+
+class _DetailsBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SensorOfflineDetails(_DetailsBase):
+    type: str
+    staleness_ratio: float | None = None
+
+
+class RelayStuckDetails(_DetailsBase):
+    hours_on: float = Field(..., ge=0)
+    threshold_hours: float = Field(..., ge=0)
+    state_source: str
+    temp_avg: float | None = None
+    sp_temp_high: float | None = None
+    greenhouse_mode: str | None = None
+    context_ts: AwareDatetime | None = None
+
+
+class VpdStressDetails(_DetailsBase):
+    vpd_stress_hours: float = Field(..., ge=0)
+    recent_samples: int = Field(..., ge=0)
+    recent_high_samples: int = Field(..., ge=0)
+    recent_high_fraction: float = Field(..., ge=0)
+    avg_vpd_15m: float | None = None
+    avg_vpd_high_15m: float | None = None
+
+
+class TempSafetyDetails(_DetailsBase):
+    temp_f: float
+
+
+class VpdExtremeDetails(_DetailsBase):
+    vpd_kpa: float = Field(..., ge=0)
+
+
+class LeakDetectedDetails(_DetailsBase):
+    since: AwareDatetime
+
+
+class ESP32RebootDetails(_DetailsBase):
+    uptime_s: float = Field(..., ge=0)
+    reset_reason: str = ""
+
+
+class PlannerStaleDetails(_DetailsBase):
+    age_s: int = Field(..., ge=0)
+    age_h: float = Field(..., ge=0)
+
+
+class PlanDeliveryFailureDetails(_DetailsBase):
+    id: int
+    event_type: str
+    event_label: str | None = None
+    instance: str | None = None
+    gateway_status: int | None = None
+    delivered_at: AwareDatetime
+    gateway_body: str = ""
+
+
+class PlannerGatewayDeliveryFailedDetails(_DetailsBase):
+    failures: list[PlanDeliveryFailureDetails]
+
+
+class RequiredPlanMissDetails(PlanDeliveryFailureDetails):
+    status: str
+
+
+class PlannerRequiredPlanMissedDetails(_DetailsBase):
+    misses: list[RequiredPlanMissDetails]
+
+
+class BandOwnershipOffender(_DetailsBase):
+    parameter: TunableParameter
+    plan_id: str
+    source: str
+    rows: int = Field(..., ge=1)
+
+
+class PlannerBandOwnershipDriftDetails(_DetailsBase):
+    band_owned_params: list[TunableParameter]
+    offenders: list[BandOwnershipOffender]
+
+
+class SafetyInvalidDetails(_DetailsBase):
+    parameter: TunableParameter
+    value: float | None = None
+
+
+class HeatManualOverrideDetails(_DetailsBase):
+    watts: int = Field(..., ge=0)
+
+
+class SoilSensorOfflineDetails(_DetailsBase):
+    column: str
+    sensor: str
+
+
+class HeatStagingInversionDetails(_DetailsBase):
+    heat2_on_since: AwareDatetime
+    duration_s: float = Field(..., ge=0)
+    temp_avg: float | None = None
+    temp_low: float | None = None
+    d_heat_stage_2: float | None = None
+
+
+class FirmwareReliefCeilingDetails(_DetailsBase):
+    relief_cycle_count: int = Field(..., ge=0)
+    ceiling_default: int = Field(..., ge=1)
+
+
+class FirmwareVentLatchedDetails(_DetailsBase):
+    vent_latch_timer_s: int = Field(..., ge=0)
+
+
+class FirmwareVersionMismatchDetails(_DetailsBase):
+    expected_firmware_version: str
+    live_firmware_version: str
+    diagnostics_ts: AwareDatetime | None = None
+    pin_source: str
+
+
+class HeapPressureDetails(_DetailsBase):
+    equipment: Literal["heap_pressure_critical", "heap_pressure_warning"]
+    equipment_ts: AwareDatetime | None = None
+    last_true_ts: AwareDatetime | None = None
+    heap_free_kb: float | None = None
+    heap_diag_ts: AwareDatetime | None = None
+    healthy_heap_samples_after_event: int = Field(..., ge=0)
+
+
+class HeapPressureCriticalDetails(HeapPressureDetails):
+    equipment: Literal["heap_pressure_critical"]
+    critical_logs_30m: int = Field(..., ge=0)
+    last_critical_log_ts: AwareDatetime | None = None
+    last_critical_log_message: str | None = None
+
+
+class HeapPressureWarningDetails(HeapPressureDetails):
+    equipment: Literal["heap_pressure_warning"]
+    warning_logs_30m: int = Field(..., ge=0)
+    last_warning_log_ts: AwareDatetime | None = None
+    last_warning_log_message: str | None = None
+
+
+class TunableZeroVarianceDetails(_DetailsBase):
+    parameter: TunableParameter
+    sample_count: int = Field(..., ge=0)
+    pinned_value: float
+
+
+class SetpointUnconfirmedDetails(_DetailsBase):
+    parameter: TunableParameter
+    requested_value: float
+    last_cfg_readback: float | None = None
+    age_s: int = Field(..., ge=0)
+    pushed_at: AwareDatetime
+
+
+class ESP32PushFailedDetails(_DetailsBase):
+    error: str
+    change_count: int = Field(..., ge=0)
+
+
+class PlanContextFailedDetails(_DetailsBase):
+    reason: str
+    stderr: str = ""
+    exit_code: int | None = None
+
+
+class BandFnNullDetails(_DetailsBase):
+    band_row_null: bool
+    zone_row_null: bool
+
+
+class _AlertBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: AlertSeverity
+    category: AlertCategory
+    sensor_id: str | None = None
+    zone: str | None = None
+    zone_id: int | None = None
+    message: str = Field(..., min_length=1)
+    metric_value: float | None = None
+    threshold_value: float | None = None
+
+
+class SensorOfflineAlert(_AlertBase):
+    alert_type: Literal["sensor_offline"]
+    details: SensorOfflineDetails
+
+
+class RelayStuckAlert(_AlertBase):
+    alert_type: Literal["relay_stuck"]
+    details: RelayStuckDetails
+
+
+class VpdStressAlert(_AlertBase):
+    alert_type: Literal["vpd_stress"]
+    details: VpdStressDetails
+
+
+class TempSafetyAlert(_AlertBase):
+    alert_type: Literal["temp_safety"]
+    details: TempSafetyDetails
+
+
+class VpdExtremeAlert(_AlertBase):
+    alert_type: Literal["vpd_extreme"]
+    details: VpdExtremeDetails
+
+
+class LeakDetectedAlert(_AlertBase):
+    alert_type: Literal["leak_detected"]
+    details: LeakDetectedDetails
+
+
+class ESP32RebootAlert(_AlertBase):
+    alert_type: Literal["esp32_reboot"]
+    details: ESP32RebootDetails
+
+
+class PlannerStaleAlert(_AlertBase):
+    alert_type: Literal["planner_stale"]
+    details: PlannerStaleDetails
+
+
+class PlannerGatewayDeliveryFailedAlert(_AlertBase):
+    alert_type: Literal["planner_gateway_delivery_failed"]
+    details: PlannerGatewayDeliveryFailedDetails
+
+
+class PlannerRequiredPlanMissedAlert(_AlertBase):
+    alert_type: Literal["planner_required_plan_missed"]
+    details: PlannerRequiredPlanMissedDetails
+
+
+class PlannerBandOwnershipDriftAlert(_AlertBase):
+    alert_type: Literal["planner_band_ownership_drift"]
+    details: PlannerBandOwnershipDriftDetails
+
+
+class SafetyInvalidAlert(_AlertBase):
+    alert_type: Literal["safety_invalid"]
+    details: SafetyInvalidDetails
+
+
+class HeatManualOverrideAlert(_AlertBase):
+    alert_type: Literal["heat_manual_override"]
+    details: HeatManualOverrideDetails
+
+
+class SoilSensorOfflineAlert(_AlertBase):
+    alert_type: Literal["soil_sensor_offline"]
+    details: SoilSensorOfflineDetails
+
+
+class HeatStagingInversionAlert(_AlertBase):
+    alert_type: Literal["heat_staging_inversion"]
+    details: HeatStagingInversionDetails
+
+
+class FirmwareReliefCeilingAlert(_AlertBase):
+    alert_type: Literal["firmware_relief_ceiling"]
+    details: FirmwareReliefCeilingDetails
+
+
+class FirmwareVentLatchedAlert(_AlertBase):
+    alert_type: Literal["firmware_vent_latched"]
+    details: FirmwareVentLatchedDetails
+
+
+class FirmwareVersionMismatchAlert(_AlertBase):
+    alert_type: Literal["firmware_version_mismatch"]
+    details: FirmwareVersionMismatchDetails
+
+
+class HeapPressureCriticalAlert(_AlertBase):
+    alert_type: Literal["heap_pressure_critical"]
+    details: HeapPressureCriticalDetails
+
+
+class HeapPressureWarningAlert(_AlertBase):
+    alert_type: Literal["heap_pressure_warning"]
+    details: HeapPressureWarningDetails
+
+
+class TunableZeroVarianceAlert(_AlertBase):
+    alert_type: Literal["tunable_zero_variance"]
+    details: TunableZeroVarianceDetails
+
+
+class SetpointUnconfirmedAlert(_AlertBase):
+    alert_type: Literal["setpoint_unconfirmed"]
+    details: SetpointUnconfirmedDetails
+
+
+class ESP32PushFailedAlert(_AlertBase):
+    alert_type: Literal["esp32_push_failed"]
+    details: ESP32PushFailedDetails
+
+
+class PlanContextFailedAlert(_AlertBase):
+    alert_type: Literal["plan_context_failed"]
+    details: PlanContextFailedDetails
+
+
+class BandFnNullAlert(_AlertBase):
+    alert_type: Literal["band_fn_null"]
+    details: BandFnNullDetails
+
+
+AlertEnvelopeUnion = Annotated[
+    BandFnNullAlert
+    | ESP32PushFailedAlert
+    | ESP32RebootAlert
+    | FirmwareReliefCeilingAlert
+    | FirmwareVentLatchedAlert
+    | FirmwareVersionMismatchAlert
+    | HeapPressureCriticalAlert
+    | HeapPressureWarningAlert
+    | HeatManualOverrideAlert
+    | HeatStagingInversionAlert
+    | LeakDetectedAlert
+    | PlanContextFailedAlert
+    | PlannerBandOwnershipDriftAlert
+    | PlannerGatewayDeliveryFailedAlert
+    | PlannerRequiredPlanMissedAlert
+    | PlannerStaleAlert
+    | RelayStuckAlert
+    | SafetyInvalidAlert
+    | SensorOfflineAlert
+    | SetpointUnconfirmedAlert
+    | SoilSensorOfflineAlert
+    | TempSafetyAlert
+    | TunableZeroVarianceAlert
+    | VpdExtremeAlert
+    | VpdStressAlert,
+    Field(discriminator="alert_type"),
+]
+
+ALERT_ENVELOPE_ADAPTER: TypeAdapter[AlertEnvelopeUnion] = TypeAdapter(AlertEnvelopeUnion)
 
 
 class AlertEnvelope(BaseModel):
-    """In-memory alert struct tasks.py builds before INSERT.
+    """In-memory alert struct validated before INSERT.
 
-    Mirrored 1:1 on `alert_log` writable columns. Enforced here so that a new
-    alert_type in `alert_monitor` can't silently drift its payload shape.
+    The public class keeps the existing ``AlertEnvelope.model_validate(...)``
+    API for ingestor callers, while the post-validator dispatches through the
+    stricter tagged union above. New alert types and detail-shape drift fail at
+    construction time instead of landing in ``alert_log.details`` silently.
 
     Sprint 22 (migration 086) added: zone_id FK to alert_log.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    alert_type: AlertType
+    severity: AlertSeverity
+    category: AlertCategory
+    sensor_id: str | None = None
+    zone: str | None = None
+    zone_id: int | None = None
+    message: str = Field(..., min_length=1)
+    details: dict[str, Any]
+    metric_value: float | None = None
+    threshold_value: float | None = None
+
+    @model_validator(mode="after")
+    def _validate_typed_details(self) -> AlertEnvelope:
+        typed = ALERT_ENVELOPE_ADAPTER.validate_python(self.model_dump(mode="python"))
+        self.details = typed.details.model_dump(mode="json")
+        return self
+
+
+class AlertLogRow(BaseModel):
+    """Full row as persisted.
+
+    Historical rows can carry old alert types or old detail payloads, so the
+    persisted-read shape intentionally remains looser than the write envelope.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    ts: AwareDatetime | None = None
     alert_type: str = Field(..., min_length=1)
     severity: AlertSeverity
     category: AlertCategory
@@ -36,18 +468,9 @@ class AlertEnvelope(BaseModel):
     zone: str | None = None
     zone_id: int | None = None
     message: str = Field(..., min_length=1)
-    details: dict | None = None
+    details: dict[str, Any] | None = None
     metric_value: float | None = None
     threshold_value: float | None = None
-
-
-class AlertLogRow(AlertEnvelope):
-    """Full row as persisted. AlertEnvelope + audit columns."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    id: int | None = None
-    ts: AwareDatetime | None = None
     source: str = "system"
     disposition: AlertDisposition = "open"
     acknowledged_at: AwareDatetime | None = None

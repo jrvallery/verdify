@@ -26,6 +26,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "d_heat_stage_2",
         "d_cool_stage_2",
         "temp_hysteresis",
+        "heat_hysteresis",
         "bias_heat",
         "bias_cool",
         # VPD band
@@ -35,6 +36,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Safety rails
         "safety_min",
         "safety_max",
+        "safety_max_seal_margin_f",
         "safety_vpd_min",
         "safety_vpd_max",
         # Mister
@@ -48,6 +50,9 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "mister_all_off_s",
         "mister_water_budget_gal",
         "mister_max_runtime_min",
+        "max_relief_cycles",
+        "dehum_aggressive_kpa",
+        "vent_latch_timeout_ms",
         # Equipment timing
         "min_heat_on_s",
         "min_heat_off_s",
@@ -62,9 +67,14 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Firmware-internal, readback-only (no SETPOINT_MAP route) — present
         # in entity_map.CFG_READBACK_MAP so SetpointSnapshot writes validate.
         "fallback_window_s",
+        # Sprint-15: live outdoor readings (Tempest via HA → ESPHome template
+        # sensor → firmware global). Readback-only; never pushed.
+        "outdoor_temp_f",
+        "outdoor_dewpoint_f",
         # Economiser
         "enthalpy_open",
         "enthalpy_close",
+        "econ_heat_margin_f",
         "site_pressure_hpa",
         # Irrigation wall
         "irrig_wall_start_hour",
@@ -88,6 +98,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         # Grow lights
         "gl_dli_target",
         "gl_lux_threshold",
+        "gl_lux_hysteresis",
         "gl_sunrise_hour",
         "gl_sunset_hour",
         # Mister pulse model
@@ -114,6 +125,18 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "fog_min_temp_f",
         "fog_time_window_start",
         "fog_time_window_end",
+        # Sprint-15: summer thermal-driven vent preference gate.
+        # Outdoor-cooler-and-drier heuristic that short-circuits VPD-seal
+        # precedence in determine_mode(), falling through to VENTILATE when
+        # active. See docs/firmware-sprint-15-summer-vent-spec.md.
+        "vent_prefer_temp_delta_f",
+        "vent_prefer_dp_delta_f",
+        "outdoor_staleness_max_s",
+        "summer_vent_min_runtime_s",
+        # Phase-2 dwell gate (plan firmware stabilization).
+        "dwell_gate_ms",
+        # Controller v2: band-first FSM.
+        "mist_backoff_s",
     }
 )
 
@@ -129,10 +152,19 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         "sw_irrigation_center_enabled",
         "sw_irrigation_weather_skip",
         "sw_occupancy_inhibit",
-        # NOTE: sw_mister_closes_vent exists as an ESP32 switch (firmware
-        # tunables.yaml line 1069) and as a CFG readback, but is NOT in
-        # SETPOINT_MAP today — dispatcher can't push it. Not adding here
-        # until the routing gap is closed; see Sprint 21 follow-up.
+        # Sprint-15: summer vent master enable. ON by default (firmware
+        # behavior today is wrong in summer; explicit opt-out is safer).
+        "sw_summer_vent_enabled",
+        # Sprint-15.1 fix 7: sprint-21 routing gap closed. Gates the
+        # vent-close interlock for misters in controls.yaml block 12.
+        # Default is whatever the firmware global initializes to
+        # (tunables.yaml sw_mister_closes_vent); operator can push
+        # per-greenhouse via dispatcher.
+        "sw_mister_closes_vent",
+        # Phase-2 dwell gate master switch.
+        "sw_dwell_gate_enabled",
+        # Controller v2 master switch.
+        "sw_fsm_controller_enabled",
     }
 )
 

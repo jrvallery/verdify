@@ -19,7 +19,7 @@ enum Mode {
     SAFETY_HEAT,      // temp <= safety_min → vent closed, both heaters
     SEALED_MIST,      // VPD > band ceiling → vent closed, fans off, misters pulsing
     THERMAL_RELIEF,   // sealed too long → mandatory vent burst for heat dump
-    VENTILATE,        // temp > temp_high + bias_cool → vent open, fans on
+    VENTILATE,        // temp above cooling threshold → vent open, fans on
     DEHUM_VENT,       // VPD < vpd_low → vent open for humidity dump
     IDLE              // everything in band → vent closed, no active equipment
 };
@@ -48,12 +48,13 @@ struct SensorInputs {
     float vpd_east;
     int   local_hour;       // 0-23, from SNTP
     bool  occupied;         // greenhouse occupancy (from Sentinel)
-    // Sprint-10 0.3: photoperiod flag for day/night setpoint selection.
-    // Populated by controls.yaml as (in scheduled daylight window) OR
-    // (tempest_lux >> ambient threshold) — hybrid so a cloudy winter day
-    // still registers as "day" inside the window and a 2 AM LED test
-    // doesn't flip it on outside the window.
-    bool  is_photoperiod;
+    // Sprint-15: outdoor readings used by the summer-vent gate.
+    // outdoor_temp_f + outdoor_dewpoint_f drive the cooler+drier comparator.
+    // outdoor_data_age_s is the staleness check (when source goes silent we
+    // fall back to the existing decision cascade).
+    float    outdoor_temp_f;        // outdoor air temperature (°F, from Tempest via /setpoints)
+    float    outdoor_dewpoint_f;    // outdoor dewpoint (°F, computed from temp+RH at caller)
+    uint32_t outdoor_data_age_s;    // seconds since last outdoor reading update
 };
 
 // ── Setpoints (band + planner tunables + firmware config) ──
@@ -91,16 +92,38 @@ struct Setpoints {
     uint32_t vent_latch_timeout_ms;    // was hardcoded 1800000 (30 min)
     float    safety_max_seal_margin_f; // was hardcoded 5.0 (two places)
     float    econ_heat_margin_f;       // was ECON_HEAT_MARGIN_F const
-    // Sprint-10 0.3: day/night setpoint pairs. Legacy temp_high/temp_low/
-    // vpd_high/vpd_low above remain as fallbacks (used when day/night are
-    // unset, or when validate_setpoints has not been invoked — typical in
-    // unit-test paths that construct Setpoints from default_setpoints and
-    // modify only the generic fields). Production flow: the planner /
-    // dispatcher pushes day/night-specific values every planner cycle.
-    float temp_high_day,  temp_high_night;
-    float temp_low_day,   temp_low_night;
-    float vpd_high_day,   vpd_high_night;
-    float vpd_low_day,    vpd_low_night;
+    // Sprint-11: day/night pairs removed. Two-band model: safety rails +
+    // the one dispatcher-pushed band (temp_low/temp_high/vpd_low/vpd_high
+    // above). Day/night phasing is the dispatcher's job — firmware does
+    // not model temporal modes. See feedback_band_architecture memory.
+    // Sprint-15: summer thermal-driven vent preference gate.
+    // When sw_summer_vent_enabled AND outdoor temp is at least
+    // vent_prefer_temp_delta_f below indoor AND outdoor dewpoint is at
+    // least vent_prefer_dp_delta_f below indoor dewpoint AND outdoor
+    // data is fresher than outdoor_staleness_max_s, the gate pre-empts
+    // VPD-seal entry and falls through to VENTILATE. Safety rails,
+    // THERMAL_RELIEF, and DEHUM_VENT remain untouched. See
+    // docs/firmware-sprint-15-summer-vent-spec.md.
+    bool     sw_summer_vent_enabled;       // master enable; default true
+    float    vent_prefer_temp_delta_f;     // outdoor must be ≥ this much cooler (°F)
+    float    vent_prefer_dp_delta_f;       // outdoor DP must be ≥ this much lower (°F)
+    uint32_t outdoor_staleness_max_s;      // gate disables when outdoor data older than this (s)
+    uint32_t summer_vent_min_runtime_s;    // min VENTILATE dwell after gate fires (s; reserved)
+    // Phase-2 (firmware stabilization plan): mode-transition dwell gate.
+    // When sw_dwell_gate_enabled is true, non-safety mode transitions are
+    // held for at least dwell_gate_ms after the last accepted transition.
+    // Safety rails, R2-3 dry override, and vpd_min_safe rescue preempt the
+    // dwell. Projected 80% reduction in whipsaw events (Explore B: 59 mode
+    // changes in 2h on 2026-04-17 stress window). Default OFF for shadow-
+    // mode bake; operator / planner flips to ON after 14d of replay +
+    // shadow validation.
+    bool     sw_dwell_gate_enabled;
+    uint32_t dwell_gate_ms;                // default 300000 (5 min)
+    // Controller v2: band-first FSM. Default OFF so the legacy cascade remains
+    // the rollback path; when enabled, firmware prioritizes temp/VPD band
+    // compliance and treats failed humidification as a backoff, not forced vent.
+    bool     sw_fsm_controller_enabled;
+    uint32_t mist_backoff_ms;
 };
 
 static constexpr uint32_t STATE_SENTINEL = 0xBEEF0042;
@@ -131,6 +154,32 @@ struct ControlState {
     // gas-valve rapid cycling in the hysteresis band between the two
     // thresholds. Managed by determine_mode; read by resolve_equipment.
     bool heat2_latched;
+    // Sprint-15: telemetry flag — set true on each cycle the summer-vent
+    // gate is actively suppressing a VPD-seal entry. Read by
+    // evaluate_overrides() and surfaced via OverrideFlags. No persisted
+    // timer; freshly evaluated each cycle.
+    bool override_summer_vent;
+    // Sprint-15.1 fix 8: which branch of determine_mode() chose the
+    // current mode. Short string literal — no heap allocation. Read by
+    // controls.yaml for the `gh_mode_reason` text sensor. Defaults to
+    // a benign literal on initial_state so consumers can safely publish
+    // before determine_mode has run.
+    const char* last_mode_reason;
+    // Phase-2: monotonic tick count (ms, saturating) at which the most
+    // recent mode transition was accepted. Drives the dwell gate —
+    // new mode proposals within dwell_gate_ms of this timestamp are
+    // held (unless safety preempts). Updated by determine_mode on each
+    // non-held transition. Initialized to 0 which means "already past
+    // dwell at boot" so the first real decision isn't gated.
+    uint32_t last_transition_tick_ms;
+    // Controller v2: lockout after a sealed humidification attempt times out.
+    // During this window the firmware suppresses new SEALED_MIST entries while
+    // still allowing normal temp/dehum control.
+    uint32_t mist_backoff_timer_ms;
+    // Controller v2: moisture assist while the temp band requires VENTILATE but
+    // VPD is also above band. controls.yaml uses this to allow directional
+    // misters during vent cooling without pretending the mode is SEALED_MIST.
+    bool vent_mist_assist_active;
 };
 
 struct RelayOutputs {
@@ -155,6 +204,9 @@ struct OverrideFlags {
     bool relief_cycle_breaker;       // seal wanted but relief_cycle_count maxed → forced VENTILATE
     bool seal_blocked_temp;          // seal wanted but within 5°F of safety_max
     bool vpd_dry_override;           // firmware sealed for VPD safety without planner dwell
+    bool summer_vent_active;         // sprint-15 gate suppressed a VPD-seal in favor of VENTILATE
+    bool vent_mist_assist;           // v2 VENTILATE is carrying concurrent mister demand
+    bool fog_heat_assist;            // v2 SEALED_MIST_FOG is humidifying while heat maintains temp
 };
 
 // ── Saturating addition (prevents uint32_t overflow at 49.7 days) ──
@@ -163,37 +215,49 @@ inline uint32_t sat_add(uint32_t a, uint32_t b) noexcept {
 }
 
 // ── Defaults ──
+// Sprint-11 widening: firmware defaults are PERMISSIVE, bounded only by
+// safety rails. The dispatcher pushes the real crop band every planner
+// cycle; if the dispatcher is silent, we sit in a wide "don't narrow"
+// regime so safety rails are the only active constraint. Two-band model:
+// safety rails + one dispatcher-pushed band.
 inline Setpoints default_setpoints() {
     return {
-        .temp_high = 82.0f, .temp_low = 58.0f,
-        .vpd_high = 1.2f, .vpd_low = 0.5f,
+        .temp_high = 95.0f, .temp_low = 40.0f,    // wide — dispatcher narrows
+        .vpd_high = 2.80f,  .vpd_low = 0.35f,      // wide — dispatcher narrows
         .bias_cool = 0.0f, .bias_heat = 0.0f,
-        .vpd_hysteresis = 0.3f, .temp_hysteresis = 1.5f, .heat_hysteresis = 1.0f,
+        .vpd_hysteresis = 0.3f, .temp_hysteresis = 1.5f, .heat_hysteresis = 1.0f,  // Phase-2: push temp_hysteresis=2.0 via dispatcher at sw_dwell_gate_enabled flip
         .dH2 = 5.0f, .dC2 = 3.0f,
-        .safety_max = 95.0f, .safety_min = 45.0f,
+        .safety_max = 100.0f, .safety_min = 35.0f,
         .vpd_max_safe = 3.0f, .vpd_min_safe = 0.3f,
         .sealed_max_ms = 600000, .relief_duration_ms = 90000,
         .vpd_watch_dwell_ms = 60000, .mist_s2_delay_ms = 300000,
         .max_relief_cycles = 3,
         .fog_escalation_kpa = 0.4f, .fog_rh_ceiling = 90.0f,
         .fog_min_temp = 55.0f, .fog_window_start = 7, .fog_window_end = 17,
-        .dehum_aggressive_kpa = 0.6f,
+        .dehum_aggressive_kpa = 0.3f,              // must be < vpd_low
         .occupancy_inhibit = false, .econ_block = false,
-        // Sprint-10 0.4b: magic number defaults match pre-sprint-10 constants.
-        .vent_latch_timeout_ms = 1800000u,  // 30 min
+        .vent_latch_timeout_ms = 1800000u,
         .safety_max_seal_margin_f = 5.0f,
         .econ_heat_margin_f = 5.0f,
-        // Sprint-10 0.3: day/night pairs default to 0 (unset). The band
-        // resolver (resolve_active_band) falls back to the legacy generic
-        // values in that case, so existing test paths that construct
-        // Setpoints via default_setpoints() + modify only temp_high/etc.
-        // continue to exercise the same thresholds. Production callers
-        // invoke validate_setpoints() which back-fills the day/night
-        // pairs from the legacy values explicitly.
-        .temp_high_day = 0.0f,  .temp_high_night = 0.0f,
-        .temp_low_day  = 0.0f,  .temp_low_night  = 0.0f,
-        .vpd_high_day  = 0.0f,  .vpd_high_night  = 0.0f,
-        .vpd_low_day   = 0.0f,  .vpd_low_night   = 0.0f
+        // Sprint-15: summer-vent gate defaults. Master enable ON by
+        // default — pre-sprint-15 firmware sealed against its own
+        // best heat sink in summer; explicit operator opt-out is the
+        // safer default. Thresholds matched to spec defaults.
+        .sw_summer_vent_enabled = true,
+        .vent_prefer_temp_delta_f = 5.0f,
+        .vent_prefer_dp_delta_f = 5.0f,
+        // Sprint-15.1 fix 3: raised from 300s → 600s (2× dispatcher
+        // cadence). Pre-15.1 at exactly 300s the staleness comparison
+        // flipped false on any dispatcher push jitter, intermittently
+        // disabling the gate.
+        .outdoor_staleness_max_s = 600u,
+        .summer_vent_min_runtime_s = 180u,
+        // Phase-2 dwell gate. Default OFF (shadow-mode bake before flipping
+        // to active). 5-min dwell projected to reduce whipsaw 80%.
+        .sw_dwell_gate_enabled = false,
+        .dwell_gate_ms = 300000u,
+        .sw_fsm_controller_enabled = false,
+        .mist_backoff_ms = 600000u
     };
 }
 
@@ -214,6 +278,13 @@ inline void validate_setpoints(Setpoints& sp) {
     sp.vpd_hysteresis = std::max(0.05f, std::min(sp.vpd_high * 0.5f, sp.vpd_hysteresis));
     sp.temp_hysteresis = std::max(0.5f, std::min(5.0f, sp.temp_hysteresis));
     sp.heat_hysteresis = std::max(0.0f, std::min(3.0f, sp.heat_hysteresis));
+    // Sprint-14: clamp biases to ±5°F. Pre-sprint-14 these were
+    // unclamped — a dispatcher push of bias_heat = -50 would disable
+    // heating entirely. 30-day observed operational range was
+    // bias_cool ∈ [-1, 5], bias_heat ∈ [0, 5]; [-5, 5] covers observed
+    // usage and matches the ±5°F margin the rest of validate uses.
+    sp.bias_heat = std::max(-5.0f, std::min(5.0f, sp.bias_heat));
+    sp.bias_cool = std::max(-5.0f, std::min(5.0f, sp.bias_cool));
     sp.safety_max = std::max(sp.temp_high + 5.0f, std::min(120.0f, sp.safety_max));
     sp.safety_min = std::max(30.0f, std::min(sp.temp_low - 5.0f, sp.safety_min));
     sp.sealed_max_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.sealed_max_ms));
@@ -276,23 +347,21 @@ inline void validate_setpoints(Setpoints& sp) {
     sp.safety_max_seal_margin_f = std::max(1.0f, std::min(15.0f, sp.safety_max_seal_margin_f));
     sp.econ_heat_margin_f       = std::max(1.0f, std::min(15.0f, sp.econ_heat_margin_f));
 
-    // --- sprint-10 0.3: back-fill day/night from legacy, then enforce
-    // relational ordering within each pair. Back-fill only when the
-    // day/night field is unset (== 0) — an explicit push of 0 for a
-    // day/night setpoint is invalid input and we treat it as "not set."
-    if (sp.temp_high_day   <= 0.0f) sp.temp_high_day   = sp.temp_high;
-    if (sp.temp_high_night <= 0.0f) sp.temp_high_night = sp.temp_high;
-    if (sp.temp_low_day    <= 0.0f) sp.temp_low_day    = sp.temp_low;
-    if (sp.temp_low_night  <= 0.0f) sp.temp_low_night  = sp.temp_low;
-    if (sp.vpd_high_day    <= 0.0f) sp.vpd_high_day    = sp.vpd_high;
-    if (sp.vpd_high_night  <= 0.0f) sp.vpd_high_night  = sp.vpd_high;
-    if (sp.vpd_low_day     <= 0.0f) sp.vpd_low_day     = sp.vpd_low;
-    if (sp.vpd_low_night   <= 0.0f) sp.vpd_low_night   = sp.vpd_low;
-    // Pair ordering: low < high within each photoperiod.
-    if (sp.temp_low_day    >= sp.temp_high_day)   sp.temp_low_day    = sp.temp_high_day   - 5.0f;
-    if (sp.temp_low_night  >= sp.temp_high_night) sp.temp_low_night  = sp.temp_high_night - 5.0f;
-    if (sp.vpd_low_day     >= sp.vpd_high_day)    sp.vpd_low_day     = sp.vpd_high_day    - 0.1f;
-    if (sp.vpd_low_night   >= sp.vpd_high_night)  sp.vpd_low_night   = sp.vpd_high_night  - 0.1f;
+    // --- sprint-15: summer-vent gate clamps (match spec ranges) ---
+    sp.vent_prefer_temp_delta_f = std::max(2.0f, std::min(15.0f, sp.vent_prefer_temp_delta_f));
+    sp.vent_prefer_dp_delta_f   = std::max(2.0f, std::min(15.0f, sp.vent_prefer_dp_delta_f));
+    // Sprint-15.1 fix 3: floor raised 60→120s (anything below dispatcher
+    // cadence disqualifies the gate on every jitter tick).
+    sp.outdoor_staleness_max_s  = std::max(uint32_t(120), std::min(uint32_t(1800), sp.outdoor_staleness_max_s));
+    sp.summer_vent_min_runtime_s = std::max(uint32_t(60), std::min(uint32_t(600), sp.summer_vent_min_runtime_s));
+
+    // --- Phase-2 dwell gate clamp ---
+    // 60s floor (shorter than control-cycle cadence makes the gate useless),
+    // 1800s (30-min) ceiling (longer than sealed_max_ms would starve exits).
+    sp.dwell_gate_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.dwell_gate_ms));
+
+    // --- Controller v2 clamps ---
+    sp.mist_backoff_ms = std::max(uint32_t(60000), std::min(uint32_t(3600000), sp.mist_backoff_ms));
 }
 
 inline ControlState initial_state() {
@@ -304,31 +373,11 @@ inline ControlState initial_state() {
         .vpd_watch_timer_ms = 0, .mist_stage_timer_ms = 0,
         .relief_cycle_count = 0, .vent_latch_timer_ms = 0,
         .dry_override_active = false,
-        .heat2_latched = false
+        .heat2_latched = false,
+        .override_summer_vent = false,
+        .last_mode_reason = "init",
+        .last_transition_tick_ms = 0,
+        .mist_backoff_timer_ms = 0,
+        .vent_mist_assist_active = false
     };
-}
-
-// ── Sprint-10 0.3: active band resolver ───────────────────────────
-// Picks day or night setpoints based on in.is_photoperiod. Falls back
-// to the legacy sp.{temp_high,temp_low,vpd_high,vpd_low} if the
-// day/night fields are unset (zero) — this preserves existing test
-// behavior that constructs Setpoints from default_setpoints() and
-// modifies only the generic fields. In production these are always
-// populated (validate_setpoints back-fills if needed).
-struct ActiveBand {
-    float temp_high, temp_low;
-    float vpd_high, vpd_low;
-};
-
-inline ActiveBand resolve_active_band(const SensorInputs& in, const Setpoints& sp) noexcept {
-    auto pick = [](float day, float night, float fallback, bool is_day) {
-        float v = is_day ? day : night;
-        return (v > 0.0f) ? v : fallback;
-    };
-    ActiveBand a;
-    a.temp_high = pick(sp.temp_high_day, sp.temp_high_night, sp.temp_high, in.is_photoperiod);
-    a.temp_low  = pick(sp.temp_low_day,  sp.temp_low_night,  sp.temp_low,  in.is_photoperiod);
-    a.vpd_high  = pick(sp.vpd_high_day,  sp.vpd_high_night,  sp.vpd_high,  in.is_photoperiod);
-    a.vpd_low   = pick(sp.vpd_low_day,   sp.vpd_low_night,   sp.vpd_low,   in.is_photoperiod);
-    return a;
 }

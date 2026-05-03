@@ -56,7 +56,7 @@ class TestTunableEnumShape:
 
         here = pathlib.Path(__file__).resolve()
         repo_root = here.parent.parent.parent  # verdify_schemas/tests/file → repo root
-        for p in ("/srv/verdify/ingestor", str(repo_root / "ingestor"), "/mnt/iris/verdify/ingestor"):
+        for p in reversed((str(repo_root / "ingestor"), "/srv/verdify/ingestor", "/mnt/iris/verdify/ingestor")):
             if p not in sys.path:
                 sys.path.insert(0, p)
         from entity_map import CFG_READBACK_MAP, SETPOINT_MAP

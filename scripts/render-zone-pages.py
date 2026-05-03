@@ -85,7 +85,7 @@ def _render_equipment_table(equipment: list[dict]) -> str:
     lines = ['<div class="metric-grid">']
     for e in sorted(equipment, key=lambda x: (x["kind"], x["slug"])):
         watts = f"{e['watts']:.0f}W" if e.get("watts") else "—"
-        cost = f"${e['cost_per_hour_usd']:.3f}" if e.get("cost_per_hour_usd") else "—"
+        cost = f"USD {e['cost_per_hour_usd']:.3f}" if e.get("cost_per_hour_usd") else "—"
         lines.append(
             _metric_card(
                 f"<code>{e['slug']}</code> ({e['name']})",
@@ -101,11 +101,12 @@ def _render_sensors_table(sensors: list[dict]) -> str:
         return _empty_card("No sensors", "No sensors assigned to this zone.")
     lines = ['<div class="metric-grid">']
     for s in sorted(sensors, key=lambda x: x["slug"]):
-        addr = s.get("modbus_addr") or s.get("gpio_pin") or "—"
+        addr = "configured" if (s.get("modbus_addr") or s.get("gpio_pin")) else "—"
+        model = "camera model withheld" if s.get("kind") == "camera" else s.get("model") or "—"
         lines.append(
             _metric_card(
                 f"<code>{s['slug']}</code>",
-                f"Kind: {s['kind']}; Protocol: {s['protocol']}; Model: {s.get('model') or '—'}; Addr: {addr}",
+                f"Kind: {s['kind']}; Protocol: {s['protocol']}; Model: {model}; Addr: {addr}",
             )
         )
     lines.append("</div>")

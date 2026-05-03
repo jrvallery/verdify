@@ -71,6 +71,300 @@ inline bool fog_permitted(const SensorInputs& in, const Setpoints& sp) noexcept 
         && fog_hour_in_window(in.local_hour, sp.fog_window_start, sp.fog_window_end);
 }
 
+// Controller v2 clamps VPD hysteresis against the actual band width. The
+// legacy cascade allows hyst_vpd_kpa=0.4 with a 0.8-1.2 band, which makes
+// SEALED_MIST exit only below 0.7 kPa. That turns normal high-VPD periods
+// into timeout/backoff loops instead of band compliance.
+inline float v2_vpd_hysteresis(const Setpoints& sp) noexcept {
+    const float vpd_width = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float requested = std::max(0.05f, sp.vpd_hysteresis);
+    const float cap = std::max(0.05f, vpd_width * 0.33f);
+    return std::min(requested, cap);
+}
+
+// Controller v2 uses the crop/planner band itself as the temperature contract.
+// Heat1 protects the midpoint; heat2 protects the lower edge. The older
+// d_heat_stage_2 margin is left to the legacy cascade and should not allow v2
+// to sit several degrees below band before gas heat joins.
+inline float v2_heat_target_f(const Setpoints& sp) noexcept {
+    return (sp.temp_low + sp.temp_high) * 0.5f;
+}
+
+// Controller v2 normally cools at the raw upper band edge. Stage-2 fan
+// escalation is band-scaled so a 6°F crop band does not wait the full legacy
+// d_cool_stage_2 margin before using both fans. The same derived margin is
+// used only for cold-outdoor vent entry to avoid repeated cold-air slugs.
+inline float v2_cool_stage2_delta_f(const Setpoints& sp) noexcept {
+    const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    return std::min(sp.dC2, std::max(1.0f, band_width * 0.25f));
+}
+
+// Controller v2: band-first FSM.
+//
+// Policy: safety rails still preempt everything, but normal control prioritizes
+// temp-band compliance, then VPD-band compliance. Failed sealed humidification
+// enters a timed backoff instead of forcing VENTILATE. Venting is selected only
+// for cooling/dehum/outdoor-exchange cases where it serves the active demand.
+inline Mode determine_mode_v2(
+    const SensorInputs& in,
+    const Setpoints& sp,
+    ControlState& state,
+    uint32_t dt_ms
+) {
+    if (state.sentinel != STATE_SENTINEL) {
+        state = initial_state();
+    }
+    state.vent_mist_assist_active = false;
+
+    if (!sensors_plausible(in)) {
+        state.mode = SENSOR_FAULT;
+        state.mist_stage = MIST_WATCH;
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.mist_stage_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
+        state.last_mode_reason = "v2_sensor_fault";
+        return SENSOR_FAULT;
+    }
+
+    const Mode prev = state.mode_prev;
+    const float temp_high = sp.temp_high;
+    const float HV = v2_vpd_hysteresis(sp);
+
+    const bool safety_cool = in.temp_f >= sp.safety_max;
+    const bool safety_heat = in.temp_f <= sp.safety_min;
+    const bool was_cooling = (prev == VENTILATE) || (prev == THERMAL_RELIEF);
+    const bool outdoor_cold_for_vent =
+        std::isfinite(in.outdoor_temp_f) && in.outdoor_temp_f < (sp.temp_low - 10.0f);
+    const float cooling_exit_hysteresis =
+        outdoor_cold_for_vent ? std::max(sp.temp_hysteresis, 3.0f) : sp.temp_hysteresis;
+    const float cooling_entry_margin =
+        outdoor_cold_for_vent ? v2_cool_stage2_delta_f(sp) : 0.0f;
+    const bool needs_cooling = was_cooling
+        ? in.temp_f > (temp_high - cooling_exit_hysteresis)
+        : in.temp_f > (temp_high + cooling_entry_margin);
+    const float heat_target = v2_heat_target_f(sp);
+    const bool temp_below_band = in.temp_f < sp.temp_low;
+    const bool needs_heating_s1 = in.temp_f < (heat_target + sp.heat_hysteresis);
+
+    const bool vpd_high = in.vpd_kpa > sp.vpd_high;
+    const bool vpd_high_resolved = in.vpd_kpa <= (sp.vpd_high - HV);
+    const bool cold_dehum_allowed =
+        !outdoor_cold_for_vent || in.temp_f > (sp.temp_low + std::max(2.0f, sp.temp_hysteresis));
+    const bool vpd_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block && cold_dehum_allowed;
+    const bool vpd_dehum_exit = in.vpd_kpa >= sp.vpd_low || !cold_dehum_allowed;
+    const bool was_dehum = prev == DEHUM_VENT;
+    const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
+
+    {
+        if (temp_below_band) {
+            state.heat2_latched = true;
+        } else if (in.temp_f >= heat_target) {
+            state.heat2_latched = false;
+        }
+    }
+
+    if (vpd_high && !safety_cool && !safety_heat) {
+        state.vpd_watch_timer_ms = sat_add(state.vpd_watch_timer_ms, dt_ms);
+    } else if (!vpd_high) {
+        state.vpd_watch_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+    }
+    const bool humidify_ready = vpd_high && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
+
+    if (state.mist_backoff_timer_ms > 0) {
+        if (!vpd_high) {
+            state.mist_backoff_timer_ms = 0;
+            state.relief_cycle_count = 0;
+        } else if (state.mist_backoff_timer_ms >= sp.mist_backoff_ms) {
+            state.mist_backoff_timer_ms = 0;
+        } else {
+            state.mist_backoff_timer_ms = sat_add(state.mist_backoff_timer_ms, dt_ms);
+        }
+    }
+
+    state.override_summer_vent = false;
+    {
+        const bool outdoor_data_fresh = in.outdoor_data_age_s < sp.outdoor_staleness_max_s;
+        const bool outdoor_cooler = in.outdoor_temp_f < (in.temp_f - sp.vent_prefer_temp_delta_f);
+        const bool outdoor_drier_dp = in.outdoor_dewpoint_f < (in.dew_point_f - sp.vent_prefer_dp_delta_f);
+        state.override_summer_vent = sp.sw_summer_vent_enabled
+                                  && outdoor_data_fresh
+                                  && outdoor_cooler
+                                  && outdoor_drier_dp
+                                  && needs_cooling
+                                  && humidify_ready;
+    }
+
+    Mode mode = IDLE;
+    state.dry_override_active = false;
+    state.last_mode_reason = "v2_idle";
+
+    if (safety_cool) {
+        mode = SAFETY_COOL;
+        state.last_mode_reason = "v2_safety_cool";
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
+    } else if (safety_heat) {
+        mode = SAFETY_HEAT;
+        state.last_mode_reason = "v2_safety_heat";
+        state.sealed_timer_ms = 0;
+        state.relief_timer_ms = 0;
+        state.vpd_watch_timer_ms = 0;
+        state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
+    } else if (prev == SEALED_MIST) {
+        state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
+        if (vpd_high_resolved || moisture_blocked) {
+            mode = needs_cooling ? VENTILATE : IDLE;
+            state.last_mode_reason = moisture_blocked ? "v2_moisture_blocked" : "v2_humidify_resolved";
+            state.sealed_timer_ms = 0;
+            state.vpd_watch_timer_ms = 0;
+            state.relief_cycle_count = 0;
+            state.vent_latch_timer_ms = 0;
+            state.mist_backoff_timer_ms = 0;
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else if (needs_cooling || in.temp_f >= (sp.safety_max - sp.safety_max_seal_margin_f)) {
+            mode = VENTILATE;
+            state.last_mode_reason = "v2_temp_preempts_humidify";
+            state.sealed_timer_ms = 0;
+            state.vent_latch_timer_ms = 0;
+            state.mist_backoff_timer_ms = 0;
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else if (state.sealed_timer_ms >= sp.sealed_max_ms) {
+            mode = IDLE;
+            state.last_mode_reason = "v2_mist_backoff";
+            state.relief_cycle_count = sat_add(state.relief_cycle_count, 1);
+            state.sealed_timer_ms = 0;
+            state.relief_timer_ms = 0;
+            state.vent_latch_timer_ms = 0;
+            state.mist_backoff_timer_ms = dt_ms;
+            state.mist_stage = MIST_WATCH;
+            state.mist_stage_timer_ms = 0;
+        } else {
+            mode = SEALED_MIST;
+            state.last_mode_reason = "v2_humidify_continue";
+        }
+    } else if (needs_cooling) {
+        mode = VENTILATE;
+        state.last_mode_reason = state.override_summer_vent ? "v2_summer_vent" : "v2_temp_high";
+        state.sealed_timer_ms = 0;
+    } else if (vpd_low_enter) {
+        mode = DEHUM_VENT;
+        state.last_mode_reason = "v2_vpd_low";
+        state.sealed_timer_ms = 0;
+    } else if (was_dehum && !vpd_dehum_exit && !sp.econ_block) {
+        mode = DEHUM_VENT;
+        state.last_mode_reason = "v2_dehum_continue";
+        state.sealed_timer_ms = 0;
+    } else if (state.mist_backoff_timer_ms > 0) {
+        mode = IDLE;
+        state.last_mode_reason = "v2_mist_backoff";
+        state.sealed_timer_ms = 0;
+    } else if (humidify_ready
+               && !moisture_blocked
+               && !temp_below_band
+               && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f)) {
+        mode = SEALED_MIST;
+        state.last_mode_reason = "v2_humidify_enter";
+        state.sealed_timer_ms = dt_ms;
+        state.mist_stage = MIST_S1;
+        state.mist_stage_timer_ms = 0;
+        state.vent_latch_timer_ms = 0;
+    } else {
+        mode = IDLE;
+        if (needs_heating_s1) {
+            state.last_mode_reason = state.heat2_latched ? "v2_heat_stage2" : "v2_heat_stage1";
+        } else {
+            state.last_mode_reason = "v2_idle";
+        }
+        state.sealed_timer_ms = 0;
+    }
+
+    {
+        const bool safety_preempts_dwell =
+            (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) || (mode == SENSOR_FAULT);
+        const bool mode_would_change = mode != state.mode_prev;
+        const bool in_dwell = state.last_transition_tick_ms < sp.dwell_gate_ms;
+        if (sp.sw_dwell_gate_enabled && mode_would_change && in_dwell && !safety_preempts_dwell) {
+            mode = state.mode_prev;
+            state.last_mode_reason = "v2_dwell_hold";
+        }
+        if (mode != state.mode_prev) {
+            state.last_transition_tick_ms = 0;
+        } else {
+            state.last_transition_tick_ms = sat_add(state.last_transition_tick_ms, dt_ms);
+        }
+    }
+
+    if (mode == SEALED_MIST) {
+        state.mist_stage_timer_ms = sat_add(state.mist_stage_timer_ms, dt_ms);
+        switch (state.mist_stage) {
+            case MIST_WATCH:
+                state.mist_stage = MIST_S1;
+                state.mist_stage_timer_ms = 0;
+                break;
+            case MIST_S1:
+                if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms && in.vpd_kpa > sp.vpd_high) {
+                    state.mist_stage = MIST_S2;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            case MIST_S2: {
+                const bool fog_gated = !fog_permitted(in, sp) || moisture_blocked;
+                if (in.vpd_kpa > sp.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
+                    state.mist_stage = MIST_FOG;
+                    state.mist_stage_timer_ms = 0;
+                } else if (vpd_high_resolved) {
+                    state.mist_stage = MIST_S1;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            }
+            case MIST_FOG:
+                if (in.vpd_kpa <= sp.vpd_high + sp.fog_escalation_kpa) {
+                    state.mist_stage = MIST_S2;
+                    state.mist_stage_timer_ms = 0;
+                }
+                break;
+            default:
+                state.mist_stage = MIST_WATCH;
+                state.mist_stage_timer_ms = 0;
+                break;
+        }
+    } else if (state.mist_stage != MIST_WATCH) {
+        state.mist_stage = MIST_WATCH;
+        state.mist_stage_timer_ms = 0;
+    }
+
+    state.vent_mist_assist_active =
+        (mode == VENTILATE)
+        && humidify_ready
+        && !moisture_blocked
+        && !safety_cool
+        && !safety_heat
+        && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f);
+
+    state.mode = mode;
+    state.mode_prev = mode;
+    return mode;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // determine_mode()
 // ═══════════════════════════════════════════════════════════════════
@@ -80,10 +374,15 @@ inline Mode determine_mode(
     ControlState& state,
     uint32_t dt_ms
 ) {
+    if (sp.sw_fsm_controller_enabled) {
+        return determine_mode_v2(in, sp, state, dt_ms);
+    }
+
     // ── Sentinel check — detect state corruption ──
     if (state.sentinel != STATE_SENTINEL) {
         state = initial_state();
     }
+    state.vent_mist_assist_active = false;
 
     // ── R2-4: Plausibility guard ──
     if (!sensors_plausible(in)) {
@@ -98,28 +397,42 @@ inline Mode determine_mode(
         state.vpd_watch_timer_ms = 0;
         state.mist_stage_timer_ms = 0;
         state.relief_cycle_count = 0;
+        state.vent_latch_timer_ms = 0;
+        state.mist_backoff_timer_ms = 0;
+        state.vent_mist_assist_active = false;
         return SENSOR_FAULT;
     }
 
     // ── Capture previous mode BEFORE any logic ──
     const Mode prev = state.mode_prev;
 
-    // Sprint-10 0.3: resolve active day/night band. All downstream logic
-    // uses `band.*` instead of `sp.temp_high / sp.temp_low / sp.vpd_high /
-    // sp.vpd_low`. Legacy generic fields remain as fallback when day/night
-    // aren't populated (see resolve_active_band).
-    const ActiveBand band = resolve_active_band(in, sp);
+    // Sprint-12: target the interior of the band, not the edges. 25% of
+    // band width inward on each side → plants operate in the middle 50%
+    // of the operator-pushed (temp_low, temp_high) band. Example with
+    // temp_low=62, temp_high=75: heating target ~65.25°F, cooling target
+    // ~71.75°F. bias_heat / bias_cool still apply as symmetric offsets
+    // from the interior target. The max(2.0f) floor prevents inversion
+    // under pathologically narrow bands (dispatcher could push temp_low
+    // ≈ temp_high); validate_setpoints already forbids it, but we
+    // belt-and-suspender here so the controller can't divide into a
+    // degenerate Tlow > Thigh state from bad input.
+    const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    const float Tlow_interior  = sp.temp_low  + band_width * 0.25f;
+    const float Thigh_interior = sp.temp_high - band_width * 0.25f;
+    const float Thigh = Thigh_interior + sp.bias_cool;
 
-    const float Thigh = band.temp_high + sp.bias_cool;
-    const float HV    = std::min(sp.vpd_hysteresis, band.vpd_high * 0.5f);
+    const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float vpd_low_eff  = sp.vpd_low  + vpd_width * 0.25f;
+    const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
+    const float HV    = std::min(sp.vpd_hysteresis, vpd_high_eff * 0.5f);
 
     bool safety_cool    = in.temp_f >= sp.safety_max;
     bool safety_heat    = in.temp_f <= sp.safety_min;
-    bool vpd_above_band = in.vpd_kpa > band.vpd_high;
-    bool vpd_below_exit = in.vpd_kpa < (band.vpd_high - HV);
+    bool vpd_above_band = in.vpd_kpa > vpd_high_eff;
+    bool vpd_below_exit = in.vpd_kpa < (vpd_high_eff - HV);
 
-    bool vpd_too_low_enter = in.vpd_kpa < (band.vpd_low - HV) && !sp.econ_block;
-    bool vpd_dehum_exit    = in.vpd_kpa >= band.vpd_low;
+    bool vpd_too_low_enter = in.vpd_kpa < (vpd_low_eff - HV) && !sp.econ_block;
+    bool vpd_dehum_exit    = in.vpd_kpa >= vpd_low_eff;
 
     bool was_ventilating = (prev == VENTILATE);
     bool needs_cooling   = was_ventilating
@@ -136,9 +449,11 @@ inline Mode determine_mode(
     // In between the two thresholds the latch holds its state,
     // preventing gas-valve rapid-cycling in the hysteresis band.
     {
-        // Sprint-10 0.3: use active-band temp_low so night-mode S2 threshold
-        // tracks the night temp_low rather than the day value.
-        const float Tlow = band.temp_low + sp.bias_heat;
+        // Sprint-12: Tlow now references the band interior (25% up from
+        // temp_low) rather than the edge. S2 gas demand fires at
+        // Tlow_interior + bias_heat - dH2 — still below the heating target
+        // but now inside the band instead of below it.
+        const float Tlow = Tlow_interior + sp.bias_heat;
         if (in.temp_f < (Tlow - sp.dH2)) {
             state.heat2_latched = true;
         } else if (in.temp_f >= (Tlow + sp.heat_hysteresis)) {
@@ -164,12 +479,75 @@ inline Mode determine_mode(
     }
     bool vpd_wants_seal = vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
 
+    // ── Sprint-15: summer thermal-driven vent preference gate ──
+    // When the screen-door intake is open in summer, outdoor-air exchange
+    // is a real heat sink. Pre-sprint-15 logic prioritized VPD-seal over
+    // thermal-vent unconditionally; on hot dry days (today: indoor 91°F /
+    // 65% RH, outdoor 77°F / 8% RH) that sealed the greenhouse against its
+    // own best cooling. The gate pre-empts vpd_wants_seal when:
+    //   1. operator hasn't disabled the feature
+    //   2. outdoor reading is fresh
+    //   3. outdoor air is at least vent_prefer_temp_delta_f cooler
+    //   4. outdoor dewpoint is at least vent_prefer_dp_delta_f lower
+    //   5. indoor temp is above the heating-target hysteresis (otherwise
+    //      we'd vent into a cold night)
+    // Falls through to existing VENTILATE path. Safety rails, THERMAL_RELIEF,
+    // and DEHUM_VENT all still pre-empt this gate (they're checked first).
+    // See docs/firmware-sprint-15-summer-vent-spec.md.
+    //
+    // Sprint-15.1 fix 2: gate now pre-empts BOTH new seal entries AND
+    // ongoing sealed cycles. Pre-15.1 the gate only set vpd_wants_seal=false
+    // which didn't affect the was_sealed sticky path (around line 258) —
+    // so once firmware was in SEALED_MIST for even one cycle (stale
+    // outdoor data, dwell just matured, etc.), the gate was toothless
+    // until normal exit conditions fired. Matches the observed
+    // 2026-04-20 23:20 → 05:30 MDT whipsaw. The `was_sealed` branch
+    // below now also sees vent_preferred semantics: we clean up the
+    // sealed state (mirror of the vpd_below_exit exit path) and force
+    // was_sealed=false so the cascade falls through to VENTILATE.
+    state.override_summer_vent = false;
+    {
+        const bool outdoor_data_fresh = (in.outdoor_data_age_s < sp.outdoor_staleness_max_s);
+        const bool outdoor_cooler     = (in.outdoor_temp_f      < (in.temp_f      - sp.vent_prefer_temp_delta_f));
+        const bool outdoor_drier_dp   = (in.outdoor_dewpoint_f  < (in.dew_point_f - sp.vent_prefer_dp_delta_f));
+        const bool temp_above_band    = (in.temp_f > (sp.temp_low + sp.temp_hysteresis));
+        const bool vent_preferred     = sp.sw_summer_vent_enabled
+                                     && outdoor_data_fresh
+                                     && outdoor_cooler
+                                     && outdoor_drier_dp
+                                     && temp_above_band;
+        if (vent_preferred && (vpd_wants_seal || was_sealed)) {
+            // Pre-empt the seal — clear entry dwell AND clean up ongoing
+            // sealed state. Telemetry flag is read by evaluate_overrides()
+            // and surfaced via active_overrides = "summer_vent".
+            vpd_wants_seal = false;
+            state.override_summer_vent = true;
+            if (was_sealed) {
+                // Mirror the vpd_below_exit cleanup (was_sealed → IDLE/VENT
+                // exit path) so the normal cascade treats this like a
+                // clean seal exit. Needed because the was_sealed branch
+                // below doesn't consult vpd_wants_seal.
+                state.sealed_timer_ms = 0;
+                state.vpd_watch_timer_ms = 0;
+                state.relief_cycle_count = 0;
+                state.vent_latch_timer_ms = 0;
+                state.mist_stage = MIST_WATCH;
+                state.mist_stage_timer_ms = 0;
+                was_sealed = false;  // force normal-cascade path
+            }
+        }
+    }
+
     // ── Priority-ordered mode determination ──
     Mode mode = IDLE;
     bool relief_just_expired = false;
+    // Sprint-15.1 fix 8: track which branch chose the current mode so we
+    // can RCA gate/seal/idle decisions post-hoc via gh_mode_reason.
+    state.last_mode_reason = "idle_default";
 
     if (safety_cool) {
         mode = SAFETY_COOL;
+        state.last_mode_reason = "safety_cool";
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;
         state.vpd_watch_timer_ms = 0;   // sprint-8: match "suspended during safety" comment
@@ -177,6 +555,7 @@ inline Mode determine_mode(
         state.vent_latch_timer_ms = 0;  // FW-8
     } else if (safety_heat) {
         mode = SAFETY_HEAT;
+        state.last_mode_reason = "safety_heat";
         state.sealed_timer_ms = 0;
         state.relief_timer_ms = 0;      // sprint-8 P1#5: match SAFETY_COOL
         state.vpd_watch_timer_ms = 0;   // sprint-8: match SAFETY_COOL
@@ -193,6 +572,7 @@ inline Mode determine_mode(
             else state.relief_cycle_count = 0;
         } else {
             mode = THERMAL_RELIEF;
+            state.last_mode_reason = "thermal_relief";
         }
     }
 
@@ -203,6 +583,7 @@ inline Mode determine_mode(
             // Exit sealed if: VPD resolved, sealed too long, OR someone is present
             if (vpd_below_exit || moisture_blocked) {
                 mode = needs_cooling ? VENTILATE : IDLE;
+                state.last_mode_reason = "seal_exit";
                 state.sealed_timer_ms = 0;
                 state.vpd_watch_timer_ms = 0;
                 state.relief_cycle_count = 0;
@@ -212,9 +593,11 @@ inline Mode determine_mode(
             } else if (state.sealed_timer_ms >= sp.sealed_max_ms
                        || in.temp_f >= (sp.safety_max - sp.safety_max_seal_margin_f)) {  // FW-7: bail if too hot
                 mode = THERMAL_RELIEF;
+                state.last_mode_reason = "thermal_relief_forced";
                 state.relief_timer_ms = 0;
             } else {
                 mode = SEALED_MIST;
+                state.last_mode_reason = "seal_continue";
                 state.sealed_timer_ms = sat_add(state.sealed_timer_ms, dt_ms);
             }
         // R2-6: Gate seal entry by relief cycle count AND occupancy
@@ -224,6 +607,7 @@ inline Mode determine_mode(
                    && state.relief_cycle_count < sp.max_relief_cycles
                    && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f)) {
             mode = SEALED_MIST;
+            state.last_mode_reason = "seal_enter";
             state.sealed_timer_ms = dt_ms;
             state.mist_stage = MIST_S1;
             state.mist_stage_timer_ms = 0;
@@ -231,6 +615,7 @@ inline Mode determine_mode(
         } else if (vpd_wants_seal && state.relief_cycle_count >= sp.max_relief_cycles) {
             // R2-6: Exceeded max consecutive sealed→relief. Force vent to break cycle.
             mode = VENTILATE;
+            state.last_mode_reason = "relief_cycle_breaker";
             // FW-8: Timeout — if latched past vent_latch_timeout_ms (sprint-10
             // 0.4b: tunable; default 30 min) with VPD still above band, retry.
             state.vent_latch_timer_ms = sat_add(state.vent_latch_timer_ms, dt_ms);
@@ -240,13 +625,22 @@ inline Mode determine_mode(
             }
         } else if (vpd_too_low_enter) {
             mode = DEHUM_VENT;
+            state.last_mode_reason = "vpd_too_low";
         } else if (was_dehum && !vpd_dehum_exit && !sp.econ_block) {
             // R2-8: Sticky dehum respects econ_block changes mid-cycle
             mode = DEHUM_VENT;
+            state.last_mode_reason = "dehum_continue";
         } else if (needs_cooling) {
             mode = VENTILATE;
+            // If sprint-15 gate pre-empted a seal this cycle, mark the
+            // reason accordingly so observers can distinguish thermal
+            // vent from gate-driven vent.
+            state.last_mode_reason = state.override_summer_vent
+                ? "summer_vent_preempt"
+                : "temp_vent";
         } else {
             mode = IDLE;
+            state.last_mode_reason = "idle_default";
         }
     }
 
@@ -276,6 +670,9 @@ inline Mode determine_mode(
 
         if (in.vpd_kpa > sp.vpd_max_safe && can_seal_for_dryness) {
             mode = SEALED_MIST;
+            // Sprint-15.1 fix 8: tag this path distinctly so gh_mode_reason
+            // shows "dry_override" rather than the prior branch's reason.
+            state.last_mode_reason = "dry_override";
             // sprint-8 P0#1/P0#2: only seed "new seal" state when we weren't
             // already in SEALED_MIST. Otherwise:
             //   - resetting mist_stage would demote MIST_S2/MIST_FOG to
@@ -311,9 +708,68 @@ inline Mode determine_mode(
                 state.mist_stage_timer_ms = 0;
             }
             mode = DEHUM_VENT;
+            state.last_mode_reason = "vpd_min_safe_rescue";  // sprint-15.1 fix 8
         }
         // else econ_block=true → stay in current mode; policy choice
         // documented in backlog (P3#15 still open).
+    }
+
+    // ── Phase-2 dwell gate ────────────────────────────────────────────
+    // Hold non-safety mode transitions for at least sp.dwell_gate_ms after
+    // the most recent accepted transition. Closes the whipsaw pattern
+    // observed 2026-04-17 (59 mode changes in 2h stable window) and
+    // 2026-04-20 (relief_cycle_breaker thrashing). Replay projects 80%
+    // reduction in stable-conditions transitions.
+    //
+    // Preempts: safety rails (SAFETY_COOL/HEAT), FAULT_HOLD-equivalent
+    // (SENSOR_FAULT), R2-3 dry override, vpd_min_safe rescue. Safety
+    // must ALWAYS fire immediately — no dwell gate on life-safety paths.
+    //
+    // Shadow mode: default sp.sw_dwell_gate_enabled=false. Firmware
+    // logs what it WOULD decide (via last_mode_reason suffix) but still
+    // applies the transition. After 14d shadow-mode bake, flip to true.
+    // See plan Phase 2 gate criteria.
+    //
+    // Accounting: last_transition_tick_ms is a "ms since last accepted
+    // transition" accumulator. Each cycle: += dt_ms if mode unchanged,
+    // reset to 0 when we accept a new transition.
+    {
+        // THERMAL_RELIEF is transient-by-design (relief_timer cap, default
+        // 90s). Holding it past its designed duration makes the firmware
+        // re-enter the in_thermal_relief branch every tick, bumping
+        // relief_cycle_count once per relief_duration window and tripping
+        // the max_relief_cycles breaker faster than it would without the
+        // gate. Both directions (into AND out of THERMAL_RELIEF) must
+        // bypass dwell so relief runs its designed course.
+        // Learned 2026-04-21 19:14-19:50 live trial; see plan Phase 2.
+        const bool transient_relief =
+            (mode == THERMAL_RELIEF) || (state.mode_prev == THERMAL_RELIEF);
+
+        const bool safety_preempts_dwell =
+            (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) ||
+            (mode == SENSOR_FAULT) ||
+            transient_relief ||
+            state.dry_override_active ||
+            (in.vpd_kpa < sp.vpd_min_safe);
+
+        const bool mode_would_change = (mode != state.mode_prev);
+        const bool in_dwell = state.last_transition_tick_ms < sp.dwell_gate_ms;
+
+        if (sp.sw_dwell_gate_enabled
+            && mode_would_change
+            && in_dwell
+            && !safety_preempts_dwell) {
+            // Hold. Report via last_mode_reason so diagnostics see it.
+            mode = state.mode_prev;
+            state.last_mode_reason = "dwell_hold";
+        }
+        // Update accumulator regardless of flag state — shadow mode needs
+        // the counter so post-flip the first transition has correct dwell.
+        if (mode != state.mode_prev) {
+            state.last_transition_tick_ms = 0;
+        } else {
+            state.last_transition_tick_ms = sat_add(state.last_transition_tick_ms, dt_ms);
+        }
     }
 
     // ── Mist stage progression ──
@@ -330,10 +786,9 @@ inline Mode determine_mode(
                     state.mist_stage_timer_ms = 0;
                     break;
                 case MIST_S1:
-                    // Sprint-10 0.3: use active-band vpd_high throughout
-                    // mist stage progression.
+                    // Sprint-12: escalate at interior vpd target, not raw edge.
                     if (state.mist_stage_timer_ms >= sp.mist_s2_delay_ms
-                        && in.vpd_kpa > band.vpd_high) {
+                        && in.vpd_kpa > vpd_high_eff) {
                         state.mist_stage = MIST_S2;
                         state.mist_stage_timer_ms = 0;
                     }
@@ -341,18 +796,18 @@ inline Mode determine_mode(
                 case MIST_S2: {
                     const bool fog_gated = !fog_permitted(in, sp)
                                         || moisture_blocked_by_occupancy(in, sp);
-                    if (in.vpd_kpa > band.vpd_high + sp.fog_escalation_kpa && !fog_gated) {
+                    if (in.vpd_kpa > vpd_high_eff + sp.fog_escalation_kpa && !fog_gated) {
                         state.mist_stage = MIST_FOG;
                         state.mist_stage_timer_ms = 0;
                     }
-                    if (in.vpd_kpa < band.vpd_high - HV) {
+                    if (in.vpd_kpa < vpd_high_eff - HV) {
                         state.mist_stage = MIST_S1;
                         state.mist_stage_timer_ms = 0;
                     }
                     break;
                 }
                 case MIST_FOG:
-                    if (in.vpd_kpa <= band.vpd_high + sp.fog_escalation_kpa) {
+                    if (in.vpd_kpa <= vpd_high_eff + sp.fog_escalation_kpa) {
                         state.mist_stage = MIST_S2;
                         state.mist_stage_timer_ms = 0;
                     }
@@ -393,11 +848,13 @@ inline OverrideFlags evaluate_overrides(
     OverrideFlags f{};
     if (!sensors_plausible(in)) return f;
 
-    // Sprint-10 0.3: resolve day/night band so observability matches
-    // the state-machine's active thresholds.
-    const ActiveBand band = resolve_active_band(in, sp);
-    const float HV = std::min(sp.vpd_hysteresis, band.vpd_high * 0.5f);
-    const bool vpd_above_band = in.vpd_kpa > band.vpd_high;
+    // Sprint-12: mirror the interior-targeting in determine_mode so the
+    // observability flags report against the same thresholds the state
+    // machine actually uses.
+    const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
+    const float HV = std::min(sp.vpd_hysteresis, vpd_high_eff * 0.5f);
+    const bool vpd_above_band = in.vpd_kpa > vpd_high_eff;
     const bool vpd_wants_seal =
         vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
     const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
@@ -413,7 +870,7 @@ inline OverrideFlags evaluate_overrides(
     const bool fog_wanted =
         (mode == SEALED_MIST)
         && (state.mist_stage == MIST_S2)
-        && (in.vpd_kpa > band.vpd_high + sp.fog_escalation_kpa);
+        && (in.vpd_kpa > vpd_high_eff + sp.fog_escalation_kpa);
     f.fog_gate_rh     = fog_wanted && (in.rh_pct  > sp.fog_rh_ceiling);
     f.fog_gate_temp   = fog_wanted && (in.temp_f  < sp.fog_min_temp);
     f.fog_gate_window = fog_wanted
@@ -435,6 +892,33 @@ inline OverrideFlags evaluate_overrides(
     // false by the time evaluate_overrides() sees state.
     f.vpd_dry_override = state.dry_override_active;
 
+    // Sprint-15: summer-vent gate active. Set by determine_mode() when the
+    // outdoor-cooler-and-drier comparator pre-empted a VPD-seal entry.
+    // Same reason as vpd_dry_override above: the gate consumes
+    // vpd_wants_seal in the same cycle, so reconstruction post-hoc would
+    // miss the firing.
+    f.summer_vent_active = state.override_summer_vent;
+    f.vent_mist_assist = state.vent_mist_assist_active;
+
+    // Controller v2 cold/dry assist: in SEALED_MIST_FOG, fog may run while
+    // heat holds the temp band. Recompute the resolve_equipment() intent so
+    // active_overrides makes the overlap explicit without mutating state.
+    const float temp_band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    const float heat_target = sp.sw_fsm_controller_enabled
+        ? v2_heat_target_f(sp)
+        : sp.temp_low + temp_band_width * 0.25f + sp.bias_heat;
+    const bool heat_suppressed_by_upper_band = in.temp_f >= sp.temp_high;
+    const bool heat1_would_run =
+        !heat_suppressed_by_upper_band
+        && in.temp_f < (heat_target + sp.heat_hysteresis);
+    const bool heat2_would_run = !heat_suppressed_by_upper_band && state.heat2_latched;
+    const bool fog_would_run =
+        (mode == SEALED_MIST)
+        && (state.mist_stage == MIST_FOG)
+        && fog_permitted(in, sp)
+        && !moisture_blocked;
+    f.fog_heat_assist = fog_would_run && (heat1_would_run || heat2_would_run);
+
     (void)HV;  // reserved for future hysteresis-sensitive gates
     return f;
 }
@@ -449,15 +933,27 @@ inline RelayOutputs resolve_equipment(
     const ControlState& state,
     bool lead_is_fan1
 ) {
-    // Sprint-10 0.3: resolve active day/night band (same as determine_mode).
-    const ActiveBand band = resolve_active_band(in, sp);
-    const float Tlow = band.temp_low + sp.bias_heat;
-    const float Thigh = band.temp_high + sp.bias_cool;
+    // Sprint-12 legacy: interior targets (25% inside band). Controller v2
+    // tightens heating to the band midpoint while keeping cooling's legacy
+    // interior target until the cooling side is redesigned separately.
+    const float band_width = std::max(2.0f, sp.temp_high - sp.temp_low);
+    const float Tlow  = sp.sw_fsm_controller_enabled
+        ? v2_heat_target_f(sp)
+        : sp.temp_low + band_width * 0.25f + sp.bias_heat;
+    const float Thigh = sp.sw_fsm_controller_enabled
+        ? sp.temp_high
+        : sp.temp_high - band_width * 0.25f + sp.bias_cool;
 
-    bool needs_heating_s1 = in.temp_f < (Tlow + sp.heat_hysteresis);
+    const float vpd_width    = std::max(0.2f, sp.vpd_high - sp.vpd_low);
+    const float vpd_low_eff  = sp.vpd_low  + vpd_width * 0.25f;
+    const float vpd_high_eff = sp.vpd_high - vpd_width * 0.25f;
+
+    const bool heat_suppressed_by_upper_band = in.temp_f >= sp.temp_high;
+    bool needs_heating_s1 = !heat_suppressed_by_upper_band
+                          && in.temp_f < (Tlow + sp.heat_hysteresis);
     // Sprint-9 P1#7: S2 is latched (see determine_mode). Reading the latch
     // instead of recomputing the threshold gives us the hysteresis band.
-    bool needs_heating_s2 = state.heat2_latched;
+    bool needs_heating_s2 = !heat_suppressed_by_upper_band && state.heat2_latched;
 
     RelayOutputs out = {false, false, false, false, false, false};
 
@@ -472,7 +968,7 @@ inline RelayOutputs resolve_equipment(
             out.fan1 = true; out.fan2 = true;
             out.fog = fog_permitted(in, sp)
                    && !moisture_blocked_by_occupancy(in, sp)
-                   && in.vpd_kpa > band.vpd_high;
+                   && in.vpd_kpa > vpd_high_eff;
             break;
 
         case SAFETY_HEAT:
@@ -506,14 +1002,22 @@ inline RelayOutputs resolve_equipment(
 
         case VENTILATE: {
             out.vent = true;
-            bool needs_both = in.temp_f > (Thigh + sp.dC2);
+            const float stage2_delta = sp.sw_fsm_controller_enabled
+                ? v2_cool_stage2_delta_f(sp)
+                : sp.dC2;
+            bool needs_both = in.temp_f > (Thigh + stage2_delta);
             if (lead_is_fan1) { out.fan1 = true; out.fan2 = needs_both; }
             else              { out.fan2 = true; out.fan1 = needs_both; }
-            // FW-9b: VPD emergency — fire fog even while venting.
-            // Only fog is forced here; misters aren't reachable in
-            // VENTILATE mode because mist_stage is reset to MIST_WATCH
-            // in determine_mode outside SEALED_MIST.
-            if (in.vpd_kpa > sp.vpd_max_safe && !moisture_blocked_by_occupancy(in, sp)) {
+            // FW-9b (PR-A lowered): fire fog concurrently with vent when VPD
+            // is above band. Original FW-9b only fired at vpd > vpd_max_safe
+            // (3.0 kPa — safety territory); data from 2026-04-16..23 showed
+            // 653 min (38% of VENTILATE time) had VPD above band with fog off.
+            // New trigger matches SEAL path's fog-stage threshold for symmetry:
+            //     vpd > vpd_high_eff + fog_escalation_kpa  (~2.2 kPa default)
+            // Only fog is forced here; misters aren't reachable in VENTILATE
+            // because mist_stage resets to MIST_WATCH in determine_mode outside
+            // SEALED_MIST (Phase-3 voting-coordinator work will address that).
+            if (in.vpd_kpa > (vpd_high_eff + sp.fog_escalation_kpa) && !moisture_blocked_by_occupancy(in, sp)) {
                 out.fog = fog_permitted(in, sp);
             }
             break;
@@ -521,7 +1025,12 @@ inline RelayOutputs resolve_equipment(
 
         case DEHUM_VENT:
             out.vent = true;
-            if (in.vpd_kpa < band.vpd_low - sp.dehum_aggressive_kpa) {
+            // Aggressive dehum (both fans) kicks in if vpd is below the
+            // INTERIOR target minus the aggressive margin — keeps the
+            // trigger consistent with the rest of the interior-targeting
+            // logic. dehum_aggressive_kpa remains the margin from the
+            // (now interior) target at which we open both fans.
+            if (in.vpd_kpa < vpd_low_eff - sp.dehum_aggressive_kpa) {
                 out.fan1 = true; out.fan2 = true;
             } else {
                 if (lead_is_fan1) out.fan1 = true; else out.fan2 = true;
@@ -531,8 +1040,11 @@ inline RelayOutputs resolve_equipment(
         case IDLE:
             if (needs_heating_s2) { out.heat1 = true; out.heat2 = true; }
             else if (needs_heating_s1) { out.heat1 = true; }
-            // Sprint-10 0.4b: econ_heat_margin_f is now a Setpoints field.
-            if (in.vpd_kpa < band.vpd_low && sp.econ_block
+            // Econ-block VPD rescue: electric heat if VPD is below the
+            // interior target AND temp is below the interior cooling
+            // target minus econ_heat_margin_f. Same semantics as before,
+            // retargeted to the band interior.
+            if (in.vpd_kpa < vpd_low_eff && sp.econ_block
                 && in.temp_f < Thigh - sp.econ_heat_margin_f) {
                 out.heat1 = true;
             }

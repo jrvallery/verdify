@@ -121,6 +121,14 @@ class ObservationCreate(BaseModel):
     count: int | None = Field(default=None, ge=0)
     affected_pct: float | None = Field(default=None, ge=0, le=100)
     photo_path: str | None = None
+    plant_height_cm: float | None = Field(default=None, ge=0)
+    leaf_count: int | None = Field(default=None, ge=0)
+    canopy_cover_pct: float | None = Field(default=None, ge=0, le=100)
+    flowering_count: int | None = Field(default=None, ge=0)
+    fruit_count: int | None = Field(default=None, ge=0)
+    root_condition: str | None = Field(default=None, max_length=200)
+    mortality_count: int | None = Field(default=None, ge=0)
+    stress_tags: list[str] | None = None
 
 
 class EventCreate(BaseModel):
@@ -228,6 +236,14 @@ class Observation(BaseModel):
     greenhouse_id: str = "vallery"
     position_id: int | None = None
     zone_id: int | None = None
+    plant_height_cm: float | None = None
+    leaf_count: int | None = None
+    canopy_cover_pct: float | None = None
+    flowering_count: int | None = None
+    fruit_count: int | None = None
+    root_condition: str | None = None
+    mortality_count: int | None = None
+    stress_tags: list[str] | None = None
 
 
 # ── MCP action envelopes ──────────────────────────────────────────────────

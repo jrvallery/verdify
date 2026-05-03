@@ -78,7 +78,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "unit": "currencyUSD"
         }
       },
       "options": {},
@@ -124,7 +125,8 @@
                 "value": 2
               }
             ]
-          }
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {},
@@ -263,7 +265,8 @@
                 "value": 2
               }
             ]
-          }
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {},
@@ -309,7 +312,8 @@
                 "value": 2
               }
             ]
-          }
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {},
@@ -346,7 +350,8 @@
             },
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {
@@ -396,7 +401,8 @@
             },
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "unit": "currencyUSD"
         }
       },
       "options": {

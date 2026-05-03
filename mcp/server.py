@@ -14,6 +14,9 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from time import perf_counter
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import asyncpg
 from mcp.server.fastmcp import FastMCP
@@ -48,6 +51,7 @@ from verdify_schemas import (  # noqa: E402
     SetpointSummary,
     TreatmentCreate,
 )
+from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG  # noqa: E402
 
 # ── Config ──
 # Read DB password from .env
@@ -59,6 +63,79 @@ if _env_path.exists():
             _db_pass = line.split("=", 1)[1].strip().strip('"').strip("'")
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
 # Legacy planner.py removed — planning now runs via iris_planner.py → OpenClaw hooks
+BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+PLAN_REQUIRED_PARAMS = frozenset(
+    {
+        "vpd_hysteresis",
+        "vpd_watch_dwell_s",
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_pulse_on_s",
+        "mister_pulse_gap_s",
+        "mister_vpd_weight",
+        "mister_water_budget_gal",
+        "mist_vent_close_lead_s",
+        "mist_max_closed_vent_s",
+        "mist_vent_reopen_delay_s",
+        "mist_thermal_relief_s",
+        "enthalpy_open",
+        "enthalpy_close",
+        "min_vent_on_s",
+        "min_vent_off_s",
+        "min_fog_on_s",
+        "min_fog_off_s",
+        "fog_escalation_kpa",
+        "d_cool_stage_2",
+        "bias_heat",
+        "bias_cool",
+        "min_heat_on_s",
+        "min_heat_off_s",
+    }
+)
+TIER1_TUNABLES = frozenset(
+    {
+        "vpd_hysteresis",
+        "vpd_watch_dwell_s",
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_pulse_on_s",
+        "mister_pulse_gap_s",
+        "mister_vpd_weight",
+        "mister_water_budget_gal",
+        "mist_vent_close_lead_s",
+        "mist_max_closed_vent_s",
+        "mist_vent_reopen_delay_s",
+        "mist_thermal_relief_s",
+        "enthalpy_open",
+        "enthalpy_close",
+        "min_vent_on_s",
+        "min_vent_off_s",
+        "min_fog_on_s",
+        "min_fog_off_s",
+        "fog_escalation_kpa",
+        "d_heat_stage_2",
+        "d_cool_stage_2",
+        "temp_hysteresis",
+        "heat_hysteresis",
+        "bias_heat",
+        "bias_cool",
+        "min_heat_on_s",
+        "min_heat_off_s",
+        "mister_engage_delay_s",
+        "mister_all_delay_s",
+        "sw_summer_vent_enabled",
+        "vent_prefer_temp_delta_f",
+        "vent_prefer_dp_delta_f",
+        "outdoor_staleness_max_s",
+        "summer_vent_min_runtime_s",
+        "sw_fog_closes_vent",
+        "sw_mister_closes_vent",
+        "sw_dwell_gate_enabled",
+        "dwell_gate_ms",
+        "sw_fsm_controller_enabled",
+        "mist_backoff_s",
+    }
+)
 
 
 def _json(obj):
@@ -80,12 +157,44 @@ mcp = FastMCP(
     instructions="""Verdify greenhouse control tools. Use these to monitor climate,
     manage setpoints, run the AI planner, and review performance.
     The greenhouse has temp/VPD bands, misters, fog, fans, heaters, and a vent.
-    The planner sets 24 Tier 1 tunables that shape how the controller responds.""",
+    The planner sets registry-approved tunables that shape how the controller responds.
+    Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
+    read-only context in routine plans; use direct tunable pushes only for explicit overrides.""",
 )
 
 
 async def _db() -> asyncpg.Connection:
     return await asyncpg.connect(DB_DSN)
+
+
+async def _record_openclaw_interaction(
+    conn: asyncpg.Connection,
+    action: str,
+    started_at: float,
+    *,
+    success: bool,
+    error_message: str | None = None,
+    model: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """Best-effort MCP/OpenClaw observability row."""
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO openclaw_interaction_log
+                (session_type, action, duration_ms, tokens_in, tokens_out, model, success, error_message, metadata)
+            VALUES ('mcp', $1, $2, 0, 0, $3, $4, $5, $6::jsonb)
+            """,
+            action,
+            duration_ms,
+            model,
+            success,
+            error_message,
+            json.dumps(metadata or {}),
+        )
+    except Exception as e:
+        print(f"openclaw interaction log failed (non-fatal): {e}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -182,9 +291,14 @@ async def equipment_state() -> str:
 async def forecast(hours: int = 72) -> str:
     """Get weather forecast summary for the next N hours (default 72).
     Returns hourly temp, RH, VPD, cloud cover, solar radiation."""
+    try:
+        hours = max(1, min(int(hours), 168))
+    except (TypeError, ValueError):
+        return json.dumps({"error": "hours must be an integer between 1 and 168"})
     conn = await _db()
     try:
-        rows = await conn.fetch(f"""
+        rows = await conn.fetch(
+            """
             SELECT to_char(ts AT TIME ZONE 'America/Denver', 'Dy HH24:MI') as time,
                    round(temp_f::numeric,0) as temp, round(rh_pct::numeric,0) as rh,
                    round(vpd_kpa::numeric,2) as vpd, round(cloud_cover_pct::numeric,0) as cloud,
@@ -193,12 +307,14 @@ async def forecast(hours: int = 72) -> str:
                 SELECT DISTINCT ON (ts) ts, temp_f, rh_pct, vpd_kpa, cloud_cover_pct,
                        direct_radiation_w_m2
                 FROM weather_forecast
-                WHERE ts > now() AND ts < now() + interval '{hours} hours'
+                WHERE ts > now() AND ts < now() + ($1::int * interval '1 hour')
                 ORDER BY ts, fetched_at DESC
             ) sub
             ORDER BY ts
-            LIMIT {hours}
-        """)
+            LIMIT $1
+            """,
+            hours,
+        )
         validated = [ForecastSummaryRow.model_validate(dict(r)).model_dump(mode="json") for r in rows]
         return json.dumps(validated)
     finally:
@@ -215,26 +331,17 @@ async def get_setpoints() -> str:
     """Get all current active setpoints (band values + planner tunables)."""
     conn = await _db()
     try:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT parameter, round(value::numeric,3) as value, source,
                    to_char(ts AT TIME ZONE 'America/Denver', 'HH24:MI') as updated
             FROM (SELECT DISTINCT ON (parameter) parameter, value, source, ts
                   FROM setpoint_changes ORDER BY parameter, ts DESC) sub
-            WHERE parameter IN (
-                'temp_high','temp_low','vpd_high','vpd_low',
-                'bias_cool','bias_heat','vpd_hysteresis',
-                'mister_engage_kpa','mister_all_kpa',
-                'mister_pulse_on_s','mister_pulse_gap_s','mister_vpd_weight',
-                'mister_water_budget_gal','mister_engage_delay_s','mister_all_delay_s',
-                'mist_max_closed_vent_s','mist_thermal_relief_s','mist_vent_close_lead_s',
-                'mist_vent_reopen_delay_s',
-                'vpd_watch_dwell_s','fog_escalation_kpa',
-                'min_fog_on_s','min_fog_off_s',
-                'min_vent_on_s','min_vent_off_s',
-                'd_cool_stage_2','min_heat_on_s','min_heat_off_s',
-                'enthalpy_open','enthalpy_close'
-            ) ORDER BY parameter
-        """)
+            WHERE parameter = ANY($1::text[])
+            ORDER BY parameter
+            """,
+            sorted(ALL_TUNABLES),
+        )
         validated = [SetpointSummary.model_validate(dict(r)).model_dump(mode="json") for r in rows]
         return json.dumps(validated)
     finally:
@@ -242,59 +349,88 @@ async def get_setpoints() -> str:
 
 
 @mcp.tool()
-async def set_tunable(parameter: str, value: float, reason: str = "iris-manual") -> str:
-    """Push a single Tier 1 tunable to the ESP32 immediately.
+async def set_tunable(
+    parameter: str,
+    value: float,
+    reason: str = "iris-manual",
+    trigger_id: str | None = None,
+    planner_instance: str | None = None,
+) -> str:
+    """Push a single registry-approved tunable to the ESP32 immediately.
     The dispatcher will apply it within 5 minutes.
-    Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')"""
-    TIER1 = {
-        "vpd_hysteresis",
-        "vpd_watch_dwell_s",
-        "mister_engage_kpa",
-        "mister_all_kpa",
-        "mister_pulse_on_s",
-        "mister_pulse_gap_s",
-        "mister_vpd_weight",
-        "mister_water_budget_gal",
-        "mist_vent_close_lead_s",
-        "mist_max_closed_vent_s",
-        "mist_vent_reopen_delay_s",
-        "mist_thermal_relief_s",
-        "enthalpy_open",
-        "enthalpy_close",
-        "min_vent_on_s",
-        "min_vent_off_s",
-        "min_fog_on_s",
-        "min_fog_off_s",
-        "fog_escalation_kpa",
-        "d_cool_stage_2",
-        "bias_heat",
-        "bias_cool",
-        "min_heat_on_s",
-        "min_heat_off_s",
-        "mister_engage_delay_s",
-        "mister_all_delay_s",
-    }
-    # Sprint 20: schema-level gate first (rejects typos like "temp_hi"); TIER1 is the stricter subset.
+    Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')
+
+    trigger_id, planner_instance: optional contract v1.4 audit fields.
+    Pass through from the trigger banner shown at the bottom of every
+    planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
+    Stamped onto plan_journal so SLA monitors can correlate by uuid."""
+    # Schema-level gate first rejects typos; the registry then blocks
+    # operator-only safety rails and readback-only diagnostics.
     if parameter not in ALL_TUNABLES:
         return json.dumps({"error": f"'{parameter}' is not a known tunable — not in verdify_schemas.ALL_TUNABLES"})
-    if parameter not in TIER1:
-        return json.dumps({"error": f"'{parameter}' is not a Tier 1 tunable", "allowed": sorted(TIER1)})
+    if parameter not in PLANNER_PUSHABLE_REG:
+        return json.dumps(
+            {
+                "error": f"'{parameter}' is not planner-pushable in the tunable registry",
+                "allowed": sorted(PLANNER_PUSHABLE_REG),
+            }
+        )
+
+    # Phase-1b: set_tunable writes to setpoint_plan (one-shot waypoint at
+    # ts=now()) so the dispatcher's plan-reading cycle doesn't overwrite
+    # the iris push within 5 minutes. Observed live 2026-04-21:
+    # min_heat_off_s=180 pushed at 11:36, overwritten to 300 from the
+    # prior sunrise plan within 4 minutes. setpoint_plan is the dispatcher's
+    # actual source of truth; writing there makes iris pushes durable until
+    # the next plan supersedes.
+    #
+    # plan_id format `iris-oneshot-<YYYYMMDD-HHMM>` lets the next set_plan
+    # call (which deactivates older plans) distinguish iris tactical pushes
+    # from automatic SUNRISE/SUNSET plans and preserve them across boundaries.
+    # Contract v1.4 §2.C — stamp audit metadata into setpoint_plan.reason
+    # text so the trigger and instance survive on the row even though
+    # setpoint_plan has no dedicated columns yet. Searchable via
+    # `WHERE reason LIKE '%trigger=<uuid>%'`.
+    audit_suffix_parts = []
+    if trigger_id:
+        audit_suffix_parts.append(f"trigger={trigger_id}")
+    if planner_instance:
+        audit_suffix_parts.append(f"instance={planner_instance}")
+    if audit_suffix_parts:
+        reason_with_audit = f"{reason} [{' '.join(audit_suffix_parts)}]"
+    else:
+        reason_with_audit = reason
 
     conn = await _db()
     try:
+        now_mdt = datetime.now(ZoneInfo("America/Denver"))
+        plan_id = f"iris-oneshot-{now_mdt.strftime('%Y%m%d-%H%M')}"
         await conn.execute(
-            "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
+            """
+            INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason)
+            VALUES (now(), $1, $2, $3, 'iris', $4)
+            ON CONFLICT (ts, parameter, plan_id) DO UPDATE
+              SET value = EXCLUDED.value, reason = EXCLUDED.reason
+            """,
             parameter,
             value,
-            "iris",
+            plan_id,
+            reason_with_audit,
         )
         return json.dumps(
             {
                 "ok": True,
                 "parameter": parameter,
                 "value": value,
-                "reason": reason,
-                "note": "Dispatcher will push to ESP32 within 5 minutes",
+                "reason": reason_with_audit,
+                "plan_id": plan_id,
+                "trigger_id": trigger_id,
+                "planner_instance": planner_instance,
+                "note": (
+                    "Written to setpoint_plan as a one-shot waypoint at now(). "
+                    "Dispatcher pushes to ESP32 within 5 minutes and this value "
+                    "persists until the next set_plan or set_tunable supersedes."
+                ),
             }
         )
     finally:
@@ -318,8 +454,12 @@ async def plan_run(mode: str = "normal") -> str:
         from iris_planner import gather_context, send_to_iris
 
         context = gather_context()
-        ok = send_to_iris("SUNRISE", "Ad-hoc planning cycle (triggered via MCP)", context=context)
-        resp = PlanRunResponse(ok=ok, note="SUNRISE event sent to Iris planner. Check #greenhouse for the brief.")
+        result = send_to_iris("SUNRISE", "Ad-hoc planning cycle (triggered via MCP)", context=context)
+        resp = PlanRunResponse(
+            ok=bool(result.get("delivered")),
+            note="SUNRISE event sent to Iris planner. Check #greenhouse for the brief.",
+            error=None if result.get("delivered") else result.get("gateway_body"),
+        )
         return resp.model_dump_json(exclude_none=True)
     except Exception as e:
         return PlanRunResponse(ok=False, error=str(e)).model_dump_json(exclude_none=True)
@@ -328,7 +468,10 @@ async def plan_run(mode: str = "normal") -> str:
 @mcp.tool()
 async def plan_status() -> str:
     """Get the current active plan — waypoints, plan_id, hypothesis, compliance."""
+    started_at = perf_counter()
     conn = await _db()
+    success = False
+    error_message: str | None = None
     try:
         journal = await conn.fetchrow("""
             SELECT plan_id, to_char(created_at AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') as created,
@@ -345,8 +488,20 @@ async def plan_status() -> str:
             plan=PlanStatusJournal.model_validate(dict(journal)) if journal else None,
             future_waypoints=[PlanStatusWaypoint.model_validate(dict(w)) for w in waypoints],
         )
+        success = True
         return resp.model_dump_json(exclude_none=True)
+    except Exception as e:
+        error_message = str(e)
+        raise
     finally:
+        await _record_openclaw_interaction(
+            conn,
+            "plan_status",
+            started_at,
+            success=success,
+            error_message=error_message,
+            metadata={"source": "mcp.server.plan_status"},
+        )
         await conn.close()
 
 
@@ -377,14 +532,24 @@ async def lessons() -> str:
 async def query(sql: str) -> str:
     """Run a read-only SQL query against the Verdify database.
     Returns up to 100 rows as JSON. Only SELECT queries allowed."""
-    sql_stripped = sql.strip().upper()
-    if not sql_stripped.startswith("SELECT"):
-        return json.dumps({"error": "Only SELECT queries are allowed"})
+    sql_stripped = sql.strip()
+    sql_upper = sql_stripped.upper()
+    if not (sql_upper.startswith("SELECT") or sql_upper.startswith("WITH")):
+        return json.dumps({"error": "Only SELECT/WITH queries are allowed"})
+    # Keep this as a simple one-statement escape hatch. The DB transaction is
+    # read-only below, but rejecting multi-statement text avoids surprising
+    # behavior and keeps tool output bounded.
+    if ";" in sql_stripped.rstrip(";"):
+        return json.dumps({"error": "Only a single read-only statement is allowed"})
 
     conn = await _db()
     try:
-        rows = await conn.fetch(sql)
+        async with conn.transaction(readonly=True):
+            await conn.execute("SET LOCAL statement_timeout = '5s'")
+            rows = await conn.fetch(sql_stripped.rstrip(";"))
         return _json([dict(r) for r in rows[:100]])
+    except asyncpg.ReadOnlySQLTransactionError:
+        return json.dumps({"error": "Query attempted a write and was rejected by the read-only transaction"})
     finally:
         await conn.close()
 
@@ -396,7 +561,13 @@ async def query(sql: str) -> str:
 
 @mcp.tool()
 async def set_plan(
-    plan_id: str, hypothesis: str, transitions: str, experiment: str = "", expected_outcome: str = ""
+    plan_id: str,
+    hypothesis: str,
+    transitions: str,
+    experiment: str = "",
+    expected_outcome: str = "",
+    trigger_id: str | None = None,
+    planner_instance: str | None = None,
 ) -> str:
     """Write a 72-hour setpoint plan with multiple time-based waypoints.
     Deactivates all existing future waypoints, writes new ones, and logs a plan journal entry.
@@ -409,7 +580,12 @@ async def set_plan(
         plan_journal.hypothesis_structured for structured downstream rendering.
     transitions: JSON array of objects: [{"ts": "ISO8601-with-TZ", "params": {"param": value, ...}, "reason": "..."}]
     experiment: optional one-line experiment description
-    expected_outcome: optional measurable prediction"""
+    expected_outcome: optional measurable prediction
+    trigger_id, planner_instance: optional contract v1.4 audit fields. Pass
+        through from the audit-headers banner shown at the bottom of every
+        planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
+        Stamped onto plan_journal so SLA monitors and audit queries can
+        correlate plans to deliveries by uuid (not 2h time-window fallback)."""
     # Sprint 20: validate the whole envelope through Plan schema before any DB writes.
     # This rejects unknown tunables, inverted temp/VPD bands, non-monotonic transitions,
     # bad plan_id format, timezone-naive timestamps, etc. — at the MCP boundary, so
@@ -432,6 +608,29 @@ async def set_plan(
     except ValidationError as e:
         return json.dumps({"error": "Plan validation failed", "details": json.loads(e.json())})
 
+    writable_params = [param for wp in plan.transitions for param in wp.params if param not in BAND_OWNED_PARAMS]
+    if not writable_params:
+        return json.dumps(
+            {
+                "error": "Plan contains only crop-band params; these are dispatcher-owned read-only context",
+                "band_owned_params": sorted(BAND_OWNED_PARAMS),
+            }
+        )
+    missing_required = []
+    for idx, wp in enumerate(plan.transitions):
+        missing = sorted(PLAN_REQUIRED_PARAMS - set(wp.params))
+        if missing:
+            missing_required.append({"transition_index": idx, "ts": wp.ts.isoformat(), "missing": missing})
+    if missing_required:
+        return json.dumps(
+            {
+                "error": "Plan transitions must include all 24 tactical Tier 1 params",
+                "missing_required_params": missing_required,
+                "required_params": sorted(PLAN_REQUIRED_PARAMS),
+                "band_owned_params": sorted(BAND_OWNED_PARAMS),
+            }
+        )
+
     # Sprint 20 Phase 5: try to extract a PlanHypothesisStructured JSON block
     # from the hypothesis prose. Fence convention: ```json …``` anywhere in
     # the text. Failure to find or validate is silent — the prose still lands.
@@ -449,37 +648,65 @@ async def set_plan(
 
     conn = await _db()
     try:
-        # Deactivate existing future waypoints
-        await conn.execute("UPDATE setpoint_plan SET is_active = false WHERE ts > now() AND is_active = true")
+        async with conn.transaction():
+            existing = await conn.fetchval("SELECT 1 FROM plan_journal WHERE plan_id = $1", plan.plan_id)
+            if existing:
+                return json.dumps({"error": f"plan_id {plan.plan_id!r} already exists; generate a new plan_id"})
 
-        # Write new waypoints (everything pre-validated — no further per-row guards needed)
-        rows_written = 0
-        for wp in plan.transitions:
-            for param, value in wp.params.items():
-                await conn.execute(
-                    """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
-                       VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
-                    wp.ts,
-                    param,
-                    float(value),
-                    plan.plan_id,
-                    wp.reason or "",
-                )
-                rows_written += 1
+            # Deactivate existing future waypoints EXCEPT iris-oneshot tactical pushes.
+            # Phase 1b: set_tunable writes to setpoint_plan with plan_id
+            # `iris-oneshot-<YYYYMMDD-HHMM>`. Those are live tactical adjustments
+            # that should survive across regular sunrise/sunset plans until
+            # superseded by a later waypoint. Plan-level supersession is by
+            # `created_at DESC` so the newer multi-waypoint plan still wins on
+            # any parameter it re-specifies.
+            await conn.execute(
+                """UPDATE setpoint_plan SET is_active = false
+                   WHERE ts > now() AND is_active = true
+                     AND plan_id NOT LIKE 'iris-oneshot-%'"""
+            )
 
-        # Write journal entry — structured JSONB column populated only if
-        # the PlanHypothesisStructured block was present AND valid.
-        await conn.execute(
-            """INSERT INTO plan_journal
-                 (plan_id, created_at, hypothesis, experiment, expected_outcome,
-                  hypothesis_structured, greenhouse_id)
-               VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery')""",
-            plan.plan_id,
-            plan.hypothesis,
-            plan.experiment,
-            plan.expected_outcome,
-            structured_payload,
-        )
+            # Write new waypoints. Crop-band params are read-only planner
+            # context, owned by crop profiles + dispatcher; dropping them
+            # here prevents future clamp storms from semantically valid but
+            # owner-misaligned plans.
+            rows_written = 0
+            band_params_dropped = 0
+            for wp in plan.transitions:
+                for param, value in wp.params.items():
+                    if param in BAND_OWNED_PARAMS:
+                        band_params_dropped += 1
+                        continue
+                    await conn.execute(
+                        """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
+                           VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
+                        wp.ts,
+                        param,
+                        float(value),
+                        plan.plan_id,
+                        wp.reason or "",
+                    )
+                    rows_written += 1
+
+            # Write journal entry — structured JSONB column populated only if
+            # the PlanHypothesisStructured block was present AND valid.
+            # Contract v1.4 §2.C — stamp planner_instance + trigger_id when the
+            # caller passed them through from the prompt's audit-headers banner.
+            # Both columns nullable; NULL means "pre-v1.4 path or operator
+            # injection that didn't carry headers."
+            await conn.execute(
+                """INSERT INTO plan_journal
+                     (plan_id, created_at, hypothesis, experiment, expected_outcome,
+                      hypothesis_structured, greenhouse_id, planner_instance, trigger_id)
+                   VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)""",
+                plan.plan_id,
+                plan.hypothesis,
+                plan.experiment,
+                plan.expected_outcome,
+                structured_payload,
+                planner_instance,
+                trigger_id,
+            )
 
         # Sprint 20 Phase 6: drop a trigger file so verdify-plan-publish.path
         # fires and regenerates the daily plan page. Local-SSD location so
@@ -500,12 +727,79 @@ async def set_plan(
             "plan_id": plan.plan_id,
             "transitions": len(plan.transitions),
             "rows_written": rows_written,
+            "band_params_dropped": band_params_dropped,
             "structured_hypothesis": structured_payload is not None,
+            "trigger_id": trigger_id,
+            "planner_instance": planner_instance,
             "note": "Dispatcher will execute waypoints on schedule. Old future waypoints deactivated.",
         }
         if structured_warning:
             result["structured_warning"] = structured_warning
         return json.dumps(result)
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def acknowledge_trigger(trigger_id: str, reason: str, planner_instance: str | None = None) -> str:
+    """Record that Iris read a planning trigger and intentionally wrote no plan.
+
+    Use this only when a FORECAST/TRANSITION/HEARTBEAT cycle needs no setpoint
+    change. It turns the matching plan_delivery_log row from pending -> acked,
+    so SLA monitors can distinguish "read/no action" from "silent drop"."""
+    try:
+        tid = UUID(trigger_id)
+    except (TypeError, ValueError):
+        return json.dumps({"error": "trigger_id must be a valid UUID"})
+
+    reason = (reason or "").strip()
+    if not reason:
+        return json.dumps({"error": "reason is required"})
+    if len(reason) > 1000:
+        return json.dumps({"error": "reason must be <= 1000 characters"})
+
+    conn = await _db()
+    try:
+        row = await conn.fetchrow(
+            """
+            UPDATE plan_delivery_log
+               SET status = 'acked',
+                   acked_at = now(),
+                   gateway_body = concat_ws(E'\n', NULLIF(gateway_body, ''), $2::text)
+             WHERE trigger_id = $1::uuid
+               AND status = 'pending'
+             RETURNING id, event_type, instance, delivered_at, status
+            """,
+            str(tid),
+            f"acknowledged by {planner_instance or 'iris'}: {reason}",
+        )
+        if row is None:
+            existing = await conn.fetchrow(
+                "SELECT id, event_type, instance, status FROM plan_delivery_log WHERE trigger_id = $1::uuid",
+                str(tid),
+            )
+            if existing is None:
+                return json.dumps({"error": f"trigger_id {tid} not found in plan_delivery_log"})
+            return _json(
+                {
+                    "ok": False,
+                    "trigger_id": str(tid),
+                    "note": "trigger was already resolved",
+                    "status": existing["status"],
+                    "event_type": existing["event_type"],
+                    "instance": existing["instance"],
+                }
+            )
+        return _json(
+            {
+                "ok": True,
+                "trigger_id": str(tid),
+                "event_type": row["event_type"],
+                "instance": row["instance"],
+                "planner_instance": planner_instance,
+                "status": row["status"],
+            }
+        )
     finally:
         await conn.close()
 
@@ -749,7 +1043,7 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
             return _json([dict(r) for r in rows])
 
         elif action == "record_observation" and crop_id:
-            crop = await conn.fetchrow("SELECT zone, position FROM crops WHERE id = $1", crop_id)
+            crop = await conn.fetchrow("SELECT zone, position, zone_id, position_id FROM crops WHERE id = $1", crop_id)
             if not crop:
                 return json.dumps({"error": f"Crop {crop_id} not found"})
             try:
@@ -758,12 +1052,22 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 return json.dumps({"error": "ObservationCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO observations (crop_id, zone, position, obs_type, notes, severity,
-                                          observer, health_score, species, count, affected_pct, photo_path, source)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'iris') RETURNING *""",
+                INSERT INTO observations (
+                    crop_id, zone, position, zone_id, position_id, obs_type, notes, severity,
+                    observer, health_score, species, count, affected_pct, photo_path,
+                    plant_height_cm, leaf_count, canopy_cover_pct, flowering_count,
+                    fruit_count, root_condition, mortality_count, stress_tags, source
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    $9, $10, $11, $12, $13, $14,
+                    $15, $16, $17, $18, $19, $20, $21, $22, 'iris'
+                ) RETURNING *""",
                 crop_id,
                 obs.zone or crop["zone"],
                 obs.position or crop["position"],
+                crop["zone_id"],
+                crop["position_id"],
                 obs.obs_type,
                 obs.notes,
                 obs.severity,
@@ -773,6 +1077,14 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 obs.count,
                 obs.affected_pct,
                 obs.photo_path,
+                obs.plant_height_cm,
+                obs.leaf_count,
+                obs.canopy_cover_pct,
+                obs.flowering_count,
+                obs.fruit_count,
+                obs.root_condition,
+                obs.mortality_count,
+                obs.stress_tags,
             )
             return _json(dict(row))
 
@@ -812,17 +1124,26 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 return json.dumps({"error": "HarvestCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO harvests (crop_id, weight_kg, unit_count, quality_grade, zone, destination,
-                                      unit_price, revenue, operator, notes)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *""",
+                INSERT INTO harvests (
+                    crop_id, weight_kg, unit_count, quality_grade,
+                    salable_weight_kg, cull_weight_kg, cull_reason, quality_reason,
+                    zone, destination, unit_price, revenue, labor_minutes, operator, notes
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                RETURNING *""",
                 crop_id,
                 hv.weight_kg,
                 hv.unit_count,
                 hv.quality_grade,
+                hv.salable_weight_kg,
+                hv.cull_weight_kg,
+                hv.cull_reason,
+                hv.quality_reason,
                 hv.zone,
                 hv.destination,
                 hv.unit_price,
                 hv.revenue,
+                hv.labor_minutes,
                 hv.operator,
                 hv.notes,
             )
@@ -845,10 +1166,13 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 return json.dumps({"error": "TreatmentCreate validation failed", "details": json.loads(e.json())})
             row = await conn.fetchrow(
                 """
-                INSERT INTO treatments (crop_id, product, active_ingredient, concentration, rate, rate_unit,
-                                        method, zone, target_pest, phi_days, rei_hours, applicator,
-                                        observation_id, notes)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *""",
+                INSERT INTO treatments (
+                    crop_id, product, active_ingredient, concentration, rate, rate_unit,
+                    method, zone, target_pest, phi_days, rei_hours, applicator,
+                    observation_id, followup_due_at, followup_completed_at, outcome, notes
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                RETURNING *""",
                 crop_id,
                 tr.product,
                 tr.active_ingredient,
@@ -862,6 +1186,9 @@ async def observations(action: str, crop_id: int = 0, data: str = "") -> str:
                 tr.rei_hours,
                 tr.applicator,
                 tr.observation_id,
+                tr.followup_due_at,
+                tr.followup_completed_at,
+                tr.outcome,
                 tr.notes,
             )
             return _json(dict(row))

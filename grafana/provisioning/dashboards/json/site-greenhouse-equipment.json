@@ -23,7 +23,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat1_min)::numeric / 60.0, 2) AS \"Heat 1\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_heat1_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat1_min)::numeric / 60.0, 2) AS \"Heat 1\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_heat1_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -88,7 +88,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat2_min)::numeric / 60.0, 2) AS \"Heat 2\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_heat2_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat2_min)::numeric / 60.0, 2) AS \"Heat 2\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_heat2_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -153,7 +153,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric / 60.0, 2) AS \"Fan 1\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fan1_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric / 60.0, 2) AS \"Fan 1\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_fan1_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -218,7 +218,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric / 60.0, 2) AS \"Fan 2\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fan2_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric / 60.0, 2) AS \"Fan 2\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_fan2_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -283,7 +283,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fog_min)::numeric / 60.0, 2) AS \"Fog\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fog_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fog_min)::numeric / 60.0, 2) AS \"Fog\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_fog_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -348,7 +348,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric / 60.0, 2) AS \"Vent\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_vent_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric / 60.0, 2) AS \"Vent\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_vent_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -413,7 +413,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_grow_light_min)::numeric / 60.0, 2) AS \"Grow Light\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_grow_light_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_grow_light_min)::numeric / 60.0, 2) AS \"Grow Light\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_grow_light_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         }
@@ -478,7 +478,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat1_min)::numeric / 60.0, 2) AS \"Heat 1\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_heat1_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat1_min)::numeric / 60.0, 2) AS \"Heat 1\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_heat1_min IS NOT NULL",
           "format": "table",
           "refId": "A"
         },
@@ -487,7 +487,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat2_min)::numeric / 60.0, 2) AS \"Heat 2\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_heat2_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_heat2_min)::numeric / 60.0, 2) AS \"Heat 2\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_heat2_min IS NOT NULL",
           "format": "table",
           "refId": "B"
         },
@@ -496,7 +496,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric / 60.0, 2) AS \"Fan 1\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fan1_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric / 60.0, 2) AS \"Fan 1\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_fan1_min IS NOT NULL",
           "format": "table",
           "refId": "C"
         },
@@ -505,7 +505,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric / 60.0, 2) AS \"Fan 2\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fan2_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric / 60.0, 2) AS \"Fan 2\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_fan2_min IS NOT NULL",
           "format": "table",
           "refId": "D"
         },
@@ -514,7 +514,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fog_min)::numeric / 60.0, 2) AS \"Fog\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_fog_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fog_min)::numeric / 60.0, 2) AS \"Fog\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_fog_min IS NOT NULL",
           "format": "table",
           "refId": "E"
         },
@@ -523,7 +523,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric / 60.0, 2) AS \"Vent\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_vent_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric / 60.0, 2) AS \"Vent\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_vent_min IS NOT NULL",
           "format": "table",
           "refId": "F"
         },
@@ -532,7 +532,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_grow_light_min)::numeric / 60.0, 2) AS \"Grow Light\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_grow_light_min IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_grow_light_min)::numeric / 60.0, 2) AS \"Grow Light\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_grow_light_min IS NOT NULL",
           "format": "table",
           "refId": "G"
         },
@@ -541,7 +541,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric, 2) AS \"Mister South\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_mister_south_h IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric, 2) AS \"Mister South\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_south_h IS NOT NULL",
           "format": "table",
           "refId": "H"
         },
@@ -550,7 +550,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric, 2) AS \"Mister West\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_mister_west_h IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric, 2) AS \"Mister West\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_west_h IS NOT NULL",
           "format": "table",
           "refId": "I"
         },
@@ -559,7 +559,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric, 2) AS \"Mister Center\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_mister_center_h IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric, 2) AS \"Mister Center\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_mister_center_h IS NOT NULL",
           "format": "table",
           "refId": "J"
         },
@@ -568,7 +568,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_wall_h)::numeric, 2) AS \"Drip Wall\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_drip_wall_h IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_wall_h)::numeric, 2) AS \"Drip Wall\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_drip_wall_h IS NOT NULL",
           "format": "table",
           "refId": "K"
         },
@@ -577,7 +577,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_center_h)::numeric, 2) AS \"Drip Center\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND runtime_drip_center_h IS NOT NULL",
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_center_h)::numeric, 2) AS \"Drip Center\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND runtime_drip_center_h IS NOT NULL",
           "format": "table",
           "refId": "L"
         }
@@ -930,7 +930,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_heat1) AS \"Heat 1\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_heat1 IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_heat1) AS \"Heat 1\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_heat1 IS NOT NULL",
           "format": "table",
           "refId": "A"
         },
@@ -939,7 +939,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_heat2) AS \"Heat 2\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_heat2 IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_heat2) AS \"Heat 2\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_heat2 IS NOT NULL",
           "format": "table",
           "refId": "B"
         },
@@ -948,7 +948,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_fan1) AS \"Fan 1\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_fan1 IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_fan1) AS \"Fan 1\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_fan1 IS NOT NULL",
           "format": "table",
           "refId": "C"
         },
@@ -957,7 +957,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_fan2) AS \"Fan 2\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_fan2 IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_fan2) AS \"Fan 2\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_fan2 IS NOT NULL",
           "format": "table",
           "refId": "D"
         },
@@ -966,7 +966,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_fog) AS \"Fog\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_fog IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_fog) AS \"Fog\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_fog IS NOT NULL",
           "format": "table",
           "refId": "E"
         },
@@ -975,7 +975,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_vent) AS \"Vent\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_vent IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_vent) AS \"Vent\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_vent IS NOT NULL",
           "format": "table",
           "refId": "F"
         },
@@ -984,7 +984,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, SUM(cycles_grow_light) AS \"Grow Light\"\nFROM daily_summary\nWHERE $__timeFilter(date::timestamptz) AND cycles_grow_light IS NOT NULL",
+          "rawSql": "SELECT now() AS time, SUM(cycles_grow_light) AS \"Grow Light\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND cycles_grow_light IS NOT NULL",
           "format": "table",
           "refId": "G"
         }

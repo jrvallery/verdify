@@ -26,6 +26,11 @@ DB_DSN = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 ESP32_HOST = os.environ.get("ESP32_HOST", "192.168.10.111")
 ESP32_PORT = int(os.environ.get("ESP32_PORT", "6053"))
 ESP32_API_KEY = os.environ.get("ESP32_API_KEY", "")
+EXPECTED_FIRMWARE_VERSION = os.environ.get("EXPECTED_FIRMWARE_VERSION", "")
+EXPECTED_FIRMWARE_VERSION_FILE = os.environ.get(
+    "EXPECTED_FIRMWARE_VERSION_FILE",
+    "/srv/verdify/state/expected-firmware-version",
+)
 
 # ── Home Assistant ────────────────────────────────────────────────
 HA_URL = os.environ.get("HA_URL", "http://192.168.30.107:8123")
@@ -59,6 +64,18 @@ OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent
 # DEPRECATED in Sprint 25 — remove in Sprint 26. Reads the opus session key
 # as a fallback when new code calls legacy send_to_iris paths.
 OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_OPUS_SESSION_KEY)
+
+# Feature gate for the local Iris peer. When true, planner_routing.pick_instance
+# is consulted as the source of truth and FORECAST/TRANSITION/HEARTBEAT may be
+# routed to the local session. When false (default), routing decisions are
+# computed and stamped onto plan_delivery_log.instance for audit, but the
+# actual delivery is forced to opus so we don't black-hole sends to a
+# nonexistent local session.
+ENABLE_LOCAL_PLANNER = os.environ.get("ENABLE_LOCAL_PLANNER", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
 
 # ── Greenhouse ────────────────────────────────────────────────────
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")

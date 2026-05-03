@@ -34,6 +34,41 @@ class TestAPIHealth:
         data = json.loads(body)
         assert "status" in data or "ok" in body.lower()
 
+    def test_public_home_metrics_endpoint(self):
+        status, body = api_get("/api/v1/public/home-metrics")
+        assert status == 200, f"Public home metrics returned {status}"
+        data = json.loads(body)
+        for key in ("generated_at", "climate_rows", "active_crops", "plan_count", "data_health_status"):
+            assert key in data, f"Public home metrics missing {key}"
+        assert data["data_health_status"] in ("ok", "warn", "fail")
+
+    def test_public_data_health_endpoint(self):
+        status, body = api_get("/api/v1/public/data-health")
+        assert status == 200, f"Public data health returned {status}"
+        data = json.loads(body)
+        assert data["overall_status"] in ("ok", "warn", "fail")
+        assert isinstance(data["checks"], list)
+
+    def test_mutating_routes_require_operator_key(self):
+        result = subprocess.run(
+            [
+                "curl",
+                "-sk",
+                "-X",
+                "POST",
+                "https://127.0.0.1/api/v1/greenhouses/vallery/lights/main/on",
+                "-H",
+                "Host: api.verdify.ai",
+                "-w",
+                "\n%{http_code}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        status = int(result.stdout.strip().rsplit("\n", 1)[-1])
+        assert status == 403, f"Unauthenticated mutating route returned {status}"
+
 
 class TestAPISetpoints:
     """Setpoint endpoint must return valid key=value data for ESP32."""
