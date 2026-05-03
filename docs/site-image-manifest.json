@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-04-28",
+  "updated": "2026-05-02",
   "policy": "Only approved public photos may be referenced from website markdown. allowed_paths entries are route/source prefixes under /mnt/iris/verdify-vault/website.",
   "images": {
     "control-center-laptop.jpg": {"status": "approved", "category": "control", "allowed_paths": ["intelligence/", "climate/"]},
@@ -25,6 +25,7 @@
     "interior-full-view.jpg": {"status": "approved", "category": "interior", "allowed_paths": ["index.md", "greenhouse/"]},
     "interior-production-aisle.jpg": {"status": "approved", "category": "interior", "allowed_paths": ["greenhouse/index.md", "index.md"]},
     "interior-south-zone.jpg": {"status": "approved", "category": "zone", "allowed_paths": ["greenhouse/zones/south.md"]},
+    "jason-and-james.jpeg": {"status": "approved", "category": "story", "allowed_paths": ["about.md"]},
     "kincony-relay-closeup.jpg": {"status": "approved", "category": "control", "allowed_paths": ["climate/", "greenhouse/equipment.md"]},
     "lennox-heater-circulation-fan.jpg": {"status": "approved", "category": "heating", "allowed_paths": ["climate/"]},
     "lennox-heater-overhead.jpg": {"status": "approved", "category": "heating", "allowed_paths": ["climate/"]},

@@ -87,6 +87,7 @@ These are useful when discussing the greenhouse shell, constraints, and site. Av
 
 | File | Contains | Current use | Notes |
 |---|---|---|---|
+| `jason-and-james.jpeg` | Jason and James inside the greenhouse near controller/equipment wall | About | Strong human-origin hero photo; keep scoped to personal story pages. |
 | `exterior-daytime-house-solar.jpg` | Greenhouse beside house and solar | About | Useful for origin/context. More residential than technical. |
 | `exterior-winter-snow-lamppost.jpg` | Winter exterior with snow | Climate | Good seasonal constraint image. |
 | `exterior-snow-falling-night.jpg` | Snow at night | Heating | Good heating/climate constraint image, duplicates snow theme. |
