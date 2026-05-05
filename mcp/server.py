@@ -51,7 +51,7 @@ from verdify_schemas import (  # noqa: E402
     SetpointSummary,
     TreatmentCreate,
 )
-from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG  # noqa: E402
+from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, registry_value_error  # noqa: E402
 
 # ── Config ──
 # Read DB password from .env
@@ -373,6 +373,15 @@ async def set_tunable(
             {
                 "error": f"'{parameter}' is not planner-pushable in the tunable registry",
                 "allowed": sorted(PLANNER_PUSHABLE_REG),
+            }
+        )
+    if bounds_error := registry_value_error(parameter, value):
+        return json.dumps(
+            {
+                "error": "Tunable value outside registry bounds",
+                "parameter": parameter,
+                "value": value,
+                "details": bounds_error,
             }
         )
 

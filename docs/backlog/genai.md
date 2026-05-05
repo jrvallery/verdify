@@ -35,6 +35,24 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 
 Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; genai's MCP boundary is typed.
 
+**Planner loop hardening + local-first Iris** (2026-05-03 trace; coordinator-requested).
+
+Target state: the existing OpenClaw `iris-planner` agent performs greenhouse
+planning and plan evaluation against local Gemma4 on cortext. Routine and
+required planning stays local by default; any cloud peer is an explicit operator
+escalation path, not the normal planning route. The ESP32 remains the
+safety-critical controller.
+
+- [ ] **G-P0.1 Local Gemma4 target contract.** Update planner docs, prompt comments, and dry-run expectations so `iris-planner` means "local Gemma4 on cortext" in production. Stop treating `instance='local'` as a policy label that may still route to the cloud session. Success: `plan_delivery_log.session_key` and OpenClaw config both prove the live planner path is the local Gemma4-backed `iris-planner` session.
+- [ ] **G-P0.2 Prompt terminology cleanup.** Replace stale `opus/local` planner language with `local_gemma4` plus an explicit `cloud_escalation` override. Keep historical labels readable in DB queries, but make new prompts and operator docs local-first.
+- [ ] **G-P0.3 Full-context planner pack.** Rework `gather-plan-context.sh` output into a Gemma4-sized context pack with: current climate/equipment, 24h hourly history, 7d score trend, prior plan outcomes, current/future active plan, next 48-72h forecast, forecast accuracy/deviation summaries, recent setpoint confirmations, recent clamps/range rejects, open alerts, crops/positions, water/energy constraints, and context-completeness flags.
+- [ ] **G-P0.4 Distilled site + lessons memory.** Generate a compact planner digest from public/site context and operational docs: safety architecture, baseline-vs-Iris lessons, response-pack claims, greenhouse physical constraints, validated planner lessons, anti-patterns, and current launch story. Feed this as stable memory instead of pasting raw website pages into every prompt.
+- [ ] **G-P0.5 Explicit tuning rubric.** Tighten `_PLANNER_CORE` guidance around the actual planning approach: diagnose dominant stress axis; choose posture; tune Tier 1 tactical knobs only; never emit crop-band params; respect registry min/max; prefer `set_plan` for solar/fixed-boundary postures; use `set_tunable` only for immediate tactical corrections; call `acknowledge_trigger` for true no-op routine cycles.
+- [ ] **G-P0.6 MCP `plan_run` audit parity.** Route manual/ad-hoc planner runs through the same trigger logging path as scheduled events. No more orphan `plan_journal.trigger_id` rows without a matching `plan_delivery_log` entry.
+- [x] **G-P0.7 Strict registry validation at MCP boundary.** `PlanTransition` / `set_plan` and `set_tunable` now reject values outside `tunable_registry` min/max before writing `setpoint_plan`. Errors include offending parameter, requested value, registry range, and nearest safe value so Iris can self-correct.
+- [ ] **G-P0.8 Local planner smoke.** Add a live smoke that sends a MANUAL trigger to local Gemma4 via OpenClaw, verifies either `plan_written` or `acked` with matching `trigger_id`, and asserts no active/future plan rows violate registry ranges.
+- [ ] **G-P1.1 Post-plan self-critique.** After each full plan, have Iris record a short structured rationale: forecast assumptions, expected stress windows, tunables intentionally changed, tunables intentionally left alone, and what evidence would falsify the plan.
+
 ## Tracked list
 
 | # | Item | Type | Blocks | Effort | Status |

@@ -14,6 +14,15 @@ Current launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2
 
 2026-05-03 content-QA update: launch pages and internal launch notes now use the same public story: Iris writes bounded tactical plans at solar milestones/event triggers; the ESP32 owns 8-state deterministic relay control every 5 seconds; telemetry, scorecards, costs, failures, and lessons make claims auditable.
 
+2026-05-03 planner-loop trace update: the planner loop is live but needs a
+local-first contract cleanup. The new backlog target is one auditable
+`iris-planner` OpenClaw path backed by local Gemma4 on cortext, complete trigger
+coverage for forecast deviations, solar transitions, and fixed local-time
+boundaries, plus strict trigger-to-plan correlation and registry-range
+validation before a plan can become active. Detailed work is split across
+`docs/backlog/genai.md` (`G-P*`), `docs/backlog/ingestor.md` (`I-P*`), and
+`docs/backlog/cross-cutting.md` (`C-P*`).
+
 | Owner | Launch focus | Backlog |
 |---|---|---|
 | `coordinator` / Jason | Privacy/security scrub, launch sequencing, identity/code-transparency decisions, final copy approval | `docs/backlog/launch.md` |
@@ -73,6 +82,7 @@ In chronological order:
 
 ## Current findings to schedule
 
+- **Planner:** Local-first hardening is now the top planning backlog. Genai owns the Gemma4-sized context pack, tuning rubric, site/lesson digest, MCP `plan_run` audit parity, and registry validation at the planner boundary. Ingestor owns the trigger matrix, no-missed-sunrise behavior, per-trigger SLA lifecycle, exact trigger correlation, deviation coverage, fixed-boundary triggers, and active/future plan range guard. Coordinator owns contract v1.5, any trigger-ledger schema, and model observability.
 - **Web:** Site simplification pass reduced the public entry path and fixed corrupted text. Remaining editorial cleanup: fold detailed Climate subpages into `/climate`, finish hiding or archiving redundant reference routes, and remove drafting scaffolds from hidden reference pages.
 - **Web:** Image cleanup removed broken/public backup assets and documented current photo fit. The manual image catalog now has a machine-readable manifest checked by `site-doctor`; crop-specific photos for basil/cucumbers/tomatoes remain a content acquisition issue, not a rendering blocker.
 - **Web:** Raw ASCII/Mermaid diagrams were removed from hand-authored public pages. Forecast, daily-plan, plans-index, crop, and zone generated outputs now use web components instead of generated Markdown tables.

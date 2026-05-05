@@ -322,6 +322,20 @@ def test_resolve_delivery_log_sets_status_plan_written():
     )
 
 
+def test_resolve_delivery_log_fallback_is_legacy_null_uuid_only():
+    """Rows with trigger_id must never use the old 2h time-window fallback."""
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("async def _resolve_delivery_log")
+    end = src.index("async def ", start + 1)
+    body = src[start:end]
+    assert "pj.trigger_id = pdl.trigger_id" in body
+    fallback = body.split("Legacy fallback for pre-v1.4 rows only", 1)[1]
+    assert "pdl.trigger_id IS NULL" in fallback
+    assert "pj.trigger_id IS NULL" in fallback
+
+
 def test_failed_plan_delivery_logs_delivery_failed_status():
     import tasks
 

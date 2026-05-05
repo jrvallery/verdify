@@ -57,6 +57,18 @@ class TestPlanTransition:
         with pytest.raises(ValidationError, match="mister_engage_kpa.*must be <= mister_all_kpa"):
             PlanTransition(ts=_t(), params={"mister_engage_kpa": 2.0, "mister_all_kpa": 1.0})
 
+    def test_rejects_registry_value_above_max(self):
+        with pytest.raises(ValidationError, match="vpd_hysteresis=0.55 outside registry bounds"):
+            PlanTransition(ts=_t(), params={"vpd_hysteresis": 0.55})
+
+    def test_rejects_registry_value_below_min(self):
+        with pytest.raises(ValidationError, match="mister_all_delay_s=10 outside registry bounds"):
+            PlanTransition(ts=_t(), params={"mister_all_delay_s": 10})
+
+    def test_registry_error_includes_nearest_safe_value(self):
+        with pytest.raises(ValidationError, match="nearest_safe=0"):
+            PlanTransition(ts=_t(), params={"enthalpy_open": 2.0})
+
     def test_requires_timezone_aware_ts(self):
         with pytest.raises(ValidationError):
             PlanTransition(ts=datetime(2026, 4, 18, 12), params={"temp_low": 55.0})
