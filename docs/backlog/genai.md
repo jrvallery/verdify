@@ -27,13 +27,31 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 
 - [x] **G-L0.3 Lesson canonicalization semantics.** Implemented in `scripts/generate-lessons-page.py`: normalized signatures collapse near-duplicate machine lessons into canonical families with validation counts and raw visibility behind a labeled details section.
 - [x] **G-L0.4 Daily-plan story support.** Implemented in `scripts/generate-daily-plan.py`: default reading path leads with outcome/score/hypothesis/rationale and changed parameters, while raw secondary parameters stay behind `<details>`.
-- [ ] **G-L1.7 Launch response pack.** Prepare concise technical answers for HN/Reddit: why not PID, LLM not in real-time loop, ESP32 safety ownership, VPD physics, shade-cloth limits, Mycodo/HAGR/Koidra/AgroNova/iGrow comparisons, related agentic-control literature, and what "self-improving" does and does not mean.
-- [ ] **G-L1.13 FAQ support.** Draft "Why not direct LLM control?", "Why not PID?", "Why not RL yet?", "What does self-correcting mean?", and "How are lessons validated?" answers for web publication.
+- [x] **G-L1.7 Launch response pack.** Added `docs/launch/launch-response-pack.md` with concise technical answers for HN/Reddit: why not PID, LLM not in real-time loop, ESP32 safety ownership, VPD physics, shade-cloth limits, peer comparisons, and self-correcting language.
+- [x] **G-L1.13 FAQ support.** Added `/intelligence/faq` with answers for direct LLM control, PID, RL, self-correcting, VPD, physics limits, yield claims, solar wording, rebuildability, and peer comparisons.
 - [ ] **G-L2.1 Weekly proof cadence.** Define the weekly "Verdify this week" planner summary inputs: weather faced, planner score, stress windows, lessons graduated, failures, repairs.
 - [ ] **G-L2.6 Counterfactual replay roadmap.** Define planner-facing requirements for replaying recent telemetry with alternate tunables before any RL/simulator path.
 - [ ] **G-L2.7 Daily lifecycle artifact.** Help web publish one complete forecast -> plan -> tunables -> telemetry -> score -> lesson example with planner-side annotations.
 
 Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; genai's MCP boundary is typed.
+
+**Planner loop hardening + local-first Iris** (2026-05-03 trace; coordinator-requested).
+
+Target state: the existing OpenClaw `iris-planner` agent performs greenhouse
+planning and plan evaluation against local Gemma4 on cortext. Routine and
+required planning stays local by default; any cloud peer is an explicit operator
+escalation path, not the normal planning route. The ESP32 remains the
+safety-critical controller.
+
+- [ ] **G-P0.1 Local Gemma4 target contract.** Update planner docs, prompt comments, and dry-run expectations so `iris-planner` means "local Gemma4 on cortext" in production. Stop treating `instance='local'` as a policy label that may still route to the cloud session. Success: `plan_delivery_log.session_key` and OpenClaw config both prove the live planner path is the local Gemma4-backed `iris-planner` session.
+- [ ] **G-P0.2 Prompt terminology cleanup.** Replace stale `opus/local` planner language with `local_gemma4` plus an explicit `cloud_escalation` override. Keep historical labels readable in DB queries, but make new prompts and operator docs local-first.
+- [ ] **G-P0.3 Full-context planner pack.** Rework `gather-plan-context.sh` output into a Gemma4-sized context pack with: current climate/equipment, 24h hourly history, 7d score trend, prior plan outcomes, current/future active plan, next 48-72h forecast, forecast accuracy/deviation summaries, recent setpoint confirmations, recent clamps/range rejects, open alerts, crops/positions, water/energy constraints, and context-completeness flags.
+- [ ] **G-P0.4 Distilled site + lessons memory.** Generate a compact planner digest from public/site context and operational docs: safety architecture, baseline-vs-Iris lessons, response-pack claims, greenhouse physical constraints, validated planner lessons, anti-patterns, and current launch story. Feed this as stable memory instead of pasting raw website pages into every prompt.
+- [ ] **G-P0.5 Explicit tuning rubric.** Tighten `_PLANNER_CORE` guidance around the actual planning approach: diagnose dominant stress axis; choose posture; tune Tier 1 tactical knobs only; never emit crop-band params; respect registry min/max; prefer `set_plan` for solar/fixed-boundary postures; use `set_tunable` only for immediate tactical corrections; call `acknowledge_trigger` for true no-op routine cycles.
+- [ ] **G-P0.6 MCP `plan_run` audit parity.** Route manual/ad-hoc planner runs through the same trigger logging path as scheduled events. No more orphan `plan_journal.trigger_id` rows without a matching `plan_delivery_log` entry.
+- [x] **G-P0.7 Strict registry validation at MCP boundary.** `PlanTransition` / `set_plan` and `set_tunable` now reject values outside `tunable_registry` min/max before writing `setpoint_plan`. Errors include offending parameter, requested value, registry range, and nearest safe value so Iris can self-correct.
+- [ ] **G-P0.8 Local planner smoke.** Add a live smoke that sends a MANUAL trigger to local Gemma4 via OpenClaw, verifies either `plan_written` or `acked` with matching `trigger_id`, and asserts no active/future plan rows violate registry ranges.
+- [ ] **G-P1.1 Post-plan self-critique.** After each full plan, have Iris record a short structured rationale: forecast assumptions, expected stress windows, tunables intentionally changed, tunables intentionally left alone, and what evidence would falsify the plan.
 
 ## Tracked list
 
@@ -79,7 +97,7 @@ Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; ge
 - `scripts/smoke-sprint20.py` (post-G11: `smoke-feedback-loop.py`) —
   end-to-end against live stack.
 - Cost sanity — coordinator reviews if avg plan-cycle cost inflates >20%.
-- Model swaps (Claude ↔ Gemini, version bumps) — require coordinator sign-off.
+- Model swaps or routing-policy changes (local ↔ cloud, Gemma/version bumps, or behavior-impacting model changes) — require coordinator sign-off.
 
 ## Handshake state
 

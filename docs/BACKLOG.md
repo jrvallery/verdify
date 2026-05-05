@@ -6,9 +6,22 @@ Per-agent backlogs live in `docs/backlog/{agent}.md`. This file is the index + "
 
 Broad launch is now a cross-agent release train. Canonical launch gates live in [`docs/launch/README.md`](launch/README.md); task tracking lives in [`docs/backlog/launch.md`](backlog/launch.md).
 
-Current launch posture: **not broad-launch ready** until the P0 gates are complete.
+Current launch posture: **engineering/content gates are complete; broad launch now depends on Jason-owned copy, video, identity, and calendar decisions.**
 
 2026-05-03 update: Jason's prior-art review is tracked in [`docs/launch/prior-art-rollup-2026-05-03.md`](launch/prior-art-rollup-2026-05-03.md). It adds post-P0 launch assets around Related Work, Safety Architecture, Baseline vs Iris, builder packaging, counterfactual replay, and progressive autonomy. These are P1/P2 credibility assets, not Track A firmware blockers.
+
+Current launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2026-05-03-l1-credibility.md). Engineering/content assets are complete: related work, safety architecture, baseline evidence, FAQ/response pack, builder path, and object-model diagram. 2026-05-03 narrative pivot: public story now centers Iris as an OpenClaw agent with local Gemma4 inference, greenhouse memory, static site context, forecast/context retrieval, and a cloud escalation path, while the ESP32 remains the safety-critical controller. Remaining broad-launch blockers are Jason-owned: operations clip, final HN copy, identity posture, launch calendar, and comment coverage.
+
+2026-05-03 content-QA update: launch pages and internal launch notes now use the same public story: Iris writes bounded tactical plans at solar milestones/event triggers; the ESP32 owns 8-state deterministic relay control every 5 seconds; telemetry, scorecards, costs, failures, and lessons make claims auditable.
+
+2026-05-03 planner-loop trace update: the planner loop is live but needs a
+local-first contract cleanup. The new backlog target is one auditable
+`iris-planner` OpenClaw path backed by local Gemma4 on cortext, complete trigger
+coverage for forecast deviations, solar transitions, and fixed local-time
+boundaries, plus strict trigger-to-plan correlation and registry-range
+validation before a plan can become active. Detailed work is split across
+`docs/backlog/genai.md` (`G-P*`), `docs/backlog/ingestor.md` (`I-P*`), and
+`docs/backlog/cross-cutting.md` (`C-P*`).
 
 | Owner | Launch focus | Backlog |
 |---|---|---|
@@ -69,6 +82,7 @@ In chronological order:
 
 ## Current findings to schedule
 
+- **Planner:** Local-first hardening is now the top planning backlog. Genai owns the Gemma4-sized context pack, tuning rubric, site/lesson digest, MCP `plan_run` audit parity, and registry validation at the planner boundary. Ingestor owns the trigger matrix, no-missed-sunrise behavior, per-trigger SLA lifecycle, exact trigger correlation, deviation coverage, fixed-boundary triggers, and active/future plan range guard. Coordinator owns contract v1.5, any trigger-ledger schema, and model observability.
 - **Web:** Site simplification pass reduced the public entry path and fixed corrupted text. Remaining editorial cleanup: fold detailed Climate subpages into `/climate`, finish hiding or archiving redundant reference routes, and remove drafting scaffolds from hidden reference pages.
 - **Web:** Image cleanup removed broken/public backup assets and documented current photo fit. The manual image catalog now has a machine-readable manifest checked by `site-doctor`; crop-specific photos for basil/cucumbers/tomatoes remain a content acquisition issue, not a rendering blocker.
 - **Web:** Raw ASCII/Mermaid diagrams were removed from hand-authored public pages. Forecast, daily-plan, plans-index, crop, and zone generated outputs now use web components instead of generated Markdown tables.

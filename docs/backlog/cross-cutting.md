@@ -12,14 +12,29 @@ Launch work is tracked in [`docs/backlog/launch.md`](launch.md) with the command
 - [x] **Public proof contract.** Added public-safe home metrics and data-health response models/endpoints for launch proof cards.
 - [x] **Launch sequencing.** P0 hardening is deployed; remaining launch timing is Jason-owned attribution/copy/video availability.
 - [x] **Cross-agent release train.** Web/genai/ingestor/saas/coordinator launch work was closed as one coordinator-driven release.
-- [ ] **Prior-art verification and positioning.** Verify publishable claims before adding Related Work copy for AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA comparators. Preserve Verdify's differentiation as public falsifiability, not "first" or largest deployment.
-- [ ] **Baseline period decision.** Choose the baseline window for "Baseline vs Iris" and document caveats so the comparison is useful without pretending to be a controlled academic trial.
+- [x] **Prior-art verification and positioning.** Added `/intelligence/related-work` using primary-source/public links for AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA comparators. Verdify is framed as public falsifiability, not first/largest/best.
+- [x] **Baseline period decision.** Selected 2026-04-22..25 planner-offline outage as baseline and 2026-04-26..2026-05-02 as the Iris-online comparison window; `/evidence/baseline-vs-iris` labels it as operational, not controlled A/B.
 
 ## Schemas / contracts
 
 - [x] **Per-alert-type discriminated union for `AlertEnvelope`.** Requested by `ingestor`. `AlertEnvelope` now preserves the existing model API while validating through a tagged per-alert registry covering every current alert writer, including planner, API, dispatcher, heap, firmware, and setpoint-confirmation alerts.
 - [x] **Migrate `verdify_schemas.crops.ObservationAction.data` union to also accept `HarvestCreate` / `TreatmentCreate`.** Verified with regression coverage.
 - [x] **Scorecard typed projection** (requested by `genai` + `web`). `ScorecardResponse` is the shared typed shape; migration 096 and `db/schema.sql` now match the live 25-metric numeric `fn_planner_scorecard()`, and `/api/v1/scorecard` returns that schema.
+
+### Planner contract v1.5 — local-first hardening
+
+Trace date: 2026-05-03. The live loop mostly works, but the contract still
+allows ambiguous "local" labels, missed required triggers, unsafe fallback
+correlation, orphan manual plans, and active/future plan rows outside the
+tunable registry. Coordinator owns the shared contract and schema pieces; genai
+and ingestor own their code slices.
+
+- [x] **C-P0.1 Ratify local-first planner contract.** `docs/iris-planner-contract.md` v1.5 now makes the existing OpenClaw `iris-planner` path the local Gemma4-on-cortext default and names cloud planning as explicit `cloud_escalation`.
+- [x] **C-P0.2 Trigger ledger schema.** v1.5 defines the logical trigger ledger backed by `plan_delivery_log`: required `trigger_id`, event type/label, planner path/session/model, lifecycle status, SLA fields, result/ack fields, validation status, and context digest hooks.
+- [ ] **C-P0.3 Shared registry range validation.** `PlanTransition` now rejects values outside `tunable_registry` min/max before `set_plan` can write them. Remaining follow-up: extend the same shared Pydantic check to `SetpointChange` and `SetpointPlanRow`. CI should fail if the schema accepts a value the dispatcher or firmware registry will reject.
+- [ ] **C-P0.4 Reconcile historical planner delivery rows.** Backfill or mark old `pending` rows so operational dashboards distinguish historical pre-contract ambiguity from current live failures. Existing mismatch examples must remain queryable but stop polluting current health.
+- [ ] **C-P0.5 Local model observability.** Add a durable status surface showing the planner model/provider/session used for each trigger. Success: a dashboard/API query can prove "this plan was reasoned by local Gemma4 on cortext" without scraping OpenClaw logs.
+- [ ] **C-P1.1 Planner context digest view.** If genai's distilled site/lesson memory needs DB support, publish a coordinator-owned view or table that versions planner context digests and records which digest version was used by each trigger.
 
 ## Migrations
 

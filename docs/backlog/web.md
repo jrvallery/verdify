@@ -4,23 +4,44 @@ Owned by the [`web`](../agents/web.md) agent.
 
 ## In flight
 
-None.
+- **Launch readiness and release freeze** (coordinated through [`docs/backlog/launch.md`](launch.md) and [`docs/launch/sprint-2026-05-04-launch-readiness.md`](../launch/sprint-2026-05-04-launch-readiness.md)).
+
+- [x] **LR-1 Data-health launch gate.** Public proof API now reports `warn`, not `fail`, with 0 open critical/high alerts. Remaining warnings are visible in `data_health_warnings`.
+- [x] **LR-2 Branch/release consolidation.** This branch merged `origin/main`; remaining launch-readiness docs are now the active delta.
+- [x] **LR-3 Public proof certification.** Run `make site-doctor` and live smoke checks before launch after this merge settles.
+- [x] **LR-4 Launch package freeze.** Draft copy, title options, and Jason decision checklist live in launch docs; Jason still chooses the final posting variant and calendar.
+- [x] **LR-5 Operations clip decision.** Clip is useful but not a code blocker; launch docs allow explicit deferral.
+- [x] **LR-6 Weekly cadence artifact.** "Verdify this week" template is queued as the first post-launch cadence surface.
+
+Completed P0/P1 web launch assets:
+
+- [x] **W-L0.2 Live proof path.** Homepage proof cards consume `/api/v1/public/home-metrics`; stale data is labeled and Grafana panels remain as fallback receipts.
+- [x] **W-L0.3 Lessons credibility pass.** `scripts/generate-lessons-page.py` now publishes canonical lessons with validation counts by default and keeps the raw machine stream labeled behind `<details>`.
+- [x] **W-L0.4 Daily plan readability.** `scripts/generate-daily-plan.py` leads cycles with score/outcome/rationale and changed parameters; full secondary dumps are behind `<details>`. Verified against `/plans/2026-04-29`.
+- [x] **W-L0.5 Launch story page.** `/` now has the OpenClaw/Iris local-inference narrative, ESP32 control-split, greenhouse visuals, live proof cards, and evidence/architecture paths.
+- [x] **W-L0.6 Social preview.** Homepage emits explicit OG/Twitter metadata and uses the snow greenhouse photo for the share card.
+- [x] **W-L0.7 Public Grafana/fallback QA.** Grafana health, anonymous dashboard boot data, d-solo URLs, and JS app bundles return successfully with noindex headers; mobile/in-app smoke remains a human pre-post check.
+- [x] **W-L0.8 Copy correctness.** Public Markdown/HTML has no raw `$123` cost strings, ambiguous `solar-powered` claims, family names, camera model, or local IP strings.
+- [x] **W-L0.9 Public API lockdown review.** Mutating public API routes require a write API key; unauthenticated POST/PUT/DELETE fail closed.
+- [x] **W-L0.10 Robots/indexing alignment.** Root robots file, canonical meta, and API/Grafana noindex headers are live.
+- [x] **W-L0.11 Public metrics/freshness consumption.** Homepage uses the public metrics/data-health contract instead of hard-coded proof counters.
 
 ## Next up (candidates)
 
-- Add a `make grafana-normalization-audit` wrapper around `scripts/audit-grafana.py` and `scripts/normalize-grafana-dashboards.py` so the canonical unit/color/label/SQL contract is easy to rerun after future dashboard work.
-- Add a formal sensor/dashboard metadata catalog keyed by source table, source column, entity, label, unit, category, and color, using `sensor_registry` as the seed.
-- Add a verified Related Work page positioning Verdify against AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA without overclaiming.
-- Add "Why the AI does not control relays" / Safety Architecture as a public page and keep the ESP32/dispatcher/LLM split above the fold.
-- Add Baseline vs Iris table after coordinator/Jason choose the baseline window and ingestor exposes stable metrics.
-- Add a builder/reference implementation path with BOM, wiring/equipment overview, MQTT examples, DB overview, sample plan JSON, sample scorecard JSON, and production-safety caveats.
-- Add the Verdify object-model diagram: Crop profile -> target bands -> forecast/state -> Iris plan -> tunables -> ESP32 state machine -> telemetry -> scorecard -> lessons -> next plan.
-- Add crop-steering roadmap language where accurate: day/night VPD bands, DLI target vs actual, dryback/irrigation windows, substrate sensing, pH/EC/DO, and shade cloth automation.
-
-## Blocked outside web scope
-
-- 2026-04-28 full `make test` in the web worktree fails because `ingestor/ingestor.py` imports coordinator-owned `verdify_schemas.tunable_registry`, but that module is present in `/mnt/iris/verdify` and absent from `/mnt/iris/verdify-worktrees/web`. Do not patch `verdify_schemas/` from web; sync/merge the schema registry through coordinator.
-- 2026-05-01 `systemd/verdify-plan-publish.service` invokes `python3 /srv/verdify/scripts/generate-daily-plan.py`, which fails when system Python lacks Pydantic. The web-owned `scripts/publish-daily-plan.sh` now uses `/srv/greenhouse/.venv/bin/python`; the coordinator-owned systemd unit should be updated to use the same venv interpreter or call the fixed wrapper.
+- [x] **W-L1.1 Architecture SVG.** Shareable diagram added at `/static/verdify-architecture.svg` and embedded on `/intelligence/architecture`.
+- [x] **W-L1.2 Bill of materials.** Launch-safe equipment/BOM surface is present on `/greenhouse/equipment` with sensitive addresses withheld.
+- [x] **W-L1.3 Cost callout.** `/evidence/economics` uses defensible solar-aligned/grid/gas wording and USD rendering.
+- [x] **W-L1.4 Outage story.** `/evidence` owns the April 22-25 zero-plan/VPD-stress run as public failure evidence.
+- [x] **W-L1.9 Related Work page.** Added `/intelligence/related-work` with primary-source/public references and no first/best/largest claims.
+- [x] **W-L1.10 Safety Architecture page.** Added `/intelligence/safety-architecture` with the ESP32/dispatcher/LLM control split and failure behavior.
+- [x] **W-L1.11 Baseline vs Iris table.** Added generated `/evidence/baseline-vs-iris` comparing the April 22-25 planner-offline window to the following Iris-online window.
+- [x] **W-L1.12 Related-work comparison table.** Added to `/intelligence/related-work`.
+- [x] **W-L1.14 Builder path.** Added `/intelligence/build-notes` with BOM links, MQTT examples, DB overview, example daily plan JSON, example scorecard JSON, and production-safety caveats.
+- [x] **W-L1.15 Object-model diagram.** Added `/static/verdify-object-model.svg` and embedded it on the safety architecture page.
+- [ ] **W-L2.1 Weekly update template.** Add "Verdify this week" page/template for weather, score, lessons, failures, repairs.
+- [ ] **W-L2.8 Crop-steering roadmap.** Add grower vocabulary where accurate: day/night VPD bands, DLI target vs actual, dryback/irrigation windows, substrate sensing, pH/EC/DO, and shade cloth automation roadmap.
+- [ ] Add a `make grafana-normalization-audit` wrapper around `scripts/audit-grafana.py` and `scripts/normalize-grafana-dashboards.py` so the canonical unit/color/label/SQL contract is easy to rerun after future dashboard work.
+- [ ] Add a formal sensor/dashboard metadata catalog keyed by source table, source column, entity, label, unit, category, and color, using `sensor_registry` as the seed.
 
 ## Ideas (not yet committed)
 

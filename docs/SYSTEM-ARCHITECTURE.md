@@ -6,7 +6,7 @@
 
 ## Overview
 
-Verdify is a greenhouse automation platform running entirely on a single VM. An ESP32 controller manages 367 sq ft of greenhouse climate (fans, heaters, misters, fog) using a 7-mode deterministic controller (`greenhouse_logic.h`). A Python ingestor captures 172 sensor entities into TimescaleDB, and an AI agent named Iris (Claude Opus 4.6 via OpenClaw) manages tunables event-driven at solar milestones and deviations. Everything is self-hosted — the only external dependency is an Anthropic API key for Iris.
+Verdify is a greenhouse automation platform running primarily on a single VM. An ESP32 controller manages 367 sq ft of greenhouse climate (fans, heaters, misters, fog) using a deterministic controller (`greenhouse_logic.h`). A Python ingestor captures 172 sensor entities into TimescaleDB, and an AI agent named Iris runs through OpenClaw with a local Gemma4-26B inference path for routine events plus a larger cloud peer for heavyweight reviews. Iris manages tunables event-driven at solar milestones and deviations, but the ESP32 owns real-time relay control.
 
 ```
 ESP32 (192.168.10.111, IoT VLAN)
@@ -19,7 +19,7 @@ TimescaleDB (44 tables, 54 views, 23 functions, 2.54M+ rows)
   ├─→ API (api.verdify.ai, 14 crop endpoints + /setpoints)
   └─→ verdify.ai (Quartz static site with embedded Grafana panels)
 
-Iris Planner (Claude Opus 4.6, OpenClaw agent)
+Iris Planner (OpenClaw: local Gemma4 + cloud peer)
   └─→ Event-driven (sunrise/transitions/sunset/forecast/deviation)
       → MCP tools (climate, scorecard, set_tunable) → setpoint_changes table
 ```
@@ -156,7 +156,7 @@ The ingestor (`/srv/verdify/ingestor/ingestor.py`, 945 lines) is the core data e
 | 10 0 * * * | vault-daily-writer.py | Daily summary → Obsidian vault markdown |
 | 15 0 * * * | vault-crop-writer.py | Per-crop status → Obsidian vault |
 | 15 0 * * * | generate-hydro-map.py | 60-position hydroponic layout HTML |
-| (event-driven) | iris_planner.py | Iris planner via OpenClaw (Claude Opus 4.6, replaces cron) |
+| (event-driven) | iris_planner.py | Iris planner via OpenClaw (local Gemma4 routine path + cloud escalation, replaces cron) |
 | 0 12,16,20,0 * * * | frigate-snapshot.py | Camera snapshots + Gemini vision analysis |
 | 0 13 * * * | checklist-to-slack.sh | Daily checklist → #greenhouse Slack |
 

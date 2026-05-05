@@ -20,7 +20,7 @@ import sys
 
 import pytest
 
-from verdify_schemas.tunable_registry import REGISTRY
+from verdify_schemas.tunable_registry import REGISTRY, registry_value_error
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -217,3 +217,16 @@ class TestDriftGuard:
         assert "PLANNER_PUSHABLE_REG" in text
         assert "parameter not in PLANNER_PUSHABLE_REG" in text
         assert "parameter not in TIER1_TUNABLES" not in text
+
+    def test_registry_value_error_reports_bounds_and_nearest_safe(self) -> None:
+        err = registry_value_error("mister_all_kpa", 2.8)
+        assert err is not None
+        assert "mister_all_kpa=2.8 outside registry bounds [1, 2.5]" in err
+        assert "nearest_safe=2.5" in err
+
+    def test_mcp_set_tunable_validates_registry_bounds(self) -> None:
+        """set_tunable must reject out-of-range planner pushes before DB writes."""
+        mcp_path = REPO_ROOT / "mcp" / "server.py"
+        text = mcp_path.read_text()
+        assert "registry_value_error(parameter, value)" in text
+        assert "Tunable value outside registry bounds" in text

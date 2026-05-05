@@ -27,10 +27,10 @@ All source-of-truth content lives on NFS (`/mnt/iris/` or `/mnt/jason/`). Three 
 │   ├── ingestor.py                ESP32 subscribe loop + on_state_change router
 │   ├── tasks.py                   15 periodic tasks
 │   ├── entity_map.py              ESP32 object_id → DB column routing
-│   ├── iris_planner.py            Event-driven Anthropic API calls
+│   ├── iris_planner.py            Event-driven OpenClaw planner dispatch
 │   ├── config.py / shared.py      env + global state
 │   ├── templates.py               planner prompt rendering
-│   ├── ai_config.py               Claude/Gemini model selection
+│   ├── ai_config.py               AI model selection for planner, vision, embeddings
 │   └── requirements.txt
 │
 ├── api/                        FastAPI crop catalog + ESP32 /setpoints endpoint

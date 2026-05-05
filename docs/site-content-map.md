@@ -2,11 +2,11 @@
 
 This is the working contract for `verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `/mnt/iris/verdify-worktrees/web/site`; Quartz builds into `/srv/verdify/verdify-site/public`.
 
-Current active source size after the 2026-04-28 simplification pass: 75 Markdown pages, including lightweight redirects for retired reference routes.
+Current active source size after the 2026-05-04 launch-readiness pass: 87 Markdown pages, including a lightweight redirect for the retired `/intelligence/lessons/` route.
 
 ## Editorial Principle
 
-The site story is: Verdify is a self-improving, AI-enabled, automated solar-powered greenhouse in Longmont's high-elevation dry climate. Every page should use data to support that single narrative: physical greenhouse, elevation/dry-air/seasonal pressure, solar/resource pressure, automation, AI planning, measurement, and learning. Avoid splitting those into disconnected technical claims unless the page is explicitly a hidden reference.
+The site story is: Verdify is a public AI-assisted greenhouse control loop in Longmont's high-elevation dry climate. Every page should support the same narrative: crop profiles define targets, Iris writes bounded tactical plans, the ESP32 owns deterministic relay control every 5 seconds, telemetry judges outcomes, and public scorecards make failures and lessons inspectable. Avoid framing Verdify as off-grid, fully autonomous, or self-improving unless the page immediately grounds the claim in the validated lesson lifecycle.
 
 ## Route Families
 

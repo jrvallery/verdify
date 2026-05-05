@@ -31,6 +31,7 @@ for the full roadmap.
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from pydantic import BaseModel
@@ -1673,3 +1674,41 @@ CFG_READBACK_MAP_REG: dict[str, str] = _cfg_readback_map()
 def get(name: str) -> TunableDef | None:
     """Lookup a tunable by canonical name. None if not registered."""
     return REGISTRY.get(name)
+
+
+def registry_value_error(name: str, value: float) -> str | None:
+    """Return a human-readable registry violation, or None when valid.
+
+    This is the shared planner/dispatcher boundary check. Firmware still clamps
+    defensively, but planner writes should fail before invalid waypoints become
+    active in `setpoint_plan`.
+    """
+    tunable = get(name)
+    if tunable is None:
+        return f"{name!r} is not registered in tunable_registry"
+
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return f"{name}={value!r} is not numeric"
+
+    if not math.isfinite(numeric):
+        return f"{name}={value!r} is not finite"
+
+    if tunable.kind == "switch" and numeric not in (0.0, 1.0):
+        return f"{name}={numeric:g} outside registry switch values [0, 1]"
+
+    if tunable.kind == "enum":
+        allowed = sorted((tunable.enum_values or {}).values())
+        if numeric % 1 != 0 or int(numeric) not in allowed:
+            return f"{name}={numeric:g} outside registry enum values {allowed}"
+
+    lo = "-inf" if tunable.min is None else f"{tunable.min:g}"
+    hi = "inf" if tunable.max is None else f"{tunable.max:g}"
+
+    if tunable.min is not None and numeric < tunable.min:
+        return f"{name}={numeric:g} outside registry bounds [{lo}, {hi}] nearest_safe={tunable.min:g}"
+    if tunable.max is not None and numeric > tunable.max:
+        return f"{name}={numeric:g} outside registry bounds [{lo}, {hi}] nearest_safe={tunable.max:g}"
+
+    return None

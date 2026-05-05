@@ -14,6 +14,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .tunable_registry import registry_value_error
 from .tunables import ALL_TUNABLES, NUMERIC_TUNABLES, SWITCH_TUNABLES, TunableParameter
 
 PLAN_ID_PATTERN = re.compile(r"^iris-\d{8}-\d{4}$")
@@ -64,6 +65,9 @@ class PlanTransition(BaseModel):
             raise ValueError(
                 f"mister_engage_kpa ({p['mister_engage_kpa']}) must be <= mister_all_kpa ({p['mister_all_kpa']})",
             )
+        registry_errors = [err for k, value in p.items() if (err := registry_value_error(k, value))]
+        if registry_errors:
+            raise ValueError("Registry bounds violation: " + "; ".join(registry_errors))
         return self
 
 

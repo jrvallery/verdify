@@ -26,9 +26,32 @@ Deploy path remains `main → /mnt/iris/verdify → systemd restart`, followed b
 - [x] **I-L1.5 Public sample dataset export.** `scripts/export-public-sample-dataset.sh` publishes scrubbed 7-day climate and 30-day plan-outcome CSVs under `/static/data/`, excluding local IPs, device IDs, trigger UUIDs, alert channels, hostnames, and raw sensor entity names.
 - [x] **I-L0.7 Proof freshness gates.** Public metrics include latest climate/plan ages so web can label stale proof instead of silently showing old values.
 - [x] **I-L1.8 Lesson duplicate support.** Implemented in the web generator as normalized lesson signatures; no ingestor DB change required for launch.
-- [ ] **I-L1.11 Baseline vs Iris metrics.** Provide a stable query or view for baseline/current comparison: temp compliance, VPD compliance, stress hours/day, water/day, energy/day, cost/day, and planner score. Coordinator/Jason choose the baseline period.
+- [x] **I-L1.11 Baseline vs Iris metrics.** Added `scripts/generate-baseline-vs-iris-page.py`, which queries `daily_summary`, `plan_journal`, and `v_planner_performance` for temp compliance, VPD compliance, stress hours/day, water/day, energy/day, cost/day, and planner score. Default baseline is the 2026-04-22..25 planner-offline window.
 - [ ] **I-L2.7 Daily lifecycle artifact data.** Export one representative lifecycle bundle: forecast rows, plan JSON/tunables, telemetry window, scorecard row, and lessons generated from the outcome.
 - [ ] **I-L2.8 Crop-steering roadmap data gaps.** Track missing substrate, pH/EC/DO, DLI correction, and shade-cloth automation signals as explicit data-readiness gaps rather than implied capabilities.
+
+**Planner trigger coverage + local-first delivery** (2026-05-03 trace; coordinator-requested).
+
+Target state: every material planning reason has an auditable trigger row, every
+trigger routes to the local Gemma4-backed `iris-planner` OpenClaw session by
+default, and every trigger resolves to exactly one of `plan_written`, `acked`,
+`delivery_failed`, or `timed_out`.
+
+- [ ] **I-P0.1 Canonical trigger matrix.** Replace implicit milestone handling with a single trigger matrix covering:
+  - solar transitions: `SUNRISE`, `SUNSET`
+  - fixed boundaries: `MIDNIGHT`, `PRE_DAWN`, `MORNING_BOUNDARY`, `MIDDAY_BOUNDARY`, `AFTERNOON_BOUNDARY`, `EVENING_BOUNDARY`
+  - forecast deviations: any observed-vs-forecast breach emitted by `forecast_deviation_check`
+  - forecast refreshes: new forecast fetches after startup baseline
+  - manual/ad-hoc runs from MCP
+  Each entry defines due time, catch-up behavior, expected planner action (`set_plan` vs `set_tunable` vs `acknowledge_trigger`), SLA, and local Gemma4 routing.
+- [ ] **I-P0.2 No missed-sunrise blind spot.** Persist expected trigger times separately from "fired" state. If ingestor starts after the current 2h catch-up window, either deliver a late catch-up trigger with an explicit label or raise `planner_required_trigger_missed`; do not wait for `planner_stale`.
+- [ ] **I-P0.3 Local-first OpenClaw routing.** Flip production routing so the existing `iris-planner` session targets local Gemma4 on cortext. `ENABLE_LOCAL_PLANNER=false` must no longer mean "stamp local but route to cloud." Cloud escalation, if retained, is an explicit override and visible in `plan_delivery_log`.
+- [ ] **I-P0.4 Per-trigger SLA lifecycle.** Implement the v1.4 SLA rule that marks old `pending` rows `timed_out` and alerts with `trigger_id`, event type, instance, delivered time, elapsed seconds, and gateway status. This replaces reliance on flat `planner_stale`.
+- [x] **I-P0.5 Correct delivery correlation.** Removed the unsafe 2h fallback for rows that have UUIDs. Exact `trigger_id` match is authoritative; fallback now runs only when both sides are legacy/null. Regression coverage prevents attaching a later plan to unrelated forecast/transition rows.
+- [ ] **I-P0.6 Deviation trigger completeness.** Ensure `forecast_deviation_check` logs and delivers every forecast deviation class the planner needs: temp, RH/VPD, solar irradiance, wind, precipitation/cloud-cover regime shift, and prolonged missed forecast. Dedupe repeated same-axis noise, but do not collapse distinct deviations into silence.
+- [ ] **I-P0.7 Fixed-boundary planning.** Add fixed local-time boundary triggers to cover the gaps between solar milestones. Start with 00:00, 06:00/pre-dawn, 12:00/midday, 16:00/afternoon, and 20:00/evening unless coordinator changes the cadence in `config/ai.yaml`.
+- [ ] **I-P0.8 Active/future plan range guard.** Scan active and future `setpoint_plan` rows against `tunable_registry` after every full plan and before every dispatch. Alert on future violations before the bad waypoint becomes current.
+- [ ] **I-P1.1 Planner health status surface.** Publish last expected trigger, last delivered trigger, last resolved trigger, pending count by SLA age, current planner session key/model label, and active-plan range-violation count for API/web health consumers.
 
 ## Findings from 2026-04-18 scope review
 

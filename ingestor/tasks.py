@@ -3029,8 +3029,9 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
                AND pj.trigger_id = pdl.trigger_id
             """,
         )
-        # Legacy fallback for pre-v1.4 rows or planner cycles where Iris did
-        # not pass the audit kwargs through to set_plan().
+        # Legacy fallback for pre-v1.4 rows only. If either side has a UUID,
+        # exact trigger_id correlation above is authoritative; do not attach
+        # a later unrelated plan by time window.
         await conn.execute(
             """
             UPDATE plan_delivery_log pdl
@@ -3041,6 +3042,8 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
              WHERE pdl.resulting_plan_id IS NULL
                AND pdl.status = 'pending'
                AND pdl.gateway_status BETWEEN 200 AND 299
+               AND pdl.trigger_id IS NULL
+               AND pj.trigger_id IS NULL
                AND pdl.delivered_at > now() - interval '6 hours'
                AND pj.created_at BETWEEN pdl.delivered_at AND pdl.delivered_at + interval '2 hours'
                AND pj.created_at = (
