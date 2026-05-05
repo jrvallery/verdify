@@ -1,0 +1,67 @@
+{
+  "model_type": "XGBoost (MultiOutputRegressor)",
+  "features": [
+    "in_tSpDay",
+    "in_tSpNight",
+    "in_thetaLampMax",
+    "in_heatDeadZone",
+    "in_rhMax",
+    "month_sin",
+    "month_cos"
+  ],
+  "raw_features": [
+    "in_tSpDay",
+    "in_tSpNight",
+    "in_thetaLampMax",
+    "in_heatDeadZone",
+    "in_rhMax",
+    "start_month"
+  ],
+  "targets": [
+    "out_mean_tAir_C",
+    "out_mean_rh_pct",
+    "out_cost_total_usd_m2"
+  ],
+  "n_estimators": 300,
+  "n_train": 425,
+  "n_test": 75,
+  "n_total": 500,
+  "test_metrics": {
+    "out_mean_tAir_C": {
+      "mae": 0.7574,
+      "r2": 0.969
+    },
+    "out_mean_rh_pct": {
+      "mae": 2.8613,
+      "r2": 0.9064
+    },
+    "out_cost_total_usd_m2": {
+      "mae": 0.0766,
+      "r2": 0.9329
+    }
+  },
+  "cv_metrics": {
+    "out_mean_tAir_C": {
+      "cv_r2_mean": 0.9473,
+      "cv_r2_std": 0.0126
+    },
+    "out_mean_rh_pct": {
+      "cv_r2_mean": 0.8995,
+      "cv_r2_std": 0.0243
+    },
+    "out_cost_total_usd_m2": {
+      "cv_r2_mean": 0.8943,
+      "cv_r2_std": 0.0198
+    }
+  },
+  "feature_importances": {
+    "in_tSpDay": 0.03852229192852974,
+    "in_tSpNight": 0.026112720370292664,
+    "in_thetaLampMax": 0.02607576735317707,
+    "in_heatDeadZone": 0.04111538454890251,
+    "in_rhMax": 0.025185158476233482,
+    "month_sin": 0.19531823694705963,
+    "month_cos": 0.6476704478263855
+  },
+  "training_data": "/Users/james-vallery/Desktop/Code/greenhouse/greenbyte/data/training_data.csv"
+}

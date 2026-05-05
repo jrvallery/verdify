@@ -51,6 +51,13 @@ site/public
 .DS_Store
 .nfs*
 *.nfs*
+*.pkl
+*.pt
+*.joblib
+*.zip
+*.epw
+*.pdf
+greenbyte/greenlight/models/models/*/input_data/test_data/*.csv
 reports/
 reports
 firmware/test/replay_overrides
