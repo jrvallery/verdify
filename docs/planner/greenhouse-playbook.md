@@ -89,11 +89,11 @@ Apply decision precedence:
 ### ACT: Push changes
 
 **For immediate adjustments** (transitions, deviations):
-Use `set_tunable(param, value, reason)` for each parameter that needs changing.
+Use `set_tunable(parameter=..., value=..., reason=..., trigger_id=..., planner_instance=...)` for each parameter that needs changing.
 The dispatcher applies within 5 minutes.
 
 **For 72-hour plans** (sunrise, sunset):
-Use `set_plan(plan_id, hypothesis, transitions)` to write a multi-waypoint plan.
+Use `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)` to write a multi-waypoint plan.
 Structure transitions around solar milestones:
 
 ```json

@@ -91,8 +91,11 @@ _STANDING_DIRECTIVES = """
    your decisions. SUNRISE/SUNSET get full briefs. TRANSITION/DEVIATION get
    brief updates only if you made changes.
 
-5. **To adjust a tunable,** call `set_tunable(parameter, value, reason)`.
-   The dispatcher pushes changes to the ESP32 within 5 minutes.
+5. **To adjust a tunable,** call
+   `set_tunable(parameter=..., value=..., reason=..., trigger_id=..., planner_instance=...)`.
+   Include the exact audit `trigger_id` and `planner_instance` values from
+   the bottom of this prompt. The dispatcher pushes changes to the ESP32
+   within 5 minutes.
 
 6. **If a routine FORECAST/TRANSITION/HEARTBEAT needs no change,** call
    `acknowledge_trigger(trigger_id, reason, planner_instance)` using the
@@ -106,6 +109,13 @@ _STANDING_DIRECTIVES = """
    normal event tasks, including SUNRISE/SUNSET full-plan tasks. Do not call
    `set_plan` or `set_tunable`; only call `acknowledge_trigger(...)` with the
    audit values, then stop.
+
+8. **Audit arguments are mandatory:** every `set_plan` and `set_tunable` tool
+   call must include `"trigger_id": "<uuid from Audit headers>"` and
+   `"planner_instance": "local"` or `"opus"`. The MCP server rejects writes
+   that omit them. Use
+   `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)`
+   for full plans.
 """
 
 _LOCAL_GEMMA_DIRECTIVES = """
@@ -123,9 +133,10 @@ review. Treat it as the primary read source.
 - Never call `history` or broad `query` during a routine SUNRISE/SUNSET plan;
   those outputs can overflow the local context.
 - For full SUNRISE/SUNSET cycles, reason from the assembled context and then
-  call `set_plan` once with a compact hypothesis and 3-6 transitions. Use the
-  `CURRENT ACTIVE SETPOINTS` and `TUNABLE CONSTRAINTS` sections for unchanged
-  values and bounds.
+  call `set_plan` once with a compact hypothesis and 3-6 transitions. Include
+  every Tier 1 parameter in every transition, plus `trigger_id` and
+  `planner_instance`. Use the `CURRENT ACTIVE SETPOINTS` and `TUNABLE
+  CONSTRAINTS` sections for unchanged values and bounds.
 - If validation mode is active, only call `acknowledge_trigger`.
 """
 
@@ -226,7 +237,7 @@ Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to foc
 
 ### Tunable Dictionary — Tactical Tier 1 + Read-Only Bands
 
-Push via `set_tunable(param, value, reason)` or as a transition key in
+Push via `set_tunable(parameter=..., value=..., reason=..., trigger_id=..., planner_instance=...)` or as a transition key in
 `set_plan`. Ranges are dispatcher clamp bounds; pushing outside clamps
 lands in `setpoint_clamps` (audited, rejected). Every Tier 1 knob below
 is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
@@ -508,7 +519,7 @@ today's forecast, and set the daytime posture.
 4. **Check current conditions** — call `climate` and `equipment_state`.
 5. **Review forecast** — call `forecast` for the next 18 hours.
 6. **Check alerts** — call `alerts`. Acknowledge or resolve any that are stale.
-7. **Write today's plan** — use `set_plan(plan_id, hypothesis, transitions)` with 5-8 waypoints
+7. **Write today's plan** — use `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)` with 5-8 waypoints
    anchored to solar milestones (dawn, morning ramp, peak stress, decline, evening).
    Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
    (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
@@ -548,7 +559,7 @@ and set the overnight posture.
 3. **Check current conditions** — call `climate` for dew point margin and outdoor forecast.
 4. **Review overnight forecast** — call `forecast` for the next 12 hours.
 5. **Check alerts** — call `alerts`. Resolve any from today.
-6. **Write overnight plan** — use `set_plan(plan_id, hypothesis, transitions)` with 3-5 waypoints
+6. **Write overnight plan** — use `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)` with 3-5 waypoints
    anchored to evening/overnight milestones (evening_settle, midnight_posture, pre_dawn).
    Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
    (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,

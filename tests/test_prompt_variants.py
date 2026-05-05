@@ -87,6 +87,14 @@ class TestComposePreamble:
         local = iris_planner._compose_preamble("local")
         assert default == local
 
+    def test_preamble_requires_audit_arguments_on_writes(self, iris_planner):
+        local = iris_planner._compose_preamble("local")
+        assert "Audit arguments are mandatory" in local
+        assert '"trigger_id": "<uuid from Audit headers>"' in local
+        assert '"planner_instance": "local"' in local
+        assert "set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)" in local
+        assert "set_tunable(parameter=..., value=..., reason=..., trigger_id=..., planner_instance=...)" in local
+
 
 class TestSplitInvariants:
     def test_core_contains_structured_hypothesis(self, iris_planner):

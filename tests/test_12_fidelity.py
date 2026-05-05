@@ -390,14 +390,17 @@ def test_mcp_plan_run_uses_manual_trigger_and_delivery_log():
     assert "acknowledge-only smoke" in body
 
 
-def test_mcp_set_plan_requires_audited_trigger_for_planner_instances():
+def test_mcp_set_plan_requires_audited_trigger():
     server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
     start = server.index("async def set_plan")
     end = server.index("@mcp.tool()", start + 1)
     body = server[start:end]
     assert "normalized_trigger_id" in body
-    assert "trigger_id is required when planner_instance is provided" in body
+    assert "trigger_id is required for set_plan MCP writes" in body
     assert "Copy trigger_id exactly from the planning prompt audit headers" in body
+    assert "plan_id is required" in body
+    assert "transitions is required" in body
+    assert "include_input=False" in body
     assert "trigger_id not found in plan_delivery_log" in body
     assert "planner_instance does not match plan_delivery_log" in body
 
@@ -419,8 +422,10 @@ def test_mcp_set_tunable_resolves_trigger_ledger_with_oneshot_plan():
     start = server.index("async def set_tunable")
     end = server.index("# ═══════════════════════════════════════════════════════════════", start + 1)
     body = server[start:end]
-    assert "trigger_id is required when planner_instance is provided" in body
+    assert "trigger_id is required for set_tunable MCP writes" in body
     assert "Copy trigger_id exactly from the planning prompt audit headers into set_tunable" in body
+    assert "parameter is required" in body
+    assert "value is required" in body
     assert "trigger_id not found in plan_delivery_log" in body
     assert "planner_instance does not match plan_delivery_log" in body
     assert "UPDATE plan_delivery_log" in body

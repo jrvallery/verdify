@@ -408,8 +408,8 @@ async def get_setpoints() -> str:
 
 @mcp.tool()
 async def set_tunable(
-    parameter: str,
-    value: float,
+    parameter: str = "",
+    value: float | None = None,
     reason: str = "iris-manual",
     trigger_id: str | None = None,
     planner_instance: str | None = None,
@@ -418,24 +418,27 @@ async def set_tunable(
     The dispatcher will apply it within 5 minutes.
     Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')
 
-    trigger_id, planner_instance: optional contract v1.5 audit fields.
+    trigger_id, planner_instance: required contract v1.5 audit fields for MCP writes.
     Pass through from the trigger banner shown at the bottom of every
     planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
     Stamped onto the one-shot setpoint_plan reason and plan_delivery_log so
     SLA monitors can correlate by uuid."""
     normalized_trigger_id: str | None = None
-    if trigger_id:
-        try:
-            normalized_trigger_id = str(UUID(trigger_id))
-        except (TypeError, ValueError):
-            return json.dumps({"error": "trigger_id must be a valid UUID"})
-    elif planner_instance:
+    if not trigger_id:
         return json.dumps(
             {
-                "error": "trigger_id is required when planner_instance is provided",
+                "error": "trigger_id is required for set_tunable MCP writes",
                 "hint": "Copy trigger_id exactly from the planning prompt audit headers into set_tunable.",
             }
         )
+    try:
+        normalized_trigger_id = str(UUID(trigger_id))
+    except (TypeError, ValueError):
+        return json.dumps({"error": "trigger_id must be a valid UUID"})
+    if not parameter:
+        return json.dumps({"error": "parameter is required"})
+    if value is None:
+        return json.dumps({"error": "value is required"})
 
     # Schema-level gate first rejects typos; the registry then blocks
     # operator-only safety rails and readback-only diagnostics.
@@ -727,9 +730,9 @@ async def query(sql: str) -> str:
 
 @mcp.tool()
 async def set_plan(
-    plan_id: str,
-    hypothesis: str,
-    transitions: str,
+    plan_id: str = "",
+    hypothesis: str = "",
+    transitions: str = "",
     experiment: str = "",
     expected_outcome: str = "",
     trigger_id: str | None = None,
@@ -747,7 +750,7 @@ async def set_plan(
     transitions: JSON array of objects: [{"ts": "ISO8601-with-TZ", "params": {"param": value, ...}, "reason": "..."}]
     experiment: optional one-line experiment description
     expected_outcome: optional measurable prediction
-    trigger_id, planner_instance: optional contract v1.4 audit fields. Pass
+    trigger_id, planner_instance: required contract v1.5 audit fields. Pass
         through from the audit-headers banner shown at the bottom of every
         planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
         Stamped onto plan_journal so SLA monitors and audit queries can
@@ -757,18 +760,21 @@ async def set_plan(
     # bad plan_id format, timezone-naive timestamps, etc. — at the MCP boundary, so
     # partial plans never land in setpoint_plan.
     normalized_trigger_id: str | None = None
-    if trigger_id:
-        try:
-            normalized_trigger_id = str(UUID(trigger_id))
-        except (TypeError, ValueError):
-            return json.dumps({"error": "trigger_id must be a valid UUID"})
-    elif planner_instance:
+    if not trigger_id:
         return json.dumps(
             {
-                "error": "trigger_id is required when planner_instance is provided",
+                "error": "trigger_id is required for set_plan MCP writes",
                 "hint": "Copy trigger_id exactly from the planning prompt audit headers into set_plan.",
             }
         )
+    try:
+        normalized_trigger_id = str(UUID(trigger_id))
+    except (TypeError, ValueError):
+        return json.dumps({"error": "trigger_id must be a valid UUID"})
+    if not plan_id:
+        return json.dumps({"error": "plan_id is required"})
+    if not transitions:
+        return json.dumps({"error": "transitions is required"})
 
     try:
         waypoints_raw = json.loads(transitions)
@@ -786,7 +792,7 @@ async def set_plan(
             }
         )
     except ValidationError as e:
-        return json.dumps({"error": "Plan validation failed", "details": json.loads(e.json())})
+        return json.dumps({"error": "Plan validation failed", "details": e.errors(include_input=False)[:10]})
 
     writable_params = [param for wp in plan.transitions for param in wp.params if param not in BAND_OWNED_PARAMS]
     if not writable_params:

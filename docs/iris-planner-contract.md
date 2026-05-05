@@ -102,8 +102,8 @@ delivery-to-plan correlation is by exact UUID only.
 **Owner:** genai (tool surface + prompt content guiding tool use).
 
 **Required MCP call shape for a planning cycle:**
-- `set_plan(plan_id, hypothesis, transitions, experiment, expected_outcome)` — exactly once per trigger that changes the tactical posture. Either called with a real plan, or the agent must call `acknowledge_trigger(trigger_id, reason)` to record "read but no plan needed."
-- Optional: zero or more `set_tunable(parameter, value, reason)` calls.
+- `set_plan(plan_id=..., hypothesis=..., transitions=..., experiment=..., expected_outcome=..., trigger_id=..., planner_instance=...)` — exactly once per trigger that changes the tactical posture. Either called with a real plan, or the agent must call `acknowledge_trigger(trigger_id=..., reason=..., planner_instance=...)` to record "read but no plan needed."
+- Optional: zero or more `set_tunable(parameter=..., value=..., reason=..., trigger_id=..., planner_instance=...)` calls.
 
 **MCP request context (new, requires FastMCP header passthrough):**
 - `X-Planner-Instance: local_gemma4 | cloud_escalation` — forwarded from the /hooks/agent call through to MCP calls made in that session. Stamped on every DB row. Legacy `local` and `opus` remain readable during migration.
@@ -328,7 +328,7 @@ escalation is an auditable trigger decision, not a hidden retry.
 6. **New MCP tool `acknowledge_trigger(trigger_id, reason)`** — lets Iris record "read, no action needed" without writing a fake plan.
 
 **Backwards compat:**
-- Planner-owned MCP writes with `planner_instance` but missing/invalid `trigger_id` fail at the MCP boundary. Operator/manual legacy writes may still leave `trigger_id=NULL` only when they omit `planner_instance`.
+- MCP writes through `set_plan` / `set_tunable` with missing/invalid `trigger_id` fail at the MCP boundary. Operator changes should be initiated through an audited MANUAL trigger rather than direct orphan writes.
 - Legacy `instance='local'` means Gemma/local; legacy `instance='opus'` means cloud. New code should write `local_gemma4` / `cloud_escalation` once the schema and dashboards are migrated.
 - `OPENCLAW_SESSION_KEY` env var still honored for one cycle; deprecation notice in release notes.
 
