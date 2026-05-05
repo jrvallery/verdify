@@ -21,6 +21,7 @@ const groups: NavGroup[] = [
       { label: "The Greenhouse", href: "/greenhouse", slug: "greenhouse", exact: true },
       { label: "Climate", href: "/climate", slug: "climate", exact: true },
       { label: "Evidence", href: "/evidence", slug: "evidence", exact: true },
+      { label: "Updates", href: "/updates", slug: "updates", exact: true },
       { label: "Planning Archive", href: "/plans", slug: "plans", exact: true },
     ],
   },

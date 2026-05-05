@@ -1,18 +1,20 @@
 # Verdify Launch Command Center
 
-Updated: 2026-05-03
+Updated: 2026-05-04
 Launch owner: coordinator / iris-dev
-Launch posture: **P0 hardening deployed; broad-launch timing now depends on Jason's identity/copy/video decisions**
+Launch posture: **P0 hardening deployed; launch credibility pages are live; broad-launch timing now depends on operational data-health, branch/release consolidation, and Jason's identity/copy/video decisions**
 
 Source triage:
 
 - [`feedback-triage-2026-05-02.md`](feedback-triage-2026-05-02.md)
 - [`prior-art-rollup-2026-05-03.md`](prior-art-rollup-2026-05-03.md)
 - [`launch-response-pack.md`](launch-response-pack.md)
+- [`frozen-launch-package-2026-05-04.md`](frozen-launch-package-2026-05-04.md)
+- [`sprint-2026-05-04-launch-readiness.md`](sprint-2026-05-04-launch-readiness.md)
 
 Active sprint:
 
-- [`sprint-2026-05-03-l1-credibility.md`](sprint-2026-05-03-l1-credibility.md) - engineering/content assets are complete; Jason-owned video, final copy, identity posture, and launch calendar remain.
+- [`sprint-2026-05-04-launch-readiness.md`](sprint-2026-05-04-launch-readiness.md) - data-health is `warn`, launch credibility pages are live, proof certification passed, and the launch package is frozen.
 
 Verdify's public launch narrative is:
 
@@ -21,6 +23,16 @@ Verdify's public launch narrative is:
 This replaces weaker launch framing like "self-improving AI greenhouse" or "Claude tunes setpoints three times a day" when addressing skeptical technical audiences. The sharper story is local-first agentic planning: OpenClaw routes routine reasoning to local Gemma4 and escalates heavier reviews when needed. The safety split must stay above the fold: the LLM does not flip relays; it writes tactical parameters and the ESP32 enforces real-time control and safety.
 
 The prior-art posture is: Verdify is not claiming to be the first smart greenhouse, the biggest autonomous greenhouse deployment, or the best RL optimizer. Verdify's contribution is the public falsifiability loop: plan, telemetry, score, cost, failure, and lesson are all visible for a real physical greenhouse.
+
+## Current Next Steps
+
+Active sprint: [`sprint-2026-05-04-launch-readiness.md`](sprint-2026-05-04-launch-readiness.md).
+
+1. Keep the live data-health gate at `warn` or better. As of the 2026-05-04 evening MDT check, the public proof API is reachable, reports `data_health_status=warn`, and has 0 open critical/high alerts. Remaining warnings are visible in `data_health_warnings`.
+2. Finish release packaging. The web branch has merged `origin/main`; push or PR the launch-readiness delta so repo docs/site source, active vault pages, and the launch board agree.
+3. Use the frozen launch package unless Jason changes it intentionally: [`frozen-launch-package-2026-05-04.md`](frozen-launch-package-2026-05-04.md).
+4. Keep the weekly cadence alive through [Verdify Weekly Operations Log](/updates/).
+5. Do a final same-day smoke check before posting if launch slips past Tuesday, May 5, 2026.
 
 ## Readiness Gates
 
@@ -38,7 +50,7 @@ The prior-art posture is: Verdify is not claiming to be the first smart greenhou
 | L0.10 Robots/indexing policy | coordinator + web + saas | done | Root `robots.txt`, canonical metadata, API/Grafana noindex headers, and Traefik security headers are aligned. |
 | L0.11 Public metrics/freshness contract | ingestor + coordinator + web | done | `/api/v1/public/home-metrics` and `/api/v1/public/data-health` power live proof cards and stale-data status without hard-coded homepage counters. |
 
-Broad launch means HN/Reddit. The remaining launch decisions are attribution, public code stance, baseline period, final HN/Reddit copy, and whether to record the short operations clip before posting.
+Broad launch means HN/Reddit. The remaining launch gates are operational data-health, release consolidation, attribution, final HN/Reddit copy, launch calendar/comment coverage, and whether to record the short operations clip before posting.
 
 ## Agent Assignments
 
@@ -46,34 +58,29 @@ Broad launch means HN/Reddit. The remaining launch decisions are attribution, pu
 
 Launch owner for public experience.
 
-- Curate and split lessons page: curated default, raw machine lessons, retired/duplicate families.
-- Add live proof hero metrics and/or `/launch`.
-- Collapse daily plan parameter dumps to deltas, keep raw details available.
-- Add architecture SVG, BOM, cost callout, and outage/known-limits path.
-- Fix Markdown dollar-sign rendering and "solar-powered" wording.
-- Add OG/Twitter metadata and validate share card.
-- Validate public Grafana embeds and static fallbacks.
+- Certify the public proof path before launch: homepage, Safety Architecture, Related Work, Build Notes, FAQ, Baseline vs Iris, sample CSVs, Grafana, API noindex headers, and OG/Twitter metadata.
+- Keep live proof cards honest if data-health is degraded.
+- Reconcile branch/source drift so repo docs, active vault pages, and `origin/main` agree.
+- Maintain the [Verdify This Week](/updates/) cadence page/template.
+- Maintain Grafana embed and mobile/static fallback quality during the launch window.
 
 ### GenAI / Planner
 
 Launch owner for narrative integrity of the planner loop.
 
-- Define lesson canonicalization semantics: duplicate family, validation count, supersession, raw confidence.
-- Prepare launch-safe language for "self-improving" claims.
-- Prepare HN answer material for "why not PID?" and "is the LLM in the control loop?"
-- Add weekly "Verdify this week" summary inputs: weather faced, score, lessons graduated, failures.
-- Help web lead daily plans with hypothesis/result/rationale rather than raw waypoint dumps.
+- Keep the response pack and FAQ language aligned with the actual planner architecture.
+- Supply launch-safe answers for "why not PID?", "why not RL?", "is the LLM in the loop?", and "what does memory mean?"
+- Provide weekly summary inputs: weather faced, score, lessons graduated, failures, and repair notes.
+- Keep daily-plan framing focused on hypothesis, result, and rationale rather than raw waypoint dumps.
 
 ### Ingestor / Data
 
 Launch owner for public evidence data surfaces.
 
-- Provide live metrics source for homepage cards: indoor temp, VPD, outdoor temp, last plan timestamp, last score.
-- Provide public data-health/trust status so stale proof degrades visibly instead of silently.
-- Provide data for plan-page deltas from previous waypoint/defaults.
-- Support lesson duplicate detection/canonicalization if web/genai need SQL views.
-- Provide outage and sample-dataset exports for public receipts.
-- Add freshness checks so launch pages fail closed when proof data is stale.
+- Keep the public `data_health_status` at `warn` or better and route any new critical/high alert before broad launch.
+- Keep public data-health/trust status visible so stale proof degrades visibly instead of silently.
+- Maintain launch sample exports and baseline comparison inputs.
+- Keep freshness checks strong enough that launch pages fail closed when proof data is stale.
 
 ### Firmware
 
@@ -89,23 +96,23 @@ Launch owner for safety and hardware truth, not for pre-launch OTA work.
 Launch owner for public access and capture.
 
 - Verify public Grafana / Cloudflare / Traefik behavior from unauthenticated browsers.
-- Lock down or explicitly approve public API/OpenAPI exposure before broad launch.
-- Align robots/indexing headers across site, Grafana, and API.
-- Decide whether waitlist/newsletter capture is static, Cloud Run, or external service.
-- Support public API or static fallback strategy for launch cards.
+- Keep public API/OpenAPI exposure aligned with the approved read-only/noindex stance.
+- Keep robots/indexing headers aligned across site, Grafana, and API.
+- Keep waitlist/newsletter capture deferred unless Jason explicitly changes the launch stance.
+- Support public API and static fallback strategy for launch cards.
 - Keep Secret Manager and cloud hardening separate from launch-critical local Track A unless a public credential risk is found.
 
 ### Coordinator / Jason
 
 Launch owner for sequencing and identity decisions.
 
-- Decide attribution: real identity vs pseudonymous Reddit/HN timing.
-- Approve privacy scrub boundaries for family/home details.
-- Decide public API stance: no public API, read-only proof API, or authenticated API.
-- Decide indexing stance: immediate search indexing vs staged/noindex for raw/generated surfaces.
-- Choose whether repo/code/prompt is public, partially public, or explicitly private.
-- Record the launch video clip.
-- Write final HN first comment and audience-specific Reddit copy.
+- Use project-first attribution through Jason's normal technical identity unless deliberately changed before posting.
+- Keep family/home privacy boundaries fixed: no family names, camera model details, local IPs, private security layout, or extra home-specific details in launch comments.
+- Keep the public API stance to read-only proof endpoints unless deliberately changed.
+- Keep broad launch pages indexable while raw/API/Grafana surfaces stay noindex.
+- Keep selected public artifacts now; full live repo/prompts remain private pending scrub unless deliberately changed.
+- Record the launch video clip only if it is ready before posting; otherwise launch with the clip explicitly deferred.
+- Use the frozen HN first comment and audience-specific copy unless deliberately changed before posting.
 - Be live for HN comments for the first 4-6 hours.
 
 ## Launch Sequence
@@ -120,7 +127,7 @@ Launch owner for sequencing and identity decisions.
 
 HN title candidates:
 
-- `Show HN: Local Gemma4 agent tunes my ESP32 greenhouse; the receipts are public`
+- `Show HN: Local Gemma4 plans my ESP32 greenhouse; the receipts are public`
 - `Show HN: An OpenClaw agent plans my greenhouse, but an ESP32 owns the relays`
 - `Show HN: Public planning data from a local-AI-tuned ESP32 greenhouse`
 

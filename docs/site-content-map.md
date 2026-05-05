@@ -2,7 +2,7 @@
 
 This is the working contract for `verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `/mnt/iris/verdify-worktrees/web/site`; Quartz builds into `/srv/verdify/verdify-site/public`.
 
-Current active source size after the 2026-05-04 launch-readiness pass: 87 Markdown pages, including a lightweight redirect for the retired `/intelligence/lessons/` route.
+Current active source size after the 2026-05-04 launch-readiness pass: 88 Markdown pages, including a lightweight redirect for the retired `/intelligence/lessons/` route.
 
 ## Editorial Principle
 
@@ -19,6 +19,7 @@ The site story is: Verdify is a public AI-assisted greenhouse control loop in Lo
 | `/evidence/operations` | Live operations view | Hand-authored | System health, active plan, alerts, controller state | `site-evidence-operations` | Manual copy, live graphs |
 | `/evidence/economics` | Canonical cost proof | Hand-authored | Utility consumption and cost allocation | `site-evidence-economics` | Manual copy, live graphs |
 | `/evidence/dashboards` | Role-based dashboard browser | Hand-authored | Owner/grower/specialist analytical views | `site-evidence-dashboards` | Manual copy, live graphs |
+| `/updates` | Weekly operating notes | Hand-authored | Weather faced, planner score, lessons, failures, repairs, next risks | None | Weekly/manual |
 | `/plans` | Canonical daily plan archive | Generated index + generated day pages | `daily_summary`, `plan_journal`, setpoint context | None | Generated/backfilled |
 | `/forecast` | Forecast page | Generated | `weather_forecast`, `fn_forecast_correction`, `forecast_deviation_log` | None | Every 30 minutes |
 | `/greenhouse` | Physical greenhouse overview | Hand-authored | Structure, zones, equipment, crops | None | Manual |

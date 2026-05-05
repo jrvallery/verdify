@@ -8,10 +8,10 @@ Owned by the [`web`](../agents/web.md) agent.
 
 - [x] **LR-1 Data-health launch gate.** Public proof API now reports `warn`, not `fail`, with 0 open critical/high alerts. Remaining warnings are visible in `data_health_warnings`.
 - [x] **LR-2 Branch/release consolidation.** This branch merged `origin/main`; remaining launch-readiness docs are now the active delta.
-- [x] **LR-3 Public proof certification.** Run `make site-doctor` and live smoke checks before launch after this merge settles.
+- [x] **LR-3 Public proof certification.** `make site-doctor` passes with 88 pages, 209 Grafana iframes, 496 internal links, and 0 findings; live smoke checks pass for launch pages, API noindex, Grafana, sample CSV, and OG metadata.
 - [x] **LR-4 Launch package freeze.** Draft copy, title options, and Jason decision checklist live in launch docs; Jason still chooses the final posting variant and calendar.
 - [x] **LR-5 Operations clip decision.** Clip is useful but not a code blocker; launch docs allow explicit deferral.
-- [x] **LR-6 Weekly cadence artifact.** "Verdify this week" template is queued as the first post-launch cadence surface.
+- [x] **LR-6 Weekly cadence artifact.** `/updates/` now carries the first "Verdify this week" launch-readiness note and reusable update template.
 
 Completed P0/P1 web launch assets:
 
@@ -38,7 +38,7 @@ Completed P0/P1 web launch assets:
 - [x] **W-L1.12 Related-work comparison table.** Added to `/intelligence/related-work`.
 - [x] **W-L1.14 Builder path.** Added `/intelligence/build-notes` with BOM links, MQTT examples, DB overview, example daily plan JSON, example scorecard JSON, and production-safety caveats.
 - [x] **W-L1.15 Object-model diagram.** Added `/static/verdify-object-model.svg` and embedded it on the safety architecture page.
-- [ ] **W-L2.1 Weekly update template.** Add "Verdify this week" page/template for weather, score, lessons, failures, repairs.
+- [x] **W-L2.1 Weekly update template.** Added `/updates/` for weather, score, lessons, failures, repairs, and next risks.
 - [ ] **W-L2.8 Crop-steering roadmap.** Add grower vocabulary where accurate: day/night VPD bands, DLI target vs actual, dryback/irrigation windows, substrate sensing, pH/EC/DO, and shade cloth automation roadmap.
 - [ ] Add a `make grafana-normalization-audit` wrapper around `scripts/audit-grafana.py` and `scripts/normalize-grafana-dashboards.py` so the canonical unit/color/label/SQL contract is easy to rerun after future dashboard work.
 - [ ] Add a formal sensor/dashboard metadata catalog keyed by source table, source column, entity, label, unit, category, and color, using `sensor_registry` as the seed.
@@ -50,6 +50,7 @@ Completed P0/P1 web launch assets:
 
 ## Recent history
 
+- 2026-05-04 launch readiness status: P0 launch gates are complete and the major credibility pages are live in the active vault: Safety Architecture, Related Work, Build Notes, FAQ, Baseline vs Iris, sample CSVs, architecture SVG, object-model SVG, and curated lessons. `make site-doctor` passed with 87 pages, 209 Grafana iframes, 486 internal links, and 0 findings before the release merge. Live proof API now reports `data_health_status=warn` with 0 open critical/high alerts. The web branch merged `origin/main`, and `/updates/` now carries the first weekly cadence artifact.
 - 2026-04-30 Grafana normalization implementation: added `scripts/normalize-grafana-dashboards.py` and scaled `scripts/audit-grafana.py` with paced parallel rendering, progress output, checkpointing, and resume support. Normalized worktree and live dashboard JSON for VPD/DLI/solar/water/heap/hour units, entity colors, default time-series styling, stale SQL (`score::numeric`, `c.avg(...)`, `cost_total_usd`, `daily_summary.ts`, `cumulative_gallons_today`), mister effectiveness filters, and stress-hour semantics. Cleaned website embeds that reused wrong/duplicate panels or squeezed complex graphs into 130px slots. Final live audit: 56 dashboards / 912 panels, 912/912 rendered OK, 0 style findings, 0 accuracy findings. `make site-doctor`, `make lint`, and `pytest tests/test_06_website.py` all pass.
 - 2026-05-03 prior-art launch positioning: Jason's second review reframed Verdify as a public AI-control-system case study, not a generic smart-greenhouse repo. Tracked the web-owned follow-ups: Related Work, Safety Architecture, Baseline vs Iris, comparison table, builder/reference implementation path, object-model diagram, and crop-steering roadmap. Detailed note: `docs/launch/prior-art-rollup-2026-05-03.md`.
 - 2026-05-01 daily-plan validation fix: generated and deployed `/plans/2026-05-01` after `tests/test_06_website.py` caught a live 404 for the current daily-plan page. Patched `scripts/publish-daily-plan.sh` to use the project venv Python so the wrapper can import Pydantic-backed `verdify_schemas`.
