@@ -1,4 +1,4 @@
-"""Sprint 25 — planner_routing unit tests.
+"""planner_routing unit tests.
 
 Pure matrix tests over classify_severity + pick_instance + sla_for. No DB,
 no HTTP, no ai.yaml dependency — uses module defaults + in-test config
@@ -33,31 +33,29 @@ from planner_routing import (  # noqa: E402
 @pytest.mark.parametrize(
     "trigger_type,severity,expected",
     [
-        # Scheduled Opus — always opus regardless of severity
-        ("SUNRISE", "minor", "opus"),
-        ("SUNRISE", "major", "opus"),
-        ("SUNSET", "minor", "opus"),
-        ("SUNSET", "major", "opus"),
-        ("MIDNIGHT", "minor", "opus"),
-        ("MIDNIGHT", "major", "opus"),
-        # HEARTBEAT + TRANSITION always local
+        # Contract v1.5: all normal triggers route local by default.
+        ("SUNRISE", "minor", "local"),
+        ("SUNRISE", "major", "local"),
+        ("SUNSET", "minor", "local"),
+        ("SUNSET", "major", "local"),
+        ("MIDNIGHT", "minor", "local"),
+        ("MIDNIGHT", "major", "local"),
         ("HEARTBEAT", "minor", "local"),
         ("HEARTBEAT", "major", "local"),
         ("TRANSITION", "minor", "local"),
         ("TRANSITION", "major", "local"),
-        # FORECAST + DEVIATION escalate on major
         ("FORECAST", "minor", "local"),
-        ("FORECAST", "major", "opus"),
+        ("FORECAST", "major", "local"),
         ("DEVIATION", "minor", "local"),
-        ("DEVIATION", "major", "opus"),
+        ("DEVIATION", "major", "local"),
     ],
 )
 def test_pick_instance_matrix(trigger_type, severity, expected):
     assert pick_instance(trigger_type, severity) == expected
 
 
-def test_pick_instance_manual_defaults_to_opus():
-    assert pick_instance("MANUAL") == "opus"
+def test_pick_instance_manual_defaults_to_local():
+    assert pick_instance("MANUAL") == "local"
 
 
 def test_pick_instance_override_always_wins():
@@ -113,17 +111,19 @@ def test_classify_severity_non_forecast_non_deviation_is_minor():
 @pytest.mark.parametrize(
     "trigger_type,instance,expected_min",
     [
-        # opus scheduled
+        ("SUNRISE", "local", 30),
+        ("SUNSET", "local", 30),
+        ("MIDNIGHT", "local", 30),
+        ("TRANSITION", "local", 30),
+        ("FORECAST", "local", 60),
+        ("DEVIATION", "local", 20),
+        ("HEARTBEAT", "local", 15),
+        # explicit cloud escalation targets
         ("SUNRISE", "opus", 15),
         ("SUNSET", "opus", 15),
         ("MIDNIGHT", "opus", 15),
         ("FORECAST", "opus", 30),
         ("DEVIATION", "opus", 10),
-        # local
-        ("TRANSITION", "local", 30),
-        ("FORECAST", "local", 60),
-        ("DEVIATION", "local", 20),
-        ("HEARTBEAT", "local", 15),
     ],
 )
 def test_sla_for_defined_pairs(trigger_type, instance, expected_min):
@@ -135,7 +135,7 @@ def test_sla_for_defined_pairs(trigger_type, instance, expected_min):
     "trigger_type,instance",
     [
         ("HEARTBEAT", "opus"),  # opus doesn't do heartbeats
-        ("TRANSITION", "opus"),  # opus doesn't do transitions (MIDNIGHT split out)
+        ("TRANSITION", "opus"),  # explicit cloud table does not include transitions
         ("MANUAL", "opus"),  # manual: no SLA
         ("MANUAL", "local"),
     ],
@@ -158,7 +158,7 @@ def test_load_routing_config_falls_back_to_defaults(tmp_path, monkeypatch):
     assert cfg.deviation_major_threshold == 0.15
     assert cfg.deviation_prolonged_cycles == 3
     # SLA table matches defaults
-    assert cfg.sla_min_by_pair[("opus", "SUNRISE")] == 15
+    assert cfg.sla_min_by_pair[("local", "SUNRISE")] == 30
     assert cfg.sla_min_by_pair[("local", "HEARTBEAT")] == 15
 
 
@@ -194,15 +194,18 @@ def test_defaults_match_contract_literals():
     # If this drifts, either the contract changed or the module did —
     # investigate before updating this test.
     expected_pairs = {
+        ("local", "SUNRISE"): 30,
+        ("local", "SUNSET"): 30,
+        ("local", "MIDNIGHT"): 30,
+        ("local", "TRANSITION"): 30,
+        ("local", "FORECAST"): 60,
+        ("local", "DEVIATION"): 20,
+        ("local", "HEARTBEAT"): 15,
         ("opus", "SUNRISE"): 15,
         ("opus", "SUNSET"): 15,
         ("opus", "MIDNIGHT"): 15,
         ("opus", "FORECAST"): 30,
         ("opus", "DEVIATION"): 10,
-        ("local", "TRANSITION"): 30,
-        ("local", "FORECAST"): 60,
-        ("local", "DEVIATION"): 20,
-        ("local", "HEARTBEAT"): 15,
     }
     assert _DEFAULT_SLA_MIN == expected_pairs
 

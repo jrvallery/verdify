@@ -300,6 +300,27 @@ def test_alert_monitor_detects_planner_delivery_outages():
     assert "row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC)" in src
 
 
+def test_planning_milestones_include_fixed_boundaries():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("def _compute_milestones")
+    end = src.index("async def _log_plan_delivery", start)
+    body = src[start:end]
+    for key in (
+        "TRANSITION:fixed_midnight",
+        "TRANSITION:fixed_pre_dawn",
+        "TRANSITION:fixed_midday",
+        "TRANSITION:fixed_afternoon",
+        "TRANSITION:fixed_evening",
+    ):
+        assert key in body
+    assert "midnight + _td(hours=6)" in body
+    assert "midnight + _td(hours=12)" in body
+    assert "midnight + _td(hours=16)" in body
+    assert "midnight + _td(hours=20)" in body
+
+
 # ── S24.9.3 — status='plan_written' on resolve ─────────────────────
 
 
@@ -345,6 +366,87 @@ def test_failed_plan_delivery_logs_delivery_failed_status():
     body = src[start:end]
     assert 'result.get("delivered") is False' in body
     assert 'explicit_status = "delivery_failed"' in body
+
+
+def test_send_to_iris_is_local_first_without_cloud_fallback():
+    src = Path(iris_planner.__file__).read_text()
+    start = src.index("def send_to_iris")
+    body = src[start:]
+    assert 'instance: PlannerInstance = "local"' in body
+    assert "ENABLE_LOCAL_PLANNER" not in body
+    assert 'if instance == "local":' in body
+    assert 'session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"' in body
+    assert '"MANUAL"' in body
+
+
+def test_mcp_plan_run_uses_manual_trigger_and_delivery_log():
+    server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
+    start = server.index("async def plan_run")
+    end = server.index("@mcp.tool()", start + 1)
+    body = server[start:end]
+    assert 'send_to_iris("MANUAL"' in body
+    assert "_insert_plan_delivery_log" in body
+    assert "trigger_id" in body
+    assert "acknowledge-only smoke" in body
+
+
+def test_mcp_set_plan_requires_audited_trigger_for_planner_instances():
+    server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
+    start = server.index("async def set_plan")
+    end = server.index("@mcp.tool()", start + 1)
+    body = server[start:end]
+    assert "normalized_trigger_id" in body
+    assert "trigger_id is required when planner_instance is provided" in body
+    assert "Copy trigger_id exactly from the planning prompt audit headers" in body
+    assert "trigger_id not found in plan_delivery_log" in body
+    assert "planner_instance does not match plan_delivery_log" in body
+
+
+def test_mcp_set_plan_updates_delivery_log_by_trigger_id_immediately():
+    server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
+    start = server.index("async def set_plan")
+    end = server.index("@mcp.tool()", start + 1)
+    body = server[start:end]
+    assert "UPDATE plan_delivery_log" in body
+    assert "resulting_plan_id = $2" in body
+    assert "plan_written_at   = $3" in body
+    assert "status            = 'plan_written'" in body
+    assert '"delivery_status": "plan_written" if normalized_trigger_id else None' in body
+
+
+def test_mcp_set_tunable_resolves_trigger_ledger_with_oneshot_plan():
+    server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
+    start = server.index("async def set_tunable")
+    end = server.index("# ═══════════════════════════════════════════════════════════════", start + 1)
+    body = server[start:end]
+    assert "trigger_id is required when planner_instance is provided" in body
+    assert "Copy trigger_id exactly from the planning prompt audit headers into set_tunable" in body
+    assert "trigger_id not found in plan_delivery_log" in body
+    assert "planner_instance does not match plan_delivery_log" in body
+    assert "UPDATE plan_delivery_log" in body
+    assert "resulting_plan_id = $2" in body
+    assert "plan_written_at   = $3" in body
+    assert "status            = 'plan_written'" in body
+    assert '"delivery_status": "plan_written" if normalized_trigger_id else None' in body
+
+
+def test_mcp_rejects_non_validation_solar_acknowledgement():
+    server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
+    start = server.index("async def acknowledge_trigger")
+    body = server[start:]
+    assert 'existing["event_type"] in {"SUNRISE", "SUNSET"}' in body
+    assert "SUNRISE/SUNSET triggers require set_plan" in body
+    assert "validation ack-only" in body
+
+
+def test_required_plan_alert_ignores_validation_ack_only_rows():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("WITH latest_required AS")
+    end = src.index("if required_misses:", start)
+    body = src[start:end]
+    assert "event_label NOT ILIKE 'validation%ack-only%'" in body
 
 
 # ── S24.9.7 — _deliver_and_log sentinel skip (integration-shape) ───

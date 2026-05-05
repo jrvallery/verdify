@@ -15,7 +15,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 from time import perf_counter
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import asyncpg
@@ -41,6 +41,7 @@ from verdify_schemas import (  # noqa: E402
     LessonValidate,
     ObservationCreate,
     Plan,
+    PlanDeliveryLogRow,
     PlanEvaluation,
     PlanHypothesisStructured,
     PlanRunResponse,
@@ -165,6 +166,63 @@ mcp = FastMCP(
 
 async def _db() -> asyncpg.Connection:
     return await asyncpg.connect(DB_DSN)
+
+
+async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> str | None:
+    """Persist a send_to_iris result from MCP-triggered manual planning."""
+    row = {
+        "event_type": result["event_type"],
+        "event_label": result.get("event_label"),
+        "session_key": result.get("session_key"),
+        "wake_mode": result.get("wake_mode"),
+        "gateway_status": result.get("gateway_status"),
+        "gateway_body": result.get("gateway_body"),
+        "trigger_id": result.get("trigger_id"),
+        "instance": result.get("instance"),
+    }
+    explicit_status = result.get("status")
+    if explicit_status is None and result.get("delivered") is False:
+        explicit_status = "delivery_failed"
+    if explicit_status is not None:
+        row["status"] = explicit_status
+    PlanDeliveryLogRow.model_validate(row)
+
+    if explicit_status is not None:
+        await conn.execute(
+            """
+            INSERT INTO plan_delivery_log
+              (event_type, event_label, session_key, wake_mode, gateway_status,
+               gateway_body, trigger_id, instance, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9)
+            """,
+            row["event_type"],
+            row["event_label"],
+            row["session_key"],
+            row["wake_mode"],
+            row["gateway_status"],
+            row["gateway_body"],
+            row["trigger_id"],
+            row["instance"],
+            explicit_status,
+        )
+        return explicit_status
+    await conn.execute(
+        """
+        INSERT INTO plan_delivery_log
+          (event_type, event_label, session_key, wake_mode, gateway_status,
+           gateway_body, trigger_id, instance)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
+        """,
+        row["event_type"],
+        row["event_label"],
+        row["session_key"],
+        row["wake_mode"],
+        row["gateway_status"],
+        row["gateway_body"],
+        row["trigger_id"],
+        row["instance"],
+    )
+    return explicit_status
 
 
 async def _record_openclaw_interaction(
@@ -360,10 +418,25 @@ async def set_tunable(
     The dispatcher will apply it within 5 minutes.
     Example: set_tunable('fog_escalation_kpa', 0.15, 'fog is 7x more effective than misters')
 
-    trigger_id, planner_instance: optional contract v1.4 audit fields.
+    trigger_id, planner_instance: optional contract v1.5 audit fields.
     Pass through from the trigger banner shown at the bottom of every
     planning event prompt (`trigger_id=<uuid>`, `planner_instance='opus'|'local'`).
-    Stamped onto plan_journal so SLA monitors can correlate by uuid."""
+    Stamped onto the one-shot setpoint_plan reason and plan_delivery_log so
+    SLA monitors can correlate by uuid."""
+    normalized_trigger_id: str | None = None
+    if trigger_id:
+        try:
+            normalized_trigger_id = str(UUID(trigger_id))
+        except (TypeError, ValueError):
+            return json.dumps({"error": "trigger_id must be a valid UUID"})
+    elif planner_instance:
+        return json.dumps(
+            {
+                "error": "trigger_id is required when planner_instance is provided",
+                "hint": "Copy trigger_id exactly from the planning prompt audit headers into set_tunable.",
+            }
+        )
+
     # Schema-level gate first rejects typos; the registry then blocks
     # operator-only safety rails and readback-only diagnostics.
     if parameter not in ALL_TUNABLES:
@@ -401,8 +474,8 @@ async def set_tunable(
     # setpoint_plan has no dedicated columns yet. Searchable via
     # `WHERE reason LIKE '%trigger=<uuid>%'`.
     audit_suffix_parts = []
-    if trigger_id:
-        audit_suffix_parts.append(f"trigger={trigger_id}")
+    if normalized_trigger_id:
+        audit_suffix_parts.append(f"trigger={normalized_trigger_id}")
     if planner_instance:
         audit_suffix_parts.append(f"instance={planner_instance}")
     if audit_suffix_parts:
@@ -414,18 +487,68 @@ async def set_tunable(
     try:
         now_mdt = datetime.now(ZoneInfo("America/Denver"))
         plan_id = f"iris-oneshot-{now_mdt.strftime('%Y%m%d-%H%M')}"
-        await conn.execute(
-            """
-            INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason)
-            VALUES (now(), $1, $2, $3, 'iris', $4)
-            ON CONFLICT (ts, parameter, plan_id) DO UPDATE
-              SET value = EXCLUDED.value, reason = EXCLUDED.reason
-            """,
-            parameter,
-            value,
-            plan_id,
-            reason_with_audit,
-        )
+        async with conn.transaction():
+            if normalized_trigger_id:
+                delivery = await conn.fetchrow(
+                    """
+                    SELECT trigger_id, status, instance
+                      FROM plan_delivery_log
+                     WHERE trigger_id = $1::uuid
+                    """,
+                    normalized_trigger_id,
+                )
+                if not delivery:
+                    return json.dumps(
+                        {
+                            "error": "trigger_id not found in plan_delivery_log",
+                            "trigger_id": normalized_trigger_id,
+                        }
+                    )
+                if delivery["status"] not in {"pending", "plan_written"}:
+                    return json.dumps(
+                        {
+                            "error": "trigger_id is not writable",
+                            "trigger_id": normalized_trigger_id,
+                            "status": delivery["status"],
+                        }
+                    )
+                if planner_instance and delivery["instance"] and planner_instance != delivery["instance"]:
+                    return json.dumps(
+                        {
+                            "error": "planner_instance does not match plan_delivery_log",
+                            "trigger_id": normalized_trigger_id,
+                            "planner_instance": planner_instance,
+                            "delivery_instance": delivery["instance"],
+                        }
+                    )
+
+            wrote_at = await conn.fetchval(
+                """
+                INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason)
+                VALUES (now(), $1, $2, $3, 'iris', $4)
+                ON CONFLICT (ts, parameter, plan_id) DO UPDATE
+                  SET value = EXCLUDED.value, reason = EXCLUDED.reason
+                RETURNING ts
+                """,
+                parameter,
+                value,
+                plan_id,
+                reason_with_audit,
+            )
+            if normalized_trigger_id:
+                await conn.execute(
+                    """
+                    UPDATE plan_delivery_log
+                       SET resulting_plan_id = $2,
+                           plan_written_at   = $3,
+                           status            = 'plan_written'
+                     WHERE trigger_id = $1::uuid
+                       AND status IN ('pending', 'plan_written')
+                    """,
+                    normalized_trigger_id,
+                    plan_id,
+                    wrote_at,
+                )
         return json.dumps(
             {
                 "ok": True,
@@ -433,8 +556,9 @@ async def set_tunable(
                 "value": value,
                 "reason": reason_with_audit,
                 "plan_id": plan_id,
-                "trigger_id": trigger_id,
+                "trigger_id": normalized_trigger_id,
                 "planner_instance": planner_instance,
+                "delivery_status": "plan_written" if normalized_trigger_id else None,
                 "note": (
                     "Written to setpoint_plan as a one-shot waypoint at now(). "
                     "Dispatcher pushes to ESP32 within 5 minutes and this value "
@@ -453,21 +577,54 @@ async def set_tunable(
 
 @mcp.tool()
 async def plan_run(mode: str = "normal") -> str:
-    """Trigger an ad-hoc planning cycle by sending a SUNRISE event to the Iris planner agent.
-    Iris will gather context, analyze conditions, write a plan via set_plan(), and post to #greenhouse.
-    This uses the same event-driven path as scheduled sunrise/sunset events."""
+    """Trigger an ad-hoc MANUAL planning cycle through the same audited path as scheduled triggers."""
     import sys
 
     sys.path.insert(0, "/srv/verdify/ingestor")
     try:
-        from iris_planner import gather_context, send_to_iris
+        from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
 
+        mode_clean = (mode or "normal").strip().lower()
         context = gather_context()
-        result = send_to_iris("SUNRISE", "Ad-hoc planning cycle (triggered via MCP)", context=context)
+        if context == CONTEXT_GATHER_FAILED_SENTINEL:
+            result = {
+                "delivered": False,
+                "event_type": "MANUAL",
+                "event_label": f"Ad-hoc planning cycle via MCP plan_run(mode={mode_clean})",
+                "session_key": None,
+                "wake_mode": None,
+                "gateway_status": None,
+                "gateway_body": "context_gather_failed",
+                "status": "delivery_failed",
+                "trigger_id": str(uuid4()),
+                "instance": "local",
+            }
+        else:
+            label = f"Ad-hoc planning cycle via MCP plan_run(mode={mode_clean})"
+            if mode_clean in {"ack", "ack_only", "ack-only", "smoke", "validation"}:
+                context = (
+                    "VALIDATION MODE: acknowledge-only smoke. Do not call set_plan or set_tunable. "
+                    "Call acknowledge_trigger with the audit trigger_id and planner_instance, "
+                    "then stop.\n\n"
+                ) + context
+            result = send_to_iris("MANUAL", label, context=context, instance="local")
+
+        conn = await _db()
+        try:
+            explicit_status = await _insert_plan_delivery_log(conn, result)
+        finally:
+            await conn.close()
+
+        status = explicit_status or "pending"
         resp = PlanRunResponse(
             ok=bool(result.get("delivered")),
-            note="SUNRISE event sent to Iris planner. Check #greenhouse for the brief.",
+            note="MANUAL event sent to local iris-planner. Check plan_delivery_log for ack/plan correlation.",
             error=None if result.get("delivered") else result.get("gateway_body"),
+            trigger_id=result.get("trigger_id"),
+            event_type=result.get("event_type"),
+            planner_instance=result.get("instance"),
+            session_key=result.get("session_key"),
+            status=status,
         )
         return resp.model_dump_json(exclude_none=True)
     except Exception as e:
@@ -599,6 +756,20 @@ async def set_plan(
     # This rejects unknown tunables, inverted temp/VPD bands, non-monotonic transitions,
     # bad plan_id format, timezone-naive timestamps, etc. — at the MCP boundary, so
     # partial plans never land in setpoint_plan.
+    normalized_trigger_id: str | None = None
+    if trigger_id:
+        try:
+            normalized_trigger_id = str(UUID(trigger_id))
+        except (TypeError, ValueError):
+            return json.dumps({"error": "trigger_id must be a valid UUID"})
+    elif planner_instance:
+        return json.dumps(
+            {
+                "error": "trigger_id is required when planner_instance is provided",
+                "hint": "Copy trigger_id exactly from the planning prompt audit headers into set_plan.",
+            }
+        )
+
     try:
         waypoints_raw = json.loads(transitions)
     except json.JSONDecodeError as e:
@@ -662,6 +833,40 @@ async def set_plan(
             if existing:
                 return json.dumps({"error": f"plan_id {plan.plan_id!r} already exists; generate a new plan_id"})
 
+            if normalized_trigger_id:
+                delivery = await conn.fetchrow(
+                    """
+                    SELECT trigger_id, status, instance
+                      FROM plan_delivery_log
+                     WHERE trigger_id = $1::uuid
+                    """,
+                    normalized_trigger_id,
+                )
+                if not delivery:
+                    return json.dumps(
+                        {
+                            "error": "trigger_id not found in plan_delivery_log",
+                            "trigger_id": normalized_trigger_id,
+                        }
+                    )
+                if delivery["status"] != "pending":
+                    return json.dumps(
+                        {
+                            "error": "trigger_id is not pending",
+                            "trigger_id": normalized_trigger_id,
+                            "status": delivery["status"],
+                        }
+                    )
+                if planner_instance and delivery["instance"] and planner_instance != delivery["instance"]:
+                    return json.dumps(
+                        {
+                            "error": "planner_instance does not match plan_delivery_log",
+                            "trigger_id": normalized_trigger_id,
+                            "planner_instance": planner_instance,
+                            "delivery_instance": delivery["instance"],
+                        }
+                    )
+
             # Deactivate existing future waypoints EXCEPT iris-oneshot tactical pushes.
             # Phase 1b: set_tunable writes to setpoint_plan with plan_id
             # `iris-oneshot-<YYYYMMDD-HHMM>`. Those are live tactical adjustments
@@ -703,19 +908,34 @@ async def set_plan(
             # caller passed them through from the prompt's audit-headers banner.
             # Both columns nullable; NULL means "pre-v1.4 path or operator
             # injection that didn't carry headers."
-            await conn.execute(
+            journal_created_at = await conn.fetchval(
                 """INSERT INTO plan_journal
                      (plan_id, created_at, hypothesis, experiment, expected_outcome,
                       hypothesis_structured, greenhouse_id, planner_instance, trigger_id)
-                   VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)""",
+                   VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)
+                   RETURNING created_at""",
                 plan.plan_id,
                 plan.hypothesis,
                 plan.experiment,
                 plan.expected_outcome,
                 structured_payload,
                 planner_instance,
-                trigger_id,
+                normalized_trigger_id,
             )
+            if normalized_trigger_id:
+                await conn.execute(
+                    """
+                    UPDATE plan_delivery_log
+                       SET resulting_plan_id = $2,
+                           plan_written_at   = $3,
+                           status            = 'plan_written'
+                     WHERE trigger_id = $1::uuid
+                       AND status = 'pending'
+                    """,
+                    normalized_trigger_id,
+                    plan.plan_id,
+                    journal_created_at,
+                )
 
         # Sprint 20 Phase 6: drop a trigger file so verdify-plan-publish.path
         # fires and regenerates the daily plan page. Local-SSD location so
@@ -738,8 +958,9 @@ async def set_plan(
             "rows_written": rows_written,
             "band_params_dropped": band_params_dropped,
             "structured_hypothesis": structured_payload is not None,
-            "trigger_id": trigger_id,
+            "trigger_id": normalized_trigger_id,
             "planner_instance": planner_instance,
+            "delivery_status": "plan_written" if normalized_trigger_id else None,
             "note": "Dispatcher will execute waypoints on schedule. Old future waypoints deactivated.",
         }
         if structured_warning:
@@ -769,6 +990,38 @@ async def acknowledge_trigger(trigger_id: str, reason: str, planner_instance: st
 
     conn = await _db()
     try:
+        existing = await conn.fetchrow(
+            """
+            SELECT id, event_type, event_label, instance, status
+              FROM plan_delivery_log
+             WHERE trigger_id = $1::uuid
+            """,
+            str(tid),
+        )
+        if existing is None:
+            return json.dumps({"error": f"trigger_id {tid} not found in plan_delivery_log"})
+        if existing["status"] != "pending":
+            return _json(
+                {
+                    "ok": False,
+                    "trigger_id": str(tid),
+                    "note": "trigger was already resolved",
+                    "status": existing["status"],
+                    "event_type": existing["event_type"],
+                    "instance": existing["instance"],
+                }
+            )
+        event_label = (existing["event_label"] or "").lower()
+        is_validation_ack = event_label.startswith("validation") and "ack-only" in event_label
+        if existing["event_type"] in {"SUNRISE", "SUNSET"} and not is_validation_ack:
+            return _json(
+                {
+                    "error": "SUNRISE/SUNSET triggers require set_plan; acknowledge_trigger is allowed only for validation ack-only rows",
+                    "trigger_id": str(tid),
+                    "event_type": existing["event_type"],
+                    "event_label": existing["event_label"],
+                }
+            )
         row = await conn.fetchrow(
             """
             UPDATE plan_delivery_log
@@ -783,12 +1036,6 @@ async def acknowledge_trigger(trigger_id: str, reason: str, planner_instance: st
             f"acknowledged by {planner_instance or 'iris'}: {reason}",
         )
         if row is None:
-            existing = await conn.fetchrow(
-                "SELECT id, event_type, instance, status FROM plan_delivery_log WHERE trigger_id = $1::uuid",
-                str(tid),
-            )
-            if existing is None:
-                return json.dumps({"error": f"trigger_id {tid} not found in plan_delivery_log"})
             return _json(
                 {
                     "ok": False,

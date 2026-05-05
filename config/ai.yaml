@@ -16,11 +16,11 @@ keys:
 # ── Models ───────────────────────────────────────────────────────
 models:
   planner:
-    provider: anthropic
-    model: claude-opus-4-6
+    provider: vllm
+    model: gemma4-26b
     temperature: 0.3
-    max_output_tokens: 16384
-    purpose: "72-hour tactical setpoint planning"
+    max_output_tokens: 4096
+    purpose: "local Gemma4-on-cortext 72-hour tactical setpoint planning via OpenClaw iris-planner"
 
   vision:
     provider: gemini
@@ -71,15 +71,16 @@ context:
   max_context_chars: 100000
   max_static_chars: 50000
 
-# ── Planner Routing & SLA (Dual-Iris, contract v1.4) ─────────────
-# Runtime knobs for the dual-peer planner routing policy. Consumed by:
+# ── Planner Routing & SLA (local-first, contract v1.5) ───────────
+# Runtime knobs for the local-first planner routing policy. Consumed by:
 #   - ingestor/planner_routing.py (classify_severity + pick_instance + sla_for)
 #   - ingestor/alert_monitor rule 7 (SLA-breach detection)
 # Contract spec: docs/iris-planner-contract.md §2.F (SLA) + §2.G (routing).
-# Tunable without code change; start with v1 defaults, review after a week of data.
+# Default target is local Gemma-on-cortext via OpenClaw agent `iris-planner`.
+# Opus entries exist only for explicit operator escalation.
 planner_routing:
   # Severity thresholds — ingestor.classify_severity returns "major" when any
-  # is exceeded; "minor" otherwise. Major → routes to opus, minor → local.
+  # is exceeded; "minor" otherwise. Both severities route to local by default.
   forecast_major_delta_vpd_kPa: 0.5    # |Δvpd_outdoor| above → major FORECAST
   forecast_major_delta_temp_F: 10      # |Δtemp_F| above → major FORECAST
   deviation_major_threshold: 0.15      # normalized band-excursion → major DEVIATION
@@ -87,17 +88,18 @@ planner_routing:
 
 planner_sla:
   # SLA in minutes, keyed by (instance, trigger_type). Absent = no SLA.
-  # Opus targets (scheduled: SUNRISE / SUNSET / MIDNIGHT) + ad-hoc majors.
-  # Local targets (routine: TRANSITION / HEARTBEAT) + minor forecast/deviation.
-  # 2× multiplier on local baseline (gemma inference + larger prompt both slower).
+  # Local gets all normal triggers. Opus targets are explicit escalation only.
+  local:
+    SUNRISE:    30
+    SUNSET:     30
+    MIDNIGHT:   30
+    TRANSITION: 30
+    FORECAST:   60
+    DEVIATION:  20
+    HEARTBEAT:  15
   opus:
     SUNRISE:    15
     SUNSET:     15
     MIDNIGHT:   15
     FORECAST:   30
     DEVIATION:  10
-  local:
-    TRANSITION: 30
-    FORECAST:   60
-    DEVIATION:  20
-    HEARTBEAT:  15

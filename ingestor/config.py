@@ -55,23 +55,21 @@ GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/jason/agents/s
 OPENCLAW_URL = os.environ.get("OPENCLAW_URL", "http://127.0.0.1:18789")
 OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "iris-hooks-verdify-2026-04")
 
-# Sprint 25 dual-Iris (contract v1.4 §2.G): per-instance agent/session routing.
-# Legacy OPENCLAW_SESSION_KEY kept for one cycle — Sprint 26 removes it.
-OPENCLAW_OPUS_AGENT_ID = os.environ.get("OPENCLAW_OPUS_AGENT_ID", "iris-planner")
-OPENCLAW_OPUS_SESSION_KEY = os.environ.get("OPENCLAW_OPUS_SESSION_KEY", "agent:iris-planner:main")
-OPENCLAW_LOCAL_AGENT_ID = os.environ.get("OPENCLAW_LOCAL_AGENT_ID", "iris-planner-local")
-OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent:iris-planner-local:main")
-# DEPRECATED in Sprint 25 — remove in Sprint 26. Reads the opus session key
-# as a fallback when new code calls legacy send_to_iris paths.
-OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_OPUS_SESSION_KEY)
+# Contract v1.5: local Gemma-on-cortext is the default iris-planner path.
+# Cloud/opus is kept as an explicit operator escalation target only.
+OPENCLAW_LOCAL_AGENT_ID = os.environ.get("OPENCLAW_LOCAL_AGENT_ID", "iris-planner")
+# Prefix for trigger-scoped local sessions. send_to_iris appends
+# `:trigger:<uuid>` so Gemma gets a fresh bounded context for every planning
+# run; historical memory comes from the gathered DB/context pack.
+OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent:iris-planner:main")
+OPENCLAW_OPUS_AGENT_ID = os.environ.get("OPENCLAW_OPUS_AGENT_ID", "iris-planner-cloud")
+OPENCLAW_OPUS_SESSION_KEY = os.environ.get("OPENCLAW_OPUS_SESSION_KEY", "agent:iris-planner-cloud:main")
+# DEPRECATED legacy alias. Defaults to the local planner session in v1.5.
+OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_LOCAL_SESSION_KEY)
 
-# Feature gate for the local Iris peer. When true, planner_routing.pick_instance
-# is consulted as the source of truth and FORECAST/TRANSITION/HEARTBEAT may be
-# routed to the local session. When false (default), routing decisions are
-# computed and stamped onto plan_delivery_log.instance for audit, but the
-# actual delivery is forced to opus so we don't black-hole sends to a
-# nonexistent local session.
-ENABLE_LOCAL_PLANNER = os.environ.get("ENABLE_LOCAL_PLANNER", "false").lower() in (
+# Compatibility flag retained for old deploy env files. Routing is local-first
+# regardless of this value; explicit `instance="opus"` is the cloud path.
+ENABLE_LOCAL_PLANNER = os.environ.get("ENABLE_LOCAL_PLANNER", "true").lower() in (
     "true",
     "1",
     "yes",

@@ -24,7 +24,6 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from config import (
-    ENABLE_LOCAL_PLANNER,
     OPENCLAW_LOCAL_AGENT_ID,
     OPENCLAW_LOCAL_SESSION_KEY,
     OPENCLAW_OPUS_AGENT_ID,
@@ -41,11 +40,10 @@ from verdify_schemas import AlertEnvelope  # noqa: E402
 
 log = logging.getLogger("iris_planner")
 
-# Planner peer instances. Added in sprint-3 for dual-Iris routing per
-# docs/iris-planner-contract.md v1.3. "opus" = cloud Claude Opus session
-# (full knowledge). "local" = on-host vLLM gemma session (trimmed lite
-# variant ≤60k gemma tokens). Callers pass instance explicitly; no
-# implicit failover per contract §2.G.
+# Planner peer instances. Contract v1.5 makes "local" the default path:
+# OpenClaw agent `iris-planner` backed by local Gemma-on-cortext. "opus" is
+# explicit cloud escalation only. Callers pass instance explicitly; no implicit
+# failover.
 PlannerInstance = Literal["opus", "local"]
 
 DENVER = ZoneInfo("America/Denver")
@@ -100,9 +98,38 @@ _STANDING_DIRECTIVES = """
    `acknowledge_trigger(trigger_id, reason, planner_instance)` using the
    audit values at the bottom of this prompt. This closes the delivery SLA
    without writing a fake plan.
+   **Do not acknowledge SUNRISE or SUNSET** unless validation mode is active;
+   real SUNRISE/SUNSET cycles must call `set_plan`.
+
+7. **Validation mode override:** if the assembled context starts with
+   `VALIDATION MODE: acknowledge-only smoke`, that instruction overrides the
+   normal event tasks, including SUNRISE/SUNSET full-plan tasks. Do not call
+   `set_plan` or `set_tunable`; only call `acknowledge_trigger(...)` with the
+   audit values, then stop.
 """
 
-# ── Planner knowledge — split for dual-Iris routing (sprint-3, G6) ──
+_LOCAL_GEMMA_DIRECTIVES = """
+## Local Gemma Context Budget (MANDATORY)
+
+You are running on local Gemma through OpenClaw. The assembled context below is
+already the greenhouse data pack: climate, scorecard, forecast, current
+setpoints, constraints, lessons, alerts, recent deliveries, clamps, and plan
+review. Treat it as the primary read source.
+
+- Do **not** call broad read tools (`history`, `query`, `forecast`,
+  `scorecard`, `lessons`, `alerts`, `climate`, `plan_status`,
+  `get_setpoints`) unless a required fact is missing from the assembled
+  context or a tool call is explicitly required to write/evaluate a plan.
+- Never call `history` or broad `query` during a routine SUNRISE/SUNSET plan;
+  those outputs can overflow the local context.
+- For full SUNRISE/SUNSET cycles, reason from the assembled context and then
+  call `set_plan` once with a compact hypothesis and 3-6 transitions. Use the
+  `CURRENT ACTIVE SETPOINTS` and `TUNABLE CONSTRAINTS` sections for unchanged
+  values and bounds.
+- If validation mode is active, only call `acknowledge_trigger`.
+"""
+
+# ── Planner knowledge — split for local/cloud prompt variants ──────
 #
 # Two layers. Both are static per planner-session → opus-cacheable. The
 # order matters for Anthropic prompt-caching (stable prefix first, drop-in
@@ -256,7 +283,7 @@ Use tactical knobs below to shift behavior instead.
 - `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration
 - `mist_backoff_s` s, [60-3600], def 600 — v2 lockout after a sealed mist attempt times out; prevents immediate reseal loops
 
-**Fog (AquaFog XE 2000 — 7× mister; firmware-gated by RH/temp/time window):**
+**Fog (AquaFog XE 2000 — Fog is 7x misters; firmware-gated by RH/temp/time window):**
 - `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.5 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
 - `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle
 - `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles
@@ -428,7 +455,7 @@ Gas heating is 3.9x cheaper per BTU than electric.
 """
 
 
-def _compose_preamble(instance: PlannerInstance = "opus") -> str:
+def _compose_preamble(instance: PlannerInstance = "local") -> str:
     """Compose the prompt preamble for a given planner instance.
 
     The returned string is the stable, per-session prefix that the event
@@ -445,7 +472,7 @@ def _compose_preamble(instance: PlannerInstance = "opus") -> str:
     15% safety cushion for gemma's heavier encoding).
     """
     if instance == "local":
-        return _STANDING_DIRECTIVES + _PLANNER_CORE
+        return _STANDING_DIRECTIVES + _LOCAL_GEMMA_DIRECTIVES + _PLANNER_CORE
     return _STANDING_DIRECTIVES + _PLANNER_CORE + _PLANNER_EXTENDED
 
 
@@ -623,19 +650,48 @@ Observed conditions have diverged significantly from the forecast:
 Post to #greenhouse with what deviated, your diagnosis, and what you changed."""
 
 
+def _manual_prompt(context: str, label: str) -> str:
+    now = datetime.now(DENVER).strftime("%H:%M %Z")
+    return f"""## Planning Event: MANUAL
+**Time:** {now}
+**Operator request:** {label}
+
+An operator-triggered planning cycle has been requested. Treat the operator
+label and assembled context as the source of truth for scope.
+
+### Your tasks:
+1. **Read the operator request** — if it says validation, smoke, or
+   acknowledge-only, do not write a plan or tunable; call `acknowledge_trigger`
+   with the audit trigger id and planner instance.
+2. **Otherwise gather current state** — call `climate`, `forecast`,
+   `scorecard`, `plan_status`, and `get_setpoints` as needed.
+3. **Act only when justified** — use `set_tunable` for narrow immediate changes
+   or `set_plan` for a deliberate 72h planning update.
+4. **Close the audit loop** — every manual event must end in either
+   `acknowledge_trigger`, `set_tunable`, or `set_plan` using the audit values.
+
+### Assembled Context
+{context}
+
+---
+Post to #greenhouse only if you changed greenhouse behavior or found an
+operator-relevant issue."""
+
+
 # ── Prompt router ─────────────────────────────────────────────────
 
-# _PREAMBLE keeps the opus-full preamble for any caller that still treats
+# _PREAMBLE keeps the local preamble for any caller that still treats
 # the preamble as a module-level constant. Instance-aware callers should
 # use _compose_preamble(instance) instead.
-_PREAMBLE = _compose_preamble("opus")
+_PREAMBLE = _compose_preamble("local")
 
 _PROMPT_BUILDERS = {
-    "SUNRISE": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _sunrise_prompt(ctx),
-    "SUNSET": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _sunset_prompt(ctx),
-    "TRANSITION": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _transition_prompt(ctx, lbl),
-    "FORECAST": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _forecast_prompt(ctx),
-    "DEVIATION": lambda ctx, lbl, instance="opus": _compose_preamble(instance) + _deviation_prompt(ctx, lbl),
+    "SUNRISE": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _sunrise_prompt(ctx),
+    "SUNSET": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _sunset_prompt(ctx),
+    "TRANSITION": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _transition_prompt(ctx, lbl),
+    "FORECAST": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _forecast_prompt(ctx),
+    "DEVIATION": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _deviation_prompt(ctx, lbl),
+    "MANUAL": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _manual_prompt(ctx, lbl),
 }
 
 
@@ -761,16 +817,17 @@ def send_to_iris(
     event_type: str,
     label: str,
     context: str | None = None,
-    instance: PlannerInstance = "opus",
+    instance: PlannerInstance = "local",
 ) -> dict:
     """Send a planning event to Iris's planner session via OpenClaw gateway.
 
     Args:
-        event_type: One of SUNRISE, SUNSET, TRANSITION, FORECAST, DEVIATION
+        event_type: One of SUNRISE, SUNSET, TRANSITION, FORECAST, DEVIATION, MANUAL
         label: Human-readable event label (e.g. "Peak stress", deviation details)
         context: Pre-gathered context string. If None, runs gather-plan-context.sh.
-        instance: 'opus' (cloud Claude — default) or 'local' (gemma-host).
-            Routes via session-key suffix and X-Planner-Instance header.
+        instance: 'local' (Gemma-on-cortext — default) or 'opus' (explicit
+            cloud escalation). Routes via OpenClaw agent/session pair and
+            X-Planner-Instance header.
 
     Returns:
         Result dict the caller writes to plan_delivery_log. Keys: delivered,
@@ -792,16 +849,15 @@ def send_to_iris(
         it and stamp plan_journal / setpoint_changes.
     """
     trigger_id = str(uuid.uuid4())
-    # Per-instance routing (contract v1.4 §2.G): map opus|local to the
-    # OpenClaw agentId + sessionKey pair. Until local Iris is provisioned
-    # (ENABLE_LOCAL_PLANNER=false), fall the actual delivery back to opus
-    # but keep `instance` in the result so plan_delivery_log records the
-    # routing decision that WOULD have been made — once local is ready,
-    # flipping the env var activates the real routing without code change.
-    routed_instance = instance if (instance == "opus" or ENABLE_LOCAL_PLANNER) else "opus"
-    if routed_instance == "local":
+    # Per-instance routing (contract v1.5 §2.G): local Gemma-on-cortext is the
+    # default. No implicit cloud fallback; cloud/opus requires an explicit
+    # instance="opus" caller override so audit rows reflect real delivery.
+    # Local uses a trigger-scoped session to prevent persistent chat history
+    # from overflowing Gemma's 131k-token context. The gathered DB/context pack
+    # is the planner memory source of truth.
+    if instance == "local":
         agent_id = OPENCLAW_LOCAL_AGENT_ID
-        session_key = OPENCLAW_LOCAL_SESSION_KEY
+        session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"
     else:
         agent_id = OPENCLAW_OPUS_AGENT_ID
         session_key = OPENCLAW_OPUS_SESSION_KEY
@@ -828,15 +884,17 @@ def send_to_iris(
 
     message = builder(context, label, instance)
 
-    # Contract v1.4 §2.A — embed trigger_id + instance in the per-cycle
+    # Contract v1.5 §2.A — embed trigger_id + instance in the per-cycle
     # message body so Iris can pass them as kwargs to set_plan() and
-    # set_tunable(). Stamping these on the writes lets us correlate
+    # set_tunable(), or close no-op cycles with acknowledge_trigger().
+    # Stamping these on the writes lets us correlate
     # plan_journal ↔ plan_delivery_log by uuid (not 2h time-window) and
     # filter "all plans from opus" vs "all plans from local". Banner sits
     # AFTER the cached preamble so prompt-cache breakpoints stay clean.
     audit_banner = (
         "\n\n---\n"
-        f"**Audit headers** — pass these to `set_plan` and `set_tunable` so the\n"
+        f"**Audit headers** — pass these to `set_plan`, `set_tunable`, or\n"
+        f"`acknowledge_trigger` so the\n"
         f"plan-journal and setpoint-changes rows record which trigger and which\n"
         f"planner instance produced them.\n\n"
         f"- `trigger_id={trigger_id}`\n"
@@ -863,9 +921,9 @@ def send_to_iris(
             "---\n\n"
         ) + message
 
-    # SUNRISE/SUNSET/DEVIATION are high-priority — process immediately.
+    # SUNRISE/SUNSET/DEVIATION/MANUAL are high-priority — process immediately.
     # FORECAST/TRANSITION can wait for the next heartbeat.
-    wake_now = event_type in ("SUNRISE", "SUNSET", "DEVIATION")
+    wake_now = event_type in ("SUNRISE", "SUNSET", "DEVIATION", "MANUAL")
     result["wake_mode"] = "now" if wake_now else "next-heartbeat"
 
     payload = {
@@ -884,7 +942,7 @@ def send_to_iris(
         headers={
             "Authorization": f"Bearer {OPENCLAW_TOKEN}",
             "Content-Type": "application/json",
-            # Contract v1.4 §2.A — propagate to MCP tool context so
+            # Contract v1.5 §2.A — propagate to MCP tool context so
             # plan_journal / setpoint_changes writes can stamp the
             # originating trigger and the planner instance.
             "X-Trigger-Id": trigger_id,

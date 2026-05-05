@@ -6,9 +6,10 @@ into the future at the exact moment it should have fired. The firing
 window `0 ≤ delta < 7200` never saw a non-negative delta for this key,
 and the milestone never dispatched.
 
-This test locks the fix: every milestone in _compute_milestones() must
-resolve to today's calendar date (not tomorrow's), and the firing window
-must contain each milestone when simulated `now = milestone_time + 60s`.
+This test locks the fix: every solar/fixed-boundary milestone in
+_compute_milestones() must resolve to today's calendar date (not tomorrow's),
+and the firing window must contain each milestone when simulated
+`now = milestone_time + 60s`.
 """
 
 from __future__ import annotations
@@ -31,12 +32,15 @@ DENVER = ZoneInfo("America/Denver")
 EXPECTED_MILESTONES = {
     "SUNRISE",
     "SUNSET",
+    "TRANSITION:fixed_midnight",
+    "TRANSITION:fixed_pre_dawn",
+    "TRANSITION:fixed_midday",
+    "TRANSITION:fixed_afternoon",
+    "TRANSITION:fixed_evening",
     "TRANSITION:peak_stress",
     "TRANSITION:tree_shade",
     "TRANSITION:decline",
     "TRANSITION:evening_settle",
-    "TRANSITION:midnight_posture",
-    "TRANSITION:pre_dawn",
 }
 
 
@@ -49,9 +53,11 @@ def reset_milestone_cache():
     yield
 
 
-def test_all_eight_milestones_present():
+def test_all_planning_milestones_present():
     milestones = tasks._compute_milestones()
-    assert set(milestones.keys()) == EXPECTED_MILESTONES, f"Expected 8 milestones, got {set(milestones.keys())}"
+    assert set(milestones.keys()) == EXPECTED_MILESTONES, (
+        f"Expected {len(EXPECTED_MILESTONES)} milestones, got {set(milestones.keys())}"
+    )
 
 
 def test_every_milestone_is_on_todays_date():
@@ -70,8 +76,8 @@ def test_every_milestone_is_on_todays_date():
     )
 
 
-def test_midnight_posture_is_today_zero_hundred():
-    """Specifically pin midnight_posture to today's 00:00 MDT.
+def test_fixed_midnight_is_today_zero_hundred():
+    """Specifically pin fixed_midnight to today's 00:00 MDT.
 
     The original bug set it to tomorrow's 00:00. The first task_loop tick
     past today's 00:00 MDT hits `delta = now - 00:00 today` which sits in
@@ -81,9 +87,9 @@ def test_midnight_posture_is_today_zero_hundred():
     """
     milestones = tasks._compute_milestones()
     today = datetime.now(DENVER).date()
-    mp = milestones["TRANSITION:midnight_posture"]
+    mp = milestones["TRANSITION:fixed_midnight"]
     expected = datetime.combine(today, datetime.min.time(), tzinfo=DENVER)
-    assert mp == expected, f"midnight_posture={mp}, expected={expected} (today's 00:00 MDT)"
+    assert mp == expected, f"fixed_midnight={mp}, expected={expected} (today's 00:00 MDT)"
 
 
 def test_every_milestone_fires_within_2h_past():
@@ -102,13 +108,13 @@ def test_every_milestone_fires_within_2h_past():
         )
 
 
-def test_midnight_posture_fires_immediately_after_rollover():
+def test_fixed_midnight_fires_immediately_after_rollover():
     """Timeline-specific: simulate the first task_loop tick after
     midnight. Today's 00:00 MDT passed a few seconds ago; the firing
     window [0, 300) must accept it.
     """
     milestones = tasks._compute_milestones()
-    mp = milestones["TRANSITION:midnight_posture"]
+    mp = milestones["TRANSITION:fixed_midnight"]
     # Simulate task_loop tick at 00:00:05 MDT (5s past midnight)
     simulated_now = mp + timedelta(seconds=5)
     delta = (simulated_now - mp).total_seconds()
@@ -116,21 +122,28 @@ def test_midnight_posture_fires_immediately_after_rollover():
 
 
 def test_milestones_ordered_sensibly_through_day():
-    """Basic sanity: pre_dawn < SUNRISE < peak_stress < tree_shade < decline
-    < SUNSET < evening_settle. Midnight_posture sits apart (today's 00:00,
-    in the past for all other milestones' today timing).
+    """Basic sanity for fixed local boundaries and solar-derived transitions.
+
+    The 06:00 fixed boundary is intentionally not asserted before sunrise;
+    sunrise can be earlier than 06:00 in late spring/summer.
     """
     m = tasks._compute_milestones()
-    # Non-midnight milestones in the expected daily sequence
-    assert m["TRANSITION:pre_dawn"] < m["SUNRISE"]
+    assert m["TRANSITION:fixed_midnight"] < m["TRANSITION:fixed_pre_dawn"]
+    assert m["TRANSITION:fixed_pre_dawn"] < m["TRANSITION:fixed_midday"]
+    assert m["TRANSITION:fixed_midday"] < m["TRANSITION:fixed_afternoon"]
+    assert m["TRANSITION:fixed_afternoon"] < m["TRANSITION:fixed_evening"]
+
     assert m["SUNRISE"] < m["TRANSITION:peak_stress"]
     assert m["TRANSITION:peak_stress"] < m["TRANSITION:tree_shade"]
     assert m["TRANSITION:tree_shade"] < m["TRANSITION:decline"]
     assert m["TRANSITION:decline"] < m["SUNSET"]
     assert m["SUNSET"] < m["TRANSITION:evening_settle"]
-    # midnight_posture is earliest (today's 00:00)
+    # fixed_midnight is earliest (today's 00:00)
     for key in (
-        "TRANSITION:pre_dawn",
+        "TRANSITION:fixed_pre_dawn",
+        "TRANSITION:fixed_midday",
+        "TRANSITION:fixed_afternoon",
+        "TRANSITION:fixed_evening",
         "SUNRISE",
         "TRANSITION:peak_stress",
         "TRANSITION:tree_shade",
@@ -138,6 +151,6 @@ def test_milestones_ordered_sensibly_through_day():
         "SUNSET",
         "TRANSITION:evening_settle",
     ):
-        assert m["TRANSITION:midnight_posture"] < m[key], (
-            f"midnight_posture ({m['TRANSITION:midnight_posture']}) should be before {key} ({m[key]})"
+        assert m["TRANSITION:fixed_midnight"] < m[key], (
+            f"fixed_midnight ({m['TRANSITION:fixed_midnight']}) should be before {key} ({m[key]})"
         )

@@ -36,11 +36,10 @@ def iris_planner():
     cfg.OPENCLAW_URL = "x"
     cfg.OPENCLAW_TOKEN = "x"
     cfg.OPENCLAW_SESSION_KEY = "x"
-    cfg.OPENCLAW_OPUS_AGENT_ID = "iris-planner"
-    cfg.OPENCLAW_OPUS_SESSION_KEY = "x"
-    cfg.OPENCLAW_LOCAL_AGENT_ID = "iris-planner-local"
+    cfg.OPENCLAW_OPUS_AGENT_ID = "iris-planner-cloud"
+    cfg.OPENCLAW_OPUS_SESSION_KEY = "agent:iris-planner-cloud:main"
+    cfg.OPENCLAW_LOCAL_AGENT_ID = "iris-planner"
     cfg.OPENCLAW_LOCAL_SESSION_KEY = "x"
-    cfg.ENABLE_LOCAL_PLANNER = False
     sys.modules["config"] = cfg
 
     spec = importlib.util.spec_from_file_location(
@@ -59,13 +58,16 @@ class TestComposePreamble:
         assert isinstance(opus, str) and len(opus) > 1000
         assert isinstance(local, str) and len(local) > 1000
 
-    def test_opus_is_strict_superset_of_local(self, iris_planner):
-        """Everything in local is also in opus (CORE is included in both)."""
+    def test_both_instances_include_core(self, iris_planner):
+        """Both prompt variants carry the shared standing directives and CORE."""
         opus = iris_planner._compose_preamble("opus")
         local = iris_planner._compose_preamble("local")
-        # Opus = directives + CORE + EXTENDED. Local = directives + CORE.
-        # So local must be a prefix of opus (byte-exact) when the split is clean.
-        assert opus.startswith(local), "local preamble must be a prefix of opus (same directives + CORE)"
+        assert iris_planner._STANDING_DIRECTIVES in opus
+        assert iris_planner._STANDING_DIRECTIVES in local
+        assert iris_planner._PLANNER_CORE in opus
+        assert iris_planner._PLANNER_CORE in local
+        assert iris_planner._LOCAL_GEMMA_DIRECTIVES in local
+        assert iris_planner._LOCAL_GEMMA_DIRECTIVES not in opus
 
     def test_lite_smaller_than_full(self, iris_planner):
         opus = iris_planner._compose_preamble("opus")
@@ -80,10 +82,10 @@ class TestComposePreamble:
             f"(≈ 52k Claude tokens / 60k gemma tokens)"
         )
 
-    def test_default_instance_is_opus(self, iris_planner):
+    def test_default_instance_is_local(self, iris_planner):
         default = iris_planner._compose_preamble()
-        opus = iris_planner._compose_preamble("opus")
-        assert default == opus
+        local = iris_planner._compose_preamble("local")
+        assert default == local
 
 
 class TestSplitInvariants:
@@ -150,7 +152,7 @@ class TestSplitInvariants:
 
 
 class TestPromptBuilders:
-    @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION"])
+    @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION", "MANUAL"])
     @pytest.mark.parametrize("instance", ["opus", "local"])
     def test_builder_renders_for_every_event_instance_pair(self, iris_planner, event, instance):
         builder = iris_planner._PROMPT_BUILDERS[event]
@@ -159,16 +161,16 @@ class TestPromptBuilders:
         # Every prompt carries the standing directives so Iris sees the MCP tool inventory.
         assert "22 tools" in message
 
-    @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION"])
+    @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION", "MANUAL"])
     def test_local_prompt_smaller_than_opus_for_every_event(self, iris_planner, event):
         builder = iris_planner._PROMPT_BUILDERS[event]
         opus_msg = builder("<context stub>", "<label stub>", "opus")
         local_msg = builder("<context stub>", "<label stub>", "local")
         assert len(local_msg) < len(opus_msg)
 
-    def test_builder_default_instance_is_opus(self, iris_planner):
-        """Back-compat: existing callers that don't pass `instance` get opus."""
+    def test_builder_default_instance_is_local(self, iris_planner):
+        """Contract v1.5: existing callers that don't pass `instance` get local."""
         builder = iris_planner._PROMPT_BUILDERS["SUNRISE"]
         default_msg = builder("<context stub>", "<label stub>")
-        opus_msg = builder("<context stub>", "<label stub>", "opus")
-        assert default_msg == opus_msg
+        local_msg = builder("<context stub>", "<label stub>", "local")
+        assert default_msg == local_msg

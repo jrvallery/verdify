@@ -78,8 +78,8 @@ class TestPlannerConfig:
         sys.path.insert(0, "/srv/verdify/ingestor")
         from ai_config import ai
 
-        assert ai.model_name("planner") == "claude-opus-4-6"
-        assert ai.config["models"]["planner"]["provider"] == "anthropic"
+        assert ai.model_name("planner") == "gemma4-26b"
+        assert ai.config["models"]["planner"]["provider"] == "vllm"
 
     def test_anthropic_key_exists(self):
         key_path = "/mnt/jason/agents/shared/credentials/anthropic_api_key.txt"

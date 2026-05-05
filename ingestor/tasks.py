@@ -885,9 +885,10 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             WITH latest_required AS (
                 SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body,
                        row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC) AS rn
-                  FROM plan_delivery_log
+                 FROM plan_delivery_log
                  WHERE event_type IN ('SUNRISE', 'SUNSET')
                    AND delivered_at > now() - interval '18 hours'
+                   AND event_label NOT ILIKE 'validation%ack-only%'
             )
             SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body
               FROM latest_required
@@ -2863,14 +2864,17 @@ def _compute_milestones() -> dict[str, datetime]:
 
     _milestones_cache = {
         "SUNRISE": s["sunrise"],
+        "TRANSITION:fixed_midnight": midnight,
+        "TRANSITION:fixed_pre_dawn": midnight + _td(hours=6),
+        "TRANSITION:fixed_midday": midnight + _td(hours=12),
+        "TRANSITION:fixed_afternoon": midnight + _td(hours=16),
+        "TRANSITION:fixed_evening": midnight + _td(hours=20),
         "TRANSITION:peak_stress": noon + _td(hours=2),
         "TRANSITION:tree_shade": noon + _td(hours=4),
         "TRANSITION:decline": s["sunset"] - _td(hours=1),
         "SUNSET": s["sunset"],
         # Evening + overnight (closes the 10h blind spot after SUNSET)
         "TRANSITION:evening_settle": s["sunset"] + _td(hours=1),
-        "TRANSITION:midnight_posture": midnight,
-        "TRANSITION:pre_dawn": s["sunrise"] - _td(hours=1),
     }
 
     # Load any previously fired milestones from disk (in case of restart)
@@ -3089,9 +3093,8 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
             log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
 
             # Gather context and send to Iris (blocking — runs in executor).
-            # SUNRISE/SUNSET/MIDNIGHT always route to opus per contract;
-            # TRANSITION routes to local. classify_severity is a no-op for
-            # those types so SeverityContext stays default.
+            # Contract v1.5 routes normal solar/fixed-boundary transitions to
+            # local Gemma; cloud/opus is explicit override only.
             loop = asyncio.get_event_loop()
             context = await loop.run_in_executor(None, gather_context)
             severity = classify_severity(event_type, SeverityContext())
@@ -3111,8 +3114,8 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 context = await loop.run_in_executor(None, gather_context)
                 # Severity inputs from latest forecast vs previous (Δvpd, Δtemp).
                 # Until those deltas are wired in here, classify_severity returns
-                # 'minor' so FORECAST routes to local — the cheap peer handles
-                # routine forecast refreshes; opus only fires on majors.
+                # 'minor'. In contract v1.5 both minor and major forecast
+                # refreshes stay local unless the caller explicitly overrides.
                 severity = classify_severity("FORECAST", SeverityContext())
                 instance = pick_instance("FORECAST", severity)
                 await _deliver_and_log(
@@ -3142,8 +3145,8 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 # Pull severity hints from the trigger payload if present.
                 # max_abs_deviation comes from alert_monitor's deviation
                 # writer (alert_monitor stamps it on the trigger when the
-                # band excursion exceeds 0.15 normalized). Falling back to
-                # 'minor' routes to local; majors escalate to opus.
+                # band excursion exceeds 0.15 normalized). In contract v1.5
+                # both severities route local unless explicitly escalated.
                 severity_ctx = SeverityContext(
                     max_abs_deviation=trigger_data.get("max_abs_deviation"),
                     consecutive_deviation_cycles=trigger_data.get("consecutive_cycles"),

@@ -244,6 +244,18 @@ class TestPlanRunResponse:
         r = PlanRunResponse(ok=True, note="sent")
         assert r.ok is True
 
+    def test_audit_fields(self):
+        r = PlanRunResponse(
+            ok=True,
+            trigger_id="00000000-0000-0000-0000-000000000001",
+            event_type="MANUAL",
+            planner_instance="local",
+            session_key="agent:iris-planner:main",
+            status="pending",
+        )
+        assert r.event_type == "MANUAL"
+        assert r.planner_instance == "local"
+
     def test_error(self):
         r = PlanRunResponse(ok=False, error="OpenClaw unreachable")
         assert r.error.startswith("OpenClaw")

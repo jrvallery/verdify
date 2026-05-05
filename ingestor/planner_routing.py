@@ -1,11 +1,12 @@
-"""planner_routing.py — Sprint 25 dual-Iris routing policy.
+"""planner_routing.py — local-first planner routing policy.
 
-Pure routing logic for the dual-Iris rollout (contract v1.4 §2.G).
+Pure routing logic for the planner rollout (contract v1.5).
 Responsibilities:
   - Load routing thresholds + SLA timeouts from config/ai.yaml.
   - Classify a trigger's severity from live context (forecast delta, deviation
     magnitude, plan age).
-  - Pick the right Iris instance (opus vs local) given trigger type + severity.
+  - Pick the right Iris instance (local vs explicit opus escalation) given
+    trigger type + severity.
   - Report the SLA timeout for a (trigger_type, instance) pair so alert_monitor
     can detect stalled triggers.
 
@@ -13,10 +14,8 @@ No side effects, no DB, no HTTP. Consumed by `tasks.py::planning_heartbeat`
 and `tasks.py::alert_monitor`. Tested in isolation via a parametrized matrix.
 
 Config fallbacks: if ai.yaml sections are missing, module defaults match the
-contract literal values. Production MUST have the sections populated before
-the Sprint 25 tactical_heartbeat task ships — missing config silently falls
-back to defaults which is correct for opus-only operation but lets the local
-SLA table be wrong if the default ever drifts from the contract.
+contract literal values. Production should keep the sections populated so SLA
+updates are auditable without a code change.
 """
 
 from __future__ import annotations
@@ -46,7 +45,7 @@ TriggerType = Literal[
 ]
 
 
-# ── Defaults (contract v1.4 §2.G) — used when ai.yaml sections are missing ──
+# ── Defaults (contract v1.5) — used when ai.yaml sections are missing ──
 
 _DEFAULT_ROUTING = {
     "forecast_major_delta_vpd_kPa": 0.5,
@@ -57,15 +56,19 @@ _DEFAULT_ROUTING = {
 
 # Minutes per (instance, trigger_type). n/a combos not in the mapping.
 _DEFAULT_SLA_MIN = {
+    ("local", "SUNRISE"): 30,
+    ("local", "SUNSET"): 30,
+    ("local", "MIDNIGHT"): 30,
+    ("local", "TRANSITION"): 30,
+    ("local", "FORECAST"): 60,
+    ("local", "DEVIATION"): 20,
+    ("local", "HEARTBEAT"): 15,
+    # Explicit cloud escalation targets. Normal routing does not select these.
     ("opus", "SUNRISE"): 15,
     ("opus", "SUNSET"): 15,
     ("opus", "MIDNIGHT"): 15,
     ("opus", "FORECAST"): 30,
     ("opus", "DEVIATION"): 10,
-    ("local", "TRANSITION"): 30,
-    ("local", "FORECAST"): 60,
-    ("local", "DEVIATION"): 20,
-    ("local", "HEARTBEAT"): 15,
 }
 
 # (trigger_type, severity) → default instance. Caller may override.
@@ -75,15 +78,15 @@ _ROUTING_TABLE: dict[tuple[TriggerType, Severity], Instance] = {
     ("TRANSITION", "minor"): "local",
     ("TRANSITION", "major"): "local",
     ("FORECAST", "minor"): "local",
-    ("FORECAST", "major"): "opus",
+    ("FORECAST", "major"): "local",
     ("DEVIATION", "minor"): "local",
-    ("DEVIATION", "major"): "opus",
-    ("SUNRISE", "minor"): "opus",
-    ("SUNRISE", "major"): "opus",
-    ("SUNSET", "minor"): "opus",
-    ("SUNSET", "major"): "opus",
-    ("MIDNIGHT", "minor"): "opus",
-    ("MIDNIGHT", "major"): "opus",
+    ("DEVIATION", "major"): "local",
+    ("SUNRISE", "minor"): "local",
+    ("SUNRISE", "major"): "local",
+    ("SUNSET", "minor"): "local",
+    ("SUNSET", "major"): "local",
+    ("MIDNIGHT", "minor"): "local",
+    ("MIDNIGHT", "major"): "local",
 }
 
 # Default config path. Override for tests via load_routing_config(path=...).
@@ -159,12 +162,11 @@ def classify_severity(
 ) -> Severity:
     """Decide 'minor' vs 'major' for the given trigger + live context.
 
-    Rules per contract v1.4 §2.G:
+    Rules per contract v1.5:
       FORECAST: major if |Δvpd_outdoor| > 0.5 kPa OR |Δtemp_F| > 10°F
       DEVIATION: major if max_abs_deviation > 0.15 OR prolonged >3 cycles
-      Otherwise trigger-specific defaults route both severities the same
-        (SUNRISE/SUNSET/MIDNIGHT always opus; TRANSITION/HEARTBEAT always
-        local), so severity classification is a no-op for those types.
+      Otherwise trigger-specific defaults route both severities to local, so
+        severity classification is a no-op for those types.
 
     Unknown trigger types default to 'minor' — conservative.
     """
@@ -202,16 +204,15 @@ def pick_instance(
     *,
     override: Instance | None = None,
 ) -> Instance:
-    """Select opus vs local per policy. Override wins unconditionally.
+    """Select local vs explicit opus escalation per policy.
 
-    MANUAL: always follows override; if caller provides no override, defaults
-    to 'opus' (safer; paid peer is the more capable one for ad-hoc operator
-    debug).
+    Override wins unconditionally. MANUAL defaults to local so operator smoke
+    tests exercise the same local Gemma-on-cortext path as scheduled planning.
     """
     if override is not None:
         return override
     if trigger_type == "MANUAL":
-        return "opus"
+        return "local"
     return _ROUTING_TABLE.get((trigger_type, severity), "local")
 
 
@@ -223,9 +224,9 @@ def sla_for(
 ) -> timedelta | None:
     """Look up the SLA timeout for a (trigger, instance) pair.
 
-    Returns None when the combination has no SLA defined (e.g. opus +
-    HEARTBEAT doesn't exist in the policy). alert_monitor should skip rows
-    with None SLA rather than alert immediately.
+    Returns None when the combination has no SLA defined (e.g. opus + HEARTBEAT
+    doesn't exist in the escalation table). alert_monitor should skip rows with
+    None SLA rather than alert immediately.
     """
     cfg = config or load_routing_config()
     minutes = cfg.sla_min_by_pair.get((instance, trigger_type))

@@ -36,13 +36,13 @@ validation before a plan can become active. Detailed work is split across
 
 | Agent | Sprint | Status | Detail |
 |---|---|---|---|
-| `coordinator` | v1.4 landed | **Cross-cutting landed this cycle**: contract `iris-planner-contract.md` v1.4 (`c88490a`), migration 093 applied to prod (`b624f5c` + live ALTER ~08:05 MDT), Pydantic v1.4 audit fields (`d822485`), schema CI unbreak (`ec9e1df`) | `docs/backlog/cross-cutting.md` |
-| `ingestor` | `sprint-25` pending | Waits on genai Sub-scope B MCP PR. Post-24.7 staging already landed: `planner_routing.py` with v1.4 defaults + OPENCLAW_{OPUS,LOCAL}_{AGENT_ID,SESSION_KEY} env vars in `config.py`. Will consume `send_to_iris(instance=)` + `acknowledge_trigger` when genai ships | `docs/backlog/ingestor.md` |
-| `genai` | `sprint-3-B` pending | Sub-scope A (prompt split `_PLANNER_CORE` + `_PLANNER_EXTENDED`) committed local on `genai/sprint-3-mcp-contract` (`8bbac41`). Sub-scope B blocked on Q5 FastMCP header smoke test — Iris has `53141f39` in her queue | `docs/backlog/genai.md` |
+| `coordinator` | v1.5 landed | **Cross-cutting landed this cycle**: local-first planner contract v1.5, strict audited `set_plan`/`set_tunable` trigger correlation, manual `plan_run` ledger parity, and schema response fields for planner audit metadata | `docs/backlog/cross-cutting.md` |
+| `ingestor` | planner hardening in progress | Local-first routing is active, trigger-scoped local OpenClaw sessions are used, and fixed 00:00/06:00/12:00/16:00/20:00 boundary triggers now supplement sunrise/sunset, forecast, deviation, and solar-derived transition triggers. Remaining: no-missed-sunrise ledger and SLA timeout lifecycle | `docs/backlog/ingestor.md` |
+| `genai` | planner hardening in progress | Local Gemma4 prompt path is live with strict audit headers, validation-mode handling, local context-budget guidance, and MANUAL `plan_run` parity. Remaining: distilled site/lesson digest and fuller Gemma-sized context-pack versioning | `docs/backlog/genai.md` |
 | `web` | — | Sprint-4 Grafana panels shipped via PR #16 (`9a9a05e`) this morning. No active sprint | `docs/backlog/web.md` |
 | `firmware` | phase-1+ | Phase-0 shipped as sprint-10 (`8d2656d`) + sprints 7-9 overnight (`8c64030`, `dda9057`, and the 212b1c5 fog-window fix). No active sprint queued | `docs/backlog/firmware.md` |
 | `saas` | `sprint-10` shipped | Rescope landed. Open task: apply migration 090 to prod DB; unblocked (coordinator has `docker exec psql` access) but awaits operator authorization | `docs/backlog/saas.md` |
-| `iris-dev` | rollout in flight | OpenClaw config done (context fix + `iris-planner-local` profile). Session boot + smoke test queued post-sprint-25. /loop operating mode is permanent | — |
+| `iris-dev` | local planner live | OpenClaw `iris-planner` points to `vllm/gemma4-26b` on cortext with no fallback. Live validation wrote `iris-20260504-2108` via local Gemma and correlated it to the trigger ledger after tightening MCP audit enforcement | — |
 
 ## Recent ships (2026-04-19 → 2026-04-20)
 
@@ -96,31 +96,34 @@ Per-agent counters. Past global sprints (17–22) map into individual agents' hi
 - **#6** DRAFT — `copilot/fix-8a7fddcf-*` (voice-note ingestion; dormant Aug 2025, no recent activity)
 - All contract-v1.4-era PRs (#15, #16) merged this morning. No agent PRs outstanding.
 
-## Contract v1.4 rollout — current state
+## Contract v1.5 rollout — current state
 
 **Phase 1 (contract + schema) ✅ complete** (iris-dev + coordinator):
-- Contract `docs/iris-planner-contract.md` v1.4 landed
-- Migration 093 applied to prod TimescaleDB
-- Pydantic v1.4 audit fields in `verdify_schemas/`
-- Routing + SLA config in `config/ai.yaml`
-- OpenClaw config: context window fix + `iris-planner-local` agent profile staged in `~/.openclaw/openclaw.json`
+- Contract `docs/iris-planner-contract.md` v1.5 landed
+- Pydantic planner response audit fields in `verdify_schemas/`
+- Routing + SLA config in `config/ai.yaml` now local-first
+- OpenClaw config: `iris-planner` targets local `vllm/gemma4-26b` on cortext
 
-**Phase 2 (MCP + dispatch) 🟡 in flight** (genai):
-- Sub-scope A (prompt split) ✅ committed local `8bbac41`
-- Sub-scope B blocked on Q5 FastMCP header smoke test — awaiting Iris
+**Phase 2 (MCP + dispatch) ✅ complete for first hardening slice** (genai/coordinator):
+- `plan_run` creates MANUAL trigger ledger rows and sends through local `send_to_iris`
+- `set_plan` / `set_tunable` reject planner-owned writes without exact `trigger_id`
+- Successful audited `set_plan` / `set_tunable` calls mark the matching `plan_delivery_log` row `plan_written` immediately
 
-**Phase 3 (ingestor consumption) 🔴 blocked** (ingestor):
-- Sprint-25 omnibus waits on Phase 2 Sub-scope B
-- Pre-staged: `planner_routing.py`, env vars, new trigger_id insert path
+**Phase 3 (ingestor consumption) 🟡 in progress** (ingestor):
+- Local-first routing and trigger-scoped sessions live
+- Fixed-boundary triggers added
+- Remaining: expected-trigger ledger for missed startup windows and per-trigger timeout lifecycle
 
-**Phase 4 (session boot + smoke test) 🔴 blocked** (iris-dev):
-- Waits on Phases 2 + 3 merging so the contract is end-to-end live
+**Phase 4 (session boot + smoke test) ✅ complete** (iris-dev/coordinator):
+- Local smoke covered MANUAL, FORECAST, DEVIATION, TRANSITION, SUNRISE, and SUNSET validation rows
+- Local full-plan catch-up wrote `iris-20260504-2108`
+- Active/future registry audit found zero violations
 
-**Phase 5 (cutover) 🔴 blocked** (ingestor):
-- First-week HEARTBEAT `X-Heartbeat-Readonly: true` safety window
-- TRANSITION + minor FORECAST/DEVIATION → `instance="local"`
+**Phase 5 (cutover) 🟡 in progress** (ingestor):
+- Routine SUNRISE/SUNSET/MIDNIGHT/TRANSITION/FORECAST/DEVIATION/HEARTBEAT/MANUAL now route local by default
+- Cloud/opus is explicit escalation only
 
-The single un-blocker for everything downstream is Iris's Q5 answer.
+Remaining high-leverage work: expected-trigger ledger, timeout lifecycle, model/status surface, and distilled site/lesson context digest.
 
 ---
 
