@@ -57,13 +57,13 @@ OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "iris-hooks-verdify-2026-04")
 
 # Contract v1.5: local Gemma-on-cortext is the default iris-planner path.
 # Cloud/opus is kept as an explicit operator escalation target only.
-OPENCLAW_LOCAL_AGENT_ID = os.environ.get("OPENCLAW_LOCAL_AGENT_ID", "iris-planner")
+OPENCLAW_LOCAL_AGENT_ID = os.environ.get("OPENCLAW_LOCAL_AGENT_ID", "iris-planner-local")
 # Prefix for trigger-scoped local sessions. send_to_iris appends
 # `:trigger:<uuid>` so Gemma gets a fresh bounded context for every planning
 # run; historical memory comes from the gathered DB/context pack.
-OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent:iris-planner:main")
-OPENCLAW_OPUS_AGENT_ID = os.environ.get("OPENCLAW_OPUS_AGENT_ID", "iris-planner-cloud")
-OPENCLAW_OPUS_SESSION_KEY = os.environ.get("OPENCLAW_OPUS_SESSION_KEY", "agent:iris-planner-cloud:main")
+OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent:iris-planner-local:main")
+OPENCLAW_OPUS_AGENT_ID = os.environ.get("OPENCLAW_OPUS_AGENT_ID", "iris-planner")
+OPENCLAW_OPUS_SESSION_KEY = os.environ.get("OPENCLAW_OPUS_SESSION_KEY", "agent:iris-planner:main")
 # DEPRECATED legacy alias. Defaults to the local planner session in v1.5.
 OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_LOCAL_SESSION_KEY)
 

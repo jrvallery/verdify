@@ -59,11 +59,72 @@ def post_slack(text):
         log.warning("Slack post failed: %s", e)
 
 
+async def evaluate_due_outcomes(conn):
+    """Keep forecast_action_log outcome complete for the public trust ledger."""
+    result = await conn.execute(
+        """
+        WITH scored AS (
+            SELECT
+                fl.id,
+                fl.action_taken,
+                before_window.stress_score AS before_stress_score,
+                after_window.stress_score AS after_stress_score
+            FROM forecast_action_log fl
+            LEFT JOIN LATERAL (
+                SELECT avg(
+                    (CASE WHEN temp_avg > 85 THEN 1 ELSE 0 END)
+                  + (CASE WHEN temp_avg < 45 THEN 1 ELSE 0 END)
+                  + (CASE WHEN vpd_avg > 1.4 THEN 1 ELSE 0 END)
+                  + (CASE WHEN vpd_avg < 0.35 THEN 1 ELSE 0 END)
+                ) AS stress_score
+                FROM climate
+                WHERE ts >= fl.triggered_at - interval '3 hours'
+                  AND ts < fl.triggered_at
+            ) before_window ON true
+            LEFT JOIN LATERAL (
+                SELECT avg(
+                    (CASE WHEN temp_avg > 85 THEN 1 ELSE 0 END)
+                  + (CASE WHEN temp_avg < 45 THEN 1 ELSE 0 END)
+                  + (CASE WHEN vpd_avg > 1.4 THEN 1 ELSE 0 END)
+                  + (CASE WHEN vpd_avg < 0.35 THEN 1 ELSE 0 END)
+                ) AS stress_score
+                FROM climate
+                WHERE ts > fl.triggered_at
+                  AND ts <= fl.triggered_at + interval '6 hours'
+            ) after_window ON true
+            WHERE (fl.outcome IS NULL OR fl.outcome = 'pending')
+              AND fl.triggered_at <= now() - interval '6 hours'
+        )
+        UPDATE forecast_action_log fl
+        SET outcome = CASE
+                WHEN s.action_taken = 'evaluated_ok' THEN 'no_action_required'
+                WHEN s.after_stress_score IS NULL THEN 'insufficient_followup_data'
+                WHEN COALESCE(s.after_stress_score, 0) <= COALESCE(s.before_stress_score, 0) THEN 'climate_recovered'
+                ELSE 'no_clear_improvement'
+            END,
+            outcome_evaluated_at = now(),
+            outcome_metrics = jsonb_build_object(
+                'before_stress_score', s.before_stress_score,
+                'after_stress_score', s.after_stress_score,
+                'window', '3h_before_6h_after',
+                'evaluator', 'forecast-action-engine'
+            )
+        FROM scored s
+        WHERE fl.id = s.id
+        """
+    )
+    updated = int(result.rsplit(" ", 1)[-1])
+    if updated:
+        log.info("Evaluated %d due forecast-action outcome rows", updated)
+
+
 async def main():
     conn = await asyncpg.connect(get_db_url())
     now = datetime.now(UTC)
 
     try:
+        await evaluate_due_outcomes(conn)
+
         # Get enabled rules ordered by priority
         rules = await conn.fetch("SELECT * FROM forecast_action_rules WHERE enabled = true ORDER BY priority")
 
@@ -116,10 +177,13 @@ async def main():
             if trigger_row is None:
                 # Condition not met — log as evaluated_ok
                 await conn.execute(
-                    "INSERT INTO forecast_action_log (rule_id, rule_name, action_taken, forecast_condition) VALUES ($1, $2, 'evaluated_ok', $3)",
+                    "INSERT INTO forecast_action_log "
+                    "(rule_id, rule_name, action_taken, forecast_condition, outcome, outcome_evaluated_at, outcome_metrics) "
+                    "VALUES ($1, $2, 'evaluated_ok', $3, 'no_action_required', now(), $4)",
                     rule_id,
                     name,
                     json.dumps({"metric": metric, "threshold": threshold, "window": window}),
+                    json.dumps({"evaluator": "forecast-action-engine", "reason": "condition_not_met"}),
                 )
                 continue
 
@@ -164,8 +228,9 @@ async def main():
                     )
 
                 await conn.execute(
-                    "INSERT INTO forecast_action_log (rule_id, rule_name, triggered_at, forecast_condition, action_taken, plan_id, param, old_value, new_value) "
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                    "INSERT INTO forecast_action_log "
+                    "(rule_id, rule_name, triggered_at, forecast_condition, action_taken, plan_id, param, old_value, new_value, outcome) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')",
                     rule_id,
                     name,
                     now,
@@ -194,8 +259,9 @@ async def main():
                     post_slack(msg)
 
                 await conn.execute(
-                    "INSERT INTO forecast_action_log (rule_id, rule_name, triggered_at, forecast_condition, action_taken) "
-                    "VALUES ($1, $2, $3, $4, $5)",
+                    "INSERT INTO forecast_action_log "
+                    "(rule_id, rule_name, triggered_at, forecast_condition, action_taken, outcome) "
+                    "VALUES ($1, $2, $3, $4, $5, 'pending')",
                     rule_id,
                     name,
                     now,
@@ -206,8 +272,9 @@ async def main():
 
             elif action_type == "log":
                 await conn.execute(
-                    "INSERT INTO forecast_action_log (rule_id, rule_name, triggered_at, forecast_condition, action_taken) "
-                    "VALUES ($1, $2, $3, $4, 'logged')",
+                    "INSERT INTO forecast_action_log "
+                    "(rule_id, rule_name, triggered_at, forecast_condition, action_taken, outcome) "
+                    "VALUES ($1, $2, $3, $4, 'logged', 'pending')",
                     rule_id,
                     name,
                     now,

@@ -76,7 +76,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)",
+      "description": "Average electric cost per day across the last 30 completed daily summaries.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -125,11 +125,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_electric), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_electric)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "refId": "A"
         }
       ],
-      "title": "Electric Cost",
+      "title": "Electric $/Day (30-Day Average)",
       "type": "stat"
     },
     {
@@ -137,7 +137,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Gas cost = heat2 runtime \u00d7 75K BTU \u00d7 $0.83/therm",
+      "description": "Average gas cost per day across the last 30 completed daily summaries.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -186,11 +186,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_gas), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_gas)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "refId": "A"
         }
       ],
-      "title": "Gas Cost",
+      "title": "Gas $/Day (30-Day Average)",
       "type": "stat"
     },
     {
@@ -198,7 +198,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Water cost = gallons used \u00d7 $0.00484/gal",
+      "description": "Average water cost per day across the last 30 completed daily summaries.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -247,11 +247,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_water), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_water)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "refId": "A"
         }
       ],
-      "title": "Water Cost",
+      "title": "Water $/Day (30-Day Average)",
       "type": "stat"
     },
     {
@@ -259,7 +259,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Sum of electric + gas + water costs for the selected period.",
+      "description": "Average total cost per day across the last 30 completed daily summaries.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,11 +308,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_total), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "refId": "A"
         }
       ],
-      "title": "Total Cost",
+      "title": "Total $/Day (30-Day Average)",
       "type": "stat"
     },
     {
@@ -1176,7 +1176,7 @@
       }
     },
     {
-      "description": "% of greenhouse electricity consumed during solar hours (8AM-5PM)",
+      "description": "Percent of greenhouse electrical load consumed during solar hours across the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -1210,14 +1210,14 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "WITH h AS (SELECT extract(hour from ts AT TIME ZONE 'America/Denver')::int as hr, avg(watts_total)::numeric as w FROM energy WHERE $__timeFilter(ts) GROUP BY 1) SELECT now() as time, round(sum(CASE WHEN hr BETWEEN 8 AND 17 THEN w ELSE 0 END)/NULLIF(sum(w),0)*100, 1) as value FROM h"
+          "rawSql": "SELECT now() as time, round((100.0 * SUM(watts_total) FILTER (WHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17) / NULLIF(SUM(watts_total), 0))::numeric, 1) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date"
         }
       ],
-      "title": "Solar Aligned",
+      "title": "30-Day Solar-Aligned Load",
       "type": "stat"
     },
     {
-      "description": "% of overnight load covered by one Powerwall (13.5 kWh)",
+      "description": "Percent of average overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 200,
@@ -1255,10 +1255,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round((13.5 / NULLIF(avg(watts_total)::numeric * 14 / 1000, 0) * 100)::numeric, 0) as value FROM energy WHERE $__timeFilter(ts) AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "SELECT now() as time, round((13.5 / NULLIF(avg(watts_total)::numeric * 14 / 1000, 0) * 100)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
-      "title": "Powerwall Coverage",
+      "title": "30-Day Powerwall Coverage",
       "type": "stat"
     },
     {
@@ -1297,10 +1297,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE $__timeFilter(ts) AND extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
+          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
         }
       ],
-      "title": "Avg Watts (Daytime)",
+      "title": "Daytime Watts (30-Day Average)",
       "type": "stat"
     },
     {
@@ -1339,10 +1339,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE $__timeFilter(ts) AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
-      "title": "Avg Watts (Night)",
+      "title": "Night Watts (30-Day Average)",
       "type": "stat"
     },
     {
@@ -1381,10 +1381,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric * 24 / 1000, 1) as value FROM energy WHERE $__timeFilter(ts)"
+          "rawSql": "SELECT now() as time, round(avg(kwh_estimated)::numeric, 1) as value FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND kwh_estimated IS NOT NULL"
         }
       ],
-      "title": "Est. kWh/day",
+      "title": "kWh/day (30-Day Average)",
       "type": "stat"
     },
     {
@@ -1619,7 +1619,7 @@
     {
       "id": 201,
       "type": "stat",
-      "title": "Total Cost",
+      "title": "Total $/Day (30-Day Average)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1636,7 +1636,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_total), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1661,12 +1661,12 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Sum of electric + gas + water costs for the selected period."
+      "description": "Average total cost per day across the last 30 completed daily summaries."
     },
     {
       "id": 203,
       "type": "stat",
-      "title": "Gas",
+      "title": "Gas $/Day (30-Day Average)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1683,7 +1683,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_gas), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_gas)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1708,12 +1708,12 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Gas cost = heat2 runtime \u00d7 75K BTU \u00d7 $0.83/therm"
+      "description": "Average gas cost per day across the last 30 completed daily summaries."
     },
     {
       "id": 204,
       "type": "stat",
-      "title": "Water",
+      "title": "Water $/Day (30-Day Average)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1730,7 +1730,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_water), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_water)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1755,12 +1755,12 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Water cost = gallons used \u00d7 $0.00484/gal"
+      "description": "Average water cost per day across the last 30 completed daily summaries."
     },
     {
       "id": 202,
       "type": "stat",
-      "title": "Electric",
+      "title": "Electric $/Day (30-Day Average)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1777,7 +1777,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(cost_electric), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_electric)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1802,7 +1802,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)"
+      "description": "Average electric cost per day across the last 30 completed daily summaries."
     }
   ],
   "annotations": {

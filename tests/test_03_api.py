@@ -21,6 +21,36 @@ def api_get(path: str, host: str = "api.verdify.ai") -> tuple[int, str]:
     return status, body
 
 
+def api_post_json(path: str, payload: dict, host: str = "api.verdify.ai") -> tuple[int, str]:
+    """POST JSON to the public API via Traefik."""
+    result = subprocess.run(
+        [
+            "curl",
+            "-sk",
+            "-X",
+            "POST",
+            f"https://127.0.0.1{path}",
+            "-H",
+            f"Host: {host}",
+            "-H",
+            "Origin: https://verdify.ai",
+            "-H",
+            "Content-Type: application/json",
+            "--data",
+            json.dumps(payload),
+            "-w",
+            "\n%{http_code}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    lines = result.stdout.strip().rsplit("\n", 1)
+    body = lines[0] if len(lines) > 1 else ""
+    status = int(lines[-1]) if lines[-1].isdigit() else 0
+    return status, body
+
+
 class TestAPIHealth:
     """API must be reachable and healthy."""
 
@@ -48,6 +78,21 @@ class TestAPIHealth:
         data = json.loads(body)
         assert data["overall_status"] in ("ok", "warn", "fail")
         assert isinstance(data["checks"], list)
+
+    def test_public_contact_honeypot_noop_accepts_request(self):
+        status, body = api_post_json(
+            "/api/v1/public/contact",
+            {
+                "name": "Verdify Test",
+                "email": "test@example.invalid",
+                "topic": "other",
+                "message": "This honeypot-filled request should be accepted without creating a contact row.",
+                "website": "https://example.invalid",
+            },
+        )
+        assert status == 202, f"Public contact honeypot path returned {status}: {body}"
+        data = json.loads(body)
+        assert data["ok"] is True
 
     def test_mutating_routes_require_operator_key(self):
         result = subprocess.run(

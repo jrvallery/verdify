@@ -76,9 +76,15 @@ context:
 #   - ingestor/planner_routing.py (classify_severity + pick_instance + sla_for)
 #   - ingestor/alert_monitor rule 7 (SLA-breach detection)
 # Contract spec: docs/iris-planner-contract.md §2.F (SLA) + §2.G (routing).
-# Default target is local Gemma-on-cortext via OpenClaw agent `iris-planner`.
+# Default routine target is local Gemma-on-cortext via OpenClaw agent `iris-planner-local`.
 # Opus entries exist only for explicit operator escalation.
 planner_routing:
+  # Launch override, 2026-05-07: local Gemma overflowed during required
+  # SUNRISE full-plan cycles on May 6-7. Keep lower-risk FORECAST /
+  # TRANSITION work local, but route required full plans through Opus until
+  # the full-plan context is trimmed and a local bake passes.
+  required_full_plan_instance: opus
+
   # Severity thresholds — ingestor.classify_severity returns "major" when any
   # is exceeded; "minor" otherwise. Both severities route to local by default.
   forecast_major_delta_vpd_kPa: 0.5    # |Δvpd_outdoor| above → major FORECAST
