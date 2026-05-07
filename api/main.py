@@ -8,18 +8,28 @@ Usage:
     uvicorn main:app --host 0.0.0.0 --port 8300
 """
 
+import asyncio
+import hashlib
 import hmac
+import ipaddress
 import json
 import os
+import re
+import smtplib
 import sys
+import urllib.parse
+import urllib.request
 from contextlib import asynccontextmanager
 from datetime import date
+from email.message import EmailMessage
+from email.utils import formataddr, make_msgid
 from typing import Annotated
 
 import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, ValidationError
 
 
 def _coerce_jsonb(row_dict: dict, *keys: str) -> dict:
@@ -104,7 +114,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://verdify.ai", "https://www.verdify.ai", "http://localhost:8080"],
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -125,10 +135,265 @@ async def noindex_api_responses(request: Request, call_next):
 DEFAULT_GREENHOUSE = "vallery"
 WRITE_API_KEY_ENV = "VERDIFY_WRITE_API_KEY"
 ALLOW_UNAUTHENTICATED_WRITES_ENV = "VERDIFY_ALLOW_UNAUTHENTICATED_WRITES"
+CONTACT_ALLOWED_TOPICS = {"build", "control", "data", "press", "collaboration", "correction", "other"}
+CONTACT_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+CONTACT_URL_RE = re.compile(r"(https?://|www\.)", re.IGNORECASE)
+CONTACT_NOTIFY_SUBJECT_PREFIX = "Verdify contact"
 
 
 def _truthy_env(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _trim(value: str | None, max_len: int) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    return trimmed[:max_len]
+
+
+def _clean_email_header(value: str | None, max_len: int = 160) -> str:
+    return (_trim((value or "").replace("\r", " ").replace("\n", " "), max_len) or "").strip()
+
+
+def _client_ip(request: Request) -> str:
+    """Prefer Cloudflare's client IP header; store only a salted hash."""
+    candidates = [
+        request.headers.get("CF-Connecting-IP"),
+        (request.headers.get("X-Forwarded-For") or "").split(",")[0],
+        request.client.host if request.client else None,
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        value = candidate.strip()
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError:
+            continue
+    return "unknown"
+
+
+def _contact_ip_hash(ip: str) -> str:
+    salt = (
+        os.environ.get("VERDIFY_CONTACT_HASH_SALT")
+        or os.environ.get(WRITE_API_KEY_ENV)
+        or os.environ.get("DB_PASS")
+        or "verdify-contact-v1"
+    )
+    return hashlib.sha256(f"{salt}:{ip}".encode()).hexdigest()
+
+
+def _turnstile_verify_sync(secret: str, token: str, remote_ip: str) -> bool:
+    payload = urllib.parse.urlencode(
+        {
+            "secret": secret,
+            "response": token,
+            "remoteip": remote_ip,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=4) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return False
+    return bool(body.get("success"))
+
+
+async def _verify_turnstile_if_configured(token: str | None, remote_ip: str) -> bool:
+    secret = os.environ.get("VERDIFY_TURNSTILE_SECRET", "").strip()
+    if not secret:
+        return False
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing contact verification token")
+    verified = await asyncio.to_thread(_turnstile_verify_sync, secret, token, remote_ip)
+    if not verified:
+        raise HTTPException(status_code=400, detail="Contact verification failed")
+    return True
+
+
+def _contact_smtp_config() -> dict[str, str | int | bool | None]:
+    host = _trim(os.environ.get("VERDIFY_CONTACT_SMTP_HOST"), 255)
+    port = _int_env("VERDIFY_CONTACT_SMTP_PORT", 587)
+    username = _trim(os.environ.get("VERDIFY_CONTACT_SMTP_USERNAME"), 255)
+    password = os.environ.get("VERDIFY_CONTACT_SMTP_PASSWORD")
+    use_ssl = _truthy_env("VERDIFY_CONTACT_SMTP_SSL")
+    starttls = not use_ssl and os.environ.get("VERDIFY_CONTACT_SMTP_STARTTLS", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    timeout_s = _int_env("VERDIFY_CONTACT_SMTP_TIMEOUT_S", 6)
+    return {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "ssl": use_ssl,
+        "starttls": starttls,
+        "timeout_s": timeout_s,
+    }
+
+
+def _contact_notification_message(
+    *,
+    submission_id: int,
+    created_at,
+    notify_to: str,
+    name: str,
+    email: str,
+    topic: str,
+    affiliation: str | None,
+    message: str,
+    user_agent: str | None,
+    referrer: str | None,
+) -> EmailMessage:
+    from_addr = (
+        _trim(os.environ.get("VERDIFY_CONTACT_NOTIFY_FROM"), 255)
+        or _trim(os.environ.get("VERDIFY_CONTACT_SMTP_USERNAME"), 255)
+        or "contact@verdify.ai"
+    )
+    from_name = _clean_email_header(os.environ.get("VERDIFY_CONTACT_NOTIFY_FROM_NAME") or "Verdify Contact")
+    subject_prefix = _clean_email_header(os.environ.get("VERDIFY_CONTACT_NOTIFY_SUBJECT_PREFIX"), 80)
+    if not subject_prefix:
+        subject_prefix = CONTACT_NOTIFY_SUBJECT_PREFIX
+
+    safe_name = _clean_email_header(name, 120)
+    safe_topic = _clean_email_header(topic, 40)
+    msg = EmailMessage()
+    msg["To"] = notify_to
+    msg["From"] = formataddr((from_name, from_addr))
+    msg["Reply-To"] = formataddr((safe_name, email))
+    msg["Subject"] = f"[{subject_prefix}] {safe_topic}: {safe_name}"
+    msg["Message-ID"] = make_msgid(domain="verdify.ai")
+    msg.set_content(
+        "\n".join(
+            [
+                f"New Verdify contact submission #{submission_id}",
+                "",
+                f"Submitted: {created_at}",
+                f"Name: {name}",
+                f"Reply email: {email}",
+                f"Topic: {topic}",
+                f"Affiliation: {affiliation or '-'}",
+                f"Referrer: {referrer or '-'}",
+                f"User agent: {user_agent or '-'}",
+                "",
+                "Message:",
+                message,
+                "",
+                "Review queue:",
+                "docker exec verdify-timescaledb psql -U verdify -d verdify -x -c "
+                "\"SELECT * FROM public_contact_submissions WHERE status = 'new' ORDER BY created_at DESC LIMIT 20;\"",
+            ]
+        )
+    )
+    return msg
+
+
+def _send_contact_notification_sync(msg: EmailMessage, smtp_config: dict[str, str | int | bool | None]) -> None:
+    host = smtp_config["host"]
+    if not host:
+        raise RuntimeError("VERDIFY_CONTACT_SMTP_HOST is not configured")
+
+    smtp_cls = smtplib.SMTP_SSL if smtp_config["ssl"] else smtplib.SMTP
+    with smtp_cls(str(host), int(smtp_config["port"]), timeout=int(smtp_config["timeout_s"])) as smtp:
+        if smtp_config["starttls"]:
+            smtp.starttls()
+        username = smtp_config["username"]
+        password = smtp_config["password"]
+        if username and password:
+            smtp.login(str(username), str(password))
+        smtp.send_message(msg)
+
+
+async def _notify_contact_submission(
+    *,
+    submission_id: int,
+    created_at,
+    notify_to: str | None,
+    name: str,
+    email: str,
+    topic: str,
+    affiliation: str | None,
+    message: str,
+    user_agent: str | None,
+    referrer: str | None,
+) -> None:
+    notify_to = _trim(os.environ.get("VERDIFY_CONTACT_NOTIFY_TO"), 254) or _trim(notify_to, 254)
+    smtp_config = _contact_smtp_config()
+    if not notify_to or not smtp_config["host"]:
+        error = (
+            "VERDIFY_CONTACT_SMTP_HOST is not configured" if notify_to else "contact notify recipient is not configured"
+        )
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE public_contact_submissions
+                SET notification_error = $2
+                WHERE id = $1
+                """,
+                submission_id,
+                error,
+            )
+        return
+
+    msg = _contact_notification_message(
+        submission_id=submission_id,
+        created_at=created_at,
+        notify_to=notify_to,
+        name=name,
+        email=email,
+        topic=topic,
+        affiliation=affiliation,
+        message=message,
+        user_agent=user_agent,
+        referrer=referrer,
+    )
+    try:
+        await asyncio.to_thread(_send_contact_notification_sync, msg, smtp_config)
+    except Exception as exc:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE public_contact_submissions
+                SET notification_status = 'failed',
+                    notification_attempted_at = now(),
+                    notification_error = $2
+                WHERE id = $1
+                """,
+                submission_id,
+                str(exc)[:500],
+            )
+        return
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE public_contact_submissions
+            SET notification_status = 'sent',
+                notification_attempted_at = now(),
+                notification_error = NULL
+            WHERE id = $1
+            """,
+            submission_id,
+        )
 
 
 async def require_write_access(
@@ -158,6 +423,32 @@ def _overall_data_health(rows: list[asyncpg.Record]) -> str:
     if "warn" in statuses:
         return "warn"
     return "ok"
+
+
+class PublicContactSubmission(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=254)
+    message: str = Field(min_length=20, max_length=4000)
+    topic: str = Field(default="other", max_length=40)
+    affiliation: str | None = Field(default=None, max_length=160)
+    website: str | None = Field(default=None, max_length=200)
+    turnstile_token: str | None = Field(default=None, max_length=2048)
+
+
+async def _parse_contact_submission(request: Request) -> tuple[PublicContactSubmission, bool]:
+    content_type = (request.headers.get("Content-Type") or "").lower()
+    try:
+        if "application/json" in content_type:
+            return PublicContactSubmission.model_validate(await request.json()), False
+
+        body = (await request.body()).decode("utf-8")
+        form_data = {
+            key: values[-1] if values else ""
+            for key, values in urllib.parse.parse_qs(body, keep_blank_values=True).items()
+        }
+        return PublicContactSubmission.model_validate(form_data), True
+    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid contact submission") from exc
 
 
 # ── Setpoints (ESP32 pulls this every 5 min) ──
@@ -325,6 +616,7 @@ async def root():
         "status": "/api/v1/status",
         "public_home_metrics": "/api/v1/public/home-metrics",
         "public_data_health": "/api/v1/public/data-health",
+        "public_contact": "/api/v1/public/contact",
     }
 
 
@@ -840,6 +1132,168 @@ async def public_data_health():
         checks=checks,
         pipeline_sources=pipeline_sources,
     )
+
+
+@app.post("/api/v1/public/contact", status_code=202)
+async def public_contact_submission(request: Request):
+    """Accept public project contact without publishing a personal email address."""
+    payload, is_form_submission = await _parse_contact_submission(request)
+
+    if _trim(payload.website, 200):
+        if is_form_submission:
+            return RedirectResponse("https://verdify.ai/contact/?sent=1", status_code=303)
+        return {"ok": True, "status": "received"}
+
+    name = _trim(payload.name, 120)
+    email = _trim(payload.email, 254)
+    message = _trim(payload.message, 4000)
+    affiliation = _trim(payload.affiliation, 160)
+    topic = (payload.topic or "other").strip().lower()
+
+    if not name or len(name) < 2:
+        raise HTTPException(status_code=422, detail="Name must be at least 2 characters")
+    if not email or not CONTACT_EMAIL_RE.match(email):
+        raise HTTPException(status_code=422, detail="A valid reply email is required")
+    if not message or len(message) < 20:
+        raise HTTPException(status_code=422, detail="Message must be at least 20 characters")
+    if topic not in CONTACT_ALLOWED_TOPICS:
+        topic = "other"
+    if len(CONTACT_URL_RE.findall(message)) > 3:
+        raise HTTPException(status_code=422, detail="Message contains too many links")
+
+    remote_ip = _client_ip(request)
+    ip_hash = _contact_ip_hash(remote_ip)
+    turnstile_verified = await _verify_turnstile_if_configured(payload.turnstile_token, remote_ip)
+    max_per_ip_hour = _int_env("VERDIFY_CONTACT_MAX_PER_IP_HOUR", 5)
+    max_per_email_day = _int_env("VERDIFY_CONTACT_MAX_PER_EMAIL_DAY", 4)
+
+    user_agent = _trim(request.headers.get("User-Agent"), 500)
+    referrer = _trim(request.headers.get("Referer"), 500)
+    metadata = {
+        "source": "verdify.ai/contact",
+        "cf_ray": _trim(request.headers.get("CF-Ray"), 120),
+        "turnstile_configured": bool(os.environ.get("VERDIFY_TURNSTILE_SECRET", "").strip()),
+    }
+
+    async with pool.acquire() as conn:
+        recent_ip = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM public_contact_submissions
+            WHERE ip_hash = $1
+              AND created_at > now() - interval '1 hour'
+              AND status <> 'spam'
+            """,
+            ip_hash,
+        )
+        if recent_ip is not None and recent_ip >= max_per_ip_hour:
+            raise HTTPException(status_code=429, detail="Too many contact submissions from this network")
+
+        recent_email = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM public_contact_submissions
+            WHERE lower(email) = lower($1)
+              AND created_at > now() - interval '1 day'
+              AND status <> 'spam'
+            """,
+            email,
+        )
+        if recent_email is not None and recent_email >= max_per_email_day:
+            raise HTTPException(status_code=429, detail="Too many contact submissions from this address")
+
+        submission = await conn.fetchrow(
+            """
+            INSERT INTO public_contact_submissions (
+              name, email, topic, affiliation, message, ip_hash,
+              user_agent, referrer, turnstile_verified, metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+            RETURNING id, created_at
+            """,
+            name,
+            email,
+            topic,
+            affiliation,
+            message,
+            ip_hash,
+            user_agent,
+            referrer,
+            turnstile_verified,
+            json.dumps(metadata),
+        )
+        notify_to = await conn.fetchval(
+            "SELECT owner_email FROM greenhouses WHERE id = $1",
+            DEFAULT_GREENHOUSE,
+        )
+
+    await _notify_contact_submission(
+        submission_id=submission["id"],
+        created_at=submission["created_at"],
+        notify_to=notify_to,
+        name=name,
+        email=email,
+        topic=topic,
+        affiliation=affiliation,
+        message=message,
+        user_agent=user_agent,
+        referrer=referrer,
+    )
+
+    if is_form_submission:
+        return RedirectResponse("https://verdify.ai/contact/?sent=1", status_code=303)
+    return {"ok": True, "status": "received"}
+
+
+@app.post("/api/v1/admin/contact-notifications/retry")
+async def retry_contact_notifications(
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    _write_access: None = Depends(require_write_access),
+):
+    """Retry email notifications for queued contact submissions."""
+    async with pool.acquire() as conn:
+        notify_to = await conn.fetchval(
+            "SELECT owner_email FROM greenhouses WHERE id = $1",
+            DEFAULT_GREENHOUSE,
+        )
+        rows = await conn.fetch(
+            """
+            SELECT id, created_at, name, email, topic, affiliation, message, user_agent, referrer
+            FROM public_contact_submissions
+            WHERE notification_status IN ('pending', 'failed')
+              AND status <> 'spam'
+            ORDER BY created_at
+            LIMIT $1
+            """,
+            limit,
+        )
+
+    results = []
+    for row in rows:
+        await _notify_contact_submission(
+            submission_id=row["id"],
+            created_at=row["created_at"],
+            notify_to=notify_to,
+            name=row["name"],
+            email=row["email"],
+            topic=row["topic"],
+            affiliation=row["affiliation"],
+            message=row["message"],
+            user_agent=row["user_agent"],
+            referrer=row["referrer"],
+        )
+        async with pool.acquire() as conn:
+            updated = await conn.fetchrow(
+                """
+                SELECT id, notification_status, notification_error
+                FROM public_contact_submissions
+                WHERE id = $1
+                """,
+                row["id"],
+            )
+        results.append(dict(updated))
+
+    return {"ok": True, "attempted": len(results), "results": results}
 
 
 @app.get("/api/v1/public/home-metrics", response_model=PublicHomeMetrics)

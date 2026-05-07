@@ -180,6 +180,38 @@ def test_resolve_plan_context_failures_marks_open_alerts_resolved():
     assert "source = 'iris_planner'" in sql
 
 
+def test_mcp_alert_ack_does_not_unresolve_resolved_alerts():
+    src = Path("mcp/server.py").read_text()
+    start = src.index('elif action == "acknowledge"')
+    block = src[start : src.index('elif action == "resolve"', start)]
+    assert "resolved_at IS NULL" in block
+    assert "already_resolved" in block
+
+
+def test_forecast_action_engine_completes_due_outcomes():
+    src = Path("scripts/forecast-action-engine.py").read_text()
+    assert "async def evaluate_due_outcomes" in src
+    assert "fl.triggered_at <= now() - interval '6 hours'" in src
+    assert "'no_action_required'" in src
+    assert "'pending'" in src
+
+
+def test_public_health_forecast_outcomes_ignore_evaluated_ok_noops():
+    src = Path("db/migrations/106-public-health-ledger-calibration.sql").read_text()
+    start = src.index("SELECT 'forecast_action_outcomes_7d'")
+    block = src[start : src.index("UNION ALL", start)]
+    assert "action_taken <> 'evaluated_ok'" in block
+
+
+def test_daily_summary_live_total_water_floors_known_mister_subset():
+    src = Path("ingestor/tasks.py").read_text()
+    start = src.index("async def daily_summary_live")
+    block = src[start:]
+    assert 'mister_water_gal = float(climate["mister_water_gal"])' in block
+    assert "meter_water_gal" in block
+    assert "water_gal = max(float(meter_water_gal), mister_water_gal)" in block
+
+
 # ── S24.9.5 — zero-variance rule param list ────────────────────────
 
 
@@ -376,6 +408,7 @@ def test_send_to_iris_is_local_first_without_cloud_fallback():
     assert "ENABLE_LOCAL_PLANNER" not in body
     assert 'if instance == "local":' in body
     assert 'session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"' in body
+    assert 'session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"' in body
     assert '"MANUAL"' in body
 
 

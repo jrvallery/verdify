@@ -2656,8 +2656,13 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
         kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
         therms = rt.get("heat2", 0) / 60.0 * 75000 / 100000
 
-        # Water
-        water_gal = (
+        # Water. The main cumulative pulse meter can reset or miss periods
+        # during the current day, but mister_water_today is a same-day subset
+        # accumulator. Keep total water at least as large as the known subset
+        # so public accounting never reports impossible negative unaccounted
+        # water while the hardware attribution layer is incomplete.
+        mister_water_gal = float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0.0
+        meter_water_gal = (
             await conn.fetchval(
                 """
             SELECT COALESCE(
@@ -2673,6 +2678,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             )
             or 0
         )
+        water_gal = max(float(meter_water_gal), mister_water_gal)
 
         # Costs
         ce = round(kwh * 0.111, 2)
@@ -2750,7 +2756,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
             cw,
             ct,
             float(water_gal),
-            float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0,
+            mister_water_gal,
             float(dp["min_margin_f"]) if dp and dp["min_margin_f"] is not None else None,
             float(dp["risk_hours"]) if dp else 0,
             compliance_pct,

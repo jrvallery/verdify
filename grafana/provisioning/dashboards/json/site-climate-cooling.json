@@ -100,7 +100,7 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "$/Day Avg",
+      "title": "$/Day (30-Day Average)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -117,7 +117,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -142,7 +142,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average daily total cost across the selected period"
+      "description": "Average daily total cost across the last 30 completed daily summaries."
     },
     {
       "datasource": {
@@ -944,7 +944,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor (15-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
           "refId": "A"
         },
         {

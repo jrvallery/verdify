@@ -170,7 +170,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Indoor temperature (solid = observed, dashed = forecast) against the forecast-driven target band. The band widens on sunny days and narrows on cloudy days. Gray line shows outdoor temperature for context.",
+      "description": "Indoor temperature (15-sample rolling average; dashed = forecast) against the forecast-driven target band. The band widens on sunny days and narrows on cloudy days. Gray line shows outdoor temperature for context.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -586,7 +586,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor Temp\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor Temp (15-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
           "refId": "A",
           "sql": {
             "columns": [
@@ -776,7 +776,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Indoor VPD (solid = observed, dashed = forecast) against the forecast-driven target band. The band widens when outdoor humidity is low. Gray line shows outdoor relative humidity for context.",
+      "description": "Indoor VPD (30-sample rolling average; dashed = forecast) against the forecast-driven target band. The band widens when outdoor humidity is low. Gray line shows outdoor relative humidity for context.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1073,7 +1073,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD (30-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
           "refId": "A",
           "sql": {
             "columns": [
