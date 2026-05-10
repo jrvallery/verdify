@@ -14,7 +14,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -34,8 +33,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -83,7 +81,6 @@
             "fixedColor": "#FF9800",
             "mode": "fixed"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -99,8 +96,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -144,7 +140,6 @@
             "fixedColor": "#F44336",
             "mode": "fixed"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -160,8 +155,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -205,7 +199,6 @@
             "fixedColor": "#2196F3",
             "mode": "fixed"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -221,8 +214,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -266,7 +258,6 @@
             "fixedColor": "#FFD740",
             "mode": "fixed"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -282,8 +273,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -686,7 +676,6 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {},
           "decimals": 3,
           "mappings": [],
           "thresholds": {
@@ -699,8 +688,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1071,8 +1059,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
-          }
+            "spanNulls": true,
+            "axisLabel": "W"
+          },
+          "unit": "watt"
         },
         "overrides": [
           {
@@ -1095,6 +1085,18 @@
               {
                 "id": "custom.lineWidth",
                 "value": 2
+              },
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W"
               }
             ]
           },
@@ -1128,6 +1130,14 @@
                 "value": {
                   "fill": "solid"
                 }
+              },
+              {
+                "id": "unit",
+                "value": "watt/m\u00b2"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W/m\u00b2"
               }
             ]
           }
@@ -1191,8 +1201,7 @@
             ]
           },
           "unit": "percent"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1236,8 +1245,7 @@
             ]
           },
           "unit": "percent"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1278,8 +1286,7 @@
             ]
           },
           "unit": "watt"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1320,8 +1327,7 @@
             ]
           },
           "unit": "watt"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1362,8 +1368,7 @@
             ]
           },
           "unit": "kwatth"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1404,8 +1409,7 @@
             ]
           },
           "unit": "watt/m\u00b2"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1646,8 +1650,7 @@
             "mode": "fixed",
             "fixedColor": "#FFD740"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1693,8 +1696,7 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1740,8 +1742,7 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1787,8 +1788,7 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {

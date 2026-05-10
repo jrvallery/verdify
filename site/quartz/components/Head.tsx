@@ -29,7 +29,7 @@ export default (() => {
     const url = new URL(`https://${cfg.baseUrl ?? "example.com"}`)
     const path = url.pathname as FullSlug
     const baseDir = fileData.slug === "404" ? path : pathToRoot(fileData.slug!)
-    const iconPath = joinSegments(baseDir, "static/icon.png")
+    const iconPath = joinSegments(baseDir, "static/icon-v2.png")
 
     // Url of current page
     const socialSlug =
@@ -49,7 +49,8 @@ export default (() => {
           ? socialImage
           : `https://${cfg.baseUrl}${socialImage.startsWith("/") ? socialImage : `/${socialImage}`}`
         : undefined
-    const ogImageDefaultPath = socialImagePath ?? `https://${cfg.baseUrl}/static/og-image.png`
+    const ogImageDefaultPath = socialImagePath ?? `https://${cfg.baseUrl}/static/og-image-v2.jpg`
+    const usesDefaultOgImage = ogImageDefaultPath.endsWith("/static/og-image-v2.jpg")
     const structuredData = {
       "@context": "https://schema.org",
       "@graph": [
@@ -103,11 +104,18 @@ export default (() => {
           <>
             <meta property="og:image" content={ogImageDefaultPath} />
             <meta property="og:image:url" content={ogImageDefaultPath} />
+            <meta property="og:image:secure_url" content={ogImageDefaultPath} />
             <meta name="twitter:image" content={ogImageDefaultPath} />
             <meta
               property="og:image:type"
               content={`image/${getFileExtension(ogImageDefaultPath) ?? "png"}`}
             />
+            {usesDefaultOgImage && (
+              <>
+                <meta property="og:image:width" content="1200" />
+                <meta property="og:image:height" content="630" />
+              </>
+            )}
           </>
         )}
 
@@ -120,6 +128,7 @@ export default (() => {
         )}
 
         <link rel="icon" href={iconPath} />
+        <link rel="apple-touch-icon" href={joinSegments(baseDir, "static/apple-touch-icon-v2.png")} />
         <link rel="canonical" href={socialUrl} />
         <meta name="description" content={description} />
         {noindex && <meta name="robots" content="noindex, follow" />}
@@ -127,7 +136,6 @@ export default (() => {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-        <meta name="generator" content="Quartz" />
 
         {css.map((resource) => CSSResourceToStyleElement(resource, true))}
         {js

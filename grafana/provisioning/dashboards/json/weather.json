@@ -153,10 +153,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -225,10 +223,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -297,10 +293,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -365,10 +359,8 @@
                 "value": 65
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -437,10 +429,8 @@
                 "value": 50
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -509,10 +499,8 @@
                 "value": 1025
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -585,10 +573,8 @@
                 "value": 11
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -657,10 +643,8 @@
                 "value": 800
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -963,8 +947,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -1594,8 +1577,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -2562,8 +2544,7 @@
             "mode": "fixed",
             "fixedColor": "#FFD600"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -3003,8 +2984,7 @@
             "mode": "fixed",
             "fixedColor": "#90A4AE"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -3233,8 +3213,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "legend": {
@@ -3321,8 +3300,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "legend": {
@@ -3377,8 +3355,7 @@
                 "mode": "fixed",
                 "fixedColor": "#AB47BC"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "legend": {
@@ -3438,8 +3415,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -3504,8 +3480,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -3553,8 +3528,7 @@
                 "mode": "fixed",
                 "fixedColor": "#42A5F5"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -3602,8 +3576,7 @@
                 "mode": "fixed",
                 "fixedColor": "#78909C"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -3669,10 +3642,8 @@
                 "value": -5
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {

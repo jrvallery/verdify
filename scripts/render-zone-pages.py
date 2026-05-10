@@ -103,10 +103,13 @@ def _render_sensors_table(sensors: list[dict]) -> str:
     for s in sorted(sensors, key=lambda x: x["slug"]):
         addr = "configured" if (s.get("modbus_addr") or s.get("gpio_pin")) else "—"
         model = "camera model withheld" if s.get("kind") == "camera" else s.get("model") or "—"
+        protocol = s["protocol"]
+        if s.get("kind") == "hydro_quality" and s.get("model") == "YINMIK":
+            protocol = "WiFi via HA"
         lines.append(
             _metric_card(
                 f"<code>{s['slug']}</code>",
-                f"Kind: {s['kind']}; Protocol: {s['protocol']}; Model: {model}; Addr: {addr}",
+                f"Kind: {s['kind']}; Protocol: {protocol}; Model: {model}; Addr: {addr}",
             )
         )
     lines.append("</div>")

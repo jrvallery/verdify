@@ -40,6 +40,7 @@ from verdify_schemas import (
     SetpointChange,
     SystemStateRow,
 )
+from verdify_schemas.tunable_registry import registry_value_error
 
 log = logging.getLogger("tasks")
 
@@ -535,6 +536,11 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
 # 6. ALERT MONITOR (every 300s)
 # ═════════════════════════════════════════════════════════════════
 async def alert_monitor(pool: asyncpg.Pool) -> None:
+    try:
+        await _expire_planner_trigger_slas(pool)
+    except Exception as e:
+        log.warning("planner trigger SLA lifecycle refresh failed: %s", e)
+
     async with pool.acquire() as conn:
         alerts = []
 
@@ -877,24 +883,26 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
-        # 7b. Required SUNRISE/SUNSET plans. These triggers must produce a
-        # plan_journal row within their SLA; otherwise the prior plan governs
-        # across a new diurnal period with no explicit planner review.
+        # 7b. Required SUNRISE/SUNSET/MIDNIGHT plans. planner_trigger_ledger is
+        # materialized before delivery, so this catches both failure modes:
+        # delivered-but-no-plan and no delivery row at all.
         required_misses = await conn.fetch(
             """
             WITH latest_required AS (
-                SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body,
-                       row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC) AS rn
-                 FROM plan_delivery_log
-                 WHERE event_type IN ('SUNRISE', 'SUNSET')
-                   AND delivered_at > now() - interval '18 hours'
+                SELECT id, event_type, event_label, instance, status, expected_at, due_at,
+                       delivered_at, plan_delivery_log_id, trigger_id, resulting_plan_id, notes,
+                       row_number() OVER (PARTITION BY event_type ORDER BY expected_at DESC) AS rn
+                 FROM planner_trigger_ledger
+                 WHERE event_type IN ('SUNRISE', 'SUNSET', 'MIDNIGHT')
+                   AND expected_at > now() - interval '36 hours'
                    AND event_label NOT ILIKE 'validation%ack-only%'
             )
-            SELECT id, event_type, event_label, instance, status, gateway_status, delivered_at, gateway_body
+            SELECT id, event_type, event_label, instance, status, expected_at, due_at,
+                   delivered_at, plan_delivery_log_id, trigger_id, resulting_plan_id, notes
               FROM latest_required
              WHERE rn = 1
-               AND delivered_at < now() - interval '15 minutes'
                AND status <> 'plan_written'
+               AND due_at < now()
              ORDER BY delivered_at DESC
             """
         )
@@ -906,9 +914,16 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "event_label": r["event_label"],
                     "instance": r["instance"],
                     "status": r["status"],
-                    "gateway_status": int(r["gateway_status"]) if r["gateway_status"] is not None else None,
-                    "delivered_at": r["delivered_at"].isoformat(),
-                    "gateway_body": (r["gateway_body"] or "")[:300],
+                    "gateway_status": None,
+                    "expected_at": r["expected_at"].isoformat(),
+                    "due_at": r["due_at"].isoformat(),
+                    "delivered_at": r["delivered_at"].isoformat() if r["delivered_at"] else None,
+                    "gateway_body": (r["notes"] or "")[:300],
+                    "plan_delivery_log_id": int(r["plan_delivery_log_id"])
+                    if r["plan_delivery_log_id"] is not None
+                    else None,
+                    "trigger_id": str(r["trigger_id"]) if r["trigger_id"] else None,
+                    "resulting_plan_id": r["resulting_plan_id"],
                 }
                 for r in required_misses
             ]
@@ -921,8 +936,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "sensor_id": "system.planner_required_plan",
                     "zone": None,
                     "message": (
-                        f"{latest['event_type']} did not produce a plan within 15 minutes "
-                        f"(status={latest['status']}, gateway={latest['gateway_status']})"
+                        f"{latest['event_type']} did not produce a plan by SLA "
+                        f"(status={latest['status']}, due={latest['due_at']})"
                     ),
                     "details": {"misses": misses},
                     "metric_value": float(len(misses)),
@@ -973,6 +988,58 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         "offenders": offenders,
                     },
                     "metric_value": float(total_rows),
+                    "threshold_value": 0.0,
+                }
+            )
+
+        # 7d. Active/future tunable range drift. MCP validates writes before
+        # insertion, but this guard checks the live schedule the dispatcher will
+        # actually read. It catches direct SQL/manual rows, stale pre-registry
+        # plans, and forced-on switches that would otherwise revive legacy
+        # controller behavior.
+        candidate_rows = await conn.fetch(
+            """
+            SELECT ts, parameter, value, plan_id, source, reason
+              FROM setpoint_plan
+             WHERE is_active = true
+               AND ts >= now() - interval '10 minutes'
+               AND source IN ('iris', 'plan')
+             ORDER BY ts, parameter
+             LIMIT 500
+            """
+        )
+        tunable_violations = []
+        for r in candidate_rows:
+            parameter = r["parameter"]
+            value = float(r["value"])
+            error = registry_value_error(parameter, value)
+            if parameter in FORCED_ON_SWITCH_PARAMS and value < 0.5:
+                error = "controller_v2_locked_on: fallback to legacy FSM is blocked outside operator/firmware rollback"
+            if not error:
+                continue
+            tunable_violations.append(
+                {
+                    "parameter": parameter,
+                    "value": value,
+                    "plan_id": r["plan_id"],
+                    "source": r["source"],
+                    "ts": r["ts"].isoformat(),
+                    "reason": (r["reason"] or "")[:200],
+                    "error": error,
+                }
+            )
+        if tunable_violations:
+            sample = ", ".join(f"{v['parameter']}={v['value']:g} ({v['plan_id']})" for v in tunable_violations[:4])
+            alerts.append(
+                {
+                    "alert_type": "planner_tunable_range_drift",
+                    "severity": "critical",
+                    "category": "system",
+                    "sensor_id": "system.planner_tunable_range",
+                    "zone": None,
+                    "message": f"{len(tunable_violations)} active/future planner tunable violation(s): {sample}",
+                    "details": {"violations": tunable_violations[:20]},
+                    "metric_value": float(len(tunable_violations)),
                     "threshold_value": 0.0,
                 }
             )
@@ -1627,9 +1694,71 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
 # 8. SETPOINT DISPATCHER (every 300s)
 # ═════════════════════════════════════════════════════════════════
 from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
+from quiet_mode import (
+    QUIET_MODE_ENTITY,
+    QUIET_MODE_SETPOINTS,
+    QUIET_REASON_ENTITY,
+    QUIET_RESTORE_ENTITY,
+    QUIET_UNTIL_ENTITY,
+    parse_restore_payload,
+    quiet_expired_needs_restore,
+    quiet_is_active,
+)
 
 # In-memory cache of last pushed values — prevents re-pushing unchanged setpoints
 _last_pushed: dict[str, float] = {}
+
+# Controller v2 is the live controller path. Keep the old switch as a
+# non-OTA rollback surface, but prevent accidental planner/manual drift back
+# to the legacy cascade.
+FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+
+QUIET_STATE_ENTITIES = (
+    QUIET_MODE_ENTITY,
+    QUIET_UNTIL_ENTITY,
+    QUIET_RESTORE_ENTITY,
+    QUIET_REASON_ENTITY,
+)
+
+
+def _upsert_change(changes: list[tuple[str, float]], param: str, value: float) -> None:
+    """Add or replace a pending dispatcher change."""
+    clean_value = float(value)
+    for idx, (existing_param, _) in enumerate(changes):
+        if existing_param == param:
+            changes[idx] = (param, clean_value)
+            return
+    changes.append((param, clean_value))
+
+
+def _apply_manual_overlay(changes: list[tuple[str, float]], overlay: dict[str, float]) -> set[str]:
+    """Force an operator overlay into the dispatcher batch."""
+    overlay_params: set[str] = set()
+    for param, value in overlay.items():
+        _upsert_change(changes, param, value)
+        overlay_params.add(param)
+    return overlay_params
+
+
+async def _fetch_quiet_state(conn: asyncpg.Connection) -> dict[str, str]:
+    rows = await conn.fetch(
+        """
+        SELECT DISTINCT ON (entity) entity, value
+        FROM system_state
+        WHERE entity = ANY($1::text[])
+        ORDER BY entity, ts DESC
+        """,
+        list(QUIET_STATE_ENTITIES),
+    )
+    return {row["entity"]: row["value"] for row in rows}
+
+
+async def _record_quiet_mode(conn: asyncpg.Connection, mode: str) -> None:
+    await conn.execute(
+        "INSERT INTO system_state (ts, entity, value) VALUES (now(), $1, $2)",
+        QUIET_MODE_ENTITY,
+        mode,
+    )
 
 
 # FW-3 (Sprint 18): physics sanity invariants. Planner values outside
@@ -1726,6 +1855,12 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
 
         planned = await conn.fetch("SELECT parameter, value, ts, plan_id, reason FROM v_active_plan")
         raw_planner_params = {r["parameter"]: r["value"] for r in (planned or [])}
+        quiet_state = await _fetch_quiet_state(conn)
+        quiet_mode = quiet_state.get(QUIET_MODE_ENTITY)
+        quiet_until = quiet_state.get(QUIET_UNTIL_ENTITY)
+        quiet_active = quiet_is_active(quiet_mode, quiet_until)
+        quiet_restore_due = quiet_expired_needs_restore(quiet_mode, quiet_until)
+        quiet_params: set[str] = set()
 
         # FW-3 (Sprint 18): enforce physics invariants BEFORE any downstream
         # use. Clamped values replace the planner's originals; violations
@@ -1744,6 +1879,14 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     clean_val,
                     violation,
                 )
+            if param in FORCED_ON_SWITCH_PARAMS and clean_val < 0.5:
+                clamps_to_log.append((param, float(raw_val), 1.0, 1.0, 1.0, "forced_on_guardrail"))
+                log.warning(
+                    "Controller guardrail: ignoring fallback request %s=%s; v2 remains locked ON",
+                    param,
+                    raw_val,
+                )
+                clean_val = 1.0
             planner_params[param] = clean_val
 
         # Band-driven params: planner can tighten within band, clamped to edges
@@ -1820,6 +1963,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue
 
+            if param in FORCED_ON_SWITCH_PARAMS:
+                planned_val = 1.0
             last = _last_pushed.get(param)
             if param.startswith("sw_"):
                 planned_bool = planned_val > 0.5
@@ -1830,6 +1975,37 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 if _should_skip(last, planned_val):
                     continue
                 changes.append((param, planned_val))
+
+        for param in FORCED_ON_SWITCH_PARAMS:
+            readback = shared.cfg_readback.get(param)
+            if readback is not None and readback < 0.5:
+                if not any(existing_param == param for existing_param, _ in changes):
+                    log.warning(
+                        "Controller guardrail: cfg readback has %s=%.0f; forcing ON",
+                        param,
+                        readback,
+                    )
+                    changes.append((param, 1.0))
+
+        if quiet_active:
+            quiet_params = _apply_manual_overlay(changes, QUIET_MODE_SETPOINTS)
+            log.info(
+                "Dispatcher: recording quiet mode active until %s; forcing %d quiet setpoints",
+                quiet_until,
+                len(quiet_params),
+            )
+        elif quiet_restore_due:
+            quiet_restore = parse_restore_payload(quiet_state.get(QUIET_RESTORE_ENTITY))
+            if quiet_restore:
+                quiet_params = _apply_manual_overlay(changes, quiet_restore)
+                await _record_quiet_mode(conn, "expired_restored")
+                log.info(
+                    "Dispatcher: recording quiet mode expired; restoring %d captured setpoints",
+                    len(quiet_params),
+                )
+            else:
+                await _record_quiet_mode(conn, "expired_no_restore")
+                log.warning("Dispatcher: recording quiet mode expired without a restore payload")
 
         if not changes:
             (STATE_DIR / "setpoint-dispatcher.log").touch()
@@ -1850,6 +2026,10 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source = "band"
             elif param in MISTER_DEFAULTS and param not in planner_params:
                 source = "band"
+            elif param in quiet_params:
+                source = "manual"
+            elif param in FORCED_ON_SWITCH_PARAMS:
+                source = "manual"
             else:
                 source = "plan"
             # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
@@ -2127,7 +2307,7 @@ WATTAGES = {
     "heat1": 1500,
     "fan1": 52,
     "fan2": 52,
-    "fog": 800,
+    "fog": 1644,
     "grow_light_main": 630,
     "grow_light_grow": 816,
     "vent": 10,
@@ -2246,7 +2426,7 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
             SELECT ROUND(SUM(COALESCE(cost_electric,0))::numeric, 2) AS ce,
                    ROUND(SUM(COALESCE(cost_gas,0))::numeric, 2)      AS cg,
                    ROUND(SUM(COALESCE(cost_water,0))::numeric, 2)    AS cw,
-                   ROUND(SUM(COALESCE(kwh_estimated,0))::numeric, 2) AS kwh,
+                   ROUND(SUM(COALESCE(kwh_total,kwh_estimated,0))::numeric, 2) AS kwh,
                    ROUND(SUM(COALESCE(water_used_gal,0))::numeric, 2) AS gal
             FROM daily_summary
             WHERE date >= $1 AND date < ($1 + INTERVAL '1 month')::date
@@ -2470,7 +2650,7 @@ _DS_WATTAGES = {
     "heat1": 1500,
     "fan1": 52,
     "fan2": 52,
-    "fog": 800,
+    "fog": 1644,
     "grow_light_main": 630,
     "grow_light_grow": 816,
     "vent": 10,
@@ -2807,6 +2987,7 @@ from planner_routing import (
     SeverityContext,
     classify_severity,
     pick_instance,
+    sla_for,
 )
 
 _LOCATION = LocationInfo("Longmont", "USA", "America/Denver", 40.1672, -105.1019)
@@ -2889,7 +3070,264 @@ def _compute_milestones() -> dict[str, datetime]:
     return _milestones_cache
 
 
-async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
+def _milestone_event(key: str, *, catchup: bool = False) -> tuple[str, str]:
+    """Return the planner event_type/label for a scheduled milestone key."""
+    catchup_tag = " (catch-up)" if catchup else ""
+    if key == "SUNRISE":
+        return "SUNRISE", f"Morning planning cycle{catchup_tag}"
+    if key == "SUNSET":
+        return "SUNSET", f"Evening planning cycle{catchup_tag}"
+    return "TRANSITION", key.split(":", 1)[1].replace("_", " ").title() + catchup_tag
+
+
+def _expected_action_for_event(event_type: str, label: str | None = None) -> str:
+    """Planner action expected to close the trigger SLA."""
+    normalized = (label or "").lower()
+    if normalized.startswith("validation") and "ack-only" in normalized:
+        return "acknowledge_trigger"
+    if event_type in {"SUNRISE", "SUNSET", "MIDNIGHT"}:
+        return "set_plan"
+    return "any"
+
+
+def _sla_seconds(event_type: str, instance: str | None) -> int | None:
+    if not instance:
+        return None
+    try:
+        sla = sla_for(event_type, instance)  # type: ignore[arg-type]
+    except Exception:
+        return None
+    if sla is None:
+        return None
+    return int(sla.total_seconds())
+
+
+async def _ensure_expected_planner_triggers(
+    conn: asyncpg.Connection,
+    milestones: dict[str, datetime],
+) -> dict[str, int]:
+    """Materialize today's expected trigger ledger before delivery happens.
+
+    plan_delivery_log only exists after an OpenClaw POST returns. This ledger is
+    written first so a missed SUNRISE/SUNSET is visible even if the POST path
+    never runs.
+    """
+    ledger_ids: dict[str, int] = {}
+    for key, expected_at in milestones.items():
+        event_type, label = _milestone_event(key, catchup=False)
+        severity = classify_severity(event_type, SeverityContext())
+        instance = pick_instance(event_type, severity)
+        sla_s = _sla_seconds(event_type, instance)
+        due_at = expected_at + _td(seconds=sla_s or 7200)
+        expected_action = _expected_action_for_event(event_type, label)
+        ledger_id = await conn.fetchval(
+            """
+            INSERT INTO planner_trigger_ledger
+              (greenhouse_id, event_type, event_label, instance, expected_at,
+               due_at, expected_action, sla_seconds)
+            VALUES ('vallery', $1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (greenhouse_id, event_type, expected_at) DO UPDATE
+               SET event_label     = EXCLUDED.event_label,
+                   instance        = EXCLUDED.instance,
+                   due_at          = EXCLUDED.due_at,
+                   expected_action = EXCLUDED.expected_action,
+                   sla_seconds     = EXCLUDED.sla_seconds,
+                   updated_at      = now()
+             WHERE planner_trigger_ledger.status = 'expected'
+            RETURNING id
+            """,
+            event_type,
+            label,
+            instance,
+            expected_at,
+            due_at,
+            expected_action,
+            sla_s,
+        )
+        if ledger_id is None:
+            ledger_id = await conn.fetchval(
+                """
+                SELECT id
+                  FROM planner_trigger_ledger
+                 WHERE greenhouse_id = 'vallery'
+                   AND event_type = $1
+                   AND expected_at = $2
+                """,
+                event_type,
+                expected_at,
+            )
+        if ledger_id is not None:
+            await conn.execute(
+                """
+                WITH matched_delivery AS (
+                    SELECT id, delivered_at, trigger_id, resulting_plan_id, status, gateway_body
+                     FROM plan_delivery_log
+                     WHERE event_type = $2
+                       AND delivered_at BETWEEN $3::timestamptz - interval '5 minutes'
+                                            AND $3::timestamptz + interval '2 hours'
+                       AND ($4::text IS NULL OR event_label ILIKE $4::text || '%')
+                     ORDER BY
+                       CASE status
+                         WHEN 'plan_written' THEN 0
+                         WHEN 'acked' THEN 1
+                         WHEN 'pending' THEN 2
+                         WHEN 'delivery_failed' THEN 3
+                         WHEN 'timed_out' THEN 4
+                         ELSE 5
+                       END,
+                       delivered_at ASC
+                     LIMIT 1
+                )
+                UPDATE planner_trigger_ledger ptl
+                   SET delivered_at         = md.delivered_at,
+                       plan_delivery_log_id = md.id,
+                       trigger_id           = md.trigger_id,
+                       resulting_plan_id    = md.resulting_plan_id,
+                       status               = CASE
+                                                WHEN md.status IN ('acked', 'plan_written', 'timed_out', 'delivery_failed')
+                                                THEN md.status
+                                                ELSE 'delivered'
+                                              END,
+                       resolved_at          = CASE
+                                                WHEN md.status IN ('acked', 'plan_written', 'timed_out', 'delivery_failed')
+                                                THEN COALESCE(ptl.resolved_at, now())
+                                                ELSE ptl.resolved_at
+                                              END,
+                       notes                = COALESCE(ptl.notes, md.gateway_body),
+                       updated_at           = now()
+                  FROM matched_delivery md
+                 WHERE ptl.id = $1
+                   AND ptl.plan_delivery_log_id IS NULL
+                """,
+                int(ledger_id),
+                event_type,
+                expected_at,
+                label,
+            )
+            ledger_ids[key] = int(ledger_id)
+    return ledger_ids
+
+
+async def _mark_expected_trigger_delivered(
+    pool: asyncpg.Pool,
+    *,
+    expected_trigger_id: int | None,
+    delivery_log_id: int | None,
+    result: dict,
+    catchup: bool,
+) -> None:
+    if expected_trigger_id is None:
+        return
+    status = "delivered"
+    if result.get("status") == "delivery_failed" or result.get("delivered") is False:
+        status = "delivery_failed"
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE planner_trigger_ledger
+               SET delivered_at         = COALESCE($2, now()),
+                   status               = $3,
+                   resolved_at          = CASE
+                                            WHEN $3 = 'delivered' THEN NULL
+                                            ELSE COALESCE(resolved_at, now())
+                                          END,
+                   catchup              = $4,
+                   plan_delivery_log_id = $5,
+                   trigger_id           = $6::uuid,
+                   notes                = $7,
+                   updated_at           = now()
+             WHERE id = $1
+               AND status IN ('expected', 'missed', 'delivery_failed', 'delivered')
+            """,
+            expected_trigger_id,
+            datetime.now(UTC),
+            status,
+            catchup,
+            delivery_log_id,
+            result.get("trigger_id"),
+            (result.get("gateway_body") or "")[:1000],
+        )
+
+
+async def _sync_planner_trigger_ledger(conn: asyncpg.Connection) -> None:
+    """Copy delivery-log terminal state onto the expected-trigger ledger."""
+    await conn.execute(
+        """
+        UPDATE planner_trigger_ledger ptl
+           SET status            = pdl.status,
+               resolved_at       = CASE
+                                      WHEN pdl.status IN ('plan_written', 'acked', 'timed_out', 'delivery_failed')
+                                      THEN COALESCE(ptl.resolved_at, now())
+                                      ELSE ptl.resolved_at
+                                    END,
+               delivered_at      = COALESCE(ptl.delivered_at, pdl.delivered_at),
+               resulting_plan_id = pdl.resulting_plan_id,
+               trigger_id        = COALESCE(ptl.trigger_id, pdl.trigger_id),
+               updated_at        = now()
+          FROM plan_delivery_log pdl
+         WHERE ptl.plan_delivery_log_id = pdl.id
+           AND pdl.status IN ('acked', 'plan_written', 'timed_out', 'delivery_failed')
+           AND ptl.status IS DISTINCT FROM pdl.status
+        """
+    )
+
+
+async def _expire_planner_trigger_slas(pool: asyncpg.Pool) -> None:
+    """Advance planner trigger lifecycle states based on per-trigger SLAs."""
+    async with pool.acquire() as conn:
+        pending = await conn.fetch(
+            """
+            SELECT id, event_type, instance, delivered_at
+              FROM plan_delivery_log
+             WHERE status = 'pending'
+               AND delivered_at > now() - interval '48 hours'
+            """
+        )
+        now_utc = datetime.now(UTC)
+        for row in pending:
+            sla_s = _sla_seconds(row["event_type"], row["instance"])
+            if sla_s is None:
+                continue
+            if row["delivered_at"] + _td(seconds=sla_s) <= now_utc:
+                await conn.execute(
+                    """
+                    UPDATE plan_delivery_log
+                       SET status = 'timed_out',
+                           gateway_body = concat_ws(E'\n', NULLIF(gateway_body, ''), $2::text)
+                     WHERE id = $1
+                       AND status = 'pending'
+                    """,
+                    row["id"],
+                    f"SLA timed out after {sla_s}s",
+                )
+
+        await conn.execute(
+            """
+            UPDATE planner_trigger_ledger
+               SET status      = 'missed',
+                   resolved_at = now(),
+                   notes       = concat_ws(E'\n', NULLIF(notes, ''), 'expected trigger was not delivered before due_at'),
+                   updated_at  = now()
+             WHERE status = 'expected'
+               AND delivered_at IS NULL
+               AND due_at < now()
+            """
+        )
+        await conn.execute(
+            """
+            UPDATE planner_trigger_ledger
+               SET status      = 'timed_out',
+                   resolved_at = now(),
+                   notes       = concat_ws(E'\n', NULLIF(notes, ''), 'delivered trigger did not resolve before due_at'),
+                   updated_at  = now()
+             WHERE status = 'delivered'
+               AND due_at < now()
+            """
+        )
+        await _sync_planner_trigger_ledger(conn)
+
+
+async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
     """F14 (Sprint 24.6): persist a send_to_iris result to plan_delivery_log
     for later delivery→plan correlation. Validated through PlanDeliveryLogRow
     before INSERT; a ValidationError here means an unexpected event_type
@@ -2922,11 +3360,12 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
     instance = result.get("instance")
     async with pool.acquire() as conn:
         if explicit_status:
-            await conn.execute(
+            return await conn.fetchval(
                 """
                 INSERT INTO plan_delivery_log
                   (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status, trigger_id, instance)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9)
+                RETURNING id
                 """,
                 row["event_type"],
                 row["event_label"],
@@ -2938,22 +3377,22 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> None:
                 trigger_id,
                 instance,
             )
-        else:
-            await conn.execute(
-                """
-                INSERT INTO plan_delivery_log
-                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, trigger_id, instance)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
-                """,
-                row["event_type"],
-                row["event_label"],
-                row["session_key"],
-                row["wake_mode"],
-                row["gateway_status"],
-                row["gateway_body"],
-                trigger_id,
-                instance,
-            )
+        return await conn.fetchval(
+            """
+            INSERT INTO plan_delivery_log
+              (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, trigger_id, instance)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
+            RETURNING id
+            """,
+            row["event_type"],
+            row["event_label"],
+            row["session_key"],
+            row["wake_mode"],
+            row["gateway_status"],
+            row["gateway_body"],
+            trigger_id,
+            instance,
+        )
 
 
 async def _deliver_and_log(
@@ -2962,6 +3401,8 @@ async def _deliver_and_log(
     label: str,
     context: str,
     instance: str = "opus",
+    expected_trigger_id: int | None = None,
+    catchup: bool = False,
 ) -> None:
     """Call send_to_iris in the executor and persist the outcome to
     plan_delivery_log. Called from every milestone/forecast/deviation path
@@ -2995,7 +3436,14 @@ async def _deliver_and_log(
             "trigger_id": str(uuid.uuid4()),
             "instance": instance,
         }
-        await _log_plan_delivery(pool, stub_result)
+        delivery_id = await _log_plan_delivery(pool, stub_result)
+        await _mark_expected_trigger_delivered(
+            pool,
+            expected_trigger_id=expected_trigger_id,
+            delivery_log_id=delivery_id,
+            result=stub_result,
+            catchup=catchup,
+        )
         return
 
     loop = asyncio.get_event_loop()
@@ -3006,7 +3454,14 @@ async def _deliver_and_log(
         None,
         lambda: send_to_iris(event_type, label, context, instance=instance),
     )
-    await _log_plan_delivery(pool, result)
+    delivery_id = await _log_plan_delivery(pool, result)
+    await _mark_expected_trigger_delivered(
+        pool,
+        expected_trigger_id=expected_trigger_id,
+        delivery_log_id=delivery_id,
+        result=result,
+        catchup=catchup,
+    )
 
 
 async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
@@ -3072,6 +3527,13 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
     all_milestones = _compute_milestones()
     if not _milestones_fired:
         log.info("Planning milestones: %s", ", ".join(f"{k}={v.strftime('%H:%M')}" for k, v in all_milestones.items()))
+    expected_trigger_ids: dict[str, int] = {}
+    try:
+        async with pool.acquire() as conn:
+            expected_trigger_ids = await _ensure_expected_planner_triggers(conn, all_milestones)
+        await _expire_planner_trigger_slas(pool)
+    except Exception as e:
+        log.warning("planner expected-trigger ledger refresh failed: %s", e)
 
     # ── 2. Check each milestone ──
     for key, milestone_time in all_milestones.items():
@@ -3087,14 +3549,7 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
             _save_milestone_state()
 
             # Determine event type and label
-            catchup_tag = " (catch-up)" if is_catchup else ""
-            if key == "SUNRISE":
-                event_type, label = "SUNRISE", f"Morning planning cycle{catchup_tag}"
-            elif key == "SUNSET":
-                event_type, label = "SUNSET", f"Evening planning cycle{catchup_tag}"
-            else:
-                event_type = "TRANSITION"
-                label = key.split(":", 1)[1].replace("_", " ").title() + catchup_tag
+            event_type, label = _milestone_event(key, catchup=is_catchup)
 
             log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
 
@@ -3105,7 +3560,15 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
             context = await loop.run_in_executor(None, gather_context)
             severity = classify_severity(event_type, SeverityContext())
             instance = pick_instance(event_type, severity)
-            await _deliver_and_log(pool, event_type, label, context, instance=instance)
+            await _deliver_and_log(
+                pool,
+                event_type,
+                label,
+                context,
+                instance=instance,
+                expected_trigger_id=expected_trigger_ids.get(key),
+                catchup=is_catchup,
+            )
 
     # ── 3. Check for forecast changes ──
     global _last_forecast_fetch
@@ -3177,8 +3640,9 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
     # verify check below.
     try:
         await _resolve_delivery_log(pool)
+        await _expire_planner_trigger_slas(pool)
     except Exception as e:
-        log.warning("plan_delivery_log resolve failed: %s", e)
+        log.warning("plan_delivery_log/planner_trigger_ledger resolve failed: %s", e)
 
     # ── 5. Verify plan delivery (30 min after SUNRISE/SUNSET) ──
     for key in ("SUNRISE", "SUNSET"):

@@ -25,10 +25,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -74,10 +72,8 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "fahrenheit"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -123,10 +119,8 @@
               }
             ]
           },
-          "unit": "\u00b5S/cm",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "\u00b5S/cm"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -174,10 +168,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -223,10 +215,8 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "fahrenheit"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -274,10 +264,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -440,8 +428,7 @@
             "spanNulls": false
           },
           "unit": "\u00b5S/cm"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,

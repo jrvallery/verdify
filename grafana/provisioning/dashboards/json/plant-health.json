@@ -189,10 +189,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -261,10 +259,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -330,13 +326,11 @@
               },
               {
                 "color": "#EF5350",
-                "value": 2.0
+                "value": 2
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -381,26 +375,143 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "fixed",
-            "fixedColor": "#78909C"
+            "mode": "thresholds"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "dark-red",
                 "value": null
               },
               {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "blue",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
                 "color": "red",
-                "value": 80
+                "value": 24
               }
             ]
           },
-          "unit": "string"
-        },
-        "overrides": []
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "dark-red"
+                },
+                "1": {
+                  "text": "IDLE",
+                  "color": "green"
+                },
+                "2": {
+                  "text": "VENTILATE",
+                  "color": "blue"
+                },
+                "3": {
+                  "text": "THERMAL_RELIEF",
+                  "color": "blue"
+                },
+                "4": {
+                  "text": "DEHUM_VENT",
+                  "color": "purple"
+                },
+                "5": {
+                  "text": "SEALED_MIST_S1",
+                  "color": "purple"
+                },
+                "6": {
+                  "text": "SEALED_MIST_S2",
+                  "color": "purple"
+                },
+                "7": {
+                  "text": "SEALED_MIST_FOG",
+                  "color": "purple"
+                },
+                "8": {
+                  "text": "SEALED_MIST_WATCH",
+                  "color": "purple"
+                },
+                "9": {
+                  "text": "TEMP_IDLE_HUM_IDLE",
+                  "color": "green"
+                },
+                "10": {
+                  "text": "TEMP_IDLE_HUMID_S1",
+                  "color": "green"
+                },
+                "11": {
+                  "text": "TEMP_IDLE_VPD_WATCH",
+                  "color": "green"
+                },
+                "12": {
+                  "text": "HEAT_S1_HUM_IDLE",
+                  "color": "orange"
+                },
+                "13": {
+                  "text": "HEAT_S1_HUMID_S1",
+                  "color": "orange"
+                },
+                "14": {
+                  "text": "HEAT_S1_VPD_WATCH",
+                  "color": "orange"
+                },
+                "15": {
+                  "text": "HEAT_S2_HUM_IDLE",
+                  "color": "orange"
+                },
+                "16": {
+                  "text": "HEAT_S2_HUMID_S1",
+                  "color": "orange"
+                },
+                "17": {
+                  "text": "HEAT_S2_VPD_WATCH",
+                  "color": "orange"
+                },
+                "18": {
+                  "text": "COOL_S1_HUM_IDLE",
+                  "color": "blue"
+                },
+                "19": {
+                  "text": "COOL_S1_HUMID_S1",
+                  "color": "blue"
+                },
+                "20": {
+                  "text": "COOL_S1_HUMID_S2",
+                  "color": "blue"
+                },
+                "21": {
+                  "text": "COOL_S1_VPD_WATCH",
+                  "color": "blue"
+                },
+                "22": {
+                  "text": "COOL_S2_HUMID_S1",
+                  "color": "blue"
+                },
+                "23": {
+                  "text": "COOL_S2_HUMID_S2",
+                  "color": "blue"
+                },
+                "24": {
+                  "text": "SAFETY_COOL",
+                  "color": "blue"
+                }
+              }
+            }
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -421,12 +532,12 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, state AS \"State\" FROM v_greenhouse_now",
+          "rawSql": "WITH state_map(state, code) AS (\n  VALUES\n    ('IDLE', 1),\n    ('VENTILATE', 2),\n    ('THERMAL_RELIEF', 3),\n    ('DEHUM_VENT', 4),\n    ('SEALED_MIST_S1', 5),\n    ('SEALED_MIST_S2', 6),\n    ('SEALED_MIST_FOG', 7),\n    ('SEALED_MIST_WATCH', 8),\n    ('TEMP_IDLE_HUM_IDLE', 9),\n    ('TEMP_IDLE_HUMID_S1', 10),\n    ('TEMP_IDLE_VPD_WATCH', 11),\n    ('HEAT_S1_HUM_IDLE', 12),\n    ('HEAT_S1_HUMID_S1', 13),\n    ('HEAT_S1_VPD_WATCH', 14),\n    ('HEAT_S2_HUM_IDLE', 15),\n    ('HEAT_S2_HUMID_S1', 16),\n    ('HEAT_S2_VPD_WATCH', 17),\n    ('COOL_S1_HUM_IDLE', 18),\n    ('COOL_S1_HUMID_S1', 19),\n    ('COOL_S1_HUMID_S2', 20),\n    ('COOL_S1_VPD_WATCH', 21),\n    ('COOL_S2_HUMID_S1', 22),\n    ('COOL_S2_HUMID_S2', 23),\n    ('SAFETY_COOL', 24)\n)\nSELECT\n  now() AS time,\n  COALESCE((\n    SELECT sm.code\n    FROM v_greenhouse_now g\n    LEFT JOIN state_map sm ON sm.state = g.state\n    LIMIT 1\n  ), 0) AS \"State\";",
           "format": "table",
           "refId": "A"
         }
       ],
-      "description": "Shows greenhouse equipment or controller state over time."
+      "description": "Current ESP32 controller state rendered through numeric value mappings so Grafana static images do not drop string-only stats."
     },
     {
       "id": 904,
@@ -465,10 +576,8 @@
                 "value": 15
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -533,10 +642,8 @@
                 "value": 10
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -597,10 +704,8 @@
                 "value": 1
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -638,11 +743,6 @@
         "w": 24,
         "x": 0,
         "y": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
       },
       "options": {}
     },
@@ -727,10 +827,8 @@
               }
             }
           ],
-          "custom": {},
           "unit": "short"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -975,8 +1073,7 @@
                 "value": 30
               }
             ]
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -1059,10 +1156,8 @@
                 "value": 25
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1205,10 +1300,8 @@
                 "value": null
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1273,10 +1366,8 @@
                 "value": 10
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1366,8 +1457,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -1381,11 +1471,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -1934,11 +2019,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -2144,8 +2224,7 @@
                     "value": null
                   }
                 ]
-              },
-              "unit": "currencyUSD"
+              }
             },
             "overrides": [
               {
@@ -2201,6 +2280,30 @@
                       "fixedColor": "#FDD835",
                       "mode": "fixed"
                     }
+                  },
+                  {
+                    "id": "custom.axisLabel",
+                    "value": "lux"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Est. PPFD"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "\u00b5mol/m\u00b2/s"
+                  },
+                  {
+                    "id": "custom.axisPlacement",
+                    "value": "left"
+                  },
+                  {
+                    "id": "custom.axisLabel",
+                    "value": "\u00b5mol/m\u00b2/s"
                   }
                 ]
               }
@@ -2338,11 +2441,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -2409,8 +2507,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -2484,8 +2581,7 @@
               "custom.thresholdsStyle": {
                 "mode": "area"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -2498,11 +2594,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -2569,8 +2660,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -2635,8 +2725,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -2649,11 +2738,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -2668,11 +2752,6 @@
         "y": 52
       },
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -2981,11 +3060,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -3108,11 +3182,6 @@
         "x": 0,
         "y": 85
       },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -3158,10 +3227,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the first south-zone probe."
@@ -3209,10 +3276,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the second south-zone probe."
@@ -3260,10 +3325,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the west-zone probe."
@@ -3292,7 +3355,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "\u00b5S/cm",
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -3306,8 +3368,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows soil electrical conductivity from the EC-capable first south-zone probe."
@@ -3558,8 +3619,7 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -3591,11 +3651,6 @@
       "panels": [],
       "title": "REVIEW \u2014 Story Graphs",
       "type": "row",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {},
       "datasource": {
         "uid": "verdify-tsdb",
@@ -4085,10 +4140,8 @@
             ]
           },
           "unit": "pressurekpa",
-          "custom": {},
           "decimals": 2
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,

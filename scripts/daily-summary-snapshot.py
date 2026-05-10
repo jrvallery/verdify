@@ -34,10 +34,10 @@ WATTAGE = {
     "heat2": 0,  # heat2 is gas
     "fan1": 52,
     "fan2": 52,
-    "fog": 800,  # AquaFog XE 2000: centrifugal atomizer ~750-850W
+    "fog": 1644,  # AquaFog XE 2000 observed draw
     "vent": 10,
-    "grow_light_main": 816,
-    "grow_light_grow": 630,  # main: 34x 2FT@24W=816W, grow: 15x 4FT@42W=630W, total 1446W
+    "grow_light_main": 630,
+    "grow_light_grow": 816,  # main: 15x 4FT@42W=630W, grow: 34x 2FT@24W=816W, total 1446W
 }
 ELECTRIC_RATE = 0.111  # $/kWh (confirmed by Jason, Longmont CO residential)
 GAS_RATE = 0.83  # $/therm (Xcel Energy marginal: variable + franchise fee + sales tax)

@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Hero view \u2014 temperature forecast, VPD/humidity, and solar correlation",
+  "description": "Hero view — temperature forecast, VPD/humidity, and solar correlation",
   "editable": false,
   "id": 2692728458375168,
   "panels": [
@@ -12,7 +12,7 @@
           "custom": {
             "spanNulls": true,
             "lineWidth": 2,
-            "axisLabel": "\u00b0F"
+            "axisLabel": "°F"
           },
           "unit": "fahrenheit"
         },
@@ -582,9 +582,10 @@
         "defaults": {
           "custom": {
             "spanNulls": true,
-            "lineWidth": 2
+            "lineWidth": 2,
+            "axisLabel": "W"
           },
-          "unit": "watt/m\u00b2"
+          "unit": "watt"
         },
         "overrides": [
           {
@@ -610,14 +611,14 @@
               },
               {
                 "id": "unit",
-                "value": "watt/m\u00b2"
+                "value": "watt/m²"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar (W/m\u00b2)"
+              "options": "Solar (W/m²)"
             },
             "properties": [
               {
@@ -641,7 +642,31 @@
               },
               {
                 "id": "unit",
-                "value": "watt/m\u00b2"
+                "value": "watt/m²"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W/m²"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Greenhouse (W)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W"
               }
             ]
           }
@@ -683,7 +708,7 @@
           },
           "format": "time_series",
           "intervalMs": 300000,
-          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "B"
         }
       ],

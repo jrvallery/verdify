@@ -55,13 +55,15 @@ Do not edit `/srv/verdify/verdify-site/quartz` for normal work. The web repo own
 Build/publish units:
 
 - `verdify-site-poll.timer` fires every 10 seconds because inotify is unreliable on the NFS/Syncthing vault.
-- `verdify-site-poll.service` runs `scripts/site-poll-and-rebuild.sh`.
+- `verdify-site-poll.service` runs `scripts/site-poll-and-rebuild.sh`. The poller compares a metadata signature for the website tree instead of using `find -newer`, because Syncthing can preserve Mac/Obsidian mtimes and otherwise hide real edits from an mtime-threshold check.
 - `verdify-site-build.service` runs `scripts/rebuild-site.sh`.
 - `verdify-forecast-page.timer` regenerates `/forecast/` every 30 minutes.
 - `verdify-plan-publish.path` watches `/var/local/verdify/state/plan-publish-trigger`.
 - `verdify-plan-publish.service` writes today's plan markdown.
 
-`scripts/rebuild-site.sh` syncs the repo-owned Quartz source into `/srv/verdify/verdify-site`, runs `npx quartz build`, then restarts `verdify-site`. Quartz deletes/recreates `public/`, and the Docker bind mount can otherwise hold a stale NFS file handle. If `verdify.ai` serves 404 while host `public/index.html` exists, check `docker logs verdify-site` for `Stale file handle` and restart only `verdify-site`.
+`scripts/rebuild-site.sh` syncs the repo-owned Quartz source into `/srv/verdify/verdify-site`, builds Quartz into `/srv/verdify/verdify-site/.builds/public.*`, verifies the staged `index.html`, then rsyncs the complete staged output into `/srv/verdify/verdify-site/public` with delayed deletes. Normal content rebuilds leave `verdify-site` nginx running; the script reloads nginx only when `site/nginx.conf` changes, with restart as the fallback. If `verdify.ai` serves 404 while host `public/index.html` exists, check `docker logs verdify-site` for serving errors before restarting only `verdify-site`.
+
+Use `make site-publish-status` to trace the live path from Obsidian vault content through the last successful signature, Quartz output, timer state, and latest build log. The detailed operator doc is `docs/site-publishing-pipeline.md`.
 
 ## Generated website pages
 

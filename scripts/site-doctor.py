@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ DEFAULT_PUBLIC = Path("/srv/verdify/verdify-site/public")
 DEFAULT_IMAGE_MANIFEST = Path("docs/site-image-manifest.json")
 DEFAULT_GRAFANA_CONTAINER = "verdify-grafana"
 DEFAULT_SITE_CONTAINER = "verdify-site"
+DEFAULT_LAUNCH_LINT = Path("scripts/lint_public_site.py")
 REBUILD_RETRY_ATTEMPTS = 25
 REBUILD_RETRY_SLEEP_SEC = 2
 BOX_DRAWING_RE = re.compile(r"[│┌└├─═╔]")
@@ -627,6 +629,47 @@ def check_site_container(container: str) -> list[Finding]:
     return [Finding("error", "site-container-bind-mount", f"{container} cannot read nginx html bind mount: {detail}")]
 
 
+def check_launch_lint(vault_root: Path, public_root: Path, skip_public: bool) -> list[Finding]:
+    if not DEFAULT_LAUNCH_LINT.exists():
+        return [Finding("warn", "launch-lint-missing", f"{DEFAULT_LAUNCH_LINT} is missing")]
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as fh:
+        report_path = Path(fh.name)
+    try:
+        cmd = [
+            sys.executable,
+            str(DEFAULT_LAUNCH_LINT),
+            "--vault-root",
+            str(vault_root),
+            "--public-root",
+            str(public_root),
+            "--json-report",
+            str(report_path),
+            "--quiet",
+        ]
+        if skip_public:
+            cmd.append("--skip-public")
+        subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        findings = []
+        for item in payload.get("findings", []):
+            findings.append(
+                Finding(
+                    severity=str(item.get("severity", "warn")),
+                    code=f"launch-{item.get('code', 'lint')}",
+                    message=str(item.get("message", "")),
+                )
+            )
+        return findings
+    except Exception as exc:
+        return [Finding("warn", "launch-lint-failed", f"launch lint failed to run: {exc}")]
+    finally:
+        try:
+            report_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def print_summary(
     pages: list[PageInfo],
     iframes: list[IframeRef],
@@ -725,6 +768,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-grafana", action="store_true")
     parser.add_argument("--skip-public", action="store_true")
     parser.add_argument("--skip-site-container", action="store_true")
+    parser.add_argument("--skip-launch-lint", action="store_true")
     parser.add_argument("--json-report", type=Path, help="Write machine-readable report to this path")
     parser.add_argument(
         "--semantic-report",
@@ -748,6 +792,8 @@ def main() -> int:
     findings.extend(content_findings)
     findings.extend(check_images(args.vault_root, images, image_manifest))
     findings.extend(check_links(args.vault_root, links))
+    if not args.skip_launch_lint:
+        findings.extend(check_launch_lint(args.vault_root, args.public_root, args.skip_public))
 
     panel_ids_by_uid: dict[str, set[str]] = {}
     panel_titles_by_uid: dict[str, dict[str, str]] = {}

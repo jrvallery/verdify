@@ -27,7 +27,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
@@ -51,8 +50,7 @@
             ]
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -99,7 +97,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -123,8 +120,7 @@
             ]
           },
           "unit": "pressurekpa"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -161,26 +157,147 @@
       "type": "stat"
     },
     {
-      "description": "Shows greenhouse equipment or controller state over time.",
+      "description": "Current ESP32 controller state rendered through numeric value mappings so Grafana static images do not drop string-only stats.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "dark-red",
                 "value": null
               },
               {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "blue",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
                 "color": "red",
-                "value": 80
+                "value": 24
               }
             ]
           },
-          "unit": "none"
-        },
-        "overrides": []
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "dark-red"
+                },
+                "1": {
+                  "text": "IDLE",
+                  "color": "green"
+                },
+                "2": {
+                  "text": "VENTILATE",
+                  "color": "blue"
+                },
+                "3": {
+                  "text": "THERMAL_RELIEF",
+                  "color": "blue"
+                },
+                "4": {
+                  "text": "DEHUM_VENT",
+                  "color": "purple"
+                },
+                "5": {
+                  "text": "SEALED_MIST_S1",
+                  "color": "purple"
+                },
+                "6": {
+                  "text": "SEALED_MIST_S2",
+                  "color": "purple"
+                },
+                "7": {
+                  "text": "SEALED_MIST_FOG",
+                  "color": "purple"
+                },
+                "8": {
+                  "text": "SEALED_MIST_WATCH",
+                  "color": "purple"
+                },
+                "9": {
+                  "text": "TEMP_IDLE_HUM_IDLE",
+                  "color": "green"
+                },
+                "10": {
+                  "text": "TEMP_IDLE_HUMID_S1",
+                  "color": "green"
+                },
+                "11": {
+                  "text": "TEMP_IDLE_VPD_WATCH",
+                  "color": "green"
+                },
+                "12": {
+                  "text": "HEAT_S1_HUM_IDLE",
+                  "color": "orange"
+                },
+                "13": {
+                  "text": "HEAT_S1_HUMID_S1",
+                  "color": "orange"
+                },
+                "14": {
+                  "text": "HEAT_S1_VPD_WATCH",
+                  "color": "orange"
+                },
+                "15": {
+                  "text": "HEAT_S2_HUM_IDLE",
+                  "color": "orange"
+                },
+                "16": {
+                  "text": "HEAT_S2_HUMID_S1",
+                  "color": "orange"
+                },
+                "17": {
+                  "text": "HEAT_S2_VPD_WATCH",
+                  "color": "orange"
+                },
+                "18": {
+                  "text": "COOL_S1_HUM_IDLE",
+                  "color": "blue"
+                },
+                "19": {
+                  "text": "COOL_S1_HUMID_S1",
+                  "color": "blue"
+                },
+                "20": {
+                  "text": "COOL_S1_HUMID_S2",
+                  "color": "blue"
+                },
+                "21": {
+                  "text": "COOL_S1_VPD_WATCH",
+                  "color": "blue"
+                },
+                "22": {
+                  "text": "COOL_S2_HUMID_S1",
+                  "color": "blue"
+                },
+                "23": {
+                  "text": "COOL_S2_HUMID_S2",
+                  "color": "blue"
+                },
+                "24": {
+                  "text": "SAFETY_COOL",
+                  "color": "blue"
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          }
+        }
       },
       "gridPos": {
         "h": 3,
@@ -189,7 +306,18 @@
         "y": 1
       },
       "id": 4,
-      "options": {},
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "colorMode": "background_solid",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "datasource": {
@@ -197,7 +325,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1",
+          "rawSql": "WITH state_map(state, code) AS (\n  VALUES\n    ('IDLE', 1),\n    ('VENTILATE', 2),\n    ('THERMAL_RELIEF', 3),\n    ('DEHUM_VENT', 4),\n    ('SEALED_MIST_S1', 5),\n    ('SEALED_MIST_S2', 6),\n    ('SEALED_MIST_FOG', 7),\n    ('SEALED_MIST_WATCH', 8),\n    ('TEMP_IDLE_HUM_IDLE', 9),\n    ('TEMP_IDLE_HUMID_S1', 10),\n    ('TEMP_IDLE_VPD_WATCH', 11),\n    ('HEAT_S1_HUM_IDLE', 12),\n    ('HEAT_S1_HUMID_S1', 13),\n    ('HEAT_S1_VPD_WATCH', 14),\n    ('HEAT_S2_HUM_IDLE', 15),\n    ('HEAT_S2_HUMID_S1', 16),\n    ('HEAT_S2_VPD_WATCH', 17),\n    ('COOL_S1_HUM_IDLE', 18),\n    ('COOL_S1_HUMID_S1', 19),\n    ('COOL_S1_HUMID_S2', 20),\n    ('COOL_S1_VPD_WATCH', 21),\n    ('COOL_S2_HUMID_S1', 22),\n    ('COOL_S2_HUMID_S2', 23),\n    ('SAFETY_COOL', 24)\n)\nSELECT\n  now() AS time,\n  COALESCE((\n    SELECT sm.code\n    FROM v_greenhouse_now g\n    LEFT JOIN state_map sm ON sm.state = g.state\n    LIMIT 1\n  ), 0) AS \"State\";",
           "refId": "A"
         }
       ],
@@ -211,7 +339,6 @@
       "description": "Shows current controller WiFi signal strength.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
@@ -231,8 +358,7 @@
             ]
           },
           "unit": "dBm"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -271,7 +397,6 @@
       "description": "Shows free memory on the ESP32 controller over time.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
@@ -291,8 +416,7 @@
             ]
           },
           "unit": "kbytes"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -335,7 +459,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
@@ -351,8 +474,7 @@
             ]
           },
           "unit": "none"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -402,23 +524,192 @@
       "type": "row"
     },
     {
-      "description": "Shows the sequence of controller states over the last 24 hours.",
+      "description": "Seven-day state timeline for the ESP32 surface mode plus derived temperature and VPD/moisture axes from the firmware mode_reason trace.",
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "fillOpacity": 80
+            "fillOpacity": 88,
+            "lineWidth": 0
+          },
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "SENSOR_FAULT": {
+                  "text": "Sensor fault",
+                  "color": "#9E9E9E",
+                  "index": 0
+                },
+                "SAFETY_COOL": {
+                  "text": "Safety cool",
+                  "color": "#D32F2F",
+                  "index": 1
+                },
+                "SAFETY_HEAT": {
+                  "text": "Safety heat",
+                  "color": "#C62828",
+                  "index": 2
+                },
+                "IDLE": {
+                  "text": "Idle",
+                  "color": "#66BB6A",
+                  "index": 3
+                },
+                "VENTILATE": {
+                  "text": "Ventilate",
+                  "color": "#42A5F5",
+                  "index": 4
+                },
+                "THERMAL_RELIEF": {
+                  "text": "Thermal relief",
+                  "color": "#F57C00",
+                  "index": 5
+                },
+                "DEHUM_VENT": {
+                  "text": "Dehum vent",
+                  "color": "#7E57C2",
+                  "index": 6
+                },
+                "SEALED_MIST_S1": {
+                  "text": "Mist S1",
+                  "color": "#26A69A",
+                  "index": 7
+                },
+                "SEALED_MIST_S2": {
+                  "text": "Mist S2",
+                  "color": "#00897B",
+                  "index": 8
+                },
+                "SEALED_MIST_FOG": {
+                  "text": "Mist + fog",
+                  "color": "#00ACC1",
+                  "index": 9
+                },
+                "SEALED_MIST_WATCH": {
+                  "text": "Mist watch",
+                  "color": "#80CBC4",
+                  "index": 10
+                },
+                "TEMP_IDLE": {
+                  "text": "Temp idle",
+                  "color": "#81C784",
+                  "index": 11
+                },
+                "HEAT_S1": {
+                  "text": "Heat 1 (Electric)",
+                  "color": "#FFB74D",
+                  "index": 12
+                },
+                "HEAT_S2": {
+                  "text": "Heat 2 (Gas)",
+                  "color": "#F4511E",
+                  "index": 13
+                },
+                "COOL_S1": {
+                  "text": "Cooling",
+                  "color": "#64B5F6",
+                  "index": 14
+                },
+                "DWELL_HOLD": {
+                  "text": "Dwell hold",
+                  "color": "#FFE082",
+                  "index": 15
+                },
+                "VPD_IDLE": {
+                  "text": "VPD idle",
+                  "color": "#A5D6A7",
+                  "index": 16
+                },
+                "VPD_LOW": {
+                  "text": "VPD low / dehum",
+                  "color": "#BA68C8",
+                  "index": 17
+                },
+                "VPD_RESOLVED": {
+                  "text": "VPD resolved",
+                  "color": "#80CBC4",
+                  "index": 18
+                },
+                "HUMID_S1": {
+                  "text": "Humidify enter",
+                  "color": "#26A69A",
+                  "index": 19
+                },
+                "HUMIDIFY": {
+                  "text": "Humidify",
+                  "color": "#00897B",
+                  "index": 20
+                },
+                "MIST_BACKOFF": {
+                  "text": "Mist backoff",
+                  "color": "#FFCA28",
+                  "index": 21
+                },
+                "MOISTURE_BLOCKED": {
+                  "text": "Moisture blocked",
+                  "color": "#BDBDBD",
+                  "index": 22
+                },
+                "TEMP_PREEMPT": {
+                  "text": "Temp preempts VPD",
+                  "color": "#F57C00",
+                  "index": 23
+                },
+                "SUMMER_VENT": {
+                  "text": "Summer vent",
+                  "color": "#29B6F6",
+                  "index": 24
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "transparent",
+                  "index": 25
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "rgba(100, 100, 100, 0.3)",
+                "value": null
+              }
+            ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
         "y": 5
       },
       "id": 9,
-      "options": {},
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "alignValue": "center",
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
       "targets": [
         {
           "datasource": {
@@ -426,12 +717,31 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Controller Mode\"\nFROM system_state\nWHERE entity = 'greenhouse_state' AND $__timeFilter(ts)\nORDER BY ts",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts),\n  CASE\n    WHEN value = 'v2_sensor_fault' THEN 'SENSOR_FAULT'\n    WHEN value = 'v2_safety_heat' THEN 'SAFETY_HEAT'\n    WHEN value = 'v2_safety_cool' THEN 'SAFETY_COOL'\n    WHEN value = 'v2_heat_stage2' THEN 'HEAT_S2'\n    WHEN value = 'v2_heat_stage1' THEN 'HEAT_S1'\n    WHEN value IN ('v2_temp_high', 'v2_summer_vent', 'v2_temp_preempts_humidify') THEN 'COOL_S1'\n    WHEN value = 'v2_dwell_hold' THEN 'DWELL_HOLD'\n    ELSE 'TEMP_IDLE'\n  END AS \"Temperature Axis\"\nFROM system_state\nWHERE entity = 'mode_reason' AND $__timeFilter(ts)\nORDER BY ts",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts),\n  CASE\n    WHEN value IN ('v2_vpd_low', 'v2_dehum_continue') THEN 'VPD_LOW'\n    WHEN value = 'v2_humidify_enter' THEN 'HUMID_S1'\n    WHEN value = 'v2_humidify_continue' THEN 'HUMIDIFY'\n    WHEN value = 'v2_humidify_resolved' THEN 'VPD_RESOLVED'\n    WHEN value = 'v2_mist_backoff' THEN 'MIST_BACKOFF'\n    WHEN value = 'v2_moisture_blocked' THEN 'MOISTURE_BLOCKED'\n    WHEN value = 'v2_temp_preempts_humidify' THEN 'TEMP_PREEMPT'\n    WHEN value = 'v2_summer_vent' THEN 'SUMMER_VENT'\n    ELSE 'VPD_IDLE'\n  END AS \"VPD Axis\"\nFROM system_state\nWHERE entity = 'mode_reason' AND $__timeFilter(ts)\nORDER BY ts",
+          "refId": "C"
         }
       ],
-      "title": "State Timeline (24h)",
-      "type": "state-timeline"
+      "title": "Multi-Axis Controller Timeline",
+      "type": "state-timeline",
+      "maxDataPoints": 10000
     },
     {
       "datasource": {
@@ -618,7 +928,6 @@
       "description": "Shows how many setpoint writes were issued over the last 24 hours.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "steps": [
               {
@@ -635,8 +944,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -662,12 +970,6 @@
     },
     {
       "description": "Shows where controller writes came from, split by source.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "gridPos": {
         "h": 4,
         "w": 12,
@@ -707,7 +1009,6 @@
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -721,8 +1022,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -772,8 +1072,7 @@
             ]
           },
           "unit": "short"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -799,12 +1098,6 @@
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1004,12 +1297,6 @@
         "uid": "verdify-tsdb"
       },
       "description": "Shows the underlying components feeding the overall system health score.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "gridPos": {
         "h": 8,
         "w": 12,

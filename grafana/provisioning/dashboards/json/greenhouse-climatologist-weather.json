@@ -530,8 +530,7 @@
             }
           },
           "unit": "pressurekpa"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1040,13 +1039,7 @@
         }
       ],
       "title": "Forecast Bias (7-day rolling)",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "type": "table"
     },
     {
       "datasource": {
@@ -1076,10 +1069,8 @@
               }
             ]
           },
-          "unit": "mol/m\u00b2/d",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "mol/m\u00b2/d"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1146,8 +1137,7 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true
-          },
-          "unit": "currencyUSD"
+          }
         },
         "overrides": [
           {
@@ -1165,7 +1155,7 @@
               },
               {
                 "id": "unit",
-                "value": "fahrenheit"
+                "value": "suffix: \u00b0F/100 W/m\u00b2"
               }
             ]
           },
@@ -1193,6 +1183,10 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 15
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W/m\u00b2"
               }
             ]
           }
@@ -1373,11 +1367,7 @@
             }
           ],
           "title": "Disease Risk (Last 12h)",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
+          "type": "table"
         },
         {
           "datasource": {
@@ -1406,11 +1396,7 @@
             }
           ],
           "title": "Mister Effectiveness (24h)",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
+          "type": "table"
         }
       ],
       "title": "Disease Risk & Mister Impact",

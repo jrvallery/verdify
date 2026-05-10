@@ -1588,14 +1588,15 @@ REGISTRY: dict[str, TunableDef] = {
     "sw_fsm_controller_enabled": TunableDef(
         name="sw_fsm_controller_enabled",
         kind="switch",
-        default=0,
+        default=1,
         esp_object_id="fsm_controller_enabled",
         cfg_readback_object_id="cfg_fsm_controller_enabled",
-        push_owner="planner",
+        push_owner="operator",
         planner_pushable=True,
         tier=1,
-        notes="Master switch for controller v2 band-first FSM. Default OFF so "
-        "legacy firmware remains the rollback path.",
+        notes="Controller v2 band-first FSM is the live controller path. "
+        "Dispatcher, MCP, and outbound-listener guardrails force this ON; "
+        "legacy fallback requires an explicit operator/firmware rollback.",
     ),
     "mist_backoff_s": TunableDef(
         name="mist_backoff_s",

@@ -39,6 +39,7 @@ analytics/umami-admin.txt
 # Backups
 *.dump
 *.bak
+*.bak-*
 
 # Archived / deprecated
 archive/
@@ -49,6 +50,8 @@ site/public
 
 # OS
 .DS_Store
+@eaDir/
+**/@eaDir/
 .nfs*
 *.nfs*
 reports/

@@ -31,12 +31,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -72,7 +66,6 @@
             "mode": "fixed",
             "fixedColor": "#9CCC65"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -86,8 +79,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -133,7 +125,6 @@
             "mode": "fixed",
             "fixedColor": "#FFCA28"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -147,8 +138,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -194,7 +184,6 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -208,8 +197,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -255,7 +243,6 @@
             "mode": "fixed",
             "fixedColor": "#CE93D8"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -269,8 +256,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -316,7 +302,6 @@
             "mode": "fixed",
             "fixedColor": "#FFA726"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -330,8 +315,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -377,7 +361,6 @@
             "mode": "fixed",
             "fixedColor": "#42A5F5"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -391,8 +374,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -438,7 +420,6 @@
             "mode": "fixed",
             "fixedColor": "#C6FF00"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -452,8 +433,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -515,8 +495,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -540,12 +519,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -896,12 +869,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -1213,12 +1180,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -1264,8 +1225,7 @@
             "spanNulls": true,
             "lineInterpolation": "linear"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -1420,12 +1380,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -1849,12 +1803,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -1924,8 +1872,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -1987,8 +1934,7 @@
             "showPoints": "never",
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -2018,12 +1964,6 @@
       },
       "collapsed": false,
       "panels": [],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {}
     },
     {
@@ -2145,12 +2085,6 @@
       "panels": [],
       "title": "REVIEW \u2014 Sensor Truth & Story Graphs",
       "type": "row",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {},
       "datasource": {
         "uid": "verdify-tsdb",

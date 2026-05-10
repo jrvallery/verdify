@@ -8,7 +8,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Indoor temperature (15-sample rolling average; dashed = forecast) against the forecast-driven target band. The band widens on sunny days and narrows on cloudy days. Gray line shows outdoor temperature for context.",
+      "description": "Observed indoor temperature and outdoor/forecast temperature against the crop-safe target band. Equipment markers show when heat, fan, and fog outputs were active.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -58,7 +58,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Indoor"
+              "options": "Indoor Temp"
             },
             "properties": [
               {
@@ -112,7 +112,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
@@ -126,7 +126,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 10
+                "value": 18
               },
               {
                 "id": "custom.hideFrom",
@@ -147,7 +147,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
@@ -181,102 +181,6 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Solar W/m\u00b2"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FFA726",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 35
-              },
-              {
-                "id": "custom.gradientMode",
-                "value": "opacity"
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "watt/m\u00b2"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1200
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Solar Forecast"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FFD740",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 18
-              },
-              {
-                "id": "custom.gradientMode",
-                "value": "opacity"
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "watt/m\u00b2"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1200
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    10,
-                    5
-                  ]
-                }
               }
             ]
           },
@@ -424,7 +328,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor Temp (15-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor Temp\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
           "refId": "A",
           "sql": {
             "columns": [
@@ -536,28 +440,6 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "refId": "J",
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar W/m\u00b2\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "K",
-          "rawSql": "(SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar Forecast\"\nFROM climate WHERE solar_irradiance_w_m2 IS NOT NULL ORDER BY ts DESC LIMIT 1)\nUNION ALL\n(SELECT DISTINCT ON (date_trunc('hour', ts))\n    date_trunc('hour', ts) AS time, solar_w_m2 AS \"Solar Forecast\"\nFROM weather_forecast WHERE ts > now() AND ts < now() + interval '72 hours'\nORDER BY date_trunc('hour', ts), fetched_at DESC)\nORDER BY time"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
           "refId": "E",
           "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 82 ELSE NULL END AS \"Fan 1\" FROM equipment_state WHERE equipment='fan1' AND $__timeFilter(ts) ORDER BY ts"
         },
@@ -606,7 +488,7 @@
           "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 56 ELSE NULL END AS \"Heat 2 (gas)\" FROM equipment_state WHERE equipment='heat2' AND $__timeFilter(ts) ORDER BY ts"
         }
       ],
-      "title": "Temperature vs Target Band",
+      "title": "Temperature Control Against Safe Band",
       "type": "timeseries"
     },
     {
@@ -614,7 +496,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Indoor VPD (30-sample rolling average; dashed = forecast) against the forecast-driven target band. The band widens when outdoor humidity is low. Gray line shows outdoor relative humidity for context.",
+      "description": "Observed indoor VPD and outdoor/forecast VPD against the crop-safe target band. Mister and fog markers show when humidity equipment was active.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -718,7 +600,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
@@ -732,7 +614,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 10
+                "value": 18
               },
               {
                 "id": "custom.hideFrom",
@@ -753,7 +635,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
@@ -911,7 +793,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD (30-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1060,7 +942,7 @@
           "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts"
         }
       ],
-      "title": "VPD vs Target Band",
+      "title": "VPD Control Against Safe Band",
       "type": "timeseries"
     },
     {
@@ -1074,7 +956,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
@@ -1098,8 +979,7 @@
             ]
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -1168,8 +1048,7 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1187,58 +1066,104 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Shows outdoor solar irradiance, one of the main drivers of greenhouse heat gain.",
+      "description": "Observed outdoor solar radiation plus the latest forecast. Zero at night is expected; the trend shows the solar heat load that drives greenhouse temperature and resource timing.",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {},
+          "unit": "watt/m\u00b2",
           "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "axisPlacement": "auto",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "#78909C",
+                "color": "green",
                 "value": null
-              },
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Observed Solar W/m\u00b2"
+            },
+            "properties": [
               {
-                "color": "#FFA726",
-                "value": 200
-              },
-              {
-                "color": "#FFEE58",
-                "value": 500
-              },
-              {
-                "color": "#FFD600",
-                "value": 800
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F9A825"
+                }
               }
             ]
           },
-          "unit": "watt/m\u00b2"
-        },
-        "overrides": []
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast Solar W/m\u00b2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FFF176"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 22
       },
       "id": 113,
       "options": {
-        "colorMode": "background_solid",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         },
-        "textMode": "auto"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
       },
       "targets": [
         {
@@ -1246,18 +1171,27 @@
             "type": "grafana-postgresql-datasource",
             "uid": "verdify-tsdb"
           },
-          "format": "table",
-          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar\" FROM climate WHERE ts > now() - interval '1 hour' AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts DESC LIMIT 1",
-          "refId": "A"
+          "format": "time_series",
+          "refId": "A",
+          "rawSql": "SELECT time_bucket('15 minutes', ts) AS time, round(avg(solar_irradiance_w_m2)::numeric, 0) AS \"Observed Solar W/m\u00b2\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND solar_irradiance_w_m2 IS NOT NULL\nGROUP BY 1 ORDER BY 1"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "refId": "B",
+          "rawSql": "SELECT ts AS time, round(solar_w_m2::numeric, 0) AS \"Forecast Solar W/m\u00b2\"\nFROM weather_forecast\nWHERE fetched_at = (SELECT max(fetched_at) FROM weather_forecast)\n  AND $__timeFilter(ts) AND solar_w_m2 IS NOT NULL\nORDER BY ts"
         }
       ],
-      "title": "Outdoor Solar Irradiance",
-      "type": "stat"
+      "title": "Solar Irradiance Over Time",
+      "type": "timeseries"
     },
     {
       "id": 105,
       "type": "stat",
-      "title": "kWh",
+      "title": "Est. kWh/day (30-Day Avg)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1271,11 +1205,11 @@
       "targets": [
         {
           "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(kwh_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
+          "rawSql": "SELECT now() AS time,\n  ROUND(AVG(kwh_estimated)::numeric, 2) AS v\nFROM daily_summary\nWHERE date >= current_date - interval '30 days'\n  AND date < current_date\n  AND kwh_estimated IS NOT NULL",
           "refId": "A"
         }
       ],
@@ -1287,8 +1221,7 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1299,12 +1232,12 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Estimated kWh from equipment runtimes \u00d7 rated wattages"
+      "description": "Average estimated electric use per completed day across the last 30 days, computed from equipment runtimes and rated/observed wattages."
     },
     {
       "id": 106,
       "type": "stat",
-      "title": "Therms",
+      "title": "Therms/day (30-Day Avg)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1318,11 +1251,11 @@
       "targets": [
         {
           "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(therms_estimated), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
+          "rawSql": "SELECT now() AS time,\n  ROUND(AVG(therms_estimated)::numeric, 2) AS v\nFROM daily_summary\nWHERE date >= current_date - interval '30 days'\n  AND date < current_date\n  AND therms_estimated IS NOT NULL",
           "refId": "A"
         }
       ],
@@ -1334,8 +1267,7 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1345,12 +1277,13 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "description": "Average estimated gas furnace consumption per completed day across the last 30 days."
     },
     {
       "id": 107,
       "type": "stat",
-      "title": "Gallons",
+      "title": "Water gal/day (30-Day Avg)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1364,11 +1297,11 @@
       "targets": [
         {
           "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
           },
-          "rawSql": "SELECT now() AS time, COALESCE(SUM(water_used_gal), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz)",
           "format": "table",
+          "rawSql": "SELECT now() AS time,\n  ROUND(AVG(water_used_gal)::numeric, 0) AS v\nFROM daily_summary\nWHERE date >= current_date - interval '30 days'\n  AND date < current_date\n  AND water_used_gal IS NOT NULL",
           "refId": "A"
         }
       ],
@@ -1380,8 +1313,7 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1391,17 +1323,24 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "description": "Average water use per completed day across the last 30 days."
     },
     {
-      "description": "Shows the sequence of controller states over the last 24 hours.",
+      "description": "Latest controller, mister, fan, occupancy, and override state values with 24-hour change counts.",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "fillOpacity": 80
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1410,20 +1349,23 @@
         "y": 39
       },
       "id": 19,
-      "options": {},
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
       "targets": [
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
             "uid": "verdify-tsdb"
           },
-          "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"State\" FROM system_state WHERE entity = 'greenhouse_state' AND $__timeFilter(ts) ORDER BY ts",
+          "format": "table",
+          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (entity)\n    entity,\n    REPLACE(REPLACE(value, chr(160), ' '), '\u2192', 'to ') AS value,\n    ts\n  FROM system_state\n  WHERE ts >= now() - interval '24 hours'\n    AND entity IN (\n      'greenhouse_state', 'mode_reason', 'mister_state', 'mister_zone',\n      'lead_fan', 'overrides_active', 'occupancy', 'last_transition'\n    )\n  ORDER BY entity, ts DESC\n), changes AS (\n  SELECT entity,\n         COUNT(*) FILTER (WHERE prev_value IS NULL OR value IS DISTINCT FROM prev_value) AS changes_24h\n  FROM (\n    SELECT entity, value,\n           LAG(value) OVER (PARTITION BY entity ORDER BY ts) AS prev_value\n    FROM system_state\n    WHERE ts >= now() - interval '24 hours'\n      AND entity IN (\n        'greenhouse_state', 'mode_reason', 'mister_state', 'mister_zone',\n        'lead_fan', 'overrides_active', 'occupancy', 'last_transition'\n      )\n  ) s\n  GROUP BY entity\n)\nSELECT\n  CASE l.entity\n    WHEN 'greenhouse_state' THEN 'Controller state'\n    WHEN 'mode_reason' THEN 'Mode reason'\n    WHEN 'mister_state' THEN 'Mister state'\n    WHEN 'mister_zone' THEN 'Active mist zone'\n    WHEN 'lead_fan' THEN 'Lead fan'\n    WHEN 'overrides_active' THEN 'Overrides'\n    WHEN 'occupancy' THEN 'Occupancy'\n    WHEN 'last_transition' THEN 'Last transition'\n    ELSE l.entity\n  END AS \"Signal\",\n  l.value AS \"Current value\",\n  to_char(l.ts AT TIME ZONE 'America/Denver', 'MM/DD HH24:MI') AS \"Updated MDT\",\n  COALESCE(c.changes_24h, 0) AS \"24h changes\"\nFROM latest l\nLEFT JOIN changes c USING (entity)\nORDER BY array_position(ARRAY[\n  'greenhouse_state', 'mode_reason', 'last_transition', 'mister_state',\n  'mister_zone', 'lead_fan', 'overrides_active', 'occupancy'\n]::text[], l.entity);",
           "refId": "A"
         }
       ],
-      "title": "State Timeline (24h)",
-      "type": "state-timeline"
+      "title": "Controller State Table (24h)",
+      "type": "table"
     },
     {
       "datasource": {
@@ -1765,8 +1707,7 @@
               "type": "linear"
             }
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -2257,6 +2198,89 @@
       ],
       "title": "Zone VPD Comparison",
       "type": "timeseries"
+    },
+    {
+      "id": 121,
+      "title": "Equipment Energy by Device (30d)",
+      "type": "table",
+      "description": "Thirty-day runtime, estimated electric kWh or gas therms, and estimated cost by controllable climate device.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Runtime h"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Energy"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Est. cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "table",
+          "rawSql": "WITH d AS (\n  SELECT *\n  FROM daily_summary\n  WHERE date >= current_date - interval '30 days'\n    AND date < current_date\n), e AS (\n  SELECT equipment, wattage, btu_rating\n  FROM equipment_assets\n), loads AS (\n  SELECT\n    'Heat 1 electric'::text AS device,\n    COALESCE(SUM(d.runtime_heat1_min), 0) / 60.0 AS runtime_h,\n    COALESCE(SUM(d.runtime_heat1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'heat1'), 1500) / 1000.0 AS energy,\n    'kWh'::text AS unit,\n    COALESCE(SUM(d.runtime_heat1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'heat1'), 1500) / 1000.0 * 0.111 AS cost_usd\n  FROM d\n  UNION ALL\n  SELECT\n    'Heat 2 gas furnace',\n    COALESCE(SUM(d.runtime_heat2_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_heat2_min), 0) / 60.0 * COALESCE((SELECT btu_rating FROM e WHERE equipment = 'heat2'), 75000) / 100000.0,\n    'therms',\n    COALESCE(SUM(d.runtime_heat2_min), 0) / 60.0 * COALESCE((SELECT btu_rating FROM e WHERE equipment = 'heat2'), 75000) / 100000.0 * 0.83\n  FROM d\n  UNION ALL\n  SELECT\n    'Fogger',\n    COALESCE(SUM(d.runtime_fog_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_fog_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fog'), 800) / 1000.0,\n    'kWh',\n    COALESCE(SUM(d.runtime_fog_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fog'), 800) / 1000.0 * 0.111\n  FROM d\n  UNION ALL\n  SELECT\n    'Fans',\n    (COALESCE(SUM(d.runtime_fan1_min), 0) + COALESCE(SUM(d.runtime_fan2_min), 0)) / 60.0,\n    COALESCE(SUM(d.runtime_fan1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan1'), 52) / 1000.0 +\n      COALESCE(SUM(d.runtime_fan2_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan2'), 52) / 1000.0,\n    'kWh',\n    (COALESCE(SUM(d.runtime_fan1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan1'), 52) / 1000.0 +\n      COALESCE(SUM(d.runtime_fan2_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan2'), 52) / 1000.0) * 0.111\n  FROM d\n  UNION ALL\n  SELECT\n    'Vent actuator',\n    COALESCE(SUM(d.runtime_vent_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_vent_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'vent'), 10) / 1000.0,\n    'kWh',\n    COALESCE(SUM(d.runtime_vent_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'vent'), 10) / 1000.0 * 0.111\n  FROM d\n  UNION ALL\n  SELECT\n    'Grow lights',\n    COALESCE(SUM(d.runtime_grow_light_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_grow_light_min), 0) / 60.0 * (\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_grow'), 816) +\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_main'), 630)\n    ) / 1000.0,\n    'kWh',\n    COALESCE(SUM(d.runtime_grow_light_min), 0) / 60.0 * (\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_grow'), 816) +\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_main'), 630)\n    ) / 1000.0 * 0.111\n  FROM d\n)\nSELECT\n  device AS \"Device\",\n  ROUND(runtime_h::numeric, 1) AS \"Runtime h\",\n  ROUND(energy::numeric, 1) AS \"Energy\",\n  unit AS \"Unit\",\n  ROUND(cost_usd::numeric, 2) AS \"Est. cost\"\nFROM loads\nWHERE runtime_h > 0 OR energy > 0\nORDER BY cost_usd DESC;",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "annotations": {

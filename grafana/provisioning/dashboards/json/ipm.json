@@ -68,10 +68,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "description": "Shows current or recent botrytis disease risk based on greenhouse conditions.",
       "options": {}
@@ -117,10 +115,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "description": "Shows current or recent condensation risk based on greenhouse conditions.",
       "options": {}
@@ -164,8 +160,7 @@
           "custom": {
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Shows how many consecutive hours conditions stayed in a botrytis-risk state.",
       "options": {}
@@ -209,8 +204,7 @@
           "custom": {
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Shows how many consecutive hours conditions stayed in a condensation-risk state.",
       "options": {}
@@ -666,10 +660,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No treatments recorded",
-          "custom": {}
-        },
-        "overrides": []
+          "noValue": "No treatments recorded"
+        }
       },
       "description": "Shows the most recent plant treatments or interventions.",
       "options": {
@@ -695,10 +687,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No observations recorded",
-          "custom": {}
-        },
-        "overrides": []
+          "noValue": "No observations recorded"
+        }
       },
       "description": "Shows the most recent greenhouse observations logged into the system.",
       "options": {
@@ -810,8 +800,7 @@
             "lineWidth": 2,
             "spanNulls": false
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Shows ventilation runtime as a proxy for air exchange activity.",
       "options": {

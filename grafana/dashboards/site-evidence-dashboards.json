@@ -14,7 +14,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
@@ -38,8 +37,7 @@
             ]
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -2561,7 +2559,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -2581,8 +2578,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -2630,7 +2626,6 @@
             "fixedColor": "#78909C",
             "mode": "fixed"
           },
-          "custom": {},
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -2646,8 +2641,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -2690,7 +2684,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
@@ -2714,8 +2707,7 @@
             ]
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,

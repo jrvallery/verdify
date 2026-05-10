@@ -319,7 +319,7 @@ Use tactical knobs below to shift behavior instead.
 - `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions. Does NOT bind THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, or SENSOR_FAULT — those preempt the gate.
 
 **Controller v2 gate:**
-- `sw_fsm_controller_enabled` — master switch for the band-first FSM. Keep ON for v2 validation; flip OFF only to return to the legacy cascade.
+- `sw_fsm_controller_enabled` — controller v2 is the live band-first FSM and is locked ON by the dispatcher/MCP guardrail. Do not request OFF; fallback to the legacy cascade now requires an operator/firmware rollback.
 
 ### Tier 2 escape hatch
 
@@ -442,7 +442,7 @@ vent flush) → cycle repeats. You control the cycle timing with tunables.
 - Fan cooling (actual): ~34,000-39,000 BTU/hr (altitude-derated + intake-restricted)
 - Cooling deficit: ~49,000-53,000 BTU/hr on peak days = physics-limited above ~85F
 - Intake vent: single 24"x24" (4 sqft) — critically undersized for 4,900 CFM
-- AquaFog XE 2000: ~800W centrifugal atomizer, 7x more effective than misters (0.40 vs 0.06 kPa/min)
+- AquaFog XE 2000: ~1,644W observed draw, 7x more effective than misters (0.40 vs 0.06 kPa/min)
 - Gas heater: 54,000 BTU/hr actual (altitude-derated 20%), 1-2F overshoot typical
 - Slab thermal mass: ~7,300 BTU/F, time constant ~11.5h, provides 7-10F overnight retention
 

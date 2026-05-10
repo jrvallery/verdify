@@ -15,7 +15,7 @@
   "fiscalYearStartMonth": 0,
   "liveNow": false,
   "schemaVersion": 39,
-  "version": 5,
+  "version": 10,
   "editable": true,
   "graphTooltip": 2,
   "templating": {
@@ -195,10 +195,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -267,10 +265,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -339,10 +335,8 @@
                 "value": 2.0
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -372,7 +366,7 @@
     },
     {
       "id": 903,
-      "type": "stat",
+      "type": "table",
       "title": "State",
       "gridPos": {
         "h": 3,
@@ -387,43 +381,38 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "fixed",
-            "fixedColor": "#78909C"
+            "mode": "thresholds"
           },
-          "custom": {},
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
               }
             ]
-          },
-          "unit": "string"
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
           ],
-          "fields": "",
-          "values": false
-        },
-        "graphMode": "none",
-        "colorMode": "background_solid",
-        "textMode": "value_and_name",
-        "justifyMode": "auto"
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -431,12 +420,12 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, state AS \"State\" FROM v_greenhouse_now",
+          "rawSql": "SELECT state AS \"Mode\", lead_fan AS \"Lead Fan\" FROM v_greenhouse_now LIMIT 1",
           "format": "table",
           "refId": "A"
         }
       ],
-      "description": "Shows the current controller or equipment state for this subsystem."
+      "description": "Current ESP32 controller mode and lead fan from v_greenhouse_now."
     },
     {
       "id": 904,
@@ -475,10 +464,8 @@
                 "value": 15
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -543,10 +530,8 @@
                 "value": 10
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -607,10 +592,8 @@
                 "value": 1
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -639,6 +622,51 @@
       "description": "Shows current alerts relevant to this dashboard context."
     },
     {
+      "id": 960,
+      "type": "row",
+      "title": "Live Greenhouse Cameras",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 961,
+      "type": "text",
+      "title": "Camera 1 \u2014 South / Center",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"height:100%;display:flex;align-items:center;justify-content:center;background:#0b0f14;border-radius:8px;overflow:hidden;position:relative;\"><img src=\"https://api.verdify.ai/api/v1/public/cameras/greenhouse_1/latest.jpg?h=1080\" style=\"width:100%;height:100%;max-height:100%;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);background:#111;\" onerror=\"this.style.display='none';this.nextElementSibling.style.display='block'\"><div style=\"display:none;padding:24px;color:#bbb\">Camera 1 unavailable</div><div style=\"position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;padding:3px 7px;border-radius:4px;font-size:12px;\">greenhouse_1 \u00b7 high-res source snapshot</div></div>"
+      },
+      "description": "Public-safe proxy for greenhouse_1 high-resolution source-stream snapshot. Uses API cache headers; refreshes with dashboard."
+    },
+    {
+      "id": 962,
+      "type": "text",
+      "title": "Camera 2 \u2014 East / Hydro",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"height:100%;display:flex;align-items:center;justify-content:center;background:#0b0f14;border-radius:8px;overflow:hidden;position:relative;\"><img src=\"https://api.verdify.ai/api/v1/public/cameras/greenhouse_2/latest.jpg?h=1080\" style=\"width:100%;height:100%;max-height:100%;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);background:#111;\" onerror=\"this.style.display='none';this.nextElementSibling.style.display='block'\"><div style=\"display:none;padding:24px;color:#bbb\">Camera 2 unavailable</div><div style=\"position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;padding:3px 7px;border-radius:4px;font-size:12px;\">greenhouse_2 \u00b7 high-res source snapshot</div></div>"
+      },
+      "description": "Public-safe proxy for greenhouse_2 high-resolution source-stream snapshot. Uses API cache headers; refreshes with dashboard."
+    },
+    {
       "id": 1,
       "type": "row",
       "title": "Equipment Status",
@@ -647,7 +675,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 14
       }
     },
     {
@@ -662,7 +690,7 @@
         "h": 3,
         "w": 3,
         "x": 0,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -745,7 +773,7 @@
         "h": 3,
         "w": 3,
         "x": 3,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -828,7 +856,7 @@
         "h": 3,
         "w": 3,
         "x": 6,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -911,7 +939,7 @@
         "h": 3,
         "w": 3,
         "x": 9,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -994,7 +1022,7 @@
         "h": 3,
         "w": 3,
         "x": 12,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -1077,7 +1105,7 @@
         "h": 3,
         "w": 3,
         "x": 15,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -1160,7 +1188,7 @@
         "h": 3,
         "w": 3,
         "x": 21,
-        "y": 4
+        "y": 15
       },
       "targets": [
         {
@@ -1232,6 +1260,484 @@
       "description": "Shows runtime, cycling, or health context for the grow light system."
     },
     {
+      "id": 27,
+      "type": "stat",
+      "title": "Mister South",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric, 2) AS \"Mister South\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_south_h IS NOT NULL",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#CE93D8"
+          },
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Shows runtime, cycling, or health context for the south mister zone."
+    },
+    {
+      "id": 28,
+      "type": "stat",
+      "title": "Mister West",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 3,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric, 2) AS \"Mister West\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_west_h IS NOT NULL",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#F48FB1"
+          },
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Shows runtime, cycling, or health context for the west mister zone."
+    },
+    {
+      "id": 29,
+      "type": "stat",
+      "title": "Mister Center",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 6,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric, 2) AS \"Mister Center\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_center_h IS NOT NULL",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#E040FB"
+          },
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Shows runtime, cycling, or health context for the center mister zone."
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Drip Wall",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 9,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_wall_h)::numeric, 2) AS \"Drip Wall\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_drip_wall_h IS NOT NULL",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#4DD0E1"
+          },
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drip Wall"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Shows runtime, cycling, or health context for the wall drip irrigation zone."
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Drip Center",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 12,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_center_h)::numeric, 2) AS \"Drip Center\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_drip_center_h IS NOT NULL",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#80DEEA"
+          },
+          "custom": {
+            "axisLabel": "Hours"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Drip Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Shows runtime, cycling, or health context for the center drip irrigation zone."
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Total Cycles",
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time,\n  SUM(COALESCE(cycles_heat1,0) + COALESCE(cycles_heat2,0) + COALESCE(cycles_fan1,0) + COALESCE(cycles_fan2,0) + COALESCE(cycles_fog,0) + COALESCE(cycles_vent,0) + COALESCE(cycles_grow_light,0)) AS \"Total\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#78909C"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "Shows total cycle counts across the selected equipment set."
+    },
+    {
       "id": 9,
       "type": "row",
       "title": "Runtime & Cycles",
@@ -1240,7 +1746,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 21
       }
     },
     {
@@ -1255,7 +1761,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 11
+        "y": 22
       },
       "targets": [
         {
@@ -1708,7 +2214,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 11
+        "y": 22
       },
       "targets": [
         {
@@ -1786,8 +2292,7 @@
                 "value": null
               }
             ]
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -2036,7 +2541,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 28
       },
       "panels": [
         {
@@ -2329,8 +2834,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -2348,6 +2852,303 @@
       ]
     },
     {
+      "id": 13,
+      "type": "state-timeline",
+      "title": "Fan / Vent Timeline",
+      "gridPos": {
+        "h": 7,
+        "w": 14,
+        "x": 0,
+        "y": 29
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "noValue": "-",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "rgba(100,100,100,0.25)",
+                "value": null
+              },
+              {
+                "color": "#73BF69",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "OFF": {
+                  "text": "",
+                  "color": "#37474F",
+                  "index": 0
+                },
+                "ON": {
+                  "text": "ON",
+                  "color": "#73BF69",
+                  "index": 1
+                },
+                "0": {
+                  "text": "",
+                  "color": "#37474F",
+                  "index": 2
+                },
+                "1": {
+                  "text": "ON",
+                  "color": "#73BF69",
+                  "index": 3
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#EF5350"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF7043"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#42A5F5"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Fan 1\"\nFROM equipment_state\nWHERE equipment = 'fan1' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Fan 2\"\nFROM equipment_state\nWHERE equipment = 'fan2' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Vent\"\nFROM equipment_state\nWHERE equipment = 'vent' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "C"
+        }
+      ],
+      "description": "Shows whether fan lead/lag is balanced and whether the vent is actually paired with fan calls."
+    },
+    {
+      "id": 14,
+      "type": "bargauge",
+      "title": "Fan Runtime Balance",
+      "gridPos": {
+        "h": 7,
+        "w": 5,
+        "x": 14,
+        "y": 29
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 2,
+          "unit": "h"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan1_min)::numeric / 60.0, 2) AS \"Fan 1\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_fan2_min)::numeric / 60.0, 2) AS \"Fan 2\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_vent_min)::numeric / 60.0, 2) AS \"Vent\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "time_series",
+          "refId": "C"
+        }
+      ],
+      "description": "Current range runtime comparison for fan wear balance and vent coupling."
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Fan Imbalance",
+      "gridPos": {
+        "h": 7,
+        "w": 5,
+        "x": 19,
+        "y": 29
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#66BB6A",
+                "value": null
+              },
+              {
+                "color": "#FFA726",
+                "value": 25
+              },
+              {
+                "color": "#EF5350",
+                "value": 50
+              }
+            ]
+          },
+          "decimals": 1,
+          "unit": "percent"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND((ABS(COALESCE(SUM(runtime_fan1_min),0) - COALESCE(SUM(runtime_fan2_min),0)) / GREATEST(COALESCE(SUM(runtime_fan1_min),0) + COALESCE(SUM(runtime_fan2_min),0), 1) * 100.0)::numeric, 1) AS \"Imbalance\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "description": "Percent runtime skew between fan1 and fan2 over the dashboard time range."
+    },
+    {
       "id": 16,
       "type": "row",
       "title": "Runtime Trends (30d)",
@@ -2356,7 +3157,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 37
       },
       "panels": [
         {
@@ -2647,6 +3448,147 @@
       ]
     },
     {
+      "id": 17,
+      "type": "timeseries",
+      "title": "30-Day Equipment Runtime Mix",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "h"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((runtime_heat1_min/60.0)::numeric,2) AS \"Heat 1\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((runtime_heat2_min/60.0)::numeric,2) AS \"Heat 2\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((runtime_fan1_min/60.0)::numeric,2) AS \"Fan 1\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((runtime_fan2_min/60.0)::numeric,2) AS \"Fan 2\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((runtime_fog_min/60.0)::numeric,2) AS \"Fog\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND((runtime_vent_min/60.0)::numeric,2) AS \"Vent\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(date::timestamptz), ROUND(COALESCE(runtime_mister_south_h,0)::numeric + COALESCE(runtime_mister_west_h,0)::numeric + COALESCE(runtime_mister_center_h,0)::numeric,2) AS \"Misters\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' ORDER BY 1",
+          "format": "time_series",
+          "refId": "G"
+        }
+      ],
+      "description": "Daily runtime mix for the last 30 days independent of the selected time range. Good for spotting seasonal shifts and runaway equipment. Panel overrides dashboard time range to 30d.",
+      "timeFrom": "30d"
+    },
+    {
       "id": 18,
       "type": "row",
       "title": "ESP32 Health",
@@ -2655,7 +3597,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 46
       },
       "panels": [
         {
@@ -2697,8 +3639,7 @@
               "color": {
                 "mode": "palette-classic"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -2771,8 +3712,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -2825,8 +3765,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -2882,8 +3821,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -2902,6 +3840,309 @@
       ]
     },
     {
+      "id": 19,
+      "type": "timeseries",
+      "title": "ESP32 WiFi RSSI",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 47
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "dBm"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), wifi_rssi AS \"RSSI\" FROM diagnostics WHERE $__timeFilter(ts) AND wifi_rssi IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "description": "Controller WiFi signal; more negative is worse."
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "ESP32 Heap Health",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 47
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "deckbytes"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), heap_bytes AS \"Free Heap\" FROM diagnostics WHERE $__timeFilter(ts) AND heap_bytes IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), heap_min_free_kb AS \"Min Free\" FROM diagnostics WHERE $__timeFilter(ts) AND heap_min_free_kb IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), heap_largest_free_block_kb AS \"Largest Block\" FROM diagnostics WHERE $__timeFilter(ts) AND heap_largest_free_block_kb IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "C"
+        }
+      ],
+      "description": "Heap trend and fragmentation indicators. Values are KB from ESP32 diagnostics."
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Controller Timers & Relief",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 47
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), vpd_watch_timer_s AS \"VPD Watch\" FROM diagnostics WHERE $__timeFilter(ts) AND vpd_watch_timer_s IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), sealed_timer_s AS \"Sealed\" FROM diagnostics WHERE $__timeFilter(ts) AND sealed_timer_s IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), mist_backoff_timer_s AS \"Mist Backoff\" FROM diagnostics WHERE $__timeFilter(ts) AND mist_backoff_timer_s IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), relief_cycle_count AS \"Relief Cycles\" FROM diagnostics WHERE $__timeFilter(ts) AND relief_cycle_count IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "D"
+        }
+      ],
+      "description": "FSM timer visibility: watch dwell, sealed mist duration, backoff, and thermal relief cycling."
+    },
+    {
       "id": 23,
       "type": "row",
       "title": "Irrigation Diagnostics",
@@ -2910,7 +4151,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 53
       },
       "panels": [
         {
@@ -2953,8 +4194,7 @@
               "color": {
                 "mode": "palette-classic"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -3008,8 +4248,7 @@
               "color": {
                 "mode": "palette-classic"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -3071,8 +4310,7 @@
                   }
                 ]
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "tooltip": {
@@ -3088,58 +4326,68 @@
       ]
     },
     {
-      "id": 27,
-      "type": "stat",
-      "title": "Mister South",
+      "id": 24,
+      "type": "state-timeline",
+      "title": "Mister / Irrigation Timeline",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
       },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 0,
-        "y": 7
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
-          },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric, 2) AS \"Mister South\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_south_h IS NOT NULL",
-          "format": "table",
-          "refId": "A"
-        }
-      ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
           "color": {
-            "mode": "fixed",
-            "fixedColor": "#CE93D8"
+            "mode": "thresholds"
           },
           "custom": {
-            "axisLabel": "Hours"
+            "fillOpacity": 80,
+            "lineWidth": 0
           },
+          "noValue": "-",
           "thresholds": {
-            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "rgba(100,100,100,0.25)",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#73BF69",
                 "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "OFF": {
+                  "text": "",
+                  "color": "#37474F",
+                  "index": 0
+                },
+                "ON": {
+                  "text": "ON",
+                  "color": "#73BF69",
+                  "index": 1
+                },
+                "0": {
+                  "text": "",
+                  "color": "#37474F",
+                  "index": 2
+                },
+                "1": {
+                  "text": "ON",
+                  "color": "#73BF69",
+                  "index": 3
+                }
+              }
+            }
+          ]
         },
         "overrides": [
           {
@@ -3151,80 +4399,12 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#CE93D8",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#EF5350"
                 }
               }
             ]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "description": "Shows runtime, cycling, or health context for the south mister zone."
-    },
-    {
-      "id": 28,
-      "type": "stat",
-      "title": "Mister West",
-      "datasource": {
-        "uid": "verdify-tsdb",
-        "type": "grafana-postgresql-datasource"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 3,
-        "y": 7
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric, 2) AS \"Mister West\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_west_h IS NOT NULL",
-          "format": "table",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#F48FB1"
-          },
-          "custom": {
-            "axisLabel": "Hours"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        },
-        "overrides": [
           {
             "matcher": {
               "id": "byName",
@@ -3234,80 +4414,12 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#F48FB1",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#FF7043"
                 }
               }
             ]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "description": "Shows runtime, cycling, or health context for the west mister zone."
-    },
-    {
-      "id": 29,
-      "type": "stat",
-      "title": "Mister Center",
-      "datasource": {
-        "uid": "verdify-tsdb",
-        "type": "grafana-postgresql-datasource"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 6,
-        "y": 7
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric, 2) AS \"Mister Center\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_mister_center_h IS NOT NULL",
-          "format": "table",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#E040FB"
-          },
-          "custom": {
-            "axisLabel": "Hours"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        },
-        "overrides": [
           {
             "matcher": {
               "id": "byName",
@@ -3317,80 +4429,12 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#E040FB",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#42A5F5"
                 }
               }
             ]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "description": "Shows runtime, cycling, or health context for the center mister zone."
-    },
-    {
-      "id": 30,
-      "type": "stat",
-      "title": "Drip Wall",
-      "datasource": {
-        "uid": "verdify-tsdb",
-        "type": "grafana-postgresql-datasource"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 9,
-        "y": 7
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_wall_h)::numeric, 2) AS \"Drip Wall\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_drip_wall_h IS NOT NULL",
-          "format": "table",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#4DD0E1"
-          },
-          "custom": {
-            "axisLabel": "Hours"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        },
-        "overrides": [
           {
             "matcher": {
               "id": "byName",
@@ -3400,80 +4444,12 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#4DB6AC",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#5C6BC0"
                 }
               }
             ]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "description": "Shows runtime, cycling, or health context for the wall drip irrigation zone."
-    },
-    {
-      "id": 31,
-      "type": "stat",
-      "title": "Drip Center",
-      "datasource": {
-        "uid": "verdify-tsdb",
-        "type": "grafana-postgresql-datasource"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 12,
-        "y": 7
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "verdify-tsdb",
-            "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_drip_center_h)::numeric, 2) AS \"Drip Center\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_drip_center_h IS NOT NULL",
-          "format": "table",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#80DEEA"
-          },
-          "custom": {
-            "axisLabel": "Hours"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        },
-        "overrides": [
           {
             "matcher": {
               "id": "byName",
@@ -3483,8 +4459,23 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#4FC3F7",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#00ACC1"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Water Flowing"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#AB47BC"
                 }
               }
             ]
@@ -3492,29 +4483,15 @@
         ]
       },
       "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
+        "mergeValues": true,
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
         },
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "description": "Shows runtime, cycling, or health context for the center drip irrigation zone."
-    },
-    {
-      "id": 32,
-      "type": "stat",
-      "title": "Total Cycles",
-      "datasource": {
-        "uid": "verdify-tsdb",
-        "type": "grafana-postgresql-datasource"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 15,
-        "y": 7
+        "tooltip": {
+          "mode": "multi"
+        }
       },
       "targets": [
         {
@@ -3522,50 +4499,228 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time,\n  SUM(COALESCE(cycles_heat1,0) + COALESCE(cycles_heat2,0) + COALESCE(cycles_fan1,0) + COALESCE(cycles_fan2,0) + COALESCE(cycles_fog,0) + COALESCE(cycles_vent,0) + COALESCE(cycles_grow_light,0)) AS \"Total\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
-          "format": "table",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Mister South\"\nFROM equipment_state\nWHERE equipment = 'mister_south' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Mister West\"\nFROM equipment_state\nWHERE equipment = 'mister_west' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Mister Center\"\nFROM equipment_state\nWHERE equipment = 'mister_center' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Drip Wall\"\nFROM equipment_state\nWHERE equipment = 'drip_wall' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Drip Center\"\nFROM equipment_state\nWHERE equipment = 'drip_center' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Water Flowing\"\nFROM equipment_state\nWHERE equipment = 'water_flowing' AND $__timeFilter(ts)\nORDER BY ts",
+          "format": "time_series",
+          "refId": "F"
         }
       ],
+      "description": "Correlates valve activity with water-flow events; catches stuck valves and missing flow."
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Water Flow & Totalizer",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 54
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
-          "decimals": 0,
           "color": {
-            "mode": "fixed",
-            "fixedColor": "#78909C"
+            "mode": "palette-classic"
           },
-          "custom": {},
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "spanNulls": true,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
               }
             ]
           }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
         },
-        "overrides": []
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), flow_gpm AS \"Flow GPM\" FROM climate WHERE $__timeFilter(ts) AND flow_gpm IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), water_total_gal AS \"Total gal\" FROM climate WHERE $__timeFilter(ts) AND water_total_gal IS NOT NULL ORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
+        }
+      ],
+      "description": "Water meter live flow and cumulative totalizer. Use with valve timeline to verify commanded irrigation actually moved water."
+    },
+    {
+      "id": 26,
+      "type": "bargauge",
+      "title": "Mister Zone Runtime",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 54
+      },
+      "datasource": {
+        "uid": "verdify-tsdb",
+        "type": "grafana-postgresql-datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 2,
+          "unit": "h"
+        }
       },
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
+          ],
+          "fields": "",
+          "values": false
         },
-        "colorMode": "value",
-        "graphMode": "none"
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 10
       },
-      "description": "Shows total cycle counts across the selected equipment set."
+      "targets": [
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_south_h)::numeric,2) AS \"South\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_west_h)::numeric,2) AS \"West\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT now() AS time, ROUND(SUM(runtime_mister_center_h)::numeric,2) AS \"Center\" FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours'))",
+          "format": "time_series",
+          "refId": "C"
+        }
+      ],
+      "description": "Mister runtime by zone; useful for confirming south-first/west-second prioritization and center underperformance."
     },
     {
       "id": 910,
@@ -3575,7 +4730,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 61
       },
       "datasource": {
         "uid": "verdify-tsdb",
@@ -3595,12 +4750,6 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "description": "Shows the current on/off state of major greenhouse equipment."
     }
   ],

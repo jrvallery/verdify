@@ -196,6 +196,8 @@ services:
       VERDIFY_CONTACT_SMTP_STARTTLS: ${VERDIFY_CONTACT_SMTP_STARTTLS:-true}
       VERDIFY_CONTACT_SMTP_SSL: ${VERDIFY_CONTACT_SMTP_SSL:-false}
       VERDIFY_CONTACT_SMTP_TIMEOUT_S: ${VERDIFY_CONTACT_SMTP_TIMEOUT_S:-6}
+      VERDIFY_GO2RTC_PUBLIC_BASE_URL: ${VERDIFY_GO2RTC_PUBLIC_BASE_URL:-http://192.168.30.142:1984}
+      VERDIFY_FRIGATE_PUBLIC_BASE_URL: ${VERDIFY_FRIGATE_PUBLIC_BASE_URL:-http://192.168.30.142:5000}
     volumes:
       # Sprint 21: shared Pydantic schema package — mounted read-only so
       # `from verdify_schemas import ...` works without duplicating code into

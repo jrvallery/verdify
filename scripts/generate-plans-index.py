@@ -41,6 +41,8 @@ def main():
         "",
         "Every day, Iris runs 3 planning cycles (6 AM, 12 PM, 6 PM MDT) to manage greenhouse setpoints.",
         "",
+        "*Generated planning archive: the daily pages are lab notebook records, not polished articles. Pending rows and missed cycles stay visible because planner availability is part of the evidence.*",
+        "",
         "---",
         "",
         "## Recent Plans",
@@ -66,7 +68,7 @@ def main():
             "",
             "---",
             "",
-            "*Auto-generated from daily_summary + plan_journal data.*",
+            "*Auto-generated from daily_summary + plan_journal data. Archive rows are generated lab notebook entries; null or pending fields mean the day is still in progress or the source row was not recorded.*",
         ]
     )
 

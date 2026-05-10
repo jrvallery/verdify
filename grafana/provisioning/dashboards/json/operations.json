@@ -54,10 +54,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -126,10 +124,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -195,13 +191,11 @@
               },
               {
                 "color": "#EF5350",
-                "value": 2.0
+                "value": 2
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -246,30 +240,143 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "fixed",
-            "fixedColor": "#78909C"
+            "mode": "thresholds"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "dark-red",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "green",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "blue",
                 "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 24
               }
             ]
           },
-          "unit": "string"
-        },
-        "overrides": []
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "dark-red"
+                },
+                "1": {
+                  "text": "IDLE",
+                  "color": "green"
+                },
+                "2": {
+                  "text": "VENTILATE",
+                  "color": "blue"
+                },
+                "3": {
+                  "text": "THERMAL_RELIEF",
+                  "color": "blue"
+                },
+                "4": {
+                  "text": "DEHUM_VENT",
+                  "color": "purple"
+                },
+                "5": {
+                  "text": "SEALED_MIST_S1",
+                  "color": "purple"
+                },
+                "6": {
+                  "text": "SEALED_MIST_S2",
+                  "color": "purple"
+                },
+                "7": {
+                  "text": "SEALED_MIST_FOG",
+                  "color": "purple"
+                },
+                "8": {
+                  "text": "SEALED_MIST_WATCH",
+                  "color": "purple"
+                },
+                "9": {
+                  "text": "TEMP_IDLE_HUM_IDLE",
+                  "color": "green"
+                },
+                "10": {
+                  "text": "TEMP_IDLE_HUMID_S1",
+                  "color": "green"
+                },
+                "11": {
+                  "text": "TEMP_IDLE_VPD_WATCH",
+                  "color": "green"
+                },
+                "12": {
+                  "text": "HEAT_S1_HUM_IDLE",
+                  "color": "orange"
+                },
+                "13": {
+                  "text": "HEAT_S1_HUMID_S1",
+                  "color": "orange"
+                },
+                "14": {
+                  "text": "HEAT_S1_VPD_WATCH",
+                  "color": "orange"
+                },
+                "15": {
+                  "text": "HEAT_S2_HUM_IDLE",
+                  "color": "orange"
+                },
+                "16": {
+                  "text": "HEAT_S2_HUMID_S1",
+                  "color": "orange"
+                },
+                "17": {
+                  "text": "HEAT_S2_VPD_WATCH",
+                  "color": "orange"
+                },
+                "18": {
+                  "text": "COOL_S1_HUM_IDLE",
+                  "color": "blue"
+                },
+                "19": {
+                  "text": "COOL_S1_HUMID_S1",
+                  "color": "blue"
+                },
+                "20": {
+                  "text": "COOL_S1_HUMID_S2",
+                  "color": "blue"
+                },
+                "21": {
+                  "text": "COOL_S1_VPD_WATCH",
+                  "color": "blue"
+                },
+                "22": {
+                  "text": "COOL_S2_HUMID_S1",
+                  "color": "blue"
+                },
+                "23": {
+                  "text": "COOL_S2_HUMID_S2",
+                  "color": "blue"
+                },
+                "24": {
+                  "text": "SAFETY_COOL",
+                  "color": "blue"
+                }
+              }
+            }
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -290,12 +397,12 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, state AS \"State\" FROM v_greenhouse_now",
+          "rawSql": "WITH state_map(state, code) AS (\n  VALUES\n    ('IDLE', 1),\n    ('VENTILATE', 2),\n    ('THERMAL_RELIEF', 3),\n    ('DEHUM_VENT', 4),\n    ('SEALED_MIST_S1', 5),\n    ('SEALED_MIST_S2', 6),\n    ('SEALED_MIST_FOG', 7),\n    ('SEALED_MIST_WATCH', 8),\n    ('TEMP_IDLE_HUM_IDLE', 9),\n    ('TEMP_IDLE_HUMID_S1', 10),\n    ('TEMP_IDLE_VPD_WATCH', 11),\n    ('HEAT_S1_HUM_IDLE', 12),\n    ('HEAT_S1_HUMID_S1', 13),\n    ('HEAT_S1_VPD_WATCH', 14),\n    ('HEAT_S2_HUM_IDLE', 15),\n    ('HEAT_S2_HUMID_S1', 16),\n    ('HEAT_S2_VPD_WATCH', 17),\n    ('COOL_S1_HUM_IDLE', 18),\n    ('COOL_S1_HUMID_S1', 19),\n    ('COOL_S1_HUMID_S2', 20),\n    ('COOL_S1_VPD_WATCH', 21),\n    ('COOL_S2_HUMID_S1', 22),\n    ('COOL_S2_HUMID_S2', 23),\n    ('SAFETY_COOL', 24)\n)\nSELECT\n  now() AS time,\n  COALESCE((\n    SELECT sm.code\n    FROM v_greenhouse_now g\n    LEFT JOIN state_map sm ON sm.state = g.state\n    LIMIT 1\n  ), 0) AS \"State\";",
           "format": "table",
           "refId": "A"
         }
       ],
-      "description": "Shows the current controller or equipment state for this subsystem."
+      "description": "Current ESP32 controller state rendered through numeric value mappings so Grafana static images do not drop string-only stats."
     },
     {
       "id": 904,
@@ -334,10 +441,8 @@
                 "value": 15
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -402,10 +507,8 @@
                 "value": 10
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -466,10 +569,8 @@
                 "value": 1
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -530,8 +631,8 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(ts), value AS \"value\"\nFROM system_state\nWHERE entity = 'greenhouse_state' AND $__timeFilter(ts)\nORDER BY ts DESC LIMIT 1",
-          "format": "time_series",
+          "rawSql": "WITH state_map(state, code) AS (\n  VALUES\n    ('IDLE', 1),\n    ('VENTILATE', 2),\n    ('THERMAL_RELIEF', 3),\n    ('DEHUM_VENT', 4),\n    ('SEALED_MIST_S1', 5),\n    ('SEALED_MIST_S2', 6),\n    ('SEALED_MIST_FOG', 7),\n    ('SEALED_MIST_WATCH', 8),\n    ('TEMP_IDLE_HUM_IDLE', 9),\n    ('TEMP_IDLE_HUMID_S1', 10),\n    ('TEMP_IDLE_VPD_WATCH', 11),\n    ('HEAT_S1_HUM_IDLE', 12),\n    ('HEAT_S1_HUMID_S1', 13),\n    ('HEAT_S1_VPD_WATCH', 14),\n    ('HEAT_S2_HUM_IDLE', 15),\n    ('HEAT_S2_HUMID_S1', 16),\n    ('HEAT_S2_VPD_WATCH', 17),\n    ('COOL_S1_HUM_IDLE', 18),\n    ('COOL_S1_HUMID_S1', 19),\n    ('COOL_S1_HUMID_S2', 20),\n    ('COOL_S1_VPD_WATCH', 21),\n    ('COOL_S2_HUMID_S1', 22),\n    ('COOL_S2_HUMID_S2', 23),\n    ('SAFETY_COOL', 24)\n)\nSELECT\n  now() AS time,\n  COALESCE((\n    SELECT sm.code\n    FROM v_greenhouse_now g\n    LEFT JOIN state_map sm ON sm.state = g.state\n    LIMIT 1\n  ), 0) AS \"State\";",
+          "format": "table",
           "refId": "A"
         }
       ],
@@ -542,8 +643,24 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "dark-red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "blue",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 24
               }
             ]
           },
@@ -552,59 +669,113 @@
           },
           "mappings": [
             {
-              "type": "regex",
+              "type": "value",
               "options": {
-                "pattern": "^IDLE.*",
-                "result": {
-                  "text": "$__value",
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "dark-red"
+                },
+                "1": {
+                  "text": "IDLE",
                   "color": "green"
-                }
-              }
-            },
-            {
-              "type": "regex",
-              "options": {
-                "pattern": "^COOL.*",
-                "result": {
-                  "text": "$__value",
-                  "color": "orange"
-                }
-              }
-            },
-            {
-              "type": "regex",
-              "options": {
-                "pattern": "^HEAT.*",
-                "result": {
-                  "text": "$__value",
-                  "color": "red"
-                }
-              }
-            },
-            {
-              "type": "regex",
-              "options": {
-                "pattern": ".*HUMID.*",
-                "result": {
-                  "text": "$__value",
+                },
+                "2": {
+                  "text": "VENTILATE",
                   "color": "blue"
-                }
-              }
-            },
-            {
-              "type": "regex",
-              "options": {
-                "pattern": ".*",
-                "result": {
-                  "text": "$__value",
-                  "color": "yellow"
+                },
+                "3": {
+                  "text": "THERMAL_RELIEF",
+                  "color": "blue"
+                },
+                "4": {
+                  "text": "DEHUM_VENT",
+                  "color": "purple"
+                },
+                "5": {
+                  "text": "SEALED_MIST_S1",
+                  "color": "purple"
+                },
+                "6": {
+                  "text": "SEALED_MIST_S2",
+                  "color": "purple"
+                },
+                "7": {
+                  "text": "SEALED_MIST_FOG",
+                  "color": "purple"
+                },
+                "8": {
+                  "text": "SEALED_MIST_WATCH",
+                  "color": "purple"
+                },
+                "9": {
+                  "text": "TEMP_IDLE_HUM_IDLE",
+                  "color": "green"
+                },
+                "10": {
+                  "text": "TEMP_IDLE_HUMID_S1",
+                  "color": "green"
+                },
+                "11": {
+                  "text": "TEMP_IDLE_VPD_WATCH",
+                  "color": "green"
+                },
+                "12": {
+                  "text": "HEAT_S1_HUM_IDLE",
+                  "color": "orange"
+                },
+                "13": {
+                  "text": "HEAT_S1_HUMID_S1",
+                  "color": "orange"
+                },
+                "14": {
+                  "text": "HEAT_S1_VPD_WATCH",
+                  "color": "orange"
+                },
+                "15": {
+                  "text": "HEAT_S2_HUM_IDLE",
+                  "color": "orange"
+                },
+                "16": {
+                  "text": "HEAT_S2_HUMID_S1",
+                  "color": "orange"
+                },
+                "17": {
+                  "text": "HEAT_S2_VPD_WATCH",
+                  "color": "orange"
+                },
+                "18": {
+                  "text": "COOL_S1_HUM_IDLE",
+                  "color": "blue"
+                },
+                "19": {
+                  "text": "COOL_S1_HUMID_S1",
+                  "color": "blue"
+                },
+                "20": {
+                  "text": "COOL_S1_HUMID_S2",
+                  "color": "blue"
+                },
+                "21": {
+                  "text": "COOL_S1_VPD_WATCH",
+                  "color": "blue"
+                },
+                "22": {
+                  "text": "COOL_S2_HUMID_S1",
+                  "color": "blue"
+                },
+                "23": {
+                  "text": "COOL_S2_HUMID_S2",
+                  "color": "blue"
+                },
+                "24": {
+                  "text": "SAFETY_COOL",
+                  "color": "blue"
                 }
               }
             }
           ],
-          "custom": {}
-        },
-        "overrides": []
+          "decimals": 0
+        }
       },
       "options": {
         "reduceOptions": {
@@ -617,9 +788,9 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
-      "description": "Shows the current controller or equipment state for this subsystem."
+      "description": "Current ESP32 controller state rendered through numeric value mappings so Grafana static images do not drop string-only stats."
     },
     {
       "id": 3,
@@ -680,10 +851,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -749,7 +918,7 @@
               },
               {
                 "color": "orange",
-                "value": 2.0
+                "value": 2
               },
               {
                 "color": "red",
@@ -759,10 +928,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -834,8 +1001,7 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -921,8 +1087,7 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -1012,10 +1177,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1083,10 +1246,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1123,8 +1284,8 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(ts), value AS \"State\"\nFROM system_state\nWHERE entity = 'greenhouse_state' AND $__timeFilter(ts)\nORDER BY ts DESC LIMIT 1",
-          "format": "time_series",
+          "rawSql": "WITH state_map(state, code) AS (\n  VALUES\n    ('IDLE', 1),\n    ('VENTILATE', 2),\n    ('THERMAL_RELIEF', 3),\n    ('DEHUM_VENT', 4),\n    ('SEALED_MIST_S1', 5),\n    ('SEALED_MIST_S2', 6),\n    ('SEALED_MIST_FOG', 7),\n    ('SEALED_MIST_WATCH', 8),\n    ('TEMP_IDLE_HUM_IDLE', 9),\n    ('TEMP_IDLE_HUMID_S1', 10),\n    ('TEMP_IDLE_VPD_WATCH', 11),\n    ('HEAT_S1_HUM_IDLE', 12),\n    ('HEAT_S1_HUMID_S1', 13),\n    ('HEAT_S1_VPD_WATCH', 14),\n    ('HEAT_S2_HUM_IDLE', 15),\n    ('HEAT_S2_HUMID_S1', 16),\n    ('HEAT_S2_VPD_WATCH', 17),\n    ('COOL_S1_HUM_IDLE', 18),\n    ('COOL_S1_HUMID_S1', 19),\n    ('COOL_S1_HUMID_S2', 20),\n    ('COOL_S1_VPD_WATCH', 21),\n    ('COOL_S2_HUMID_S1', 22),\n    ('COOL_S2_HUMID_S2', 23),\n    ('SAFETY_COOL', 24)\n)\nSELECT\n  now() AS time,\n  COALESCE((\n    SELECT sm.code\n    FROM v_greenhouse_now g\n    LEFT JOIN state_map sm ON sm.state = g.state\n    LIMIT 1\n  ), 0) AS \"State\";",
+          "format": "table",
           "refId": "A"
         }
       ],
@@ -1135,8 +1296,24 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "dark-red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "blue",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 24
               }
             ]
           },
@@ -1147,26 +1324,111 @@
             {
               "type": "value",
               "options": {
-                "OK": {
-                  "text": "OK",
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "dark-red"
+                },
+                "1": {
+                  "text": "IDLE",
                   "color": "green"
-                }
-              }
-            },
-            {
-              "type": "regex",
-              "options": {
-                "pattern": ".*",
-                "result": {
-                  "text": "$__value",
-                  "color": "red"
+                },
+                "2": {
+                  "text": "VENTILATE",
+                  "color": "blue"
+                },
+                "3": {
+                  "text": "THERMAL_RELIEF",
+                  "color": "blue"
+                },
+                "4": {
+                  "text": "DEHUM_VENT",
+                  "color": "purple"
+                },
+                "5": {
+                  "text": "SEALED_MIST_S1",
+                  "color": "purple"
+                },
+                "6": {
+                  "text": "SEALED_MIST_S2",
+                  "color": "purple"
+                },
+                "7": {
+                  "text": "SEALED_MIST_FOG",
+                  "color": "purple"
+                },
+                "8": {
+                  "text": "SEALED_MIST_WATCH",
+                  "color": "purple"
+                },
+                "9": {
+                  "text": "TEMP_IDLE_HUM_IDLE",
+                  "color": "green"
+                },
+                "10": {
+                  "text": "TEMP_IDLE_HUMID_S1",
+                  "color": "green"
+                },
+                "11": {
+                  "text": "TEMP_IDLE_VPD_WATCH",
+                  "color": "green"
+                },
+                "12": {
+                  "text": "HEAT_S1_HUM_IDLE",
+                  "color": "orange"
+                },
+                "13": {
+                  "text": "HEAT_S1_HUMID_S1",
+                  "color": "orange"
+                },
+                "14": {
+                  "text": "HEAT_S1_VPD_WATCH",
+                  "color": "orange"
+                },
+                "15": {
+                  "text": "HEAT_S2_HUM_IDLE",
+                  "color": "orange"
+                },
+                "16": {
+                  "text": "HEAT_S2_HUMID_S1",
+                  "color": "orange"
+                },
+                "17": {
+                  "text": "HEAT_S2_VPD_WATCH",
+                  "color": "orange"
+                },
+                "18": {
+                  "text": "COOL_S1_HUM_IDLE",
+                  "color": "blue"
+                },
+                "19": {
+                  "text": "COOL_S1_HUMID_S1",
+                  "color": "blue"
+                },
+                "20": {
+                  "text": "COOL_S1_HUMID_S2",
+                  "color": "blue"
+                },
+                "21": {
+                  "text": "COOL_S1_VPD_WATCH",
+                  "color": "blue"
+                },
+                "22": {
+                  "text": "COOL_S2_HUMID_S1",
+                  "color": "blue"
+                },
+                "23": {
+                  "text": "COOL_S2_HUMID_S2",
+                  "color": "blue"
+                },
+                "24": {
+                  "text": "SAFETY_COOL",
+                  "color": "blue"
                 }
               }
             }
           ],
-          "custom": {}
-        },
-        "overrides": []
+          "decimals": 0
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1179,9 +1441,9 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
-      "description": "Shows the current greenhouse operating state at a glance."
+      "description": "Current ESP32 controller state rendered through numeric value mappings so Grafana static images do not drop string-only stats."
     },
     {
       "id": 10,
@@ -2891,10 +3153,8 @@
                 }
               }
             }
-          ],
-          "custom": {}
-        },
-        "overrides": []
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -2988,10 +3248,8 @@
                 }
               }
             }
-          ],
-          "custom": {}
-        },
-        "overrides": []
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -3047,10 +3305,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -3144,10 +3400,8 @@
                 }
               }
             }
-          ],
-          "custom": {}
-        },
-        "overrides": []
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -3998,8 +4252,7 @@
                 "value": 50
               }
             ]
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -4921,10 +5174,8 @@
                 }
               }
             }
-          ],
-          "custom": {}
-        },
-        "overrides": []
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -5081,10 +5332,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -5179,10 +5428,8 @@
                 }
               }
             }
-          ],
-          "custom": {}
-        },
-        "overrides": []
+          ]
+        }
       },
       "options": {
         "reduceOptions": {
@@ -5470,8 +5717,7 @@
               "color": {
                 "mode": "thresholds"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5543,8 +5789,7 @@
               "color": {
                 "mode": "thresholds"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5616,8 +5861,7 @@
               "color": {
                 "mode": "thresholds"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5693,8 +5937,7 @@
                   }
                 }
               ]
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5772,8 +6015,7 @@
                   }
                 }
               ]
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5829,8 +6071,7 @@
               "color": {
                 "mode": "thresholds"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5886,8 +6127,7 @@
               "color": {
                 "mode": "thresholds"
               }
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -5963,8 +6203,7 @@
                   }
                 }
               ]
-            },
-            "overrides": []
+            }
           },
           "options": {
             "reduceOptions": {
@@ -7189,8 +7428,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -7230,12 +7468,6 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "description": "Shows how much VPD reduction each mister zone achieved over the last 24 hours."
     }
   ],

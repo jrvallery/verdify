@@ -318,7 +318,7 @@ def test_mcp_set_tunable_treats_vpd_low_as_band_owned():
 
 
 def test_alert_monitor_detects_planner_delivery_outages():
-    """OpenClaw outages and missed SUNRISE/SUNSET plans must be visible alerts."""
+    """OpenClaw outages and missed required plans must be visible alerts."""
     import tasks
 
     src = Path(tasks.__file__).read_text()
@@ -328,8 +328,10 @@ def test_alert_monitor_detects_planner_delivery_outages():
     assert "gateway_status = 0" in src
     assert "planner_required_plan_missed" in src
     assert "system.planner_required_plan" in src
-    assert "event_type IN ('SUNRISE', 'SUNSET')" in src
-    assert "row_number() OVER (PARTITION BY event_type ORDER BY delivered_at DESC)" in src
+    assert "planner_trigger_ledger" in src
+    assert "event_type IN ('SUNRISE', 'SUNSET', 'MIDNIGHT')" in src
+    assert "row_number() OVER (PARTITION BY event_type ORDER BY expected_at DESC)" in src
+    assert "status <> 'plan_written'" in src
 
 
 def test_planning_milestones_include_fixed_boundaries():
@@ -398,6 +400,40 @@ def test_failed_plan_delivery_logs_delivery_failed_status():
     body = src[start:end]
     assert 'result.get("delivered") is False' in body
     assert 'explicit_status = "delivery_failed"' in body
+
+
+def test_planner_expected_trigger_ledger_is_materialized_before_delivery():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    assert "async def _ensure_expected_planner_triggers" in src
+    assert "planner_trigger_ledger" in src
+    assert "ON CONFLICT (greenhouse_id, event_type, expected_at)" in src
+    assert "expected trigger was not delivered before due_at" in src
+    assert "plan_delivery_log_id" in src
+
+
+def test_planner_sla_lifecycle_uses_configured_pair_timeout():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("async def _expire_planner_trigger_slas")
+    end = src.index("async def _log_plan_delivery", start)
+    body = src[start:end]
+    assert '_sla_seconds(row["event_type"], row["instance"])' in body
+    assert "status = 'timed_out'" in body
+    assert "status      = 'missed'" in body
+    assert "await _sync_planner_trigger_ledger(conn)" in body
+
+
+def test_active_future_plan_range_guard_uses_tunable_registry():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    assert "planner_tunable_range_drift" in src
+    assert "registry_value_error(parameter, value)" in src
+    assert "controller_v2_locked_on" in src
+    assert "system.planner_tunable_range" in src
 
 
 def test_send_to_iris_is_local_first_without_cloud_fallback():

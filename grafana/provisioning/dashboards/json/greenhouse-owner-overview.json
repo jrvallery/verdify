@@ -46,10 +46,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -114,10 +112,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -186,10 +182,8 @@
               }
             ]
           },
-          "unit": "pressurekpa",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "pressurekpa"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -254,10 +248,8 @@
               }
             ]
           },
-          "unit": "currencyUSD",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "currencyUSD"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -322,10 +314,8 @@
               }
             ]
           },
-          "unit": "none",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "none"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -390,10 +380,8 @@
               }
             ]
           },
-          "unit": "mol/m\u00b2/d",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "mol/m\u00b2/d"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -475,8 +463,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -563,8 +550,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -651,8 +637,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -739,8 +724,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -844,8 +828,7 @@
             ]
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 7,
@@ -1011,13 +994,7 @@
       ],
       "title": "Equipment Running Now",
       "type": "table",
-      "description": "Shows the current state of key greenhouse equipment.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "description": "Shows the current state of key greenhouse equipment."
     },
     {
       "datasource": {
@@ -1047,13 +1024,7 @@
       ],
       "title": "Open Alerts",
       "type": "table",
-      "description": "Shows current or recent alerts that need attention.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "description": "Shows current or recent alerts that need attention."
     },
     {
       "collapsed": true,
@@ -1092,11 +1063,7 @@
             }
           ],
           "title": "State Durations Today",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
+          "type": "table"
         },
         {
           "datasource": {
@@ -1125,11 +1092,7 @@
             }
           ],
           "title": "Stress Hours Today",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
+          "type": "table"
         }
       ],
       "title": "State Machine & Stress",
