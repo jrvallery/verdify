@@ -31,6 +31,8 @@ REBUILD_RETRY_SLEEP_SEC = 2
 BOX_DRAWING_RE = re.compile(r"[│┌└├─═╔]")
 
 GENERATED_PAGES = {
+    "data/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
+    "evidence/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
     "forecast/index.md": "scripts/generate-forecast-page.py",
     "plans/index.md": "scripts/generate-plans-index.py",
     "greenhouse/lessons.md": "scripts/generate-lessons-page.py",
