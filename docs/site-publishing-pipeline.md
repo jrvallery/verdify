@@ -16,10 +16,25 @@ Quartz reads that same tree through:
 /srv/verdify/verdify-site/content -> /mnt/iris/verdify-vault/website
 ```
 
-Generated pages, such as `/forecast`, `/plans/YYYY-MM-DD`, `/plans/index`,
-and `/greenhouse/lessons`, are written into the same website tree by generator
-scripts. Do not hand-edit generated pages unless you expect the generator to
-overwrite them later.
+Generated pages, such as `/forecast`, `/data/forecast`, `/plans/YYYY-MM-DD`,
+`/plans/index`, `/data/plans`, and `/greenhouse/lessons`, are written into the
+same website tree by generator scripts. Do not hand-edit generated pages unless
+you expect the generator to overwrite them later.
+
+Some public routes are aliases that must stay byte-identical because the nav and
+story pages link to the `/data/...` route while older canonical pages still
+exist:
+
+```text
+forecast/index.md              == data/forecast/index.md
+plans/index.md                 == data/plans/index.md
+evidence/baseline-vs-iris.md   == data/baseline-vs-iris.md
+```
+
+`make site-doctor` enforces those alias pairs, checks forecast freshness from
+`last_updated`, and verifies that both plan indexes list the newest
+`plans/YYYY-MM-DD.md` page first. A stale generated route is a release-blocking
+site-doctor error, not a visual cleanup task.
 
 ## Publish Flow
 
@@ -117,6 +132,13 @@ Validate the built site:
 
 ```bash
 make site-doctor
+```
+
+For generated planning and forecast pages, also confirm the nav-facing routes:
+
+```bash
+curl -fsSL https://verdify.ai/data/forecast/ | rg '05-[0-9]{2} [0-9]{2}:00'
+curl -fsSL https://verdify.ai/data/plans/ | rg "$(date +%Y-%m-%d)"
 ```
 
 ## Debugging Mac/Syncthing Edits
