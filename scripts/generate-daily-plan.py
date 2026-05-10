@@ -872,7 +872,7 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
         lesson = plan.get("lesson_extracted", "")
         if lesson:
-            lines.append(f"> **New finding:** {public_text(lesson)} → Added to [Lessons Learned](/greenhouse/lessons)")
+            lines.append(f"> **New finding:** {public_text(lesson)} → Added to [Lessons Learned](/reference/lessons)")
             lines.append("")
     else:
         # First ever cycle or no previous plan found

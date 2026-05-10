@@ -1,7 +1,7 @@
 #!/usr/bin/env /srv/greenhouse/.venv/bin/python3
-"""Generate the Lessons Learned page from planner_lessons table.
+"""Generate the public Lessons Learned page from planner_lessons table.
 
-Outputs: /srv/verdify/verdify-site/content/greenhouse/lessons.md
+Output: /srv/verdify/verdify-site/content/reference/lessons.md
 """
 
 import json
@@ -19,8 +19,8 @@ from verdify_schemas import LessonsVaultFrontmatter  # noqa: E402
 DB_CONTAINER = "verdify-timescaledb"
 DB_USER = "verdify"
 DB_NAME = "verdify"
-OUTPUT_PATH = "/srv/verdify/verdify-site/content/greenhouse/lessons.md"
-RAW_OUTPUT_PATH = "/srv/verdify/verdify-site/content/greenhouse/lessons/raw.md"
+OUTPUT_PATH = "/srv/verdify/verdify-site/content/reference/lessons.md"
+RAW_OUTPUT_PATH = "/srv/verdify/state/site-generated/raw-planner-lessons.md"
 
 
 def query_db(sql: str) -> str:
@@ -580,7 +580,7 @@ def generate_page() -> str:
     fm = LessonsVaultFrontmatter(
         date=date.today(),
         tags=["greenhouse", "planning", "lessons"],
-        aliases=["intelligence/lessons", "operations/lessons-learned"],
+        aliases=["greenhouse/lessons", "intelligence/lessons", "operations/lessons-learned"],
     )
     yaml_block = yaml.safe_dump(
         fm.model_dump(mode="json", exclude_none=True),
@@ -668,7 +668,7 @@ def generate_raw_page() -> str:
         "# Raw Planner Lesson Rows",
         "",
         "This page exists for auditability, not as the public reading path. "
-        "[Start with the curated Lessons page](/greenhouse/lessons/).",
+        "[Start with the curated Lessons page](/reference/lessons/).",
         "",
         f"Generated {today}: {len(all_lessons)} raw rows collapsed into {len(all_groups)} grouped signals.",
         "",

@@ -11,8 +11,9 @@ sudo systemctl enable --now \
   verdify-api.service \
   verdify-setpoint-server.service \
   verdify-site-poll.timer
-# verdify-forecast.service and verdify-site-build.service are triggered
-# by cron/timer/poller and do not need to be enabled directly.
+# verdify-forecast.service, verdify-forecast-page.timer, and site build
+# services are triggered by cron/timer/poller and do not need to be enabled
+# directly except where noted in the unit-specific install docs.
 ```
 
 ## Files
@@ -24,6 +25,8 @@ sudo systemctl enable --now \
 | `verdify-api.service` | `simple` (always-on) | FastAPI crop catalog + ESP32 /setpoints endpoint (port 8300) | `enable --now` |
 | `verdify-setpoint-server.service` | `simple` (always-on) | Grow-light control + setpoint HTTP surface | `enable --now` |
 | `verdify-forecast.service` | `oneshot` | Open-Meteo 72 h forecast sync | invoked by cron via `scripts/forecast-sync.py` |
+| `verdify-forecast-page.timer` | `Timer` | Runs the unified generated-site publisher after forecast refresh cadence | `enable --now` |
+| `verdify-forecast-page.service` | `oneshot` | `scripts/publish-site-content.sh --reason forecast` | triggered by timer |
 | `verdify-site-poll.timer` | `Timer` | Fires every 10 s | `enable --now` |
 | `verdify-site-poll.service` | `oneshot` | `scripts/site-poll-and-rebuild.sh` — mtime check vs marker; rebuilds if vault changed | triggered by timer |
 | `verdify-site-build.service` | `oneshot` | `scripts/rebuild-site.sh` (flock + 5 s debounce + `npx quartz build` + `docker restart verdify-site`) | invoked from poll script, or `make site-rebuild` |

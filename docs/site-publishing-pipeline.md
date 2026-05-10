@@ -17,9 +17,21 @@ Quartz reads that same tree through:
 ```
 
 Generated pages, such as `/forecast`, `/data/forecast`, `/plans/YYYY-MM-DD`,
-`/plans/index`, `/data/plans`, and `/greenhouse/lessons`, are written into the
-same website tree by generator scripts. Do not hand-edit generated pages unless
-you expect the generator to overwrite them later.
+`/plans/index`, `/data/plans`, `/reference/lessons`, crop profiles, zone pages,
+equipment blocks, and public sample datasets are written into the same website
+tree by generator scripts. Do not hand-edit generated blocks or pages unless you
+expect the generator to overwrite them later.
+
+Production refreshes use one entry point:
+
+```bash
+/srv/verdify/scripts/publish-site-content.sh --reason manual
+```
+
+Planner publishes, forecast-page refreshes, and manual full refreshes all call
+that script. It regenerates the daily plan, forecast page, plan indexes,
+lessons, Baseline vs Iris, equipment blocks, zone pages, crop profiles, public
+sample CSVs, and planner static context before rebuilding the site.
 
 Some public routes are aliases that must stay byte-identical because the nav and
 story pages link to the `/data/...` route while older canonical pages still
@@ -32,8 +44,10 @@ evidence/baseline-vs-iris.md   == data/baseline-vs-iris.md
 ```
 
 `make site-doctor` enforces those alias pairs, checks forecast freshness from
-`last_updated`, and verifies that both plan indexes list the newest
-`plans/YYYY-MM-DD.md` page first. A stale generated route is a release-blocking
+`last_updated`, verifies that both plan indexes list the newest
+`plans/YYYY-MM-DD.md` page first, rejects duplicate route owners, and rejects
+retired source paths such as the old `intelligence/`, `slack/`, and duplicate
+top-level article copies. A stale generated route is a release-blocking
 site-doctor error, not a visual cleanup task.
 
 ## Publish Flow
@@ -42,7 +56,8 @@ site-doctor error, not a visual cleanup task.
 Obsidian on Mac
   -> Syncthing
   -> /mnt/iris/verdify-vault/website
-  -> verdify-site-poll.timer
+  -> publish-site-content.sh for generated refreshes
+  -> verdify-site-poll.timer for hand-authored edits
   -> scripts/site-poll-and-rebuild.sh
   -> scripts/rebuild-site.sh
   -> npx quartz build --output /srv/verdify/verdify-site/.builds/public.*
@@ -126,6 +141,12 @@ Run a manual rebuild:
 
 ```bash
 make site-rebuild
+```
+
+Regenerate every generated public page and rebuild:
+
+```bash
+/srv/verdify/scripts/publish-site-content.sh --reason manual
 ```
 
 Validate the built site:

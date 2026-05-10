@@ -102,6 +102,41 @@ def markdown_pages(vault_root: Path) -> list[Path]:
     return sorted(vault_root.rglob("*.md"))
 
 
+def normalize_route(route: str) -> str:
+    clean = route.split("?", 1)[0].split("#", 1)[0].strip()
+    clean = clean.removeprefix("/")
+    clean = clean.removesuffix("/")
+    clean = clean.removesuffix(".html")
+    clean = clean.removesuffix(".md")
+    return clean or "index"
+
+
+def frontmatter_aliases(text: str) -> list[str]:
+    if not text.startswith("---\n"):
+        return []
+    end = text.find("\n---", 4)
+    if end == -1:
+        return []
+    raw = text[4:end]
+    aliases: list[str] = []
+    in_aliases = False
+    for line in raw.splitlines():
+        if line.startswith((" ", "\t")) and in_aliases:
+            value = line.strip()
+            if value.startswith("- "):
+                aliases.append(value[2:].strip().strip("'\""))
+            continue
+        in_aliases = False
+        if not line.startswith("aliases:"):
+            continue
+        value = line.split(":", 1)[1].strip()
+        if value.startswith("[") and value.endswith("]"):
+            aliases.extend(item.strip().strip("'\"") for item in value[1:-1].split(",") if item.strip())
+        else:
+            in_aliases = True
+    return aliases
+
+
 def route_to_source(vault_root: Path, route: str) -> Path | None:
     clean = route.strip("/")
     if not clean:
@@ -114,6 +149,10 @@ def route_to_source(vault_root: Path, route: str) -> Path | None:
     for candidate in candidates:
         if candidate.exists():
             return candidate
+    normalized_route = normalize_route(route)
+    for page in markdown_pages(vault_root):
+        if any(normalize_route(alias) == normalized_route for alias in frontmatter_aliases(read_text(page))):
+            return page
     return None
 
 

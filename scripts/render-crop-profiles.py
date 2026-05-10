@@ -457,12 +457,20 @@ async def run(args: argparse.Namespace) -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         changes = 0
+        expected_vision_assets: set[Path] = set()
         for slug in slugs:
             result = await render_crop(conn, slug)
             if result is None:
                 print(f"  SKIP {slug}: not in crop_catalog")
                 continue
             filename, content, blocks, vision_assets = result
+            expected_vision_assets.update(dest for _src, dest in vision_assets)
+            if not args.dry_run:
+                for src, dest in vision_assets:
+                    if src.exists():
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        if not dest.exists() or src.stat().st_mtime_ns != dest.stat().st_mtime_ns:
+                            shutil.copy2(src, dest)
             target = out_dir / filename
             existing = target.read_text() if target.exists() else ""
             mode = "full page"
@@ -478,14 +486,17 @@ async def run(args: argparse.Namespace) -> int:
             if args.dry_run:
                 print(f"  WOULD WRITE  {filename} ({mode})")
             else:
-                for src, dest in vision_assets:
-                    if src.exists():
-                        dest.parent.mkdir(parents=True, exist_ok=True)
-                        if not dest.exists() or src.stat().st_mtime_ns != dest.stat().st_mtime_ns:
-                            shutil.copy2(src, dest)
                 target.write_text(content)
                 print(f"  WROTE  {filename} ({mode})")
             changes += 1
+        if not args.slug and not args.dry_run:
+            removed = 0
+            for asset in DEFAULT_VISION_OUT.glob("*.jpg"):
+                if asset not in expected_vision_assets:
+                    asset.unlink()
+                    removed += 1
+            if removed:
+                print(f"Pruned {removed} stale vision asset(s)")
         print(f"\n{'Would change' if args.dry_run else 'Changed'} {changes} crop page(s)")
     finally:
         await conn.close()

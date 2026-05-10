@@ -8,7 +8,7 @@ Type=oneshot
 # plan page we publish is "today in Denver" not "today in UTC".
 Environment=TZ=America/Denver
 Environment=PYTHON=/srv/greenhouse/.venv/bin/python
-ExecStart=/srv/verdify/scripts/publish-daily-plan.sh
+ExecStart=/srv/verdify/scripts/publish-site-content.sh --reason planner
 StandardOutput=journal
 StandardError=journal
 User=jason

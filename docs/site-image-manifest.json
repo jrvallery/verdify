@@ -1,20 +1,5 @@
 {
   "images": {
-    "control-center-laptop.jpg": {
-      "allowed_paths": [
-        "intelligence/",
-        "climate/controller.md"
-      ],
-      "category": "control",
-      "status": "approved"
-    },
-    "drip-irrigation-emitters.jpg": {
-      "allowed_paths": [
-        "climate/water.md"
-      ],
-      "category": "water",
-      "status": "approved"
-    },
     "esp32-controller.jpg": {
       "allowed_paths": [
         "greenhouse/equipment.md"
@@ -30,51 +15,12 @@
       "category": "cooling",
       "status": "approved"
     },
-    "exterior-daytime-house-solar.jpg": {
-      "allowed_paths": [
-        "about.md",
-        "index.md",
-        "greenhouse/",
-        "climate/"
-      ],
-      "category": "exterior",
-      "status": "approved"
-    },
-    "exterior-daytime-side-path.jpg": {
-      "allowed_paths": [
-        "greenhouse/structure.md"
-      ],
-      "category": "exterior",
-      "status": "approved"
-    },
-    "exterior-dusk-patio.jpg": {
-      "allowed_paths": [
-        "climate/index.md",
-        "index.md"
-      ],
-      "category": "exterior",
-      "status": "approved"
-    },
     "exterior-evening-patio-wide.jpg": {
       "allowed_paths": [
         "greenhouse/structure.md",
         "index.md"
       ],
       "category": "exterior",
-      "status": "approved"
-    },
-    "exterior-night-patio-lights.jpg": {
-      "allowed_paths": [
-        "climate/lighting.md"
-      ],
-      "category": "lighting",
-      "status": "approved"
-    },
-    "exterior-night-rain-reflections.jpg": {
-      "allowed_paths": [
-        "climate/water.md"
-      ],
-      "category": "water",
       "status": "approved"
     },
     "exterior-night-snow.jpg": {
@@ -88,13 +34,6 @@
       "category": "climate",
       "status": "approved"
     },
-    "exterior-snow-falling-night.jpg": {
-      "allowed_paths": [
-        "climate/heating.md"
-      ],
-      "category": "heating",
-      "status": "approved"
-    },
     "exterior-wide-property-solar.jpg": {
       "allowed_paths": [
         "index.md",
@@ -105,14 +44,6 @@
         "reference/about.md"
       ],
       "category": "exterior",
-      "status": "approved"
-    },
-    "exterior-winter-snow-lamppost.jpg": {
-      "allowed_paths": [
-        "climate/index.md",
-        "greenhouse/structure.md"
-      ],
-      "category": "climate",
       "status": "approved"
     },
     "greenhouse-entry-door.jpg": {
@@ -182,22 +113,6 @@
       "category": "crop",
       "status": "approved"
     },
-    "interior-full-view.jpg": {
-      "allowed_paths": [
-        "index.md",
-        "greenhouse/"
-      ],
-      "category": "interior",
-      "status": "approved"
-    },
-    "interior-production-aisle.jpg": {
-      "allowed_paths": [
-        "greenhouse/index.md",
-        "index.md"
-      ],
-      "category": "interior",
-      "status": "approved"
-    },
     "interior-south-zone.jpg": {
       "allowed_paths": [
         "greenhouse/zones/south.md"
@@ -222,32 +137,11 @@
       "category": "control",
       "status": "approved"
     },
-    "lennox-heater-circulation-fan.jpg": {
-      "allowed_paths": [
-        "climate/heating.md"
-      ],
-      "category": "heating",
-      "status": "approved"
-    },
-    "lennox-heater-overhead.jpg": {
-      "allowed_paths": [
-        "climate/heating.md"
-      ],
-      "category": "heating",
-      "status": "approved"
-    },
     "motorized-louver-vent.jpg": {
       "allowed_paths": [
         "climate/cooling.md"
       ],
       "category": "cooling",
-      "status": "approved"
-    },
-    "north-wall-equipment.jpg": {
-      "allowed_paths": [
-        "greenhouse/zones/north.md"
-      ],
-      "category": "equipment",
       "status": "approved"
     },
     "north-wall-manifold.jpg": {
@@ -268,13 +162,6 @@
       "allowed_paths": [
         "greenhouse/equipment.md",
         "greenhouse/zones/north.md"
-      ],
-      "category": "equipment",
-      "status": "approved"
-    },
-    "north-wall-utility-wide.jpg": {
-      "allowed_paths": [
-        "greenhouse/equipment.md"
       ],
       "category": "equipment",
       "status": "approved"
@@ -356,13 +243,6 @@
         "greenhouse/crops/orchid.md"
       ],
       "category": "crop",
-      "status": "approved"
-    },
-    "water-flow-meter.jpg": {
-      "allowed_paths": [
-        "climate/water.md"
-      ],
-      "category": "water",
       "status": "approved"
     }
   },

@@ -42,7 +42,7 @@ GENERATED_PAGES = {
     "evidence/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
     "forecast/index.md": "scripts/generate-forecast-page.py",
     "plans/index.md": "scripts/generate-plans-index.py",
-    "greenhouse/lessons.md": "scripts/generate-lessons-page.py",
+    "reference/lessons.md": "scripts/generate-lessons-page.py",
 }
 GENERATED_PREFIXES = {
     "plans/": "scripts/generate-daily-plan.py",
@@ -74,6 +74,22 @@ GENERATED_ROUTE_ALIASES = (
         "scripts/generate-baseline-vs-iris-page.py",
     ),
 )
+RETIRED_SOURCE_PATHS = (
+    "ai-greenhouse.md",
+    "climate/index.md",
+    "contact.md",
+    "data/slack-ops",
+    "evidence/economics.md",
+    "evidence/index.md",
+    "evidence/operations.md",
+    "evidence/planning-quality.md",
+    "greenhouse/lessons.md",
+    "greenhouse/lessons/raw.md",
+    "intelligence",
+    "slack",
+)
+RETIRED_EMPTY_DIRS = ("press", "project", "updates")
+UNIFIED_PUBLISHER = Path("scripts/publish-site-content.sh")
 
 
 @dataclass(frozen=True)
@@ -473,6 +489,76 @@ def canonical_paths_for_page(rel_path: str) -> set[str]:
         parent = path.parent.as_posix()
         paths.add(normalize_route(parent if parent != "." else "index"))
     return paths
+
+
+def check_duplicate_routes(pages: list[PageInfo]) -> list[Finding]:
+    owners_by_route: dict[str, set[str]] = defaultdict(set)
+    for page in pages:
+        for route in canonical_paths_for_page(page.path):
+            owners_by_route[route].add(page.path)
+        for alias in page.aliases:
+            owners_by_route[normalize_route(alias)].add(f"{page.path} alias")
+
+    findings: list[Finding] = []
+    for route, owners in sorted(owners_by_route.items()):
+        owner_pages = {owner.removesuffix(" alias") for owner in owners}
+        if len(owner_pages) > 1:
+            findings.append(
+                Finding(
+                    "error",
+                    "duplicate-route",
+                    f"{route} is emitted by multiple source pages: {', '.join(sorted(owners))}",
+                )
+            )
+    return findings
+
+
+def check_retired_source_paths(vault_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    for rel in RETIRED_SOURCE_PATHS:
+        path = vault_root / rel
+        if path.exists():
+            findings.append(
+                Finding(
+                    "error",
+                    "retired-site-source",
+                    f"{rel} still exists; collapse legacy content into the canonical nav/source path",
+                )
+            )
+    for rel in RETIRED_EMPTY_DIRS:
+        path = vault_root / rel
+        if path.exists() and path.is_dir() and not any(path.iterdir()):
+            findings.append(Finding("error", "retired-empty-dir", f"{rel}/ is an empty retired website directory"))
+    return findings
+
+
+def check_generation_entrypoint(repo_root: Path | None = None) -> list[Finding]:
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    publisher = repo_root / UNIFIED_PUBLISHER
+    if not publisher.exists():
+        return [Finding("error", "site-publisher-missing", f"{UNIFIED_PUBLISHER} is missing")]
+
+    findings: list[Finding] = []
+    expected_refs = {
+        "scripts/publish-daily-plan.sh": "publish-site-content.sh",
+        "systemd/verdify-forecast-page.service": "publish-site-content.sh",
+        "systemd/verdify-plan-publish.service": "publish-site-content.sh",
+    }
+    for rel, needle in expected_refs.items():
+        path = repo_root / rel
+        if not path.exists():
+            findings.append(Finding("error", "site-publisher-wrapper-missing", f"{rel} is missing"))
+            continue
+        if needle not in read_text(path):
+            findings.append(
+                Finding(
+                    "error",
+                    "site-publisher-bypass",
+                    f"{rel} does not call {UNIFIED_PUBLISHER}; generated content refreshes must use one entry point",
+                )
+            )
+    return findings
 
 
 def load_image_manifest(path: Path) -> dict[str, dict[str, object]]:
@@ -911,6 +997,9 @@ def main() -> int:
     image_manifest = load_image_manifest(args.image_manifest)
     pages, iframes, images, links, content_findings = collect_pages(args.vault_root)
     findings.extend(content_findings)
+    findings.extend(check_duplicate_routes(pages))
+    findings.extend(check_retired_source_paths(args.vault_root))
+    findings.extend(check_generation_entrypoint())
     findings.extend(check_generated_route_aliases(args.vault_root))
     findings.extend(check_forecast_freshness(args.vault_root))
     findings.extend(check_plan_archive_freshness(args.vault_root))

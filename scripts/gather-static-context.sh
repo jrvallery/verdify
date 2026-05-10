@@ -16,7 +16,7 @@ mkdir -p "$(dirname "$OUTPUT")"
     echo ""
     echo "Generated: $(date '+%Y-%m-%d %H:%M %Z')"
     echo "Source: ${CONTENT_DIR}/"
-    echo "Files: $(find "$CONTENT_DIR" -name '*.md' \
+    echo "Files: $(find -L "$CONTENT_DIR" -name '*.md' \
         -not -path '*/plans/*' \
         -not -path '*/dashboards/*' \
         -not -path '*/static/*' | wc -l)"
@@ -25,7 +25,7 @@ mkdir -p "$(dirname "$OUTPUT")"
     echo ""
 
     # Process files in a logical order: index first, then alphabetical by directory
-    find "$CONTENT_DIR" -name '*.md' \
+    find -L "$CONTENT_DIR" -name '*.md' \
         -not -path '*/plans/*' \
         -not -path '*/dashboards/*' \
         -not -path '*/static/*' \
