@@ -68,10 +68,10 @@ if not PLANNER_PLAYBOOK_PATH.exists():  # pragma: no cover — host-path check
 _STANDING_DIRECTIVES = """
 ## Standing Directives (MANDATORY — read before every action)
 
-1. **Use MCP tools ONLY.** You have 22 tools:
+1. **Use MCP tools ONLY.** You have 24 tools:
    **Monitoring:** `climate`, `scorecard`, `equipment_state`, `forecast`, `history`
    **Control:** `get_setpoints`, `set_tunable`, `set_plan`, `acknowledge_trigger`, `plan_status`, `plan_evaluate`
-   **Knowledge:** `lessons`, `lessons_manage`
+   **Knowledge:** `lessons`, `lessons_manage`, `lessons_search`, `knowledge_search`
    **Crops:** `crops`, `observations`
    **Topology:** `topology`, `position_current`, `crop_history`, `crop_lifecycle`
    **Operations:** `alerts`, `query`
@@ -80,6 +80,9 @@ _STANDING_DIRECTIVES = """
      Only use it if explicitly asked.
    NEVER run psql, docker exec, shell SQL, or any direct database access.
    The `query` tool runs read-only SQL if no dedicated tool exists — use it as escape hatch.
+   `lessons_search` and `knowledge_search` (Phase 3) do semantic retrieval over
+   the unified verdify_embeddings store; use them when the static top-10 lessons
+   in the context don't match TODAY's forecast or you need playbook reference.
 
 2. **If a tool is missing,** post to #greenhouse: `<@U0A9KJHFJSU> Platform feature request:
    [what you need and why]`. Do NOT work around it with shell commands.

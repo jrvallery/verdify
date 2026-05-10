@@ -1915,6 +1915,146 @@ async def crop_lifecycle(crop_id: int) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════
+# VECTORIZED RETRIEVAL (Phase 3, migration 112)
+# ═══════════════════════════════════════════════════════════════
+#
+# lessons_search and knowledge_search embed the query via OpenAI
+# text-embedding-3-large (3072-dim) and call fn_search_embeddings()
+# against the verdify_embeddings table. Both tools fail gracefully if
+# OPENAI_API_KEY is unset, returning a clear error instead of crashing.
+
+
+_OPENAI_EMBED_MODEL = "text-embedding-3-large"
+_OPENAI_EMBED_DIM = 3072
+
+
+async def _embed_query(text: str) -> list[float] | None:
+    """Embed a query string for vector retrieval. None on failure."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        # Sync call wrapped in a worker thread; the OpenAI Python SDK has an
+        # async client too but we keep the import surface minimal here.
+        import asyncio as _asyncio
+
+        resp = await _asyncio.to_thread(
+            client.embeddings.create,
+            model=_OPENAI_EMBED_MODEL,
+            input=text,
+            dimensions=_OPENAI_EMBED_DIM,
+        )
+        return list(resp.data[0].embedding)
+    except Exception as exc:  # pragma: no cover — surface failure to caller
+        print(f"[mcp.embed_query] failed: {exc}", file=sys.stderr)
+        return None
+
+
+def _vector_literal(vec: list[float]) -> str:
+    return "[" + ",".join(f"{v:.6f}" for v in vec) + "]"
+
+
+@mcp.tool()
+async def lessons_search(query: str, top_k: int = 10, min_confidence: str = "low") -> str:
+    """Semantic search across planner_lessons.
+
+    Use this to pull the lessons most relevant to a *forward-looking* condition
+    (e.g. "hot dry day with 1100 W/m² solar peak") rather than relying on the
+    static top-10-by-confidence list the prompt context surfaces by default.
+
+    Args:
+        query: free-text description of the conditions or topic you care about
+        top_k: max results (default 10, cap 25)
+        min_confidence: 'low' | 'medium' | 'high' — filter by minimum confidence
+            of the underlying planner_lessons row. Most lessons are 'low' so
+            the default is permissive.
+
+    Returns: JSON array of {id, category, condition, lesson, confidence,
+    times_validated, distance} sorted by ascending cosine distance.
+    """
+    top_k = max(1, min(int(top_k), 25))
+    embedding = await _embed_query(query)
+    if embedding is None:
+        return json.dumps({"error": "lessons_search requires OPENAI_API_KEY for query embedding"})
+
+    rank_floor = {"low": 1, "medium": 2, "high": 3}.get(min_confidence, 1)
+    conn = await _db()
+    try:
+        rows = await conn.fetch(
+            """
+            WITH hits AS (
+              SELECT source_id, content, metadata, distance
+                FROM fn_search_embeddings($1::vector, $2, ARRAY['lesson']::text[])
+            )
+            SELECT pl.id, pl.category, pl.condition, pl.lesson, pl.confidence,
+                   pl.times_validated, pl.is_active, h.distance
+              FROM hits h
+              JOIN planner_lessons pl ON pl.id::text = h.source_id
+             WHERE pl.is_active = true AND pl.superseded_by IS NULL
+               AND CASE pl.confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END >= $3
+             ORDER BY h.distance
+            """,
+            _vector_literal(embedding),
+            top_k,
+            rank_floor,
+        )
+        return _json([dict(r) for r in rows])
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def knowledge_search(query: str, top_k: int = 8, source_types: str = "site_doc,playbook") -> str:
+    """Semantic search across docs, planner playbook, and historical plans.
+
+    Use this when you need reference-level knowledge: "what does the playbook
+    say about vent oscillation?", "summarize the controller mode hierarchy",
+    "have I seen a 1100 W/m² solar day before, and what did I try?". The
+    source_types argument lets you scope the search:
+
+      site_doc — operator-facing docs in docs/**/*.md
+      playbook — the planner playbook + skills mirror (chunked by heading)
+      plan     — past plan_journal hypotheses + actual_outcome rows
+      lesson   — planner_lessons rows (same corpus as lessons_search)
+
+    Args:
+        query: free-text query
+        top_k: max results (default 8, cap 25)
+        source_types: comma-separated subset of the four sources
+
+    Returns: JSON array of {source_type, source_id, content, metadata, distance}.
+    """
+    top_k = max(1, min(int(top_k), 25))
+    types = [s.strip() for s in source_types.split(",") if s.strip()]
+    valid = {"lesson", "plan", "site_doc", "playbook"}
+    types = [t for t in types if t in valid]
+    if not types:
+        return json.dumps({"error": "source_types must include at least one of: lesson, plan, site_doc, playbook"})
+
+    embedding = await _embed_query(query)
+    if embedding is None:
+        return json.dumps({"error": "knowledge_search requires OPENAI_API_KEY for query embedding"})
+
+    conn = await _db()
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT source_type, source_id, chunk_idx, content, metadata, distance
+              FROM fn_search_embeddings($1::vector, $2, $3::text[])
+            """,
+            _vector_literal(embedding),
+            top_k,
+            types,
+        )
+        return _json([dict(r) for r in rows])
+    finally:
+        await conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════
 

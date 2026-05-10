@@ -19,6 +19,11 @@ dependencies = [
 planner = [
     "anthropic>=0.90",
     "google-genai>=0.5",
+    # Phase 3 (Iris loop overhaul): OpenAI text-embedding-3-large for the
+    # unified verdify_embeddings corpus, and the GPT-5.5 client that the
+    # Hermes adapter calls in Phase 5. Pinned to >=1.50 for the responses
+    # API and reasoning_effort parameter support.
+    "openai>=1.50",
 ]
 api = [
     "fastapi>=0.115",

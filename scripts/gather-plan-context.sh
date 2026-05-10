@@ -449,6 +449,46 @@ echo "When making decisions, reference applicable lessons above. If a lesson con
 echo "your plan, either follow the lesson or explain why conditions differ enough to override."
 echo ""
 
+# ── 20a. RELEVANT LESSONS FOR TODAY'S FORECAST (Phase 3 — semantic) ─
+# The top-10-by-confidence list above is a static ordering. For a forward-
+# looking plan, call lessons_search() with the forecast headline as the
+# query so you see lessons that match TODAY's conditions, not just the most-
+# validated ones. Same goes for knowledge_search() if you need playbook /
+# site-doc reference content during planning.
+echo "--- RELEVANT LESSONS FOR TODAY'S FORECAST (semantic retrieval; Phase 3) ---"
+echo "Beyond the top-10 above, call lessons_search(query, top_k) with a forecast-derived"
+echo "query for the conditions you're actually planning around. Examples:"
+echo "  lessons_search(\"hot dry day with 1100 W/m^2 solar peak, RH below 15%\", top_k=8)"
+echo "  lessons_search(\"cool overcast morning then dry afternoon ramp\", top_k=8)"
+echo "Use knowledge_search(query, source_types) when you need reference content from the"
+echo "planner playbook or operator docs. Examples:"
+echo "  knowledge_search(\"vent oscillation pattern hot dry day\", source_types=\"playbook\")"
+echo "  knowledge_search(\"VPD-low recovery overnight\", source_types=\"site_doc,playbook\")"
+echo ""
+
+# ── 20a-2. FORECAST CALIBRATION (Codex P1: forecast-bias-corrected priors) ─
+# Open-Meteo consistently overshoots solar by ~+48 W/m^2 and VPD by ~+0.20 kPa
+# at 0-24h leads. Iris should discount those biases when planning, especially
+# for dry-day pre-staging. Without this, the May VPD-low overshoot pattern
+# repeats — Iris plans for the forecast (bright + dry) and the day arrives
+# cooler/wetter, so the aggressive misting becomes over-humidification.
+echo "--- FORECAST CALIBRATION (apply these biases when interpreting today's forecast) ---"
+echo "Open-Meteo forecast bias (last 7 days, by lead time):"
+$DB -c "
+SELECT param,
+       lead_bucket,
+       round(AVG(bias)::numeric, 2)  AS bias,
+       round(AVG(mae)::numeric, 2)   AS mae
+  FROM v_forecast_accuracy_lead_buckets
+ WHERE date >= CURRENT_DATE - 7
+ GROUP BY param, lead_bucket
+ ORDER BY param, lead_bucket;
+" 2>/dev/null
+echo "Rule: positive bias = forecast OVERSHOOTS reality. Discount accordingly."
+echo "Solar bias historically +47 W/m^2 (~5-15%% of peak). Do not pre-stage aggressive"
+echo "misting until live morning VPD confirms the predicted dry ramp."
+echo ""
+
 # ── 20b. CURRENT ACTIVE SETPOINTS (for mandatory waypoint emission) ─
 echo "--- CURRENT ACTIVE SETPOINTS ---"
 $DB -c "
