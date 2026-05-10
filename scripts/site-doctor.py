@@ -17,8 +17,10 @@ import tempfile
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 DEFAULT_VAULT = Path("/mnt/iris/verdify-vault/website")
 DEFAULT_PUBLIC = Path("/srv/verdify/verdify-site/public")
@@ -29,9 +31,13 @@ DEFAULT_LAUNCH_LINT = Path("scripts/lint_public_site.py")
 REBUILD_RETRY_ATTEMPTS = 25
 REBUILD_RETRY_SLEEP_SEC = 2
 BOX_DRAWING_RE = re.compile(r"[│┌└├─═╔]")
+DENVER_TZ = ZoneInfo("America/Denver")
+FORECAST_MAX_AGE_SECONDS = 2 * 60 * 60
+PLAN_INDEX_ROW_RE = re.compile(r"^\| \[(\d{4}-\d{2}-\d{2})\]\(/plans/\1\)")
 
 GENERATED_PAGES = {
     "data/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
+    "data/forecast/index.md": "scripts/generate-forecast-page.py",
     "data/plans/index.md": "scripts/generate-plans-index.py",
     "evidence/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
     "forecast/index.md": "scripts/generate-forecast-page.py",
@@ -51,6 +57,23 @@ GENERATED_EXCEPTIONS = {
 GENERATED_PARTIALS = {
     "greenhouse/equipment.md": "scripts/render-equipment-page.py",
 }
+GENERATED_ROUTE_ALIASES = (
+    (
+        "forecast/index.md",
+        "data/forecast/index.md",
+        "scripts/generate-forecast-page.py",
+    ),
+    (
+        "plans/index.md",
+        "data/plans/index.md",
+        "scripts/generate-plans-index.py",
+    ),
+    (
+        "evidence/baseline-vs-iris.md",
+        "data/baseline-vs-iris.md",
+        "scripts/generate-baseline-vs-iris-page.py",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -336,6 +359,101 @@ def collect_pages(
         links.extend(page_links)
 
     return pages, iframes, images, links, findings
+
+
+def clean_scalar(value: object) -> str:
+    return str(value or "").strip().strip("'\"")
+
+
+def check_generated_route_aliases(vault_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    for left_rel, right_rel, source in GENERATED_ROUTE_ALIASES:
+        left = vault_root / left_rel
+        right = vault_root / right_rel
+        if not left.exists():
+            findings.append(
+                Finding("error", "generated-alias-missing", f"{source} expected {left_rel}, but it is missing")
+            )
+            continue
+        if not right.exists():
+            findings.append(
+                Finding("error", "generated-alias-missing", f"{source} expected {right_rel}, but it is missing")
+            )
+            continue
+        if read_text(left) != read_text(right):
+            findings.append(
+                Finding(
+                    "error",
+                    "generated-route-drift",
+                    f"{left_rel} and {right_rel} differ; regenerate both with {source}",
+                )
+            )
+    return findings
+
+
+def check_forecast_freshness(vault_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    for rel in ("forecast/index.md", "data/forecast/index.md"):
+        path = vault_root / rel
+        if not path.exists():
+            findings.append(Finding("error", "forecast-page-missing", f"{rel} is missing"))
+            continue
+        fm, _body = frontmatter(read_text(path))
+        raw = clean_scalar(fm.get("last_updated"))
+        if not raw:
+            findings.append(Finding("error", "forecast-freshness-missing", f"{rel} has no last_updated frontmatter"))
+            continue
+        try:
+            updated_at = datetime.fromisoformat(raw)
+        except ValueError:
+            findings.append(Finding("error", "forecast-freshness-invalid", f"{rel} has invalid last_updated: {raw}"))
+            continue
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=DENVER_TZ)
+        age_seconds = (datetime.now(updated_at.tzinfo) - updated_at).total_seconds()
+        if age_seconds > FORECAST_MAX_AGE_SECONDS:
+            findings.append(
+                Finding(
+                    "error",
+                    "forecast-page-stale",
+                    f"{rel} last_updated is {int(age_seconds)}s old; verdify-forecast-page.timer should refresh every 30min",
+                )
+            )
+    return findings
+
+
+def first_plan_index_date(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    for line in read_text(path).splitlines():
+        match = PLAN_INDEX_ROW_RE.match(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def check_plan_archive_freshness(vault_root: Path) -> list[Finding]:
+    plan_dates = sorted(
+        path.stem for path in (vault_root / "plans").glob("*.md") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", path.stem)
+    )
+    if not plan_dates:
+        return [Finding("error", "plan-pages-missing", "plans/YYYY-MM-DD.md pages are missing")]
+
+    findings: list[Finding] = []
+    latest_plan = plan_dates[-1]
+    for rel in ("plans/index.md", "data/plans/index.md"):
+        first_date = first_plan_index_date(vault_root / rel)
+        if first_date is None:
+            findings.append(Finding("error", "plans-index-empty", f"{rel} has no daily plan rows"))
+        elif first_date != latest_plan:
+            findings.append(
+                Finding(
+                    "error",
+                    "plans-index-stale",
+                    f"{rel} starts at {first_date}, but latest plan page is {latest_plan}; regenerate with scripts/generate-plans-index.py",
+                )
+            )
+    return findings
 
 
 def normalize_route(route: str) -> str:
@@ -793,6 +911,9 @@ def main() -> int:
     image_manifest = load_image_manifest(args.image_manifest)
     pages, iframes, images, links, content_findings = collect_pages(args.vault_root)
     findings.extend(content_findings)
+    findings.extend(check_generated_route_aliases(args.vault_root))
+    findings.extend(check_forecast_freshness(args.vault_root))
+    findings.extend(check_plan_archive_freshness(args.vault_root))
     findings.extend(check_images(args.vault_root, images, image_manifest))
     findings.extend(check_links(args.vault_root, links))
     if not args.skip_launch_lint:

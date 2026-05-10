@@ -1,5 +1,5 @@
 #!/usr/bin/env /srv/greenhouse/.venv/bin/python3
-"""Sprint 20 Phase 7: generate /website/forecast/index.md from
+"""Sprint 20 Phase 7: generate forecast archive pages from
 weather_forecast + fn_forecast_correction + forecast_deviation_log.
 
 Validated through verdify_schemas.ForecastHour so malformed DB rows are
@@ -8,6 +8,7 @@ caught at the boundary. Invoked by:
   - manual `python3 scripts/generate-forecast-page.py`
 
 Output: /mnt/iris/verdify-vault/website/forecast/index.md
+        /mnt/iris/verdify-vault/website/data/forecast/index.md
         (picked up by the Quartz poll-timer within 10 s)
 """
 
@@ -24,7 +25,10 @@ import yaml  # noqa: E402
 
 from verdify_schemas import ForecastHour, ForecastVaultFrontmatter  # noqa: E402
 
-OUT_PATH = Path("/mnt/iris/verdify-vault/website/forecast/index.md")
+OUT_PATHS = (
+    Path("/mnt/iris/verdify-vault/website/forecast/index.md"),
+    Path("/mnt/iris/verdify-vault/website/data/forecast/index.md"),
+)
 
 
 def _data_table(rows: list[tuple[str, str, str]]) -> str:
@@ -308,14 +312,21 @@ def main() -> None:
     bias = _bias_correction()
     deviations = _recent_deviations()
     body = _render(hours, daily, bias, deviations)
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # Only rewrite if content changed — saves unnecessary site rebuilds.
-    old = OUT_PATH.read_text() if OUT_PATH.exists() else ""
-    if old != body:
-        OUT_PATH.write_text(body)
-        print(f"Wrote {OUT_PATH} ({len(body)} chars; {len(hours)} hourly rows, {len(daily)} daily rows)")
+    changed: list[Path] = []
+    for out_path in OUT_PATHS:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        # Only rewrite if content changed — saves unnecessary site rebuilds.
+        old = out_path.read_text() if out_path.exists() else ""
+        if old != body:
+            out_path.write_text(body)
+            changed.append(out_path)
+
+    if changed:
+        paths = ", ".join(str(path) for path in changed)
+        print(f"Wrote {paths} ({len(body)} chars; {len(hours)} hourly rows, {len(daily)} daily rows)")
     else:
-        print(f"No change; {OUT_PATH} unchanged ({len(hours)} hourly rows)")
+        paths = ", ".join(str(path) for path in OUT_PATHS)
+        print(f"No change; {paths} unchanged ({len(hours)} hourly rows)")
 
 
 if __name__ == "__main__":
