@@ -95,7 +95,14 @@ def plan_day(plan_id: str | None) -> str:
 
 
 def fetch_snapshot(url: str) -> dict:
-    with urllib.request.urlopen(url, timeout=20) as response:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Verdify-Site-Publisher/1.0 (+https://verdify.ai)",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
