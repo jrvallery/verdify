@@ -12,6 +12,7 @@ __pycache__/
 
 # Node
 node_modules/
+*.tsbuildinfo
 site/public/
 
 # ESPHome build
