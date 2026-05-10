@@ -102,6 +102,7 @@ class RoutingConfig:
     deviation_major_threshold: float
     deviation_prolonged_cycles: int
     sla_min_by_pair: dict[tuple[Instance, TriggerType], int]
+    required_full_plan_instance: Instance | None = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +137,17 @@ def load_routing_config(path: str | None = None) -> RoutingConfig:
     else:
         log.warning("planner_routing: %s not found, using contract defaults", p)
 
-    routing = {**_DEFAULT_ROUTING, **(raw.get("planner_routing") or {})}
+    routing_raw = raw.get("planner_routing") or {}
+    routing = {**_DEFAULT_ROUTING, **routing_raw}
+
+    required_full_plan_instance = routing_raw.get("required_full_plan_instance")
+    if required_full_plan_instance not in (None, "local", "opus"):
+        log.warning(
+            "planner_routing: invalid required_full_plan_instance=%r in %s; using local-first default",
+            required_full_plan_instance,
+            p,
+        )
+        required_full_plan_instance = None
 
     # sla_min_by_pair: contract YAML shape is {opus: {TYPE: min}, local: {TYPE: min}}
     sla_yaml = raw.get("planner_sla") or {}
@@ -151,6 +162,7 @@ def load_routing_config(path: str | None = None) -> RoutingConfig:
         deviation_major_threshold=float(routing["deviation_major_threshold"]),
         deviation_prolonged_cycles=int(routing["deviation_prolonged_cycles"]),
         sla_min_by_pair=sla_min,
+        required_full_plan_instance=required_full_plan_instance,
     )
 
 
@@ -203,6 +215,7 @@ def pick_instance(
     severity: Severity = "minor",
     *,
     override: Instance | None = None,
+    config: RoutingConfig | None = None,
 ) -> Instance:
     """Select local vs explicit opus escalation per policy.
 
@@ -213,6 +226,9 @@ def pick_instance(
         return override
     if trigger_type == "MANUAL":
         return "local"
+    cfg = config or load_routing_config()
+    if trigger_type in ("SUNRISE", "SUNSET", "MIDNIGHT") and cfg.required_full_plan_instance:
+        return cfg.required_full_plan_instance
     return _ROUTING_TABLE.get((trigger_type, severity), "local")
 
 

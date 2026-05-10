@@ -25,6 +25,7 @@
     "interior-full-view.jpg": {"status": "approved", "category": "interior", "allowed_paths": ["index.md", "greenhouse/"]},
     "interior-production-aisle.jpg": {"status": "approved", "category": "interior", "allowed_paths": ["greenhouse/index.md", "index.md"]},
     "interior-south-zone.jpg": {"status": "approved", "category": "zone", "allowed_paths": ["greenhouse/zones/south.md"]},
+    "jason-and-james.jpeg": {"status": "approved", "category": "people", "allowed_paths": ["about.md"]},
     "kincony-relay-closeup.jpg": {"status": "approved", "category": "control", "allowed_paths": ["climate/controller.md", "greenhouse/equipment.md"]},
     "lennox-heater-circulation-fan.jpg": {"status": "approved", "category": "heating", "allowed_paths": ["climate/heating.md"]},
     "lennox-heater-overhead.jpg": {"status": "approved", "category": "heating", "allowed_paths": ["climate/heating.md"]},

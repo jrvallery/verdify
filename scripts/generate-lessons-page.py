@@ -255,6 +255,22 @@ def generate_page() -> str:
     )
     parts.append("")
 
+    parts.append("## Launch-Relevant Lessons")
+    parts.append("")
+    parts.append("The five launch-relevant lessons:")
+    parts.append("")
+    parts.append("- Gas heat is 3.9x cheaper per BTU than electric for sustained cold.")
+    parts.append("- Direct relay control stays in firmware.")
+    parts.append("- Shade cloth, not software, is the missing hot-day fix.")
+    parts.append("- VPD is the dominant spring constraint.")
+    parts.append("- Stale plans must be replaced when forecast regime changes.")
+    parts.append("")
+    parts.append(
+        "Those lessons constrain the bounded control surface listed in "
+        "[AI-Writable Tunables](/intelligence/planning/#ai-writable-tunables)."
+    )
+    parts.append("")
+
     # Active lessons
     parts.append("## Canonical Lessons")
     parts.append("")

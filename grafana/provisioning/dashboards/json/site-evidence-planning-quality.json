@@ -738,7 +738,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, avg(c.temp_avg) OVER (ORDER BY c.ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.temp_avg) OVER (ORDER BY c.ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp (15-sample rolling avg)\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "editorMode": "code"
         },
         {
@@ -875,7 +875,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, avg(c.vpd_avg) OVER (ORDER BY c.ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Actual Indoor VPD\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.vpd_avg) OVER (ORDER BY c.ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Actual Indoor VPD (30-sample rolling avg)\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "editorMode": "code"
         },
         {

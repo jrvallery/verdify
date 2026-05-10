@@ -871,7 +871,7 @@ def send_to_iris(
         session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"
     else:
         agent_id = OPENCLAW_OPUS_AGENT_ID
-        session_key = OPENCLAW_OPUS_SESSION_KEY
+        session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"
     result = {
         "delivered": False,
         "event_type": event_type,

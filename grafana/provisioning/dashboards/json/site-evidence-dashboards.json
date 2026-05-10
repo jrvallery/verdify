@@ -1424,7 +1424,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor (15-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
           "refId": "A"
         },
         {
@@ -1826,7 +1826,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD (30-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
           "refId": "A"
         },
         {
@@ -2498,7 +2498,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, avg(c.temp_avg) OVER (ORDER BY c.ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.temp_avg) OVER (ORDER BY c.ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Actual Indoor Temp (15-sample rolling avg)\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "refId": "B",
           "sql": {
             "columns": [
@@ -2623,7 +2623,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Average daily total cost across the selected period",
+      "description": "Average daily total cost across the last 30 completed daily summaries.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2672,11 +2672,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() AS time, COALESCE(ROUND(AVG(cost_total)::numeric, 2), 0) AS v FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "refId": "A"
         }
       ],
-      "title": "Average $/Day",
+      "title": "$/Day (30-Day Average)",
       "type": "stat"
     },
     {

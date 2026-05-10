@@ -37,16 +37,29 @@ fi
 # If no header found (new file), generate default
 if [[ -z "$HEADER" ]]; then
   HEADER="---
-title: Daily Plans
+title: AI Greenhouse Planning Archive
+description: \"Daily archive and monthly summary of Iris, Verdify's AI greenhouse planner: experiments, scorecards, climate stress, costs, and lessons from each planning cycle.\"
 tags: [plans, greenhouse, ai]
 date: ${TODAY}
 cssclasses:
   - hide-folder-listing
 ---
 
-# Daily Plans
+# AI Greenhouse Planning Archive
 
-Iris manages greenhouse setpoints through solar-milestone planning cycles — SUNRISE, peak stress, decline, SUNSET, and overnight transitions. Each cycle evaluates conditions, writes a hypothesis, sets waypoints, and validates the previous cycle's outcome.
+Iris normally runs up to three planning cycles per day. Missed cycles are intentionally visible in this archive, because planner availability is part of the system being audited.
+
+The individual daily pages are generated records, not polished articles. The important story is what the AI planned, what the greenhouse actually experienced, how much stress remained, and what the next plan learned.
+
+To understand the exact parameters behind the plan rows, see [AI-Writable Tunables](/intelligence/planning/#ai-writable-tunables).
+
+## What the Archive Shows
+
+<div class=\"metric-grid\">
+  <div class=\"metric-card\"><strong>Plan frequency</strong><span>Up to 3 cycles/day</span><p>Morning, midday, and evening plans adjust temperature, VPD, misting, fog, ventilation, heat, and lighting tactics.</p></div>
+  <div class=\"metric-card\"><strong>Scorecard feedback</strong><span>Outcome-driven</span><p>Daily summaries compare stress hours, compliance, resource use, and experimental outcomes.</p></div>
+  <div class=\"metric-card\"><strong>Learning loop</strong><span>Validated lessons</span><p>Useful findings graduate into generated lessons that the planner reads before future cycles.</p></div>
+</div>
 
 ---
 "

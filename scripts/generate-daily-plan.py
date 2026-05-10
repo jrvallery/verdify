@@ -21,7 +21,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from html import escape
 from pathlib import Path
 
@@ -171,6 +171,36 @@ def get_plans_for_date(d: date) -> list[dict]:
               AND plan_id NOT LIKE 'iris-fix%'
             ORDER BY created_at
         ) p
+    """)
+        or []
+    )
+    return [{k: str(v or "").strip() for k, v in row.items()} for row in rows]
+
+
+def get_plan_delivery_for_date(d: date) -> list[dict]:
+    """Get planner delivery events for a local date.
+
+    These rows are distinct from full plan_journal cycles. A delivery can be
+    acknowledged, left pending, or write a small one-shot setpoint correction
+    without becoming a public Tier 1 planning cycle.
+    """
+    next_day = d + timedelta(days=1)
+    rows = (
+        db_query_json(f"""
+        SELECT COALESCE(json_agg(row_to_json(e)), '[]'::json)
+        FROM (
+            SELECT event_type,
+                   event_label,
+                   status,
+                   to_char(delivered_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') AS delivered,
+                   COALESCE(resulting_plan_id, '') AS resulting_plan_id,
+                   COALESCE(to_char(plan_written_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI'), '') AS plan_written
+            FROM plan_delivery_log
+            WHERE delivered_at >= '{d} 00:00:00 America/Denver'::timestamptz
+              AND delivered_at < '{next_day} 00:00:00 America/Denver'::timestamptz
+              AND event_type IN ('SUNRISE', 'MIDDAY', 'SUNSET', 'TRANSITION', 'FORECAST')
+            ORDER BY delivered_at
+        ) e
     """)
         or []
     )
@@ -819,6 +849,68 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     return "\n".join(lines)
 
 
+def generate_no_plan_section(d: date, delivery_events: list[dict]) -> str:
+    """Explain a day with no full plan_journal cycles without hiding activity."""
+    lines = [
+        "**Planner archive status:** no full `plan_journal` planning cycles were recorded for this day.",
+        "",
+        "Missed cycles are intentionally visible here because planner availability is part of the system being audited. The ESP32 controller continued enforcing the last valid bounded setpoints and hard safety rails; this page still shows the measured climate, equipment runtime, stress hours, and costs for the day.",
+        "",
+    ]
+
+    if not delivery_events:
+        lines.extend(
+            [
+                "No planner delivery-log rows were recorded for this local date.",
+                "",
+            ]
+        )
+        return "\n".join(lines)
+
+    required_events = [event for event in delivery_events if event.get("event_type") in {"SUNRISE", "MIDDAY", "SUNSET"}]
+    one_shots = [
+        event
+        for event in delivery_events
+        if event.get("status") == "plan_written" and event.get("resulting_plan_id", "").startswith("iris-oneshot-")
+    ]
+    pending_required = [event for event in required_events if event.get("status") == "pending"]
+
+    summary_cards = [
+        ("Delivery events", str(len(delivery_events))),
+        ("Required cycles pending", str(len(pending_required))),
+        ("One-shot corrections", str(len(one_shots))),
+    ]
+    lines.append(metric_grid(summary_cards))
+    lines.append("")
+
+    if pending_required:
+        names = ", ".join(
+            f"{event.get('event_type')} at {event.get('delivered', '')[11:]}" for event in pending_required
+        )
+        lines.append(
+            f"Required planning events accepted by the gateway but still pending: {public_text(names)}. That is an availability failure, not a hidden success."
+        )
+        lines.append("")
+
+    if one_shots:
+        ids = ", ".join(event["resulting_plan_id"] for event in one_shots[:5])
+        lines.append(
+            f"The planner did write one-shot setpoint corrections on {d} ({public_text(ids)}), "
+            "but those are not counted as full daily planning cycles."
+        )
+        lines.append("")
+
+    rows = []
+    for event in delivery_events:
+        plan_id = event.get("resulting_plan_id") or "-"
+        meta = f"{event.get('event_type', '?')} · {event.get('status', '?')}"
+        body = f"Delivered {event.get('delivered', '?')}; resulting plan {plan_id}."
+        rows.append((event.get("event_label") or event.get("event_type") or "Planner event", meta, body))
+    lines.append(data_table(rows))
+    lines.append("")
+    return "\n".join(lines)
+
+
 def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_date: date = None) -> str:
     """Generate end-of-day summary section."""
     if not summary:
@@ -967,6 +1059,7 @@ def generate_day(d: date) -> str:
 
     summary = get_daily_summary(d)
     plans = get_plans_for_date(d)
+    delivery_events = get_plan_delivery_for_date(d)
     setpoints = get_active_setpoints_at(d)
     hourly = get_hourly_pattern(d)
     stress_ctx = get_stress_context(d)
@@ -983,7 +1076,7 @@ def generate_day(d: date) -> str:
     ]
 
     if not plans:
-        body.extend(["*No planning cycles recorded for this day.*", ""])
+        body.append(generate_no_plan_section(d, delivery_events))
     else:
         # Each plan gets its own cycle section, chronologically
         for plan in plans:

@@ -792,7 +792,7 @@ async def set_plan(
             }
         )
     except ValidationError as e:
-        return json.dumps({"error": "Plan validation failed", "details": e.errors(include_input=False)[:10]})
+        return json.dumps({"error": "Plan validation failed", "details": json.loads(e.json(include_input=False))[:10]})
 
     writable_params = [param for wp in plan.transitions for param in wp.params if param not in BAND_OWNED_PARAMS]
     if not writable_params:
@@ -1509,12 +1509,21 @@ async def alerts(action: str = "list", alert_id: int = 0, data: str = "") -> str
                 ack = AlertAckPayload.model_validate({"acknowledged_by": d.get("acknowledged_by") or "iris"})
             except ValidationError as e:
                 return json.dumps({"error": "AlertAckPayload validation failed", "details": json.loads(e.json())})
-            await conn.execute(
+            row = await conn.fetchrow(
                 "UPDATE alert_log SET acknowledged_at = now(), acknowledged_by = $2, "
-                "disposition = 'acknowledged' WHERE id = $1",
+                "disposition = 'acknowledged' WHERE id = $1 AND resolved_at IS NULL "
+                "RETURNING id, disposition",
                 alert_id,
                 ack.acknowledged_by,
             )
+            if row is None:
+                existing = await conn.fetchrow(
+                    "SELECT id, disposition, resolved_at IS NOT NULL AS resolved FROM alert_log WHERE id = $1", alert_id
+                )
+                if existing and existing["resolved"]:
+                    return json.dumps({"ok": True, "alert_id": alert_id, "action": "already_resolved"})
+                if existing is None:
+                    return json.dumps({"error": f"alert_id {alert_id} not found"})
             return json.dumps({"ok": True, "alert_id": alert_id, "action": "acknowledged"})
 
         elif action == "resolve" and alert_id:

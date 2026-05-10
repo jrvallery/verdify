@@ -27,6 +27,14 @@ from planner_routing import (  # noqa: E402
     sla_for,
 )
 
+LOCAL_FIRST_CONFIG = RoutingConfig(
+    forecast_major_delta_vpd_kpa=0.5,
+    forecast_major_delta_temp_f=10.0,
+    deviation_major_threshold=0.15,
+    deviation_prolonged_cycles=3,
+    sla_min_by_pair=_DEFAULT_SLA_MIN,
+)
+
 # ── pick_instance ──────────────────────────────────────────────────
 
 
@@ -51,17 +59,33 @@ from planner_routing import (  # noqa: E402
     ],
 )
 def test_pick_instance_matrix(trigger_type, severity, expected):
-    assert pick_instance(trigger_type, severity) == expected
+    assert pick_instance(trigger_type, severity, config=LOCAL_FIRST_CONFIG) == expected
 
 
 def test_pick_instance_manual_defaults_to_local():
-    assert pick_instance("MANUAL") == "local"
+    assert pick_instance("MANUAL", config=LOCAL_FIRST_CONFIG) == "local"
 
 
 def test_pick_instance_override_always_wins():
     # Override wins even when the policy would pick the other instance
-    assert pick_instance("SUNRISE", "major", override="local") == "local"
-    assert pick_instance("HEARTBEAT", "minor", override="opus") == "opus"
+    assert pick_instance("SUNRISE", "major", override="local", config=LOCAL_FIRST_CONFIG) == "local"
+    assert pick_instance("HEARTBEAT", "minor", override="opus", config=LOCAL_FIRST_CONFIG) == "opus"
+
+
+def test_required_full_plan_instance_override_routes_required_cycles_only():
+    cfg = RoutingConfig(
+        forecast_major_delta_vpd_kpa=0.5,
+        forecast_major_delta_temp_f=10.0,
+        deviation_major_threshold=0.15,
+        deviation_prolonged_cycles=3,
+        sla_min_by_pair=_DEFAULT_SLA_MIN,
+        required_full_plan_instance="opus",
+    )
+    assert pick_instance("SUNRISE", "minor", config=cfg) == "opus"
+    assert pick_instance("SUNSET", "major", config=cfg) == "opus"
+    assert pick_instance("MIDNIGHT", "minor", config=cfg) == "opus"
+    assert pick_instance("FORECAST", "major", config=cfg) == "local"
+    assert pick_instance("TRANSITION", "minor", config=cfg) == "local"
 
 
 # ── classify_severity ──────────────────────────────────────────────
@@ -168,6 +192,7 @@ def test_load_routing_config_applies_yaml_overrides(tmp_path):
     p.write_text(
         """
 planner_routing:
+  required_full_plan_instance: opus
   forecast_major_delta_vpd_kPa: 0.8
   deviation_prolonged_cycles: 5
 planner_sla:
@@ -181,6 +206,7 @@ planner_sla:
     # Overridden
     assert cfg.forecast_major_delta_vpd_kpa == 0.8
     assert cfg.deviation_prolonged_cycles == 5
+    assert cfg.required_full_plan_instance == "opus"
     assert cfg.sla_min_by_pair[("opus", "SUNRISE")] == 20
     assert cfg.sla_min_by_pair[("local", "HEARTBEAT")] == 25
     # Unchanged where YAML didn't specify

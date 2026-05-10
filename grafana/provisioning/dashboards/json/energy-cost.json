@@ -945,7 +945,7 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "$/Day Avg",
+      "title": "$/Day (30-Day Average)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -962,7 +962,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND cost_total > 0",
+          "rawSql": "SELECT now() AS time, ROUND(AVG(cost_total)::numeric, 2) AS v FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND cost_total > 0",
           "format": "table",
           "refId": "A"
         }
@@ -1001,7 +1001,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average daily total cost across the selected period"
+      "description": "Average daily total cost across the last 30 completed daily summaries."
     },
     {
       "type": "row",

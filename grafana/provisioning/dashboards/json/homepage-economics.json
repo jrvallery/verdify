@@ -457,7 +457,7 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "Avg $/Day",
+      "title": "$/Day (30-Day Average)",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -466,7 +466,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT ROUND(AVG(cost_total)::numeric, 2) AS \"Avg\" FROM daily_summary WHERE date > (CURRENT_DATE - '${period}'::interval) AND cost_total > 0",
+          "rawSql": "SELECT ROUND(AVG(cost_total)::numeric, 2) AS \"30-Day Average\" FROM daily_summary WHERE date >= CURRENT_DATE - interval '30 days' AND date < CURRENT_DATE AND cost_total > 0",
           "refId": "A",
           "format": "table",
           "datasource": {
@@ -500,7 +500,7 @@
         },
         "overrides": []
       },
-      "description": "Shows average daily greenhouse operating cost.",
+      "description": "Average daily total cost across the last 30 completed daily summaries.",
       "options": {}
     },
     {

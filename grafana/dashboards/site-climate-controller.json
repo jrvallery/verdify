@@ -919,7 +919,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(temp_avg) OVER (ORDER BY ts ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS \"Indoor (15-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND temp_avg IS NOT NULL\nORDER BY ts",
           "refId": "A"
         },
         {
@@ -1321,7 +1321,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    avg(vpd_avg) OVER (ORDER BY ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Indoor VPD (30-sample rolling avg)\"\nFROM climate\nWHERE $__timeFilter(ts) AND ts <= now() AND vpd_avg IS NOT NULL\nORDER BY ts",
           "refId": "A"
         },
         {

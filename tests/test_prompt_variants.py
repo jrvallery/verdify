@@ -36,10 +36,10 @@ def iris_planner():
     cfg.OPENCLAW_URL = "x"
     cfg.OPENCLAW_TOKEN = "x"
     cfg.OPENCLAW_SESSION_KEY = "x"
-    cfg.OPENCLAW_OPUS_AGENT_ID = "iris-planner-cloud"
-    cfg.OPENCLAW_OPUS_SESSION_KEY = "agent:iris-planner-cloud:main"
-    cfg.OPENCLAW_LOCAL_AGENT_ID = "iris-planner"
-    cfg.OPENCLAW_LOCAL_SESSION_KEY = "x"
+    cfg.OPENCLAW_OPUS_AGENT_ID = "iris-planner"
+    cfg.OPENCLAW_OPUS_SESSION_KEY = "agent:iris-planner:main"
+    cfg.OPENCLAW_LOCAL_AGENT_ID = "iris-planner-local"
+    cfg.OPENCLAW_LOCAL_SESSION_KEY = "agent:iris-planner-local:main"
     sys.modules["config"] = cfg
 
     spec = importlib.util.spec_from_file_location(

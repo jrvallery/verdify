@@ -1,7 +1,7 @@
 {
   "panels": [
     {
-      "description": "% of greenhouse electricity consumed during solar hours (8AM-5PM)",
+      "description": "Percent of greenhouse electrical load consumed during solar hours across the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -36,10 +36,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "WITH h AS (SELECT extract(hour from ts AT TIME ZONE 'America/Denver')::int as hr, avg(watts_total)::numeric as w FROM energy WHERE $__timeFilter(ts) GROUP BY 1) SELECT now() as time, round(sum(CASE WHEN hr BETWEEN 8 AND 17 THEN w ELSE 0 END)/NULLIF(sum(w),0)*100, 1) as value FROM h"
+          "rawSql": "SELECT now() as time, round((100.0 * SUM(watts_total) FILTER (WHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17) / NULLIF(SUM(watts_total), 0))::numeric, 1) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date"
         }
       ],
-      "title": "Solar Aligned",
+      "title": "30-Day Solar-Aligned Load",
       "type": "stat",
       "options": {}
     },
@@ -80,12 +80,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE $__timeFilter(ts) AND extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
+          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
         }
       ],
-      "title": "Avg Watts (Daytime)",
+      "title": "Daytime Watts (30-Day Average)",
       "type": "stat",
-      "description": "Shows average greenhouse power draw during daytime hours.",
+      "description": "Average greenhouse power draw during daytime hours across the last 30 completed days.",
       "options": {}
     },
     {
@@ -125,12 +125,12 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE $__timeFilter(ts) AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
-      "title": "Avg Watts (Night)",
+      "title": "Night Watts (30-Day Average)",
       "type": "stat",
-      "description": "Shows average greenhouse power draw during nighttime hours.",
+      "description": "Average greenhouse power draw during nighttime hours across the last 30 completed days.",
       "options": {}
     },
     {
@@ -170,16 +170,16 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric * 24 / 1000, 1) as value FROM energy WHERE $__timeFilter(ts)"
+          "rawSql": "SELECT now() as time, round(avg(kwh_estimated)::numeric, 1) as value FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND kwh_estimated IS NOT NULL"
         }
       ],
-      "title": "Est. kWh/day",
+      "title": "kWh/day (30-Day Average)",
       "type": "stat",
-      "description": "Shows estimated daily electricity consumption.",
+      "description": "Average estimated daily electricity consumption across the last 30 completed daily summaries.",
       "options": {}
     },
     {
-      "description": "% of overnight load covered by one Powerwall (13.5 kWh)",
+      "description": "Percent of average overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 200,
@@ -218,10 +218,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round((13.5 / NULLIF(avg(watts_total)::numeric * 14 / 1000, 0) * 100)::numeric, 0) as value FROM energy WHERE $__timeFilter(ts) AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "SELECT now() as time, round((13.5 / NULLIF(avg(watts_total)::numeric * 14 / 1000, 0) * 100)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
-      "title": "Powerwall Coverage",
+      "title": "30-Day Powerwall Coverage",
       "type": "stat",
       "options": {}
     },
