@@ -16,7 +16,7 @@ set -uo pipefail
 LOCK=/var/lock/verdify-site-build.lock
 LOG=/srv/verdify/state/site-build.log
 MARKER=/var/local/verdify/state/site-build-last-run
-SITE_SOURCE=${VERDIFY_SITE_SOURCE:-/mnt/iris/verdify-worktrees/web/site}
+SITE_SOURCE=${VERDIFY_SITE_SOURCE:-/srv/verdify/site}
 SITE_RUNTIME=${VERDIFY_SITE_RUNTIME:-/srv/verdify/verdify-site}
 LIVE_PUBLIC=${VERDIFY_SITE_PUBLIC:-"$SITE_RUNTIME/public"}
 BUILD_ROOT=${VERDIFY_SITE_BUILD_ROOT:-"$SITE_RUNTIME/.builds"}
