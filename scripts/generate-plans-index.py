@@ -6,7 +6,9 @@ from datetime import date
 from html import escape
 from pathlib import Path
 
-CONTENT_DIR = Path("/srv/verdify/verdify-site/content/plans")
+CONTENT_ROOT = Path("/srv/verdify/verdify-site/content")
+CONTENT_DIR = CONTENT_ROOT / "plans"
+DATA_CONTENT_DIR = CONTENT_ROOT / "data" / "plans"
 DB_CMD = "docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
 
 
@@ -72,8 +74,11 @@ def main():
         ]
     )
 
-    (CONTENT_DIR / "index.md").write_text("\n".join(lines))
-    print(f"Plans index: {len(rows)} days")
+    output = "\n".join(lines)
+    for content_dir in (CONTENT_DIR, DATA_CONTENT_DIR):
+        content_dir.mkdir(parents=True, exist_ok=True)
+        (content_dir / "index.md").write_text(output)
+    print(f"Plans index: {len(rows)} days -> plans/index.md and data/plans/index.md")
 
 
 if __name__ == "__main__":

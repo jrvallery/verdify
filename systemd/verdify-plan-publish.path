@@ -1,5 +1,5 @@
 [Unit]
-Description=Watch for new plan trigger and publish daily plan markdown
+Description=Watch for new planner output and publish the public plan archive
 After=verdify-ingestor.service
 
 [Path]

@@ -4,6 +4,13 @@ import * as Component from "./quartz/components";
 const showsPlanningDate = (page: any) =>
     /^plans\/\d{4}-\d{2}-\d{2}$/.test(page.fileData.slug);
 
+const hasContentH1 = (page: any) =>
+    Boolean(
+        page.tree?.children?.some(
+            (node: any) => node.type === "element" && node.tagName === "h1",
+        ),
+    );
+
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
     head: Component.Head(),
@@ -28,10 +35,13 @@ export const sharedPageComponents: SharedLayout = {
 export const defaultContentPageLayout: PageLayout = {
     beforeBody: [
         Component.ConditionalRender({
-            component: Component.Breadcrumbs(),
+            component: Component.Breadcrumbs({ showCurrentPage: false }),
             condition: (page) => page.fileData.slug !== "index",
         }),
-        Component.ArticleTitle(),
+        Component.ConditionalRender({
+            component: Component.ArticleTitle(),
+            condition: (page) => !hasContentH1(page),
+        }),
         Component.ConditionalRender({
             component: Component.ContentMeta({ showDate: true }),
             condition: showsPlanningDate,
@@ -63,8 +73,11 @@ export const defaultContentPageLayout: PageLayout = {
 // components for pages that display lists of pages  (e.g. tags or folders)
 export const defaultListPageLayout: PageLayout = {
     beforeBody: [
-        Component.Breadcrumbs(),
-        Component.ArticleTitle(),
+        Component.Breadcrumbs({ showCurrentPage: false }),
+        Component.ConditionalRender({
+            component: Component.ArticleTitle(),
+            condition: (page) => !hasContentH1(page),
+        }),
         Component.ContentMeta({ showDate: false }),
     ],
     left: [

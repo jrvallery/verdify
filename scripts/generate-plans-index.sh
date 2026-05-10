@@ -3,7 +3,9 @@
 # Queries daily_summary + plan_journal for the last 14 days.
 set -euo pipefail
 
-INDEX="/srv/verdify/verdify-site/content/plans/index.md"
+CONTENT_ROOT="/srv/verdify/verdify-site/content"
+INDEX="$CONTENT_ROOT/plans/index.md"
+DATA_INDEX="$CONTENT_ROOT/data/plans/index.md"
 DB_CMD="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
 TODAY=$(date +%Y-%m-%d)
 
@@ -77,7 +79,11 @@ else
   HEADER=$(echo "$HEADER" | sed -e :a -e '/^\n*$/{$d;N;ba}')
 fi
 
-# Build output
+# Build output once, then publish it to both public archive routes:
+# /plans/ is the canonical daily-plan folder and /data/plans/ is the
+# navigation-facing route. Keeping them byte-identical prevents route drift.
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
 {
   echo "$HEADER"
   echo ""
@@ -104,8 +110,12 @@ fi
   echo "---"
   echo ""
   echo "*Auto-generated from daily_summary + plan_journal data. Archive rows are generated lab notebook entries; null or pending fields mean the day is still in progress or the source row was not recorded.*"
-} > "$INDEX"
+} > "$TMP"
+
+mkdir -p "$(dirname "$INDEX")" "$(dirname "$DATA_INDEX")"
+cp "$TMP" "$INDEX"
+cp "$TMP" "$DATA_INDEX"
 
 # Count rows for logging
 COUNT=$(echo "$ROWS" | grep -c '[0-9]' || true)
-echo "Plans index: ${COUNT} days"
+echo "Plans index: ${COUNT} days -> plans/index.md and data/plans/index.md"
