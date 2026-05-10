@@ -3084,29 +3084,21 @@ def _compute_milestones() -> dict[str, datetime]:
     today = datetime.now(_DENVER).date()
     s = _sun(_LOCATION.observer, date=today, tzinfo=_DENVER)
     noon = s["noon"]
-    # Sprint 24.8 hotfix: midnight must be TODAY's 00:00, not tomorrow's.
-    # The old `today + _td(days=1)` form set the milestone to tomorrow's
-    # midnight, but the cache-per-day pattern rebuilds at date rollover
-    # — the exact moment the milestone would fire. Result: midnight_posture
-    # was perpetually 24h in the future and never dispatched. Today's 00:00
-    # is in the past by the time we observe it, but the firing window is
-    # `0 ≤ delta < 7200` so the task_loop's first tick past 00:00 MDT
-    # catches it via the normal window [0, 300s).
-    midnight = datetime.combine(today, datetime.min.time(), tzinfo=_DENVER)
 
+    # Phase 4 (Iris loop overhaul, 2026-05-10): reshape from 12 trigger keys
+    # to 5. Retired keys (fixed_midnight, fixed_pre_dawn, fixed_midday,
+    # fixed_afternoon, fixed_evening, tree_shade, evening_settle, plus the
+    # FORECAST poll in planning_heartbeat) produced low-signal cycles that
+    # blew through Iris's local-Gemma context budget without changing the
+    # plan. SOLAR_MAX is new: a deterministic solar-noon checkpoint that
+    # replaces the implicit "peak stress is noon + 2h" guess. See plan
+    # /home/jason/.claude-agents/iris-dev/plans/i-d-like-you-to-cozy-frost.md.
     _milestones_cache = {
         "SUNRISE": s["sunrise"],
-        "TRANSITION:fixed_midnight": midnight,
-        "TRANSITION:fixed_pre_dawn": midnight + _td(hours=6),
-        "TRANSITION:fixed_midday": midnight + _td(hours=12),
-        "TRANSITION:fixed_afternoon": midnight + _td(hours=16),
-        "TRANSITION:fixed_evening": midnight + _td(hours=20),
         "TRANSITION:peak_stress": noon + _td(hours=2),
-        "TRANSITION:tree_shade": noon + _td(hours=4),
+        "SOLAR_MAX": noon,
         "TRANSITION:decline": s["sunset"] - _td(hours=1),
         "SUNSET": s["sunset"],
-        # Evening + overnight (closes the 10h blind spot after SUNSET)
-        "TRANSITION:evening_settle": s["sunset"] + _td(hours=1),
     }
 
     # Load any previously fired milestones from disk (in case of restart)
@@ -3122,6 +3114,8 @@ def _milestone_event(key: str, *, catchup: bool = False) -> tuple[str, str]:
         return "SUNRISE", f"Morning planning cycle{catchup_tag}"
     if key == "SUNSET":
         return "SUNSET", f"Evening planning cycle{catchup_tag}"
+    if key == "SOLAR_MAX":
+        return "SOLAR_MAX", f"Solar peak planning checkpoint{catchup_tag}"
     return "TRANSITION", key.split(":", 1)[1].replace("_", " ").title() + catchup_tag
 
 
@@ -3590,11 +3584,42 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
         delta = (now - milestone_time).total_seconds()
         is_catchup = 300 <= delta < 7200
         if 0 <= delta < 300 or is_catchup:
+            event_type, label = _milestone_event(key, catchup=is_catchup)
+
+            # Phase 4 cadence ceiling: if a SUNRISE plan was already written
+            # in the last 4 hours, drop another SUNRISE trigger. The 2026-04-10
+            # hot-cadence regression (41 plans in 24h, ~one every 36 min)
+            # showed catch-up firing produced cascading duplicates of the
+            # same posture decision. Skipping here keeps the catch-up safety
+            # net for SUNSET/SOLAR_MAX/TRANSITION without letting SUNRISE
+            # rewrite itself mid-morning.
+            if event_type == "SUNRISE":
+                try:
+                    async with pool.acquire() as conn:
+                        recent_sunrise = await conn.fetchval(
+                            """
+                            SELECT 1 FROM plan_journal
+                             WHERE plan_id LIKE 'iris-%'
+                               AND created_at > now() - interval '4 hours'
+                               AND EXTRACT(hour FROM created_at AT TIME ZONE 'America/Denver')
+                                     BETWEEN 5 AND 9
+                             LIMIT 1
+                            """
+                        )
+                except Exception as e:
+                    log.warning("cadence-ceiling check failed (proceeding): %s", e)
+                    recent_sunrise = None
+                if recent_sunrise:
+                    _milestones_fired[key] = True
+                    _save_milestone_state()
+                    log.info(
+                        "Skipping SUNRISE %s — another SUNRISE plan exists within last 4h (Phase 4 cadence ceiling)",
+                        key,
+                    )
+                    continue
+
             _milestones_fired[key] = True
             _save_milestone_state()
-
-            # Determine event type and label
-            event_type, label = _milestone_event(key, catchup=is_catchup)
 
             log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
 
@@ -3615,33 +3640,29 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 catchup=is_catchup,
             )
 
-    # ── 3. Check for forecast changes ──
+    # ── 3. FORECAST poll RETIRED (Phase 4, 2026-05-10) ──
+    # The "new forecast fetched" event was the highest-volume / lowest-signal
+    # planner trigger — it fired every time the Open-Meteo fetcher landed a
+    # row, regardless of whether anything in the forecast had actually
+    # changed materially. Baseline showed 238 FORECAST timeouts in the
+    # ledger and most plans produced a bare acknowledge_trigger. Forecast
+    # awareness now ships through the FORECAST_DEVIATION σ-gated path below
+    # (Iris is told material forecast changes through the deviation watcher)
+    # and through the FORECAST CALIBRATION section of gather-plan-context.sh.
+    # _last_forecast_fetch is preserved as a no-op slot for backward-compat
+    # of any external readers that import it; do not re-enable the emission
+    # without first writing a σ-gated threshold so we don't regress.
     global _last_forecast_fetch
     async with pool.acquire() as conn:
         latest_fetch = await conn.fetchval(
             "SELECT MAX(fetched_at)::text FROM weather_forecast WHERE fetched_at > now() - interval '2 hours'"
         )
-        if latest_fetch and latest_fetch != _last_forecast_fetch:
-            if _last_forecast_fetch:
-                log.info("New forecast detected (fetched_at=%s), notifying Iris", latest_fetch)
-                loop = asyncio.get_event_loop()
-                context = await loop.run_in_executor(None, gather_context)
-                # Severity inputs from latest forecast vs previous (Δvpd, Δtemp).
-                # Until those deltas are wired in here, classify_severity returns
-                # 'minor'. In contract v1.5 both minor and major forecast
-                # refreshes stay local unless the caller explicitly overrides.
-                severity = classify_severity("FORECAST", SeverityContext())
-                instance = pick_instance("FORECAST", severity)
-                await _deliver_and_log(
-                    pool,
-                    "FORECAST",
-                    "New forecast data",
-                    context,
-                    instance=instance,
-                )
+        if latest_fetch:
             _last_forecast_fetch = latest_fetch
 
-    # ── 4. Check for deviations (route to Iris instead of trigger file) ──
+    # ── 4. Check for FORECAST_DEVIATION (route to Iris instead of trigger file) ──
+    # Was 'DEVIATION'; renamed in Phase 4 so the event_type vocabulary matches
+    # the new closed set {SUNRISE, SUNSET, SOLAR_MAX, TRANSITION, FORECAST_DEVIATION, MANUAL}.
     trigger_file = STATE_DIR / "replan-needed.json"
     if trigger_file.exists():
         import time as _t
@@ -3653,23 +3674,26 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
                 deviations_str = json.dumps(trigger_data.get("deviations", []), indent=2)
                 reason = trigger_data.get("reason", "Unknown deviation")
 
-                log.info("Deviation trigger found, routing to Iris: %s", reason)
+                log.info("FORECAST_DEVIATION trigger found, routing to Iris: %s", reason)
                 loop = asyncio.get_event_loop()
                 context = await loop.run_in_executor(None, gather_context)
                 # Pull severity hints from the trigger payload if present.
-                # max_abs_deviation comes from alert_monitor's deviation
-                # writer (alert_monitor stamps it on the trigger when the
-                # band excursion exceeds 0.15 normalized). In contract v1.5
-                # both severities route local unless explicitly escalated.
+                # max_abs_deviation is stamped by alert_monitor's deviation
+                # writer when the band excursion exceeds 0.15 normalized.
+                # Both severities route local unless explicitly escalated.
                 severity_ctx = SeverityContext(
                     max_abs_deviation=trigger_data.get("max_abs_deviation"),
                     consecutive_deviation_cycles=trigger_data.get("consecutive_cycles"),
                 )
+                # planner_routing still uses "DEVIATION" internally for the
+                # severity/SLA table key; the event_type emitted to Iris
+                # and stored in plan_delivery_log / planner_trigger_ledger
+                # is "FORECAST_DEVIATION".
                 severity = classify_severity("DEVIATION", severity_ctx)
                 instance = pick_instance("DEVIATION", severity)
                 await _deliver_and_log(
                     pool,
-                    "DEVIATION",
+                    "FORECAST_DEVIATION",
                     deviations_str,
                     context,
                     instance=instance,
@@ -3677,7 +3701,7 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
 
                 trigger_file.unlink(missing_ok=True)
             except Exception as e:
-                log.error("Failed to process deviation trigger: %s", e)
+                log.error("Failed to process FORECAST_DEVIATION trigger: %s", e)
 
     # ── 4b. Resolve plan_delivery_log entries (F14): update any unresolved
     # rows where a plan landed within 2h of delivery. Runs every heartbeat
@@ -3851,8 +3875,9 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    sc.value,
                    sc.ts,
                    EXTRACT(EPOCH FROM (now() - sc.ts))::int AS age_s
-              FROM setpoint_changes sc
+             FROM setpoint_changes sc
              WHERE sc.confirmed_at IS NULL
+               AND COALESCE(sc.source, '') <> 'esp32'
                AND sc.ts < now() - interval '5 minutes'
                AND sc.ts > now() - interval '1 hour'
                AND sc.parameter = ANY($1::text[])

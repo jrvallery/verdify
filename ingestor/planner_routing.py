@@ -36,10 +36,12 @@ Severity = Literal["minor", "major"]
 TriggerType = Literal[
     "SUNRISE",
     "SUNSET",
+    "SOLAR_MAX",  # Phase 4: deterministic solar-noon checkpoint
     "MIDNIGHT",
     "TRANSITION",
     "FORECAST",
-    "DEVIATION",
+    "DEVIATION",  # legacy alias for FORECAST_DEVIATION in routing table
+    "FORECAST_DEVIATION",  # Phase 4: renamed from DEVIATION on the wire
     "HEARTBEAT",
     "MANUAL",
 ]
@@ -67,13 +69,17 @@ _DEFAULT_SLA_MIN = {
     ("local", "TRANSITION"): 45,
     ("local", "FORECAST"): 90,
     ("local", "DEVIATION"): 20,
+    ("local", "FORECAST_DEVIATION"): 20,  # Phase 4: same SLA as legacy DEVIATION
+    ("local", "SOLAR_MAX"): 30,  # Phase 4: same SLA shape as SUNRISE/SUNSET
     ("local", "HEARTBEAT"): 15,
     # Explicit cloud escalation targets. Normal routing does not select these.
     ("opus", "SUNRISE"): 15,
     ("opus", "SUNSET"): 15,
+    ("opus", "SOLAR_MAX"): 15,
     ("opus", "MIDNIGHT"): 15,
     ("opus", "FORECAST"): 30,
     ("opus", "DEVIATION"): 10,
+    ("opus", "FORECAST_DEVIATION"): 10,
 }
 
 # (trigger_type, severity) → default instance. Caller may override.
@@ -90,8 +96,12 @@ _ROUTING_TABLE: dict[tuple[TriggerType, Severity], Instance] = {
     ("SUNRISE", "major"): "local",
     ("SUNSET", "minor"): "local",
     ("SUNSET", "major"): "local",
+    ("SOLAR_MAX", "minor"): "local",
+    ("SOLAR_MAX", "major"): "local",
     ("MIDNIGHT", "minor"): "local",
     ("MIDNIGHT", "major"): "local",
+    ("FORECAST_DEVIATION", "minor"): "local",
+    ("FORECAST_DEVIATION", "major"): "local",
 }
 
 # Default config path. Override for tests via load_routing_config(path=...).

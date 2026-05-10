@@ -591,21 +591,36 @@ When done, post your summary to #greenhouse via Slack."""
 
 
 def _transition_prompt(context: str, label: str) -> str:
+    """TRANSITION prompt — Phase 4: only `peak_stress` and `decline` survive
+    the trigger reshape; the other 7 subtypes were retired (fixed_midnight /
+    fixed_pre_dawn / fixed_midday / fixed_afternoon / fixed_evening /
+    tree_shade / evening_settle). Narrowed prompt reflects the two real
+    inflection points around solar noon and sunset.
+    """
     now = datetime.now(DENVER).strftime("%H:%M %Z")
     return f"""## Planning Event: TRANSITION — {label}
 **Time:** {now}
 
-A transition milestone has been reached: **{label}**.
-Assess whether tunables need adjustment for the upcoming conditions.
+A transition checkpoint has been reached: **{label}**. Only the two
+highest-signal subtypes survive (peak_stress at noon+2h, decline at
+sunset−1h). Assess whether tunables need adjustment for the upcoming
+window. Acknowledge_trigger is the right call if conditions are tracking
+the existing plan; only set_tunable if there's a concrete signal to act on.
 
 ### Your tasks:
 1. **Check current conditions** — call `climate` and `equipment_state`.
 2. **Compare to plan** — call `plan_status` and `get_setpoints`.
-3. **Adjust if needed** — use `set_tunable` for any changes. Common transitions:
-   - **Peak stress:** Increase misting aggressiveness, widen fog window
-   - **Tree shade:** VPD drops as direct sun leaves — reduce misting to prevent overshoot
-   - **Decline:** Temperatures falling — start transitioning to evening posture
-4. **Post brief update** — only if you made changes. Include what changed and why.
+3. **Decide**:
+   - **peak_stress:** noon+2h is the hottest+driest part of most days. If
+     VPD-high or heat stress is climbing past expectations, lower
+     `mister_engage_kpa`, tighten `mister_pulse_gap_s`, lower
+     `fog_escalation_kpa`. If conditions are tracking forecast, ack.
+   - **decline:** sunset−1h. Transition out of dry-day posture before the
+     overnight humidity rebound. Raise `mister_engage_kpa`, widen
+     `mister_pulse_gap_s`, raise `fog_escalation_kpa` so you don't carry
+     aggressive midday settings into the VPD-low evening.
+4. **Post brief update** — only if you made changes. Include what changed
+   and why. Otherwise call `acknowledge_trigger` and stop.
 
 ### Assembled Context
 {context}
@@ -614,36 +629,55 @@ Assess whether tunables need adjustment for the upcoming conditions.
 Post to #greenhouse only if you made tunable changes."""
 
 
-def _forecast_prompt(context: str) -> str:
+def _solar_max_prompt(context: str) -> str:
+    """SOLAR_MAX prompt — Phase 4: deterministic solar-noon checkpoint that
+    replaces the implicit "peak stress is noon+2h" guess. Cleanest place to
+    confirm forecast-vs-reality on solar load before the afternoon dry
+    window dominates.
+    """
     now = datetime.now(DENVER).strftime("%H:%M %Z")
-    return f"""## Planning Event: FORECAST UPDATE
+    return f"""## Planning Event: SOLAR_MAX
 **Time:** {now}
 
-New forecast data has been received. Compare to your current plan and adjust
-if the new forecast differs significantly from what you planned for.
+Solar noon has been reached — this is the cleanest deterministic moment to
+compare the forecast against reality. The actual peak stress lags noon by
+roughly 2 hours; what you do here shapes how the next 2-4 hours unfold.
 
 ### Your tasks:
-1. **Check new forecast** — call `forecast` for the next 24 hours.
-2. **Compare to current plan** — call `plan_status` and `get_setpoints`.
-3. **Adjust if needed** — only change tunables if the forecast shift is significant:
-   - Temperature forecast changed by >5F
-   - Cloud cover changed significantly (clear→overcast or vice versa)
-   - Wind or humidity patterns shifted substantially
-4. **Post update only if you made changes** — explain what shifted and how you adapted.
+1. **Check live solar + indoor signals** — call `climate` and `forecast`.
+   Compare actual `solar_w_m2` to the forecast peak. Apply the FORECAST
+   CALIBRATION bias from the assembled context (Open-Meteo overshoots solar
+   by ~+47 W/m² at 0-24h leads).
+2. **Compare indoor VPD to plan** — call `plan_status` and `get_setpoints`.
+   If indoor VPD is already climbing fast and the live solar is hitting
+   the forecast peak: consider a TRANSITION-style tunable nudge before the
+   peak_stress checkpoint, not after.
+3. **Ack or act**:
+   - If conditions are tracking forecast and the existing plan covers the
+     afternoon: `acknowledge_trigger`.
+   - If solar overshot the forecast or indoor VPD is climbing steeper than
+     planned: small `set_tunable` adjustment to misting/fog setup. Do not
+     write a full plan — SUNRISE owns that.
 
 ### Assembled Context
 {context}
 
 ---
-Post to #greenhouse only if you made tunable changes. Otherwise, no action needed."""
+Post to #greenhouse only if you made tunable changes."""
 
 
-def _deviation_prompt(context: str, deviations: str) -> str:
+def _forecast_deviation_prompt(context: str, deviations: str) -> str:
+    """FORECAST_DEVIATION prompt — Phase 4: was DEVIATION. Renamed so the
+    event_type vocabulary in plan_delivery_log / planner_trigger_ledger
+    matches the closed set {SUNRISE, SUNSET, SOLAR_MAX, TRANSITION,
+    FORECAST_DEVIATION, MANUAL}. The σ-gated trigger upstream is unchanged.
+    """
     now = datetime.now(DENVER).strftime("%H:%M %Z")
-    return f"""## Planning Event: DEVIATION DETECTED
+    return f"""## Planning Event: FORECAST_DEVIATION
 **Time:** {now}
 
-Observed conditions have diverged significantly from the forecast:
+Observed conditions have diverged significantly from the forecast (σ-gated
+threshold tripped):
 ```
 {deviations}
 ```
@@ -651,12 +685,18 @@ Observed conditions have diverged significantly from the forecast:
 ### Your tasks:
 1. **Assess the deviation** — call `climate` to see current conditions.
 2. **Check equipment** — call `equipment_state` to see what's running.
-3. **Determine cause** — is this a weather shift, equipment issue, or forecast error?
+3. **Determine cause** — is this a weather shift, equipment issue, or
+   forecast error? Apply FORECAST CALIBRATION (assembled context); a
+   deviation that goes the SAME direction as the historical bias is the
+   forecast catching up to reality, not a regime change.
 4. **Adjust tunables** — use `set_tunable` to adapt to actual conditions:
-   - If hotter than expected: increase misting, consider lowering fog_escalation_kpa
-   - If cooler than expected: reduce misting aggressiveness, check heating bias
-   - If more humid: watch dew point margin, consider dehum vent bias
-5. **Post what changed** — explain the deviation, your diagnosis, and your response.
+   - If hotter than expected: increase misting, consider lowering
+     `fog_escalation_kpa`.
+   - If cooler than expected: reduce misting aggressiveness, check
+     heating bias.
+   - If more humid: watch dew point margin, consider dehum vent bias.
+5. **Post what changed** — explain the deviation, your diagnosis, and your
+   response.
 
 ### Assembled Context
 {context}
@@ -703,10 +743,16 @@ _PREAMBLE = _compose_preamble("local")
 _PROMPT_BUILDERS = {
     "SUNRISE": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _sunrise_prompt(ctx),
     "SUNSET": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _sunset_prompt(ctx),
+    "SOLAR_MAX": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _solar_max_prompt(ctx),
     "TRANSITION": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _transition_prompt(ctx, lbl),
-    "FORECAST": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _forecast_prompt(ctx),
-    "DEVIATION": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _deviation_prompt(ctx, lbl),
+    "FORECAST_DEVIATION": lambda ctx, lbl, instance="local": (
+        _compose_preamble(instance) + _forecast_deviation_prompt(ctx, lbl)
+    ),
     "MANUAL": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _manual_prompt(ctx, lbl),
+    # Backward-compat alias: any in-flight FORECAST or DEVIATION delivery
+    # from the pre-Phase-4 emission path will route through here. New code
+    # paths in ingestor/tasks.py emit FORECAST_DEVIATION only.
+    "DEVIATION": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _forecast_deviation_prompt(ctx, lbl),
 }
 
 
