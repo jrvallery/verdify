@@ -92,10 +92,8 @@
                 "value": 300
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "description": "Shows total operating cost for the selected period.",
       "options": {}
@@ -129,7 +127,6 @@
             "mode": "fixed",
             "fixedColor": "#EAB308"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -198,7 +195,6 @@
             "mode": "fixed",
             "fixedColor": "orange"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -267,7 +263,6 @@
             "mode": "fixed",
             "fixedColor": "#3B82F6"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -332,7 +327,6 @@
         "defaults": {
           "unit": "kwatth",
           "decimals": 1,
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -350,8 +344,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Shows electricity consumed over the selected period.",
       "options": {}
@@ -381,7 +374,6 @@
         "defaults": {
           "unit": "therms",
           "decimals": 1,
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -399,8 +391,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Shows gas consumed over the selected period.",
       "options": {}
@@ -430,7 +421,6 @@
         "defaults": {
           "unit": "gal",
           "decimals": 0,
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -448,8 +438,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Shows water consumed over the selected period.",
       "options": {}
@@ -479,7 +468,6 @@
         "defaults": {
           "unit": "currencyUSD",
           "decimals": 2,
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -497,8 +485,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "description": "Average daily total cost across the last 30 completed daily summaries.",
       "options": {}

@@ -46,10 +46,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -110,10 +108,8 @@
               }
             ]
           },
-          "unit": "none",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "none"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -182,8 +178,7 @@
           "custom": {
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -248,10 +243,8 @@
               }
             ]
           },
-          "unit": "dBm",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "dBm"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -316,10 +309,8 @@
               }
             ]
           },
-          "unit": "kbytes",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "kbytes"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -384,10 +375,8 @@
               }
             ]
           },
-          "unit": "currencyUSD",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "currencyUSD"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -469,10 +458,8 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "fahrenheit"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -537,10 +524,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -609,10 +594,8 @@
               }
             ]
           },
-          "unit": "pressurekpa",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "pressurekpa"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -662,7 +645,6 @@
           },
           "decimals": 0,
           "unit": "ppm",
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -680,8 +662,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -731,7 +712,6 @@
           },
           "decimals": 0,
           "unit": "lux",
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -749,8 +729,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -815,10 +794,8 @@
               }
             ]
           },
-          "unit": "mol/m\u00b2/d",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "mol/m\u00b2/d"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -965,12 +942,6 @@
       ],
       "title": "State Durations Today",
       "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "description": "Shows how long the greenhouse has spent in each controller state."
     },
     {
@@ -993,8 +964,7 @@
             "spanNulls": false
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 6,
@@ -1067,12 +1037,6 @@
       ],
       "title": "v_active_plan",
       "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "description": "Shows the currently active setpoint plan rows."
     },
     {
@@ -1265,11 +1229,7 @@
             }
           ],
           "title": "Recent Alerts",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
+          "type": "table"
         },
         {
           "datasource": {
@@ -1422,10 +1382,8 @@
           "max": 100,
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "gridPos": {
         "h": 6,

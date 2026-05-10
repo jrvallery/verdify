@@ -18,10 +18,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -62,10 +60,8 @@
               }
             ]
           },
-          "unit": "watt",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "watt"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -107,10 +103,8 @@
               }
             ]
           },
-          "unit": "watt",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "watt"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -152,10 +146,8 @@
               }
             ]
           },
-          "unit": "kwatth",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "kwatth"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -200,10 +192,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -244,10 +234,8 @@
               }
             ]
           },
-          "unit": "watt/m\u00b2",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "watt/m\u00b2"
+        }
       },
       "gridPos": {
         "h": 4,
@@ -279,9 +267,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "W"
           },
-          "unit": "watt/m\u00b2"
+          "unit": "watt"
         },
         "overrides": [
           {
@@ -304,6 +293,18 @@
               {
                 "id": "custom.lineWidth",
                 "value": 2
+              },
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W"
               }
             ]
           },
@@ -337,6 +338,14 @@
                 "value": {
                   "fill": "solid"
                 }
+              },
+              {
+                "id": "unit",
+                "value": "watt/m\u00b2"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W/m\u00b2"
               }
             ]
           }

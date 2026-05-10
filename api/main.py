@@ -28,7 +28,7 @@ from typing import Annotated
 import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 
 
@@ -68,6 +68,8 @@ from verdify_schemas import (  # noqa: E402
     PublicDataHealthResponse,
     PublicHomeMetrics,
     PublicPipelineHealthSource,
+    PublicPlannerHealthResponse,
+    PublicPlannerTrigger,
     ZoneDetail,
     ZoneListItem,
 )
@@ -139,6 +141,9 @@ CONTACT_ALLOWED_TOPICS = {"build", "control", "data", "press", "collaboration", 
 CONTACT_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 CONTACT_URL_RE = re.compile(r"(https?://|www\.)", re.IGNORECASE)
 CONTACT_NOTIFY_SUBJECT_PREFIX = "Verdify contact"
+PUBLIC_CAMERA_IDS = {"greenhouse_1", "greenhouse_2"}
+FRIGATE_BASE_URL_ENV = "VERDIFY_FRIGATE_PUBLIC_BASE_URL"
+GO2RTC_BASE_URL_ENV = "VERDIFY_GO2RTC_PUBLIC_BASE_URL"
 
 
 def _truthy_env(name: str) -> bool:
@@ -213,6 +218,29 @@ def _turnstile_verify_sync(secret: str, token: str, remote_ip: str) -> bool:
     except Exception:
         return False
     return bool(body.get("success"))
+
+
+def _read_camera_jpeg_sync(url: str) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "verdify-public-api/1.0"})
+    with urllib.request.urlopen(request, timeout=4) as response:
+        data = response.read()
+    if len(data) < 1024 or not data.startswith(b"\xff\xd8"):
+        raise ValueError("camera snapshot did not look like a JPEG")
+    return data
+
+
+def _fetch_camera_snapshot_sync(camera_id: str, height: int) -> bytes:
+    go2rtc_base_url = os.environ.get(GO2RTC_BASE_URL_ENV, "http://192.168.30.142:1984").rstrip("/")
+    go2rtc_url = f"{go2rtc_base_url}/api/frame.jpeg?{urllib.parse.urlencode({'src': camera_id, 'h': height})}"
+    try:
+        return _read_camera_jpeg_sync(go2rtc_url)
+    except Exception:
+        # Fall back to Frigate's latest detect frame if the source stream is unavailable.
+        pass
+
+    base_url = os.environ.get(FRIGATE_BASE_URL_ENV, "http://192.168.30.142:5000").rstrip("/")
+    url = f"{base_url}/api/{urllib.parse.quote(camera_id)}/latest.jpg?{urllib.parse.urlencode({'h': height, 'quality': 100})}"
+    return _read_camera_jpeg_sync(url)
 
 
 async def _verify_turnstile_if_configured(token: str | None, remote_ip: str) -> bool:
@@ -616,6 +644,7 @@ async def root():
         "status": "/api/v1/status",
         "public_home_metrics": "/api/v1/public/home-metrics",
         "public_data_health": "/api/v1/public/data-health",
+        "public_planner_health": "/api/v1/public/planner-health",
         "public_contact": "/api/v1/public/contact",
     }
 
@@ -1062,12 +1091,22 @@ async def get_zone(zone: str):
 @app.get("/api/v1/status", response_model=APIStatus)
 async def status():
     async with pool.acquire() as conn:
-        crop_count = await conn.fetchval("SELECT COUNT(*) FROM crops WHERE is_active")
+        crop_count = await conn.fetchval(
+            """
+            SELECT count(DISTINCT crop_catalog_slug)::int
+            FROM v_position_current
+            WHERE greenhouse_id = $1
+              AND is_occupied
+              AND crop_catalog_slug IS NOT NULL
+              AND zone_slug <> 'center'
+            """,
+            DEFAULT_GREENHOUSE,
+        )
         obs_count = await conn.fetchval("SELECT COUNT(*) FROM observations")
         latest = await conn.fetchval("SELECT MAX(ts) FROM climate")
     return {
         "status": "ok",
-        "active_crops": crop_count,
+        "active_crops": crop_count or 0,
         "observations": obs_count,
         "latest_climate_ts": latest,
     }
@@ -1131,6 +1170,85 @@ async def public_data_health():
         overall_status=_overall_data_health(check_rows),
         checks=checks,
         pipeline_sources=pipeline_sources,
+    )
+
+
+@app.get("/api/v1/public/planner-health", response_model=PublicPlannerHealthResponse)
+async def public_planner_health():
+    """Public-safe expected-trigger SLA surface for planner reliability."""
+    async with pool.acquire() as conn:
+        summary = await conn.fetchrow("SELECT * FROM v_planner_trigger_health")
+        trigger_rows = await conn.fetch(
+            """
+            SELECT id, event_type, event_label, instance, expected_at, due_at,
+                   delivered_at, resolved_at, status, expected_action, trigger_id,
+                   resulting_plan_id
+              FROM planner_trigger_ledger
+             WHERE expected_at >= now() - interval '36 hours'
+             ORDER BY expected_at DESC
+             LIMIT 40
+            """
+        )
+
+    if summary is None:
+        raise HTTPException(status_code=503, detail="Planner health view unavailable")
+
+    required_failure_count = int(summary["required_failure_count"] or 0)
+    missed_expected_count = int(summary["missed_expected_count"] or 0)
+    overdue_delivered_count = int(summary["overdue_delivered_count"] or 0)
+    if required_failure_count > 0:
+        overall_status = "fail"
+    elif missed_expected_count > 0 or overdue_delivered_count > 0:
+        overall_status = "warn"
+    else:
+        overall_status = "ok"
+
+    latest_required = summary["latest_required"] or []
+    if isinstance(latest_required, str):
+        latest_required = json.loads(latest_required)
+
+    return PublicPlannerHealthResponse(
+        generated_at=summary["generated_at"],
+        overall_status=overall_status,
+        missed_expected_count=missed_expected_count,
+        overdue_delivered_count=overdue_delivered_count,
+        required_failure_count=required_failure_count,
+        recent_expected_count=int(summary["recent_expected_count"] or 0),
+        resolved_count=int(summary["resolved_count"] or 0),
+        latest_required=latest_required,
+        recent_triggers=[
+            PublicPlannerTrigger(
+                id=int(r["id"]),
+                event_type=r["event_type"],
+                event_label=r["event_label"],
+                instance=r["instance"],
+                expected_at=r["expected_at"],
+                due_at=r["due_at"],
+                delivered_at=r["delivered_at"],
+                resolved_at=r["resolved_at"],
+                status=r["status"],
+                expected_action=r["expected_action"],
+                trigger_id=str(r["trigger_id"]) if r["trigger_id"] else None,
+                resulting_plan_id=r["resulting_plan_id"],
+            )
+            for r in trigger_rows
+        ],
+    )
+
+
+@app.get("/api/v1/public/cameras/{camera_id}/latest.jpg")
+async def public_camera_snapshot(camera_id: str, h: Annotated[int, Query(ge=120, le=1080)] = 1080):
+    """Public-safe proxy for the two greenhouse source-stream camera snapshots."""
+    if camera_id not in PUBLIC_CAMERA_IDS:
+        raise HTTPException(status_code=404, detail="Unknown public camera")
+    try:
+        data = await asyncio.to_thread(_fetch_camera_snapshot_sync, camera_id, h)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Camera snapshot unavailable") from exc
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=20, stale-while-revalidate=60"},
     )
 
 
@@ -1329,7 +1447,14 @@ async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
             greenhouse_id,
         )
         active_crops = await conn.fetchval(
-            "SELECT count(*)::int FROM crops WHERE greenhouse_id = $1 AND is_active",
+            """
+            SELECT count(DISTINCT crop_catalog_slug)::int
+            FROM v_position_current
+            WHERE greenhouse_id = $1
+              AND is_occupied
+              AND crop_catalog_slug IS NOT NULL
+              AND zone_slug <> 'center'
+            """,
             greenhouse_id,
         )
         plan_count = await conn.fetchval(
@@ -1415,11 +1540,248 @@ async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
         planner_score_today=scorecard.get("planner_score"),
         compliance_pct_today=scorecard.get("compliance_pct"),
         cost_today_usd=scorecard.get("cost_total"),
-        water_today_gal=scorecard.get("water_used_gal"),
+        water_today_gal=scorecard.get("water_gal") or scorecard.get("water_used_gal"),
         open_critical_high_alerts=open_critical_high or 0,
         data_health_status=_overall_data_health(data_checks),
         data_health_warnings=warning_checks[:8],
     )
+
+
+@app.get("/api/v1/public/evidence-snapshot")
+async def public_evidence_snapshot(greenhouse_id: str = DEFAULT_GREENHOUSE):
+    """Crawler-friendly public proof snapshot for evidence subpages."""
+    async with pool.acquire() as conn:
+        generated_at = await conn.fetchval("SELECT now()")
+        score_rows = await conn.fetch(
+            "SELECT metric, value FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date)"
+        )
+        scorecard = {r["metric"]: _to_float(r["value"]) for r in score_rows}
+        last_plan = await conn.fetchrow(
+            """
+            SELECT plan_id,
+                   created_at,
+                   extract(epoch FROM now() - created_at)::int AS age_s,
+                   outcome_score,
+                   validated_at,
+                   CASE
+                     WHEN validated_at IS NOT NULL THEN 'validated'
+                     WHEN actual_outcome IS NOT NULL OR outcome_score IS NOT NULL THEN 'evaluated'
+                     ELSE 'awaiting outcome'
+                   END AS status
+            FROM plan_journal
+            WHERE greenhouse_id = $1
+              AND plan_id LIKE 'iris-%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        last_validated_plan = await conn.fetchrow(
+            """
+            SELECT plan_id, outcome_score, validated_at
+            FROM plan_journal
+            WHERE greenhouse_id = $1
+              AND validated_at IS NOT NULL
+              AND plan_id LIKE 'iris-%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            ORDER BY validated_at DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        latest_lesson = await conn.fetchrow(
+            """
+            SELECT id, category, lesson, confidence, times_validated, last_validated
+            FROM planner_lessons
+            WHERE greenhouse_id = $1 AND is_active
+            ORDER BY last_validated DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        latest_climate = await conn.fetchrow(
+            """
+            SELECT ts, extract(epoch FROM now() - ts)::int AS age_s
+            FROM climate
+            WHERE greenhouse_id = $1
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        climate_rows = await conn.fetchval(
+            "SELECT count(*)::int FROM climate WHERE greenhouse_id = $1",
+            greenhouse_id,
+        )
+        active_crops = await conn.fetchval(
+            """
+            SELECT count(DISTINCT crop_catalog_slug)::int
+            FROM v_position_current
+            WHERE greenhouse_id = $1
+              AND is_occupied
+              AND crop_catalog_slug IS NOT NULL
+              AND zone_slug <> 'center'
+            """,
+            greenhouse_id,
+        )
+        plan_count = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM plan_journal
+            WHERE greenhouse_id = $1
+              AND plan_id LIKE 'iris-%'
+              AND plan_id NOT LIKE 'iris-reactive%'
+              AND plan_id NOT LIKE 'iris-fix%'
+            """,
+            greenhouse_id,
+        )
+        lesson_count = await conn.fetchval(
+            "SELECT count(*)::int FROM planner_lessons WHERE greenhouse_id = $1 AND is_active",
+            greenhouse_id,
+        )
+        active_plan = await conn.fetchrow(
+            """
+            SELECT plan_id,
+                   max(created_at) AS created_at,
+                   extract(epoch FROM now() - max(created_at))::int AS age_s
+            FROM setpoint_plan
+            WHERE greenhouse_id = $1
+              AND is_active
+              AND plan_id IS NOT NULL
+            GROUP BY plan_id
+            ORDER BY max(created_at) DESC
+            LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        controller_mode = await conn.fetchval(
+            "SELECT value FROM system_state WHERE entity = 'greenhouse_state' ORDER BY ts DESC LIMIT 1"
+        )
+        active_relays = await conn.fetch(
+            """
+            WITH latest AS (
+              SELECT DISTINCT ON (equipment) equipment, state, ts
+              FROM equipment_state
+              WHERE greenhouse_id = $1
+              ORDER BY equipment, ts DESC
+            )
+            SELECT equipment
+            FROM latest
+            WHERE state
+              AND equipment IN (
+                'heat1', 'heat2', 'fan1', 'fan2', 'fog', 'vent',
+                'grow_light_main', 'grow_light_grow',
+                'mister_south', 'mister_west', 'mister_center',
+                'mister_south_fert', 'mister_west_fert',
+                'drip_wall', 'drip_center',
+                'drip_wall_fert', 'drip_center_fert',
+                'fert_master_valve'
+              )
+            ORDER BY equipment
+            """,
+            greenhouse_id,
+        )
+        open_critical_high = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM alert_log
+            WHERE greenhouse_id = $1
+              AND disposition = 'open'
+              AND severity IN ('critical', 'high')
+            """,
+            greenhouse_id,
+        )
+        data_checks = await conn.fetch(
+            """
+            SELECT check_name, lower(status) AS status, metric_value, threshold_value, details
+            FROM v_data_trust_ledger
+            ORDER BY
+              CASE lower(status) WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
+              check_name
+            """
+        )
+        planner_health = await conn.fetchrow("SELECT * FROM v_planner_trigger_health")
+
+    check_by_name = {r["check_name"]: r for r in data_checks}
+    water_check = check_by_name.get("water_accounting_14d")
+    water_details = water_check["details"] if water_check else None
+    data_health_status = _overall_data_health(data_checks)
+    active_plan_id = active_plan["plan_id"] if active_plan else (last_plan["plan_id"] if last_plan else None)
+    active_plan_status = None
+    if active_plan_id and last_plan and active_plan_id == last_plan["plan_id"]:
+        active_plan_status = last_plan["status"]
+    elif active_plan_id:
+        active_plan_status = "active"
+    active_relays_list = [r["equipment"] for r in active_relays]
+    water_today_gal = scorecard.get("water_gal") or scorecard.get("water_used_gal")
+    planner_health_payload = dict(planner_health) if planner_health else None
+    if planner_health_payload and isinstance(planner_health_payload.get("latest_required"), str):
+        planner_health_payload["latest_required"] = json.loads(planner_health_payload["latest_required"])
+    return {
+        "generated_at": generated_at,
+        "timezone": "America/Denver",
+        "greenhouse_id": greenhouse_id,
+        "data_health_status": data_health_status,
+        "climate_age_seconds": latest_climate["age_s"] if latest_climate else None,
+        "open_critical_high_alerts": open_critical_high or 0,
+        "planner_score_today": scorecard.get("planner_score"),
+        "both_axis_compliance_pct": scorecard.get("compliance_pct"),
+        "temp_compliance_pct": scorecard.get("temp_compliance_pct"),
+        "vpd_compliance_pct": scorecard.get("vpd_compliance_pct"),
+        "stress_axis_hours": scorecard.get("total_stress_h"),
+        "active_plan_id": active_plan_id,
+        "active_plan_status": active_plan_status,
+        "last_plan_id": last_plan["plan_id"] if last_plan else None,
+        "last_validated_plan_id": last_validated_plan["plan_id"] if last_validated_plan else None,
+        "cost_today_usd": scorecard.get("cost_total"),
+        "water_today_gal": water_today_gal,
+        "active_relays": active_relays_list,
+        "active_control_crops": active_crops or 0,
+        "public_plan_records": plan_count or 0,
+        "climate_rows": climate_rows or 0,
+        "lesson_rows_active": lesson_count or 0,
+        "controller_mode": controller_mode,
+        "planner_health": planner_health_payload,
+        "planning_quality": {
+            "planner_score_today": scorecard.get("planner_score"),
+            "both_axis_compliance_pct": scorecard.get("compliance_pct"),
+            "temp_compliance_pct": scorecard.get("temp_compliance_pct"),
+            "vpd_compliance_pct": scorecard.get("vpd_compliance_pct"),
+            "stress_axis_hours": scorecard.get("total_stress_h"),
+            "stress_breakdown": {
+                "heat_h": scorecard.get("heat_stress_h"),
+                "cold_h": scorecard.get("cold_stress_h"),
+                "vpd_high_h": scorecard.get("vpd_high_stress_h"),
+                "vpd_low_h": scorecard.get("vpd_low_stress_h"),
+            },
+            "last_validated_plan": dict(last_validated_plan) if last_validated_plan else None,
+            "last_plan": dict(last_plan) if last_plan else None,
+            "latest_lesson": dict(latest_lesson) if latest_lesson else None,
+        },
+        "operations": {
+            "data_health_status": data_health_status,
+            "latest_climate_ts": latest_climate["ts"] if latest_climate else None,
+            "latest_climate_age_s": latest_climate["age_s"] if latest_climate else None,
+            "open_critical_high_alerts": open_critical_high or 0,
+            "active_controller_mode": controller_mode,
+            "active_relays": active_relays_list,
+            "active_plan_id": active_plan_id,
+            "active_plan_status": active_plan_status,
+            "active_plan_age_s": active_plan["age_s"] if active_plan else None,
+            "last_plan_age_s": last_plan["age_s"] if last_plan else None,
+            "cost_today_usd": scorecard.get("cost_total"),
+            "water_today_gal": water_today_gal,
+            "mister_water_today_gal": scorecard.get("mister_water_gal"),
+            "water_accounting_status": water_check["status"] if water_check else None,
+            "water_accounting_incomplete": bool(
+                water_details and "unattributed water remains" in water_details.lower()
+            ),
+            "water_accounting_details": water_details,
+        },
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════

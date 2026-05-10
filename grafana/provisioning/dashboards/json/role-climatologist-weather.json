@@ -63,10 +63,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -142,10 +140,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -214,10 +210,8 @@
                 "value": 2.0
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -286,10 +280,8 @@
                 "value": 800
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -377,10 +369,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -450,10 +440,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1824,8 +1812,7 @@
             "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {

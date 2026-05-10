@@ -10,6 +10,30 @@ Goal: move from P0-safe to broad-launch credible by closing the safety architect
 
 This sprint is intentionally **not** a firmware behavior sprint, SaaS sprint, or RL/counterfactual implementation sprint. Firmware remains Track A only; the launch work should explain the existing safety architecture, not trigger an OTA.
 
+## Launch Stabilization - 2026-05-08 MDT
+
+Focus areas 1-5 from the broad-launch backlog now have a concrete split between completed launch hardening and post-launch follow-up.
+
+### Completed in the launch window
+
+- [x] **Planner reliability - expected trigger ledger.** Added `planner_trigger_ledger` so expected SUNRISE/SUNSET/MIDNIGHT/transition triggers exist before OpenClaw delivery. Missed required cycles are now visible even when no `plan_delivery_log` row is created.
+- [x] **Planner reliability - SLA lifecycle.** Required triggers now have explicit due times and public health counts for missed expected triggers, overdue delivered triggers, required failures, recent expected triggers, and latest required trigger outcomes.
+- [x] **Planner reliability - active/future tunable guard.** Alert monitor now validates active/future planner rows against the tunable registry and blocks `sw_fsm_controller_enabled=0` from silently reviving the legacy controller path.
+- [x] **Planner reliability - public health surface.** Public API exposes `/api/v1/public/planner-health`, and evidence snapshots include `planner_health` beside `data_health_status`.
+- [x] **Controller-v2 fallback risk.** `sw_fsm_controller_enabled` now defaults to `1` in the registry and is labeled operator-owned; firmware remains frozen, so the actual firmware default is not changed by launch work.
+- [x] **Public proof cadence - archive self-check.** Recent daily plan pages were regenerated and the DB-backed daily archive audit now reports `ok` for the launch window.
+- [x] **Live health recovery.** Data trust ledger reports all checks `ok`, `open_critical_or_high_alerts=0`, and `planner_trigger_sla_36h=ok`.
+
+### Still pending
+
+- [ ] **Planner quality - Gemma-sized context pack.** Build a smaller, versioned context pack with current state, 24h history, 7d score trend, active/future plan, forecast, lessons, open alerts, setpoint confirmation, and context-completeness flags.
+- [ ] **Planner quality - distilled site + lessons memory.** Generate stable planner memory from safety architecture, known limits, validated lessons, physical constraints, and launch claims rather than pasting raw site pages.
+- [ ] **Planner quality - post-plan self-critique.** Each full plan should record assumptions, expected stress windows, intentional tunable changes, unchanged tunables, and falsification evidence.
+- [ ] **Planner quality - scorecard feedback loop.** Feed "why did we fail?" stress-window analysis into the next required plan.
+- [ ] **Public proof cadence - weekly artifact.** Publish a recurring "Verdify this week" template plus one complete lifecycle example: forecast -> plan -> tunables -> telemetry -> score -> lesson.
+- [ ] **Safety/ops hardening.** Keep firmware frozen for launch unless Track A plant/system safety requires an OTA; continue v2 bake and reboot forensics.
+- [ ] **Infra after launch.** Secret Manager migration, cloud monitoring/alerting, and cloud-only fallback tests remain post-launch work unless needed to keep Track A safe.
+
 ## P0 — Launch Blockers
 
 | ID | Status | Owner | Task | Acceptance | Dependencies |
@@ -38,12 +62,12 @@ This sprint is intentionally **not** a firmware behavior sprint, SaaS sprint, or
 | L1.6 | Jason | Jason + web | 30-90s dashboard clip | Timestamped screen recording shows outdoor stress, indoor VPD/temp, equipment response, and recovery | L0.7 public proof path |
 | L1.7 | done | genai + coordinator + Jason | Launch response pack | HN/Reddit answer notes cover PID vs LLM, deterministic safety, VPD physics, shade-cloth limits, Mycodo/HAGR/Koidra/AgroNova/iGrow comparisons, and what "self-improving" does and does not mean | `docs/launch/launch-response-pack.md` |
 | L1.8 | done | ingestor + genai + coordinator | Lesson duplicate detection support | Public lesson generator identifies duplicate candidate families by normalized lesson signature before publishing | L0.3 |
-| L1.9 | done | web + coordinator | Related Work page | Public page positions Verdify against AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA, with externally verified primary-source claims | `/intelligence/related-work` |
-| L1.10 | done | web + firmware + genai | Safety Architecture page | Page "Why the AI does not control relays" explains LLM tactical intent, dispatcher validation, ESP32 enforcement cadence, hard safety guards, cloud/wifi failure behavior, and scorecard closure | `/intelligence/safety-architecture` |
-| L1.11 | done | ingestor + web + coordinator | Baseline vs Iris score table | Public table compares baseline and Iris periods for temp compliance, VPD compliance, cumulative stress-axis hours/day, water/day, estimated electric energy/day, cost/day, and planner score, with definitions and caveats | `/evidence/baseline-vs-iris`; default baseline = 2026-04-22..25 outage |
-| L1.12 | done | web + coordinator | Related-work comparison table | Publish a verified table comparing control style, AI role, public telemetry, public scorecards, and public lessons across peer projects | `/intelligence/related-work` |
-| L1.13 | done | genai + web + coordinator | "Why not RL / direct LLM control?" FAQ | FAQ gives concise technical answers for deterministic safety, VPD physics, intrinsic interpretability, counterfactual replay roadmap, and why RL is future simulator work, not launch framing | `/intelligence/faq` |
-| L1.14 | done | web + firmware + ingestor + genai | Builder / reference implementation path | Public build notes include BOM, wiring/equipment overview, MQTT topic examples, DB table overview, example daily plan JSON, example scorecard JSON, what is not production-safe yet, and code-transparency stance | `/intelligence/build-notes` |
+| L1.9 | done | web + coordinator | Related Work page | Public page positions Verdify against AgroNova, IOGRUCloud, Hydro0x01, HAGR, Mycodo, iGrow, GreenLight-Gym, FarmBot/OpenAg, WUR, and commercial CEA, with externally verified primary-source claims | `/reference/related-work` |
+| L1.10 | done | web + firmware + genai | Safety Architecture page | Page "Why the AI does not control relays" explains LLM tactical intent, dispatcher validation, ESP32 enforcement cadence, hard safety guards, cloud/wifi failure behavior, and scorecard closure | `/reference/safety` |
+| L1.11 | done | ingestor + web + coordinator | Baseline vs Iris score table | Public table compares baseline and Iris periods for temp compliance, VPD compliance, cumulative stress-axis hours/day, water/day, estimated electric energy/day, cost/day, and planner score, with definitions and caveats | `/data/baseline-vs-iris`; default baseline = 2026-04-22..25 outage |
+| L1.12 | done | web + coordinator | Related-work comparison table | Publish a verified table comparing control style, AI role, public telemetry, public scorecards, and public lessons across peer projects | `/reference/related-work` |
+| L1.13 | done | genai + web + coordinator | "Why not RL / direct LLM control?" FAQ | FAQ gives concise technical answers for deterministic safety, VPD physics, intrinsic interpretability, counterfactual replay roadmap, and why RL is future simulator work, not launch framing | `/reference/faq` |
+| L1.14 | done | web + firmware + ingestor + genai | Builder / reference implementation path | Public build notes include BOM, wiring/equipment overview, MQTT topic examples, DB table overview, example daily plan JSON, example scorecard JSON, what is not production-safe yet, and code-transparency stance | `/reference/build-notes` |
 | L1.15 | done | web + genai | Verdify object-model diagram | Static diagram shows Crop profile -> target bands/climate recipe -> forecast/state -> Iris plan -> tunables -> ESP32 state machine -> telemetry -> scorecard -> lessons -> next plan | `/static/verdify-object-model.svg` |
 
 ## P2 — Launch Cadence
@@ -54,7 +78,7 @@ This sprint is intentionally **not** a firmware behavior sprint, SaaS sprint, or
 | L2.2 | saas | Waitlist/newsletter capture | Capture path exists or explicit no-capture decision is documented | Jason product decision |
 | L2.3 | coordinator | Repo/code transparency decision | Public page links repo/prompt/firmware or states why code is private | Jason decision |
 | L2.4 | web | Audience-specific landing anchors | Homelab, Home Assistant, AI/agents, and greenhouse readers have direct links/sections | L0.5 |
-| L2.5 | coordinator + firmware + genai | Progressive autonomy roadmap | Verdify is placed on an L1-L4 autonomy ladder with deployment safeguards and upgrade gates | done in `/intelligence/safety-architecture` |
+| L2.5 | coordinator + firmware + genai | Progressive autonomy roadmap | Verdify is placed on an L1-L4 autonomy ladder with deployment safeguards and upgrade gates | done in `/reference/safety` |
 | L2.6 | genai + coordinator | Counterfactual replay roadmap | Public roadmap explains replaying recent telemetry with alternate tunables before considering RL or simulator-trained policies | L1.13 |
 | L2.7 | web + genai + ingestor | Full daily lifecycle artifact | One public example shows forecast -> plan -> tunables -> telemetry -> score -> lesson, with sample JSON/CSV artifacts | L1.14 |
 | L2.8 | web + ingestor + Jason | Crop-steering maturity roadmap | Public roadmap covers substrate sensors, dryback/irrigation windows, pH/EC/DO, DLI correction, and shade cloth automation without implying these are complete | L1.14 |

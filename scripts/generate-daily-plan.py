@@ -111,8 +111,17 @@ def record_plan_archive_audit(d: date, output: Path, plans: list[dict], summary:
         db_plan_count = int(db_plan_count_raw or "0")
     except ValueError:
         db_plan_count = len(plans)
-    generated_cost = _num(summary.get("cost_total"), 2)
-    generated_water = _num(summary.get("water_used_gal"), 2)
+
+    def audit_float(value: object) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    generated_cost = audit_float(summary.get("cost_total"))
+    generated_water = audit_float(summary.get("water_used_gal"))
     checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
     stale = "false" if db_plan_count == len(plans) else "true"
     db_query(
@@ -361,6 +370,20 @@ CORE_PARAMS = [
     "mister_pulse_gap_s",
     "mister_vpd_weight",
 ]
+PRIMARY_BAND_PARAMS = [
+    "temp_high",
+    "temp_low",
+    "vpd_high",
+    "vpd_hysteresis",
+]
+TACTICAL_TUNABLE_PARAMS = [
+    "d_cool_stage_2",
+    "mister_engage_kpa",
+    "mister_all_kpa",
+    "mister_pulse_on_s",
+    "mister_pulse_gap_s",
+    "mister_vpd_weight",
+]
 PARAM_SHORT = {
     "temp_high": "high",
     "temp_low": "low",
@@ -373,6 +396,17 @@ PARAM_SHORT = {
     "mister_pulse_gap_s": "gap",
     "mister_vpd_weight": "wt",
 }
+
+
+def _has_value(value: object) -> bool:
+    return value is not None and str(value).strip() not in {"", "·", "-", "None", "null"}
+
+
+def status_label(status: object) -> str:
+    status_text = str(status or "pending").strip()
+    if status_text == "pending":
+        return "Daily Summary So Far"
+    return status_text
 
 
 def data_table(rows: list[tuple[str, str, str]]) -> str:
@@ -459,8 +493,40 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
     return lines
 
 
+def _format_param_values(vals: dict, params: list[str]) -> str:
+    cols = []
+    for p in params:
+        v = vals.get(p, "")
+        if _has_value(v):
+            cols.append(f"{PARAM_SHORT.get(p, p)} {v}")
+    return "; ".join(cols)
+
+
+def _waypoint_rows(
+    times: list[str],
+    by_time: dict,
+    notes_by_time: dict,
+    params: list[str],
+    fallback_note: str,
+) -> list[str]:
+    rows: list[str] = []
+    for t in times:
+        vals = by_time[t]
+        meta = _format_param_values(vals, params)
+        if not meta:
+            continue
+        time_str = t[11:16] if len(t) > 11 else t
+        note = notes_by_time.get(t, "")
+        note = note.replace("|", "—")[:80]
+        rows.append(
+            f'  <div class="data-row"><strong>{escape(time_str)}</strong>'
+            f"<span>{escape(meta)}</span><p>{escape(note or fallback_note)}</p></div>"
+        )
+    return rows
+
+
 def format_waypoints_table(waypoints: list[dict]) -> str:
-    """Format waypoints as a pivoted table: rows = transition times, columns = 10 core params."""
+    """Format waypoints as grouped primary crop-band and tactical tunable changes."""
     if not waypoints:
         return "*No waypoints recorded.*\n"
 
@@ -480,36 +546,43 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
     times = sorted(by_time.keys())
 
     lines = []
-    current_day = None
+    days = []
     for t in times:
         day = t[:10]
-        if day != current_day:
-            if current_day is not None:
-                lines.append("</div>")
-            current_day = day
-            try:
-                d = datetime.strptime(day, "%Y-%m-%d")
-                day_label = d.strftime("%A %B %d")
-            except ValueError:
-                day_label = day
-            lines.append(f"\n#### {day_label}\n")
-            lines.append('<div class="data-table">')
+        if day not in days:
+            days.append(day)
 
-        vals = by_time[t]
-        time_str = t[11:16] if len(t) > 11 else t
-        cols = []
-        for p in CORE_PARAMS:
-            v = vals.get(p, "")
-            cols.append(f"{PARAM_SHORT.get(p, p)} {v if v else '·'}")
-        note = notes_by_time.get(t, "")
-        note = note.replace("|", "—")[:40]
-        lines.append(
-            f'  <div class="data-row"><strong>{escape(time_str)}</strong>'
-            f"<span>{escape('; '.join(cols))}</span><p>{escape(note or 'Core setpoint transition.')}</p></div>"
+    for day in days:
+        day_times = [t for t in times if t.startswith(day)]
+        try:
+            d = datetime.strptime(day, "%Y-%m-%d")
+            day_label = d.strftime("%A %B %d")
+        except ValueError:
+            day_label = day
+        lines.append(f"\n#### {day_label}\n")
+
+        primary_rows = _waypoint_rows(
+            day_times,
+            by_time,
+            notes_by_time,
+            PRIMARY_BAND_PARAMS,
+            "Primary crop-band transition.",
         )
-
-    if current_day is not None:
-        lines.append("</div>")
+        tactical_rows = _waypoint_rows(
+            day_times,
+            by_time,
+            notes_by_time,
+            TACTICAL_TUNABLE_PARAMS,
+            "Tactical tunable transition.",
+        )
+        if primary_rows:
+            lines.extend(["**Primary crop-band changes:**", "", '<div class="data-table">'])
+            lines.extend(primary_rows)
+            lines.extend(["</div>", ""])
+        if tactical_rows:
+            lines.extend(["**Tactical tunable changes:**", "", '<div class="data-table">'])
+            lines.extend(tactical_rows)
+            lines.extend(["</div>", ""])
 
     # Secondary parameters are noisy when every waypoint repeats the full
     # controller state. Lead with deltas; keep the raw dump auditable.
@@ -750,8 +823,8 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     lines.append(
         metric_grid(
             [
-                ("Status", plan.get("status", "pending")),
-                ("Outcome score", f"{score}/10" if score else "pending"),
+                ("Status", status_label(plan.get("status", "pending"))),
+                ("Outcome score", f"{score}/10" if score else "not validated yet"),
                 (
                     "Changed parameters",
                     ", ".join(changed_params[:8]) + (" ..." if len(changed_params) > 8 else "")
@@ -773,7 +846,7 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
     if plan.get("status") == "pending":
         # This is the latest (current) cycle — hasn't been validated yet
-        lines.append("⏳ *Pending — will be validated at next planning cycle.*")
+        lines.append("*Daily Summary So Far — this cycle will be validated at the next planning cycle.*")
         lines.append("")
     elif prev_plan:
         # Show what previous cycle hypothesized and how it turned out
@@ -911,12 +984,18 @@ def generate_no_plan_section(d: date, delivery_events: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_date: date = None) -> str:
+def generate_daily_summary_section(
+    summary: dict,
+    hourly: list[dict],
+    summary_date: date = None,
+    pending: bool = False,
+) -> str:
     """Generate end-of-day summary section."""
     if not summary:
         return ""
 
-    lines = ["## End-of-Day Summary", ""]
+    heading = "Daily Summary So Far" if pending else "End-of-Day Summary"
+    lines = [f"## {heading}", ""]
 
     # Climate cards
     lines.extend(
@@ -1014,7 +1093,7 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
     crop_health = db_query_rows(f"""
         SELECT c.name, c.zone, ROUND(AVG(o.health_score)::numeric, 2) AS avg_health,
             COUNT(*) AS obs_count,
-            string_agg(DISTINCT LEFT(o.notes, 50), '; ' ORDER BY LEFT(o.notes, 50)) AS notes
+            string_agg(DISTINCT o.notes, ' || ' ORDER BY o.notes) AS notes
         FROM observations o JOIN crops c ON o.crop_id = c.id
         WHERE o.source = 'gemini-vision' AND o.ts::date = '{summary_date or date.today()}'
         GROUP BY c.name, c.zone ORDER BY c.name
@@ -1027,12 +1106,34 @@ def generate_daily_summary_section(summary: dict, hourly: list[dict], summary_da
             ]
         )
         rows = []
+        detail_rows = []
         for row in crop_health:
             if len(row) >= 5:
                 health_pct = f"{float(row[2].strip()) * 100:.0f}%" if row[2].strip() else "—"
-                notes = row[4].strip()[:60] if row[4].strip() else "—"
-                rows.append((row[0].strip(), f"{row[1].strip()} · health {health_pct} · {row[3].strip()} obs", notes))
+                crop = row[0].strip()
+                notes = row[4].strip()
+                rows.append(
+                    (
+                        crop,
+                        f"{row[1].strip()} · health {health_pct} · {row[3].strip()} obs",
+                        "Observation notes are collapsed below to avoid publishing partial vision snippets.",
+                    )
+                )
+                if notes:
+                    detail_rows.append((crop, "Gemini Vision notes", public_text(notes[:1000])))
         lines.append(data_table(rows))
+        if detail_rows:
+            lines.extend(
+                [
+                    "",
+                    "<details>",
+                    "<summary>Vision observation notes</summary>",
+                    "",
+                    data_table(detail_rows),
+                    "",
+                    "</details>",
+                ]
+            )
         lines.append("")
 
     # Hourly pattern (compact)
@@ -1073,6 +1174,8 @@ def generate_day(d: date) -> str:
         "",
         f"# {title}",
         "",
+        "*Generated lab notebook from `daily_summary`, `plan_journal`, and setpoint audit data. It is intentionally chronological and may include in-progress cycles before validation.*",
+        "",
     ]
 
     if not plans:
@@ -1086,7 +1189,14 @@ def generate_day(d: date) -> str:
 
     # End-of-day summary (unchanged)
     if summary:
-        body.append(generate_daily_summary_section(summary, hourly, d))
+        body.append(
+            generate_daily_summary_section(
+                summary,
+                hourly,
+                d,
+                pending=any(plan.get("status") == "pending" for plan in plans),
+            )
+        )
 
     # 7-day stress context (unchanged)
     if stress_ctx:

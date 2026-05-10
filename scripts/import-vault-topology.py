@@ -807,7 +807,7 @@ STATIC_SENSORS: list[dict[str, Any]] = [
         "slug": "hydro.quality",
         "zone": "east",
         "kind": "hydro_quality",
-        "protocol": "ble",
+        "protocol": "http_api",
         "model": "YINMIK",
         "source_table": "climate",
         "source_column": "hydro_ph",

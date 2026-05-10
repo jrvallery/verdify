@@ -59,10 +59,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -113,7 +111,6 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -128,8 +125,7 @@
             ]
           },
           "unit": "string"
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows planning behavior, compliance, or planning outcomes over time."
@@ -177,8 +173,7 @@
           "custom": {
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows planning behavior, compliance, or planning outcomes over time."
@@ -204,12 +199,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {
         "showHeader": true
       },
@@ -975,10 +964,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "unit": "none"
-        },
-        "overrides": []
+        }
       },
       "description": "Shows planning behavior, compliance, or planning outcomes over time."
     },
@@ -1014,8 +1001,7 @@
             "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -1056,12 +1042,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {
         "showHeader": true
       },

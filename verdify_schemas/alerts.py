@@ -34,6 +34,7 @@ AlertType = Literal[
     "planner_gateway_delivery_failed",
     "planner_required_plan_missed",
     "planner_stale",
+    "planner_tunable_range_drift",
     "relay_stuck",
     "safety_invalid",
     "sensor_offline",
@@ -62,6 +63,7 @@ ALERT_TYPES: tuple[str, ...] = (
     "planner_gateway_delivery_failed",
     "planner_required_plan_missed",
     "planner_stale",
+    "planner_tunable_range_drift",
     "relay_stuck",
     "safety_invalid",
     "sensor_offline",
@@ -130,7 +132,7 @@ class PlanDeliveryFailureDetails(_DetailsBase):
     event_label: str | None = None
     instance: str | None = None
     gateway_status: int | None = None
-    delivered_at: AwareDatetime
+    delivered_at: AwareDatetime | None = None
     gateway_body: str = ""
 
 
@@ -140,6 +142,11 @@ class PlannerGatewayDeliveryFailedDetails(_DetailsBase):
 
 class RequiredPlanMissDetails(PlanDeliveryFailureDetails):
     status: str
+    expected_at: AwareDatetime | None = None
+    due_at: AwareDatetime | None = None
+    plan_delivery_log_id: int | None = None
+    trigger_id: str | None = None
+    resulting_plan_id: str | None = None
 
 
 class PlannerRequiredPlanMissedDetails(_DetailsBase):
@@ -156,6 +163,20 @@ class BandOwnershipOffender(_DetailsBase):
 class PlannerBandOwnershipDriftDetails(_DetailsBase):
     band_owned_params: list[TunableParameter]
     offenders: list[BandOwnershipOffender]
+
+
+class PlannerTunableRangeViolation(_DetailsBase):
+    parameter: str
+    value: float
+    plan_id: str
+    source: str
+    ts: AwareDatetime
+    reason: str = ""
+    error: str
+
+
+class PlannerTunableRangeDriftDetails(_DetailsBase):
+    violations: list[PlannerTunableRangeViolation]
 
 
 class SafetyInvalidDetails(_DetailsBase):
@@ -317,6 +338,11 @@ class PlannerBandOwnershipDriftAlert(_AlertBase):
     details: PlannerBandOwnershipDriftDetails
 
 
+class PlannerTunableRangeDriftAlert(_AlertBase):
+    alert_type: Literal["planner_tunable_range_drift"]
+    details: PlannerTunableRangeDriftDetails
+
+
 class SafetyInvalidAlert(_AlertBase):
     alert_type: Literal["safety_invalid"]
     details: SafetyInvalidDetails
@@ -404,6 +430,7 @@ AlertEnvelopeUnion = Annotated[
     | PlannerGatewayDeliveryFailedAlert
     | PlannerRequiredPlanMissedAlert
     | PlannerStaleAlert
+    | PlannerTunableRangeDriftAlert
     | RelayStuckAlert
     | SafetyInvalidAlert
     | SensorOfflineAlert

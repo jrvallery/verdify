@@ -14,7 +14,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
@@ -34,8 +33,7 @@
             ]
           },
           "unit": "percent"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -75,7 +73,6 @@
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -89,8 +86,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,
@@ -140,8 +136,7 @@
             ]
           },
           "unit": "short"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 3,

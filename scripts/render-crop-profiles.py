@@ -35,6 +35,45 @@ DSN = os.environ.get(
     "VERDIFY_DSN",
     f"postgresql://verdify:{os.environ.get('POSTGRES_PASSWORD', 'verdify_tsdb_2026')}@127.0.0.1:5432/verdify",
 )
+ACTIVE_CONTROL_SLUGS = {"canna", "lettuce", "peppers", "strawberries"}
+CROP_TAXONOMY = {
+    "basil": (
+        "Planned/Retired",
+        "No active planting in <code>v_position_current</code>; kept as a crop profile and prior planting record.",
+    ),
+    "canna": (
+        "Active Control",
+        "Occupied south-zone record in <code>v_position_current</code>; its wide VPD tolerance informs south-zone control.",
+    ),
+    "cucumbers": (
+        "Planned/Retired",
+        "No active planting in <code>v_position_current</code>; retained as a future west-zone crop candidate.",
+    ),
+    "herbs": (
+        "Observed/Reference",
+        "Mixed-herb reference profile; individual herb species are not active control records right now.",
+    ),
+    "lettuce": (
+        "Active Control",
+        "Occupied east-zone record in <code>v_position_current</code>; heat-sensitive profile constrains the active band.",
+    ),
+    "orchid": (
+        "Observed/Reference",
+        "Observed Vanda reference only: center-zone page is OFFLINE and says no active planting.",
+    ),
+    "peppers": (
+        "Active Control",
+        "Occupied east-zone record in <code>v_position_current</code>; warm-crop profile participates in active control.",
+    ),
+    "strawberries": (
+        "Active Control",
+        "Occupied east-zone record in <code>v_position_current</code>; strawberry VPD tolerance drives east stress scoring.",
+    ),
+    "tomatoes": (
+        "Planned/Retired",
+        "No active planting in <code>v_position_current</code>; retained as a south-zone future crop profile.",
+    ),
+}
 AUTO_BLOCK_RE = re.compile(
     r"(?P<start>(?:\[//\]: # \(auto-render:start (?P<markdown_name>[-a-z0-9_]+)\)|"
     r"<!-- auto-render:start (?P<html_name>[-a-z0-9_]+) -->|"
@@ -150,6 +189,30 @@ def _render_catalog_cards(d: dict) -> str:
     return "\n".join(lines)
 
 
+def _render_taxonomy_status(slug: str, current: list[dict]) -> str:
+    status, note = CROP_TAXONOMY.get(
+        slug,
+        ("Observed/Reference", "No explicit launch taxonomy assigned; treated as reference until reviewed."),
+    )
+    occupied = [c for c in current if c.get("is_occupied", True)]
+    positions = ", ".join(c.get("position_label") or "—" for c in occupied) or "none"
+    control_source = (
+        "Counts as active control."
+        if slug in ACTIVE_CONTROL_SLUGS
+        else "Does not count toward the active-control crop total."
+    )
+    lines = [
+        '<div class="metric-grid">',
+        (f'  <div class="metric-card"><strong>{status}</strong><p>{control_source} {note}</p></div>'),
+        (
+            '  <div class="metric-card"><strong>Source Check</strong>'
+            f"<p>Current occupied positions from <code>v_position_current</code>: {positions}.</p></div>"
+        ),
+        "</div>",
+    ]
+    return "\n".join(lines)
+
+
 def _replace_auto_blocks(existing: str, blocks: dict[str, str]) -> tuple[str, list[str], list[str]]:
     """Replace generated blocks in an existing hybrid page.
 
@@ -184,8 +247,23 @@ def _auto_block(name: str, body: str) -> str:
 
 
 def _insert_missing_blocks(existing: str, missing: list[str], blocks: dict[str, str]) -> str:
+    updated = existing
+    if "taxonomy-status" in missing:
+        block = "\n\n## Launch Taxonomy\n\n" + _auto_block("taxonomy-status", blocks["taxonomy-status"])
+        anchors = [
+            "[//]: # (auto-render:end catalog-entry)",
+            "<!-- auto-render:end catalog-entry -->",
+            '<span data-auto-render="end catalog-entry"></span>',
+            '<div class="auto-render-marker" data-auto-render="end catalog-entry"></div>',
+        ]
+        for anchor in anchors:
+            if anchor in updated:
+                updated = updated.replace(anchor, anchor + block, 1)
+                break
+        else:
+            updated = updated.rstrip() + block + "\n"
     if "latest-vision" not in missing:
-        return existing
+        return updated
     block = "\n\n## Latest Vision\n\n" + _auto_block("latest-vision", blocks["latest-vision"])
     anchors = [
         "[//]: # (auto-render:end current-plantings)",
@@ -194,9 +272,41 @@ def _insert_missing_blocks(existing: str, missing: list[str], blocks: dict[str, 
         '<div class="auto-render-marker" data-auto-render="end current-plantings"></div>',
     ]
     for anchor in anchors:
-        if anchor in existing:
-            return existing.replace(anchor, anchor + block, 1)
-    return existing.rstrip() + block + "\n"
+        if anchor in updated:
+            return updated.replace(anchor, anchor + block, 1)
+    return updated.rstrip() + block + "\n"
+
+
+async def _check_crop_consistency(conn: asyncpg.Connection) -> int:
+    rows = await conn.fetch(
+        """
+        SELECT zone_slug, crop_catalog_slug
+        FROM v_position_current
+        WHERE greenhouse_id = 'vallery'
+          AND is_occupied
+          AND crop_catalog_slug IS NOT NULL
+        """
+    )
+    occupied_by_zone = {(r["zone_slug"], r["crop_catalog_slug"]) for r in rows}
+    active_from_db = {slug for zone, slug in occupied_by_zone if zone != "center"}
+    observed_center = {slug for zone, slug in occupied_by_zone if zone == "center"}
+    ok = True
+    if active_from_db != ACTIVE_CONTROL_SLUGS:
+        ok = False
+        print(
+            "ERROR active-control taxonomy mismatch: "
+            f"taxonomy={sorted(ACTIVE_CONTROL_SLUGS)} db_non_center={sorted(active_from_db)}"
+        )
+    for slug in sorted(observed_center & ACTIVE_CONTROL_SLUGS):
+        ok = False
+        print(f"ERROR center-zone crop {slug} is marked Active Control while center is offline")
+    for slug in sorted(observed_center - ACTIVE_CONTROL_SLUGS):
+        status = CROP_TAXONOMY.get(slug, ("Observed/Reference", ""))[0]
+        if status != "Observed/Reference":
+            ok = False
+            print(f"ERROR center-zone crop {slug} should be Observed/Reference, got {status}")
+    print(f"Active-control crop count: {len(ACTIVE_CONTROL_SLUGS)} ({', '.join(sorted(ACTIVE_CONTROL_SLUGS))})")
+    return 0 if ok else 1
 
 
 def _render_latest_vision(rows: list[dict], public_refs: dict[int, str]) -> str:
@@ -292,6 +402,7 @@ async def render_crop(
 
     blocks = {
         "catalog-entry": _render_catalog_cards(d),
+        "taxonomy-status": _render_taxonomy_status(slug, [dict(r) for r in current]),
         "target-bands": _render_stage_band_table(profiles),
         "current-plantings": _render_current_plantings([dict(r) for r in current]),
         "latest-vision": _render_latest_vision([dict(r) for r in vision_rows], public_refs),
@@ -306,6 +417,10 @@ async def render_crop(
 ## Catalog Entry
 
 {_auto_block("catalog-entry", blocks["catalog-entry"])}
+
+## Launch Taxonomy
+
+{_auto_block("taxonomy-status", blocks["taxonomy-status"])}
 
 ## Stage × Season Target Bands (24h averages)
 
@@ -330,6 +445,8 @@ async def render_crop(
 async def run(args: argparse.Namespace) -> int:
     conn = await asyncpg.connect(DSN)
     try:
+        if args.check_consistency:
+            return await _check_crop_consistency(conn)
         if args.slug:
             slugs = [args.slug]
         else:
@@ -380,6 +497,7 @@ def main() -> None:
     p.add_argument("--slug", help="Render only this crop slug")
     p.add_argument("--out", default=str(DEFAULT_OUT), help="Output directory")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--check-consistency", action="store_true", help="Validate launch crop taxonomy against DB views")
     p.add_argument(
         "--replace-page", action="store_true", help="Overwrite the whole page instead of updating auto-render blocks"
     )

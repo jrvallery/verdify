@@ -282,8 +282,7 @@
             ]
           },
           "unit": "mol/m\u00b2/d"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -858,8 +857,7 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -881,9 +879,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "W"
           },
-          "unit": "currencyUSD"
+          "unit": "watt"
         },
         "overrides": [
           {
@@ -906,6 +905,18 @@
               {
                 "id": "custom.lineWidth",
                 "value": 2
+              },
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W"
               }
             ]
           },
@@ -939,6 +950,14 @@
                 "value": {
                   "fill": "solid"
                 }
+              },
+              {
+                "id": "unit",
+                "value": "watt/m\u00b2"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "W/m\u00b2"
               }
             ]
           }

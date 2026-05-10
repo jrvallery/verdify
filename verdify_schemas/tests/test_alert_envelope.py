@@ -28,6 +28,7 @@ from verdify_schemas.alerts import (
     PlannerGatewayDeliveryFailedAlert,
     PlannerRequiredPlanMissedAlert,
     PlannerStaleAlert,
+    PlannerTunableRangeDriftAlert,
     RelayStuckAlert,
     SafetyInvalidAlert,
     SensorOfflineAlert,
@@ -164,6 +165,22 @@ CASES = {
     "planner_stale": (
         PlannerStaleAlert,
         {"age_s": 50_500, "age_h": 14.0},
+    ),
+    "planner_tunable_range_drift": (
+        PlannerTunableRangeDriftAlert,
+        {
+            "violations": [
+                {
+                    "parameter": "sw_fsm_controller_enabled",
+                    "value": 0.0,
+                    "plan_id": "iris-20260508-0700",
+                    "source": "iris",
+                    "ts": NOW,
+                    "reason": "legacy fallback",
+                    "error": "controller_v2_locked_on",
+                }
+            ]
+        },
     ),
     "relay_stuck": (
         RelayStuckAlert,

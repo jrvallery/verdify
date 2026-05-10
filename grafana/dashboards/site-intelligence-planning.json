@@ -186,12 +186,6 @@
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "gridPos": {
         "h": 8,
         "w": 6,
@@ -737,8 +731,7 @@
             "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -782,8 +775,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
-          }
+            "spanNulls": true,
+            "axisLabel": "events/hour"
+          },
+          "unit": "short"
         },
         "overrides": [
           {
@@ -798,6 +793,30 @@
                   "fixedColor": "red",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "events/hour"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Writes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "events/hour"
               }
             ]
           }
@@ -895,8 +914,7 @@
             ]
           },
           "unit": "short"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "barRadius": 0,
@@ -997,8 +1015,7 @@
             ]
           },
           "unit": "short"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "colorMode": "value",
@@ -1088,8 +1105,7 @@
             ]
           },
           "unit": "s"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "bucketOffset": 0,

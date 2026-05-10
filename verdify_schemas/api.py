@@ -65,6 +65,41 @@ class PublicDataHealthResponse(BaseModel):
     pipeline_sources: list[PublicPipelineHealthSource]
 
 
+class PublicPlannerTrigger(BaseModel):
+    """One expected planner trigger in the public planner-health surface."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int = Field(..., ge=1)
+    event_type: str
+    event_label: str | None = None
+    instance: str | None = None
+    expected_at: AwareDatetime
+    due_at: AwareDatetime
+    delivered_at: AwareDatetime | None = None
+    resolved_at: AwareDatetime | None = None
+    status: str
+    expected_action: str
+    trigger_id: str | None = None
+    resulting_plan_id: str | None = None
+
+
+class PublicPlannerHealthResponse(BaseModel):
+    """GET /api/v1/public/planner-health."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    generated_at: AwareDatetime
+    overall_status: Literal["ok", "warn", "fail"]
+    missed_expected_count: int = Field(..., ge=0)
+    overdue_delivered_count: int = Field(..., ge=0)
+    required_failure_count: int = Field(..., ge=0)
+    recent_expected_count: int = Field(..., ge=0)
+    resolved_count: int = Field(..., ge=0)
+    latest_required: list[dict] = Field(default_factory=list)
+    recent_triggers: list[PublicPlannerTrigger] = Field(default_factory=list)
+
+
 class PublicHomeMetrics(BaseModel):
     """GET /api/v1/public/home-metrics — launch-safe proof counters."""
 

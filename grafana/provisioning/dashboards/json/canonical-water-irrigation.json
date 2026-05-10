@@ -57,10 +57,8 @@
                 "value": 200
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -97,10 +95,8 @@
                 "value": 0.05
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows current or recent irrigation flow rate in gallons per minute."
@@ -132,10 +128,8 @@
               }
             ]
           },
-          "custom": {},
           "unit": "string"
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows when the wall drip zone last ran."
@@ -167,10 +161,8 @@
               }
             ]
           },
-          "custom": {},
           "unit": "string"
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows when the center drip zone last ran."
@@ -216,8 +208,7 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -496,10 +487,8 @@
             ]
           },
           "unit": "pressurekpa",
-          "custom": {},
           "decimals": 2
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -596,8 +585,7 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -789,8 +777,7 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -835,10 +822,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 8,
@@ -886,10 +871,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 8,
@@ -937,10 +920,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 8,

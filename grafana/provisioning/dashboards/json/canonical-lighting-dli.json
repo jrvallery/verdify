@@ -55,7 +55,6 @@
             "mode": "fixed",
             "fixedColor": "#FFCA28"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -69,8 +68,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -116,7 +114,6 @@
             "mode": "fixed",
             "fixedColor": "#9CCC65"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -130,8 +127,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -376,8 +372,7 @@
             "showPoints": "never",
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -456,10 +451,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -529,10 +522,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -863,8 +854,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -1044,10 +1034,8 @@
                 "value": 800
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {

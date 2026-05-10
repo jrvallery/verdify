@@ -53,6 +53,8 @@ The individual daily pages are generated records, not polished articles. The imp
 
 To understand the exact parameters behind the plan rows, see [AI-Writable Tunables](/intelligence/planning/#ai-writable-tunables).
 
+*Generated planning archive: daily pages are lab notebook records. Pending rows and missed cycles stay visible because planner availability is part of the evidence.*
+
 ## What the Archive Shows
 
 <div class=\"metric-grid\">
@@ -66,6 +68,11 @@ To understand the exact parameters behind the plan rows, see [AI-Writable Tunabl
 else
   # Update the date in frontmatter
   HEADER=$(echo "$HEADER" | sed "s/^date: .*/date: ${TODAY}/")
+  if ! grep -q "Generated planning archive" <<< "$HEADER"; then
+    HEADER=$(echo "$HEADER" | sed '/^## What the Archive Shows$/i\
+*Generated planning archive: daily pages are lab notebook records. Pending rows and missed cycles stay visible because planner availability is part of the evidence.*\
+')
+  fi
   # Ensure trailing newline for spacing before ## Recent Plans
   HEADER=$(echo "$HEADER" | sed -e :a -e '/^\n*$/{$d;N;ba}')
 fi
@@ -96,7 +103,7 @@ fi
   echo ""
   echo "---"
   echo ""
-  echo "*Auto-generated from daily_summary + plan_journal data.*"
+  echo "*Auto-generated from daily_summary + plan_journal data. Archive rows are generated lab notebook entries; null or pending fields mean the day is still in progress or the source row was not recorded.*"
 } > "$INDEX"
 
 # Count rows for logging

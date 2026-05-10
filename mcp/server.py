@@ -138,6 +138,8 @@ TIER1_TUNABLES = frozenset(
     }
 )
 
+FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+
 
 def _json(obj):
     """JSON serialize with asyncpg/Decimal support."""
@@ -458,6 +460,15 @@ async def set_tunable(
                 "parameter": parameter,
                 "value": value,
                 "details": bounds_error,
+            }
+        )
+    if parameter in FORCED_ON_SWITCH_PARAMS and value < 0.5:
+        return json.dumps(
+            {
+                "error": "controller_v2_locked_on",
+                "parameter": parameter,
+                "value": value,
+                "hint": "Controller v2 is the live controller path; fallback to the legacy cascade now requires an operator/firmware rollback.",
             }
         )
 
@@ -892,11 +903,15 @@ async def set_plan(
             # owner-misaligned plans.
             rows_written = 0
             band_params_dropped = 0
+            forced_on_params = 0
             for wp in plan.transitions:
                 for param, value in wp.params.items():
                     if param in BAND_OWNED_PARAMS:
                         band_params_dropped += 1
                         continue
+                    if param in FORCED_ON_SWITCH_PARAMS and float(value) < 0.5:
+                        value = 1.0
+                        forced_on_params += 1
                     await conn.execute(
                         """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
                            VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
@@ -963,6 +978,7 @@ async def set_plan(
             "transitions": len(plan.transitions),
             "rows_written": rows_written,
             "band_params_dropped": band_params_dropped,
+            "forced_on_params": forced_on_params,
             "structured_hypothesis": structured_payload is not None,
             "trigger_id": normalized_trigger_id,
             "planner_instance": planner_instance,

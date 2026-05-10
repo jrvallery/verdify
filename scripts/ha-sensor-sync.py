@@ -53,7 +53,7 @@ LIGHT_ENTITIES = {
     "light.greenhouse_grow": "grow_light_grow",
 }
 
-# --- Hydroponic water tester (LocalTuya + BLE) ---
+# --- Hydroponic water tester (LocalTuya + WiFi) ---
 HYDRO_MAP = {
     # LocalTuya (primary — renamed from pool_* to greenhouse_hydroponic_*)
     "sensor.greenhouse_hydroponic_ec": ("hydro_ec_us_cm", None),

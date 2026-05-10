@@ -572,8 +572,7 @@
             ]
           },
           "unit": "percent"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 9,
@@ -1657,11 +1656,7 @@
       ],
       "title": "State Durations Today",
       "type": "table",
-      "description": "Shows how long the greenhouse has spent in each controller state.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      }
+      "description": "Shows how long the greenhouse has spent in each controller state."
     },
     {
       "datasource": {
@@ -1691,11 +1686,7 @@
         }
       ],
       "title": "Plan Accuracy (Recent Plans)",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      }
+      "type": "table"
     }
   ],
   "refresh": "5m",

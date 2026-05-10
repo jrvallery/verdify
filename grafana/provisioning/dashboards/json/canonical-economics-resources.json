@@ -59,10 +59,8 @@
                 "value": 15
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -123,7 +121,6 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -137,8 +134,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -184,7 +180,6 @@
             "mode": "fixed",
             "fixedColor": "#F44336"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -198,8 +193,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -245,7 +239,6 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -259,8 +252,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -306,7 +298,6 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -320,8 +311,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -367,7 +357,6 @@
             "mode": "fixed",
             "fixedColor": "#FFD740"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -381,8 +370,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -804,10 +792,8 @@
             ]
           },
           "unit": "currencyUSD",
-          "custom": {},
           "decimals": 3
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,

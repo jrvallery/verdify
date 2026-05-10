@@ -63,10 +63,8 @@
                 "value": 90
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -142,10 +140,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -214,10 +210,8 @@
                 "value": 2.0
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -278,7 +272,6 @@
             "mode": "fixed",
             "fixedColor": "#9CCC65"
           },
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -292,8 +285,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -530,10 +522,8 @@
                 "value": 200
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -1219,10 +1209,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1270,10 +1258,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1321,10 +1307,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1366,10 +1350,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No observations recorded",
-          "custom": {}
-        },
-        "overrides": []
+          "noValue": "No observations recorded"
+        }
       },
       "description": "Shows the most recent greenhouse observations logged into the system.",
       "options": {
@@ -1395,10 +1377,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No treatments recorded",
-          "custom": {}
-        },
-        "overrides": []
+          "noValue": "No treatments recorded"
+        }
       },
       "description": "Shows the most recent plant treatments or interventions.",
       "options": {

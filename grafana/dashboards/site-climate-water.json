@@ -36,8 +36,7 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -83,8 +82,7 @@
             "mode": "fixed",
             "fixedColor": "#2196F3"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -129,8 +127,7 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -156,8 +153,7 @@
             "spanNulls": true
           },
           "unit": "gal"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -588,7 +584,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 2,
           "mappings": [],
           "thresholds": {
@@ -609,8 +604,7 @@
             ]
           },
           "unit": "pressurekpa"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -681,8 +675,7 @@
             }
           },
           "unit": "min"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -960,8 +953,7 @@
             ]
           },
           "unit": "\u00b5S/cm"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -999,7 +991,6 @@
       "description": "Shows soil moisture from the first south-zone probe.",
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -1023,8 +1014,7 @@
             ]
           },
           "unit": "percent"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,

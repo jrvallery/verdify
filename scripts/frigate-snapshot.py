@@ -10,8 +10,10 @@ Usage:
 """
 
 import logging
+import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +26,8 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-FRIGATE_URL = "http://192.168.30.142:5000"  # Direct API (no auth needed)
+FRIGATE_URL = "http://192.168.30.142:5000"  # Frigate detect-frame fallback.
+GO2RTC_URL = os.environ.get("VERDIFY_GO2RTC_PUBLIC_BASE_URL", "http://192.168.30.142:1984")
 CAMERAS = ["greenhouse_1", "greenhouse_2"]
 VAULT_DIR = Path("/mnt/iris/verdify-vault/snapshots")
 DENVER = ZoneInfo("America/Denver")
@@ -39,27 +42,31 @@ def capture_snapshot(camera: str) -> bool:
     filename = f"{camera}_{now.strftime('%H%M')}.jpg"
     filepath = date_dir / filename
 
-    url = f"{FRIGATE_URL}/api/{camera}/latest.jpg?h=720"
-    req = urllib.request.Request(url, headers={"User-Agent": "verdify-snapshot/1.0"})
+    urls = [
+        f"{GO2RTC_URL.rstrip('/')}/api/frame.jpeg?{urllib.parse.urlencode({'src': camera, 'h': 1080})}",
+        f"{FRIGATE_URL.rstrip('/')}/api/{camera}/latest.jpg?h=720&quality=100",
+    ]
 
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = resp.read()
-            if len(data) < 1000:
-                log.warning("%s: response too small (%d bytes) — camera may be offline", camera, len(data))
-                return False
-            filepath.write_bytes(data)
-            log.info("%s: saved %s (%d KB)", camera, filepath, len(data) // 1024)
-            return True
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            log.warning("%s: camera not found (404) — may be offline", camera)
-        else:
-            log.error("%s: HTTP %d — %s", camera, e.code, e.reason)
-        return False
-    except Exception as e:
-        log.error("%s: %s", camera, e)
-        return False
+    for url in urls:
+        req = urllib.request.Request(url, headers={"User-Agent": "verdify-snapshot/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+                if len(data) < 1000:
+                    log.warning("%s: response too small (%d bytes) — camera may be offline", camera, len(data))
+                    continue
+                filepath.write_bytes(data)
+                log.info("%s: saved %s (%d KB)", camera, filepath, len(data) // 1024)
+                return True
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                log.warning("%s: camera not found (404) — may be offline", camera)
+            else:
+                log.warning("%s: HTTP %d — %s", camera, e.code, e.reason)
+        except Exception as e:
+            log.warning("%s: %s", camera, e)
+    log.error("%s: no snapshot endpoint succeeded", camera)
+    return False
 
 
 def main():

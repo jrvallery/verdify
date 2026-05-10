@@ -7,6 +7,7 @@ PYTEST := $(PYTHON) -m pytest
 RUFF := $(VENV)/bin/ruff
 ESPHOME := $(VENV)/bin/esphome
 ESP32_DEVICE ?= 192.168.10.111
+QUIET_MINUTES ?= 30
 FIRMWARE_ESPHOME := scripts/firmware-esphome-worktree.sh
 FIRMWARE_OTA_BIN := firmware/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin
 
@@ -109,8 +110,14 @@ firmware-check-all: firmware-check ## Compile firmware from the only supported d
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
+site-publish-status: ## Trace Obsidian vault -> Quartz build -> nginx publish state
+	bash scripts/site-publish-status.sh
+
 site-doctor: ## Audit verdify.ai source, build output, and Grafana embeds
 	$(PYTHON) scripts/site-doctor.py
+
+site-lint: ## Run cheap launch lint for public-site content and routes
+	$(PYTHON) scripts/lint_public_site.py
 
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
 	@mkdir -p firmware/artifacts
@@ -150,6 +157,15 @@ firmware-rollback: ## Manually flash the saved last-good.ota.bin back onto the E
 
 sensor-health: ## Run sensor health sweep (layer 3 of Firmware Change Protocol)
 	SINCE='$(or $(SINCE),5 minutes)' EXPECTED_FW_VERSION='$(EXPECTED_FW_VERSION)' bash scripts/sensor-health-sweep.sh
+
+greenhouse-quiet-on: ## Temporarily suppress routine greenhouse automations for recording (QUIET_MINUTES=30)
+	$(PYTHON) scripts/greenhouse-quiet-mode.py enable --minutes $(QUIET_MINUTES)
+
+greenhouse-quiet-off: ## Restore greenhouse quiet-mode setpoints now
+	$(PYTHON) scripts/greenhouse-quiet-mode.py disable
+
+greenhouse-quiet-status: ## Show recording quiet-mode status
+	$(PYTHON) scripts/greenhouse-quiet-mode.py status
 
 # ── Planner (event-driven via Iris agent) ────────────────────────────
 

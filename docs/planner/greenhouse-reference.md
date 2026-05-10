@@ -30,7 +30,7 @@
 | Fan 2 (SE) | 2,450 CFM, 52W | COOL_S1 (lag) or COOL_S2 (both) |
 | Heater 1 (electric) | 1,500W | HEAT_S1 (pre-heat inside band) |
 | Heater 2 (gas/Lennox) | 75,000 BTU/hr nameplate, ~48,000-54,000 actual (altitude derated 20%) | HEAT_S2 (below band floor). Overshoot: ~1-2°F typical |
-| AquaFog XE 2000 | ~750-850W, centrifugal atomizer (4-25µm droplets, ~90% evap efficiency) | HUMID_S3 (fog escalation, vent forced closed). Max 15.8 GPH (0.26 GPM). |
+| AquaFog XE 2000 | 1,644W observed draw, centrifugal atomizer (4-25µm droplets, ~90% evap efficiency) | HUMID_S3 (fog escalation, vent forced closed). Max 15.8 GPH (0.26 GPM). |
 | Intake vent (north) | 24"x24" (4 sq ft) — critically undersized, needs 2-3x more area | Economiser logic (enthalpy gate) |
 | Grow lights (main) | 630W, 15x4FT LED | DLI-based automation |
 | Grow lights (shelf) | 816W, 15x2FT LED | DLI-based automation |

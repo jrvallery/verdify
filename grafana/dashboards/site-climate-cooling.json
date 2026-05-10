@@ -36,8 +36,7 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -83,8 +82,7 @@
             "mode": "fixed",
             "fixedColor": "#FF9800"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -130,8 +128,7 @@
             "mode": "fixed",
             "fixedColor": "#78909C"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {

@@ -206,10 +206,8 @@
           },
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -278,10 +276,8 @@
                 "value": 2.0
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {
         "reduceOptions": {
@@ -803,10 +799,8 @@
             ]
           },
           "unit": "pressurekpa",
-          "custom": {},
           "decimals": 2
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -894,10 +888,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No observations recorded",
-          "custom": {}
-        },
-        "overrides": []
+          "noValue": "No observations recorded"
+        }
       },
       "description": "Shows the most recent greenhouse observations logged into the system.",
       "options": {
@@ -923,10 +915,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No treatments recorded",
-          "custom": {}
-        },
-        "overrides": []
+          "noValue": "No treatments recorded"
+        }
       },
       "description": "Shows the most recent plant treatments or interventions.",
       "options": {

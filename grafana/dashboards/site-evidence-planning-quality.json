@@ -51,8 +51,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -111,8 +110,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -171,8 +169,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -234,8 +231,7 @@
           "custom": {
             "axisLabel": "Hours"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -294,8 +290,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -354,8 +349,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "reduceOptions": {
@@ -1056,8 +1050,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -1118,8 +1111,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "orientation": "auto",
@@ -1230,8 +1222,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -1340,8 +1331,7 @@
             ]
           },
           "mappings": []
-        },
-        "overrides": []
+        }
       },
       "options": {
         "legend": {
@@ -1406,8 +1396,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "showHeader": true,
@@ -1468,8 +1457,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "showHeader": true,
@@ -1530,8 +1518,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "showHeader": true,

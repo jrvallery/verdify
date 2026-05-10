@@ -29,11 +29,6 @@
         "x": 0,
         "y": 0
       },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -71,10 +66,8 @@
                 "value": 200
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -114,10 +107,8 @@
                 "value": 50
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows water use or irrigation behavior over time."
@@ -143,7 +134,6 @@
         "defaults": {
           "unit": "currencyUSD",
           "decimals": 2,
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -157,8 +147,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows operating cost behavior for this part of the greenhouse system."
@@ -190,10 +179,8 @@
               }
             ]
           },
-          "custom": {},
           "unit": "string"
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows when the wall drip zone last ran."
@@ -225,10 +212,8 @@
               }
             ]
           },
-          "custom": {},
           "unit": "string"
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows when the center drip zone last ran."
@@ -265,10 +250,8 @@
                 "value": 0.05
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows current or recent irrigation flow rate in gallons per minute."
@@ -282,11 +265,6 @@
         "w": 24,
         "x": 0,
         "y": 5
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
       },
       "options": {}
     },
@@ -318,8 +296,7 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -415,11 +392,6 @@
         "x": 0,
         "y": 14
       },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -463,8 +435,7 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -517,8 +488,7 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -547,11 +517,6 @@
         "w": 24,
         "x": 0,
         "y": 23
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
       },
       "options": {}
     },
@@ -657,11 +622,6 @@
         "x": 0,
         "y": 32
       },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {}
     },
     {
@@ -693,8 +653,7 @@
             "lineInterpolation": "linear",
             "showPoints": "never"
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -731,12 +690,6 @@
           "format": "table"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {
         "showHeader": true
       },
@@ -751,11 +704,6 @@
         "w": 24,
         "x": 0,
         "y": 50
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
       },
       "options": {}
     },
@@ -802,10 +750,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the first south-zone irrigation probe."
@@ -853,10 +799,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the second south-zone irrigation probe."
@@ -904,10 +848,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the west-zone irrigation probe."
@@ -936,7 +878,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "\u00b5S/cm",
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -950,8 +891,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "options": {},
       "description": "Shows soil EC from the first south-zone probe, useful for fertigation context."
@@ -1202,8 +1142,7 @@
             "showPoints": "never",
             "fillOpacity": 10
           }
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -1232,11 +1171,6 @@
         "w": 24,
         "x": 0,
         "y": 80
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
       },
       "options": {}
     },
@@ -1285,10 +1219,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the first south-zone irrigation probe."
@@ -1338,10 +1270,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "options": {},
       "description": "Shows soil moisture from the second south-zone irrigation probe."
@@ -1391,8 +1321,7 @@
                 "value": 75
               }
             ]
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -1436,12 +1365,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "options": {
         "showHeader": true
       },
@@ -1644,11 +1567,6 @@
       "panels": [],
       "title": "REVIEW \u2014 Story Graphs",
       "type": "row",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {},
       "datasource": {
         "uid": "verdify-tsdb",

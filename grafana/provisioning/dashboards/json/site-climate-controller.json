@@ -43,8 +43,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       }
     },
     {
@@ -87,8 +86,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       }
     },
     {
@@ -115,8 +113,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        },
-        "overrides": []
+        }
       }
     },
     {
@@ -159,8 +156,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       }
     },
     {
@@ -203,8 +199,7 @@
             ]
           },
           "unit": "short"
-        },
-        "overrides": []
+        }
       }
     },
     {
@@ -230,10 +225,6 @@
       ],
       "options": {
         "showHeader": true
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
       }
     },
     {
@@ -407,8 +398,7 @@
             "lineWidth": 1
           },
           "unit": "currencyUSD"
-        },
-        "overrides": []
+        }
       },
       "options": {
         "tooltip": {
@@ -442,11 +432,7 @@
             "type": "grafana-postgresql-datasource"
           }
         }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      }
+      ]
     },
     {
       "id": 45,
@@ -477,10 +463,6 @@
           "scheme": "RdYlGn",
           "reverse": true
         }
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
       }
     },
     {
@@ -488,10 +470,162 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "fillOpacity": 80
+            "fillOpacity": 88,
+            "lineWidth": 0
+          },
+          "unit": "none",
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "text": "Idle",
+                  "color": "#66BB6A",
+                  "index": 0
+                },
+                "VENTILATE": {
+                  "text": "Ventilate",
+                  "color": "#FFCA28",
+                  "index": 1
+                },
+                "THERMAL_RELIEF": {
+                  "text": "Thermal relief",
+                  "color": "#F57C00",
+                  "index": 2
+                },
+                "DEHUM_VENT": {
+                  "text": "Dehum vent",
+                  "color": "#7E57C2",
+                  "index": 3
+                },
+                "SEALED_MIST_S1": {
+                  "text": "Mist S1",
+                  "color": "#26A69A",
+                  "index": 4
+                },
+                "SEALED_MIST_S2": {
+                  "text": "Mist S2",
+                  "color": "#00897B",
+                  "index": 5
+                },
+                "SEALED_MIST_FOG": {
+                  "text": "Mist + fog",
+                  "color": "#00ACC1",
+                  "index": 6
+                },
+                "SEALED_MIST_WATCH": {
+                  "text": "Mist watch",
+                  "color": "#80CBC4",
+                  "index": 7
+                },
+                "SAFETY_COOL": {
+                  "text": "Safety cool",
+                  "color": "#D32F2F",
+                  "index": 8
+                },
+                "TEMP_IDLE_HUM_IDLE": {
+                  "text": "Temp idle / hum idle",
+                  "color": "#81C784",
+                  "index": 9
+                },
+                "TEMP_IDLE_HUMID_S1": {
+                  "text": "Temp idle / humid S1",
+                  "color": "#4DB6AC",
+                  "index": 10
+                },
+                "TEMP_IDLE_VPD_WATCH": {
+                  "text": "Temp idle / VPD watch",
+                  "color": "#B2DFDB",
+                  "index": 11
+                },
+                "HEAT_S1_HUM_IDLE": {
+                  "text": "Heat S1 / hum idle",
+                  "color": "#FFB74D",
+                  "index": 12
+                },
+                "HEAT_S1_HUMID_S1": {
+                  "text": "Heat S1 / humid S1",
+                  "color": "#FFCC80",
+                  "index": 13
+                },
+                "HEAT_S1_VPD_WATCH": {
+                  "text": "Heat S1 / VPD watch",
+                  "color": "#FFE0B2",
+                  "index": 14
+                },
+                "HEAT_S2_HUM_IDLE": {
+                  "text": "Heat S2 / hum idle",
+                  "color": "#F4511E",
+                  "index": 15
+                },
+                "HEAT_S2_HUMID_S1": {
+                  "text": "Heat S2 / humid S1",
+                  "color": "#E64A19",
+                  "index": 16
+                },
+                "HEAT_S2_VPD_WATCH": {
+                  "text": "Heat S2 / VPD watch",
+                  "color": "#BF360C",
+                  "index": 17
+                },
+                "COOL_S1_HUM_IDLE": {
+                  "text": "Cool S1 / hum idle",
+                  "color": "#64B5F6",
+                  "index": 18
+                },
+                "COOL_S1_HUMID_S1": {
+                  "text": "Cool S1 / humid S1",
+                  "color": "#42A5F5",
+                  "index": 19
+                },
+                "COOL_S1_HUMID_S2": {
+                  "text": "Cool S1 / humid S2",
+                  "color": "#1E88E5",
+                  "index": 20
+                },
+                "COOL_S1_VPD_WATCH": {
+                  "text": "Cool S1 / VPD watch",
+                  "color": "#90CAF9",
+                  "index": 21
+                },
+                "COOL_S2_HUMID_S1": {
+                  "text": "Cool S2 / humid S1",
+                  "color": "#1976D2",
+                  "index": 22
+                },
+                "COOL_S2_HUMID_S2": {
+                  "text": "Cool S2 / humid S2",
+                  "color": "#0D47A1",
+                  "index": 23
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "transparent",
+                  "index": 24
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "rgba(100, 100, 100, 0.3)",
+                "value": null
+              }
+            ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -500,7 +634,9 @@
         "y": 39
       },
       "id": 119,
-      "options": {},
+      "options": {
+        "mergeValues": false
+      },
       "targets": [
         {
           "datasource": {
@@ -512,7 +648,7 @@
           "refId": "A"
         }
       ],
-      "title": "State Timeline (24h)",
+      "title": "Controller State Timeline",
       "type": "state-timeline"
     },
     {
@@ -1719,8 +1855,7 @@
             "spanNulls": true
           },
           "unit": "fahrenheit"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -1756,12 +1891,6 @@
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "gridPos": {
         "h": 8,
         "w": 6,
@@ -1796,9 +1925,10 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisLabel": "events/hour"
           },
-          "unit": "currencyUSD"
+          "unit": "short"
         },
         "overrides": [
           {
@@ -1813,6 +1943,30 @@
                   "fixedColor": "red",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "events/hour"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Writes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "events/hour"
               }
             ]
           }

@@ -385,8 +385,7 @@
               "type": "linear"
             }
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -730,7 +729,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {},
           "decimals": 2,
           "mappings": [],
           "thresholds": {
@@ -751,8 +749,7 @@
             ]
           },
           "unit": "pressurekpa"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,
@@ -823,8 +820,7 @@
             }
           },
           "unit": "min"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 8,

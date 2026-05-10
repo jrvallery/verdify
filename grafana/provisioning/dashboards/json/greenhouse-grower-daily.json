@@ -163,8 +163,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -251,8 +250,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -339,8 +337,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -427,8 +424,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -524,13 +520,7 @@
         }
       ],
       "title": "Irrigation Status",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "type": "table"
     },
     {
       "datasource": {
@@ -560,10 +550,8 @@
               }
             ]
           },
-          "unit": "gal",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "gal"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -628,10 +616,8 @@
               }
             ]
           },
-          "unit": "currencyUSD",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "currencyUSD"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -709,13 +695,7 @@
         }
       ],
       "title": "Active Crops",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "type": "table"
     },
     {
       "datasource": {
@@ -745,13 +725,7 @@
         }
       ],
       "title": "Recent Observations",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "type": "table"
     },
     {
       "collapsed": false,
@@ -794,13 +768,7 @@
         }
       ],
       "title": "Active Alerts",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "type": "table"
     },
     {
       "datasource": {
@@ -834,8 +802,7 @@
               }
             ]
           },
-          "unit": "fahrenheit",
-          "custom": {}
+          "unit": "fahrenheit"
         },
         "overrides": [
           {
@@ -903,7 +870,6 @@
           },
           "decimals": 0,
           "unit": "velocitymph",
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -921,8 +887,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 5,
@@ -987,10 +952,8 @@
               }
             ]
           },
-          "unit": "percent",
-          "custom": {}
-        },
-        "overrides": []
+          "unit": "percent"
+        }
       },
       "gridPos": {
         "h": 5,
@@ -1041,12 +1004,6 @@
       },
       "title": "Hydro Pod Map",
       "type": "text",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "description": "Shows the current hydroponic pod layout or occupancy map."
     },
     {
@@ -1059,17 +1016,11 @@
       },
       "id": 98,
       "options": {
-        "content": "<div style=\"text-align:center\"><img src=\"http://192.168.30.142:5000/api/greenhouse_1/latest.jpg?h=480\" style=\"max-width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15)\" onerror=\"this.style.display='none';this.nextElementSibling.style.display='block'\"><div style=\"display:none;padding:20px;color:#999\">Camera offline</div></div>",
+        "content": "<div style=\"text-align:center\"><img src=\"https://api.verdify.ai/api/v1/public/cameras/greenhouse_1/latest.jpg?h=1080\" style=\"max-width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15)\" onerror=\"this.style.display='none';this.nextElementSibling.style.display='block'\"><div style=\"display:none;padding:20px;color:#999\">Camera offline</div></div>",
         "mode": "html"
       },
       "title": "Greenhouse Camera (Live)",
-      "type": "text",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      }
+      "type": "text"
     },
     {
       "id": 109,
@@ -1127,10 +1078,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "description": "Shows current soil moisture for the first south-zone probe.",
       "options": {}
@@ -1180,10 +1129,8 @@
                 "value": 80
               }
             ]
-          },
-          "custom": {}
-        },
-        "overrides": []
+          }
+        }
       },
       "description": "Shows current soil moisture for the second south-zone probe.",
       "options": {}
@@ -1233,8 +1180,7 @@
                 "value": 75
               }
             ]
-          },
-          "custom": {}
+          }
         },
         "overrides": [
           {
@@ -1278,12 +1224,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
       "description": "Summarizes current soil probe conditions across the monitored zones.",
       "options": {
         "showHeader": true

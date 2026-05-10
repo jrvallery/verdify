@@ -78,7 +78,6 @@
               }
             ]
           },
-          "custom": {},
           "unit": "currencyUSD"
         }
       },
@@ -108,7 +107,6 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -171,8 +169,7 @@
                 "value": 20
               }
             ]
-          },
-          "custom": {}
+          }
         }
       },
       "options": {},
@@ -202,7 +199,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -248,7 +244,6 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -295,7 +290,6 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -488,11 +482,6 @@
           }
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        }
-      },
       "options": {},
       "description": "Shows how OpenClaw usage is distributed across session types."
     },
@@ -519,8 +508,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "No errors in this period",
-          "custom": {}
+          "noValue": "No errors in this period"
         }
       },
       "options": {

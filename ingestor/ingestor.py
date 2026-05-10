@@ -46,6 +46,7 @@ from entity_map import (
     EQUIPMENT_SWITCH_MAP,
     SETPOINT_MAP,
     STATE_MAP,
+    SWITCH_TO_ENTITY,
 )
 from esp32_push import push_to_esp32
 from pydantic import ValidationError
@@ -631,6 +632,8 @@ _SETPOINT_RANGES = {
     "vpd_low": (0.1, 3.0),
 }
 
+FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+
 # Boot window: suppress ESP32 setpoint reports for 60s after connect
 # to prevent firmware defaults from polluting the DB
 _BOOT_WINDOW_S = 60
@@ -705,6 +708,9 @@ def _accept_setpoint(param: str, value: float) -> bool:
 
 def _accept_outbound_setpoint(param: str, value: float) -> bool:
     """Return True if a DB-origin setpoint is inside registry bounds."""
+    if param in FORCED_ON_SWITCH_PARAMS and value < 0.5:
+        log.warning("Rejecting outbound fallback request %s=%.3f; controller v2 is locked ON", param, value)
+        return False
     spec = get_tunable(param)
     if spec is None or spec.kind != "numeric":
         return True
@@ -754,6 +760,18 @@ def on_state_change(entity_state) -> None:
                     return
             state.cfg_readback[cfg_param] = val
             shared.cfg_readback[cfg_param] = float(val)
+            if cfg_param in FORCED_ON_SWITCH_PARAMS and val < 0.5:
+                eid = SWITCH_TO_ENTITY.get(cfg_param)
+                if eid:
+                    log.warning(
+                        "Controller guardrail: cfg readback has %s=%.0f; immediate repair push queued",
+                        cfg_param,
+                        val,
+                    )
+                    try:
+                        asyncio.get_running_loop().create_task(push_to_esp32([(eid, 1.0, "switch")]))
+                    except RuntimeError:
+                        shared.force_setpoint_push.set()
             return
 
         col = CLIMATE_MAP.get(obj_id)
