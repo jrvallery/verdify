@@ -32,6 +32,7 @@ BOX_DRAWING_RE = re.compile(r"[│┌└├─═╔]")
 
 GENERATED_PAGES = {
     "data/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
+    "data/plans/index.md": "scripts/generate-plans-index.py",
     "evidence/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
     "forecast/index.md": "scripts/generate-forecast-page.py",
     "plans/index.md": "scripts/generate-plans-index.py",

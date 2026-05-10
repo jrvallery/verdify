@@ -28,12 +28,29 @@ const primaryLinks: SiteNavItem[] = [
     },
     { label: "Climate", href: "/start/climate", slug: "start/climate" },
     { label: "Evidence", href: "/start/evidence", slug: "start/evidence" },
+    {
+        label: "Resource Use",
+        href: "/start/resource-use",
+        slug: "start/resource-use",
+    },
     { label: "Operations", href: "/data/operations", slug: "data/operations" },
     {
         label: "Plans",
         href: "/data/plans",
         slug: "data/plans",
         aliases: ["plans"],
+        exact: true,
+    },
+    {
+        label: "About",
+        href: "/start/about",
+        slug: "start/about",
+        exact: true,
+    },
+    {
+        label: "Contact",
+        href: "/start/contact",
+        slug: "start/contact",
         exact: true,
     },
 ];
@@ -256,28 +273,6 @@ const groups: SiteNavGroup[] = [
             { label: "FAQ", href: "/reference/faq", slug: "reference/faq" },
         ],
     },
-    {
-        title: "Project",
-        links: [
-            {
-                label: "Resource Use",
-                href: "/start/resource-use",
-                slug: "start/resource-use",
-            },
-            {
-                label: "About",
-                href: "/start/about",
-                slug: "start/about",
-                exact: true,
-            },
-            {
-                label: "Contact",
-                href: "/start/contact",
-                slug: "start/contact",
-                exact: true,
-            },
-        ],
-    },
 ];
 
 function normalizeSlug(slug: string | undefined) {
@@ -377,9 +372,7 @@ function renderNavPanel(currentSlug: string, idPrefix: string) {
             {groups.map((group) => (
                 <details
                     class="site-nav__group"
-                    open={group.links.some((link) =>
-                        isActiveBranch(currentSlug, link),
-                    )}
+                    open
                 >
                     <summary>
                         <span>{group.title}</span>
