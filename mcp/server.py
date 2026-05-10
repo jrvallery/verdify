@@ -828,20 +828,36 @@ async def set_plan(
             }
         )
 
-    # Sprint 20 Phase 5: try to extract a PlanHypothesisStructured JSON block
-    # from the hypothesis prose. Fence convention: ```json …``` anywhere in
-    # the text. Failure to find or validate is silent — the prose still lands.
+    # Phase 2b (Iris loop overhaul): extract structured hypothesis and enforce
+    # presence for SUNRISE/SUNSET. Two parser paths:
+    #   1. Fenced ```json …``` block anywhere in the hypothesis (original)
+    #   2. Bare top-level JSON when the hypothesis field is entirely JSON
+    #      (common GPT-5.5 output mode — flagged by Codex audit 2026-05-10)
     structured_payload: str | None = None
     structured_warning: str | None = None
     import re as _re
 
+    def _try_parse_structured(blob: str) -> tuple[str | None, str | None]:
+        try:
+            ps = PlanHypothesisStructured.model_validate_json(blob)
+            return ps.model_dump_json(), None
+        except ValidationError as ee:
+            return None, f"structured hypothesis present but invalid: {ee.errors()[:3]}"
+
+    # Path 1: fenced ```json block
     m = _re.search(r"```json\s*(\{.*?\})\s*```", hypothesis, _re.DOTALL)
     if m:
-        try:
-            structured = PlanHypothesisStructured.model_validate_json(m.group(1))
-            structured_payload = structured.model_dump_json()
-        except ValidationError as e:
-            structured_warning = f"structured hypothesis block present but invalid: {e.errors()[:3]}"
+        structured_payload, structured_warning = _try_parse_structured(m.group(1))
+
+    # Path 2: bare top-level JSON (GPT-5.5 often omits the fence)
+    if structured_payload is None:
+        stripped = (hypothesis or "").strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            sp, sw = _try_parse_structured(stripped)
+            if sp is not None:
+                structured_payload = sp
+            elif structured_warning is None:
+                structured_warning = sw
 
     conn = await _db()
     try:
@@ -849,6 +865,54 @@ async def set_plan(
             existing = await conn.fetchval("SELECT 1 FROM plan_journal WHERE plan_id = $1", plan.plan_id)
             if existing:
                 return json.dumps({"error": f"plan_id {plan.plan_id!r} already exists; generate a new plan_id"})
+
+            # Phase 2b: SUNRISE/SUNSET MUST carry a valid hypothesis_structured.
+            # Look up the trigger's event_type from planner_trigger_ledger and
+            # reject if the structured block is missing or invalid.
+            event_type_row = await conn.fetchrow(
+                "SELECT event_type FROM planner_trigger_ledger WHERE trigger_id = $1::uuid",
+                normalized_trigger_id,
+            )
+            event_type = event_type_row["event_type"] if event_type_row else None
+            if event_type in ("SUNRISE", "SUNSET") and structured_payload is None:
+                return json.dumps(
+                    {
+                        "error": f"{event_type} plans require a valid PlanHypothesisStructured block",
+                        "detail": structured_warning or "no JSON block found in hypothesis",
+                        "required_top_level_keys": ["conditions", "stress_windows", "rationale"],
+                        "accepted_formats": [
+                            "fenced ```json {...} ``` block in the hypothesis prose",
+                            "bare top-level JSON (the entire hypothesis field is one JSON object)",
+                        ],
+                        "example_template": {
+                            "conditions": {
+                                "outdoor_temp_peak_f": 75.0,
+                                "outdoor_rh_min_pct": 25.0,
+                                "solar_peak_w_m2": 900,
+                                "cloud_cover_avg_pct": 30,
+                                "notes": "describe the dominant weather drivers and any unusual conditions",
+                            },
+                            "stress_windows": [
+                                {
+                                    "kind": "vpd_high",
+                                    "start": "2026-05-10T11:00:00-06:00",
+                                    "end": "2026-05-10T17:00:00-06:00",
+                                    "severity": "medium",
+                                    "mitigation": "engage 1.3, gap 25s, fog_escalation 0.30",
+                                }
+                            ],
+                            "rationale": [
+                                {
+                                    "parameter": "mister_engage_kpa",
+                                    "old_value": 1.6,
+                                    "new_value": 1.3,
+                                    "forecast_anchor": "RH < 15% from 11:00-17:00",
+                                    "expected_effect": "drop VPD-high stress hours from 4.5 to under 2.0",
+                                }
+                            ],
+                        },
+                    }
+                )
 
             if normalized_trigger_id:
                 delivery = await conn.fetchrow(

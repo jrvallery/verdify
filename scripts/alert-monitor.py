@@ -331,6 +331,38 @@ async def check_conditions(conn) -> list[dict]:
             }
         )
 
+    # 7b. planner_evaluation_missed — SUNRISE plans older than 26h with no
+    # validated_at. The SUNRISE prompt declares plan_evaluate MANDATORY but
+    # baseline (2026-05-10) showed only 41.5% of SUNRISE plans get evaluated
+    # within 25h. Two thresholds: warning at 26h, critical at 48h.
+    eval_missed = await conn.fetch("""
+        SELECT plan_id,
+               EXTRACT(EPOCH FROM (now() - created_at))::int AS age_seconds
+          FROM plan_journal
+         WHERE plan_id LIKE 'iris-%'
+           AND validated_at IS NULL
+           AND created_at < now() - interval '26 hours'
+           AND EXTRACT(hour FROM created_at AT TIME ZONE 'America/Denver') BETWEEN 5 AND 9
+         ORDER BY created_at
+    """)
+    for row in eval_missed:
+        age_h = row["age_seconds"] // 3600
+        severity = "critical" if row["age_seconds"] > 48 * 3600 else "warning"
+        alerts.append(
+            {
+                "alert_type": "planner_evaluation_missed",
+                "severity": severity,
+                "category": "system",
+                "sensor_id": "system.planner.evaluation",
+                "zone": None,
+                "message": (
+                    f"SUNRISE plan {row['plan_id']} not evaluated ({age_h}h since created); "
+                    f"prompt declares plan_evaluate MANDATORY"
+                ),
+                "details": {"plan_id": row["plan_id"], "age_hours": age_h},
+            }
+        )
+
     # 8. Dispatcher heartbeat — log file stale >15 min
     import os
 

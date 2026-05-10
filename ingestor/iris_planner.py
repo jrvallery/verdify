@@ -873,6 +873,28 @@ def send_to_iris(
     else:
         agent_id = OPENCLAW_OPUS_AGENT_ID
         session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"
+
+    # Phase 2d (Codex 2026-05-07 incident): fail loud on malformed session_key
+    # before the POST. OpenClaw silently rejected sessionKey rows for reasons
+    # we couldn't reconstruct from gateway_body alone. Constrain to safe ASCII
+    # so the failure mode is local + logged with the offending value, not a
+    # downstream 4xx with no telemetry.
+    import re as _re_session
+
+    if not session_key or not _re_session.fullmatch(r"[A-Za-z0-9:_\-.]+", session_key):
+        log.error("send_to_iris: rejecting malformed session_key before POST: %r", session_key)
+        return {
+            "delivered": False,
+            "event_type": event_type,
+            "event_label": label,
+            "session_key": session_key,
+            "wake_mode": None,
+            "gateway_status": 0,
+            "gateway_body": f"client-side reject: malformed session_key {session_key!r}",
+            "trigger_id": trigger_id,
+            "instance": instance,
+        }
+
     result = {
         "delivered": False,
         "event_type": event_type,

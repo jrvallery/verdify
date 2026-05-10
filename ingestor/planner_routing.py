@@ -59,8 +59,13 @@ _DEFAULT_SLA_MIN = {
     ("local", "SUNRISE"): 30,
     ("local", "SUNSET"): 30,
     ("local", "MIDNIGHT"): 30,
-    ("local", "TRANSITION"): 30,
-    ("local", "FORECAST"): 60,
+    # TRANSITION + FORECAST are typically no-op (acknowledge_trigger) cycles.
+    # Baseline (2026-05-10) showed 17/30 TRANSITION events timing out under
+    # the 30-minute SLA — the planner is either still mid-cycle or producing
+    # a no-op. Widen to give acknowledge-first cycles room without alerting.
+    # Codex 2026-05-10 audit recommendation; see Phase 2d in plan.
+    ("local", "TRANSITION"): 45,
+    ("local", "FORECAST"): 90,
     ("local", "DEVIATION"): 20,
     ("local", "HEARTBEAT"): 15,
     # Explicit cloud escalation targets. Normal routing does not select these.
