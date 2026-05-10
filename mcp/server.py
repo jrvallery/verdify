@@ -1090,7 +1090,15 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
     plan_id: the plan to evaluate (e.g. 'iris-20260411-1346')
     outcome_score: 1-10 score for how well the plan achieved its hypothesis
     actual_outcome: what actually happened (stress hours, compliance, key observations)
-    lesson_extracted: new lesson learned, or empty if none"""
+    lesson_extracted: new lesson learned, or empty if none
+
+    Side effects (loop-closure repair, see migration 111):
+      - Computes fn_plan_anchor_score(plan_id), stores it in plan_journal.anchor_score.
+      - If |outcome_score - anchor_score| > 2, returns a deviation warning so Iris
+        can explain the gap on her next cycle.
+      - If lesson_extracted is non-empty, INSERTs a low-confidence planner_lessons
+        row in the same transaction (proposed; Iris validates later via lessons_manage).
+    """
     try:
         ev = PlanEvaluation.model_validate(
             {
@@ -1105,20 +1113,101 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
 
     conn = await _db()
     try:
-        existing = await conn.fetchrow("SELECT plan_id FROM plan_journal WHERE plan_id = $1", ev.plan_id)
+        existing = await conn.fetchrow(
+            "SELECT plan_id, hypothesis_structured FROM plan_journal WHERE plan_id = $1",
+            ev.plan_id,
+        )
         if not existing:
             return json.dumps({"error": f"Plan '{ev.plan_id}' not found in plan_journal"})
 
-        await conn.execute(
-            """UPDATE plan_journal SET
-                outcome_score = $2, actual_outcome = $3, lesson_extracted = $4, validated_at = now()
-               WHERE plan_id = $1""",
-            ev.plan_id,
-            ev.outcome_score,
-            ev.actual_outcome,
-            ev.lesson_extracted,
+        async with conn.transaction():
+            anchor_row = await conn.fetchrow("SELECT fn_plan_anchor_score($1) AS anchor", ev.plan_id)
+            anchor_score = anchor_row["anchor"] if anchor_row else None
+
+            await conn.execute(
+                """UPDATE plan_journal SET
+                    outcome_score = $2, actual_outcome = $3, lesson_extracted = $4,
+                    anchor_score  = $5, validated_at = now()
+                   WHERE plan_id = $1""",
+                ev.plan_id,
+                ev.outcome_score,
+                ev.actual_outcome,
+                ev.lesson_extracted,
+                anchor_score,
+            )
+
+            lesson_row_id = None
+            if ev.lesson_extracted:
+                # Lessonization (Phase 2a): convert lesson_extracted text into a
+                # queryable planner_lessons row. Category derived from the plan's
+                # dominant stress type during its governed interval; condition
+                # derived from hypothesis_structured.conditions when present,
+                # else a templated description.
+                cat_row = await conn.fetchrow(
+                    """
+                    SELECT CASE
+                             WHEN heat_stress_h     >= GREATEST(cold_stress_h, vpd_high_stress_h, vpd_low_stress_h)
+                               THEN 'cooling'
+                             WHEN cold_stress_h     >= GREATEST(heat_stress_h, vpd_high_stress_h, vpd_low_stress_h)
+                               THEN 'heating'
+                             WHEN vpd_high_stress_h >= GREATEST(heat_stress_h, cold_stress_h, vpd_low_stress_h)
+                               THEN 'misting'
+                             WHEN vpd_low_stress_h  >= GREATEST(heat_stress_h, cold_stress_h, vpd_high_stress_h)
+                               THEN 'humidity'
+                             ELSE 'planning'
+                           END AS category
+                      FROM v_plan_window_scorecard WHERE plan_id = $1
+                    """,
+                    ev.plan_id,
+                )
+                category = (cat_row["category"] if cat_row else None) or "planning"
+
+                hs = existing["hypothesis_structured"]
+                if hs and isinstance(hs, dict) and hs.get("conditions"):
+                    c = hs["conditions"]
+                    condition = (
+                        f"outdoor_high={c.get('outdoor_temp_peak_f', '?')}F, "
+                        f"outdoor_rh_min={c.get('outdoor_rh_min_pct', '?')}%, "
+                        f"solar_peak={c.get('solar_peak_w_m2', '?')} W/m^2"
+                    )
+                else:
+                    condition = f"auto-extracted from {ev.plan_id}"
+
+                lesson_row = await conn.fetchrow(
+                    """
+                    INSERT INTO planner_lessons
+                      (category, condition, lesson, confidence, times_validated,
+                       source_plan_ids, is_active, greenhouse_id)
+                    VALUES ($1, $2, $3, 'low', 1, ARRAY[$4]::text[], true, 'vallery')
+                    RETURNING id
+                    """,
+                    category,
+                    condition,
+                    ev.lesson_extracted,
+                    ev.plan_id,
+                )
+                lesson_row_id = lesson_row["id"] if lesson_row else None
+
+        deviation = abs(ev.outcome_score - anchor_score) if anchor_score is not None else None
+        warning = None
+        if deviation is not None and deviation > 2:
+            direction = "high" if ev.outcome_score > anchor_score else "low"
+            warning = (
+                f"Self-score {ev.outcome_score} deviates from deterministic anchor "
+                f"{anchor_score} by {deviation} ({direction}). Explain the gap on "
+                f"the next cycle, or revise your grade."
+            )
+
+        return json.dumps(
+            {
+                "ok": True,
+                "plan_id": ev.plan_id,
+                "outcome_score": ev.outcome_score,
+                "anchor_score": anchor_score,
+                "deviation_warning": warning,
+                "lesson_row_id": lesson_row_id,
+            }
         )
-        return json.dumps({"ok": True, "plan_id": ev.plan_id, "outcome_score": ev.outcome_score})
     finally:
         await conn.close()
 

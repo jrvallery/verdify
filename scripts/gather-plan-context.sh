@@ -249,61 +249,90 @@ FROM crops WHERE is_active ORDER BY zone, position;
 " 2>/dev/null || echo "(none)"
 echo ""
 
-# Compute yesterday + governing plan once for sections 15 and 15b
+# ── Phase 1 (causal evaluation foundation, migration 111) ─────────
+# The old logic was: GOVERNING_PLAN = latest plan with created_at::date <= yesterday.
+# That let a plan written at 23:26 get graded against the entire preceding day's
+# scorecard. Now: list ALL plans whose interval_end >= now() - 24h AND
+# interval_start < now() (the plans that actually governed any wall-clock time
+# in the last 24h), each annotated with anchor_score from v_plan_window_scorecard.
 YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
-GOVERNING_PLAN=$($DB -c "SELECT plan_id FROM plan_journal WHERE created_at::date <= '${YESTERDAY}'::date AND plan_id NOT LIKE 'iris-reactive%' ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
+
+# Primary governing plan for sections that need a single anchor (e.g. structured
+# hypothesis display): the plan that governed the most hours in the last 24h.
+GOVERNING_PLAN=$($DB -c "
+  SELECT plan_id FROM v_plan_execution_intervals
+   WHERE interval_end >= now() - interval '24 hours' AND interval_start < now()
+   ORDER BY governed_hours DESC NULLS LAST LIMIT 1;
+" 2>/dev/null | tr -d ' ')
 GOVERNING_VALIDATED=$($DB -c "SELECT CASE WHEN validated_at IS NOT NULL THEN 'yes' ELSE 'no' END FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}';" 2>/dev/null | tr -d ' ')
 
-# ── 15. PREVIOUS PLAN REVIEW (show governing plan for yesterday) ────
-echo "--- PREVIOUS PLAN REVIEW (governing plan for ${YESTERDAY}) ---"
+# Evaluation backlog: SUNRISE-like plans older than 26h that still have no
+# validated_at. Forces Iris to clear the backlog before writing a new plan.
+EVAL_BACKLOG=$($DB -c "
+  SELECT COUNT(*) FROM plan_journal
+   WHERE plan_id LIKE 'iris-%'
+     AND created_at < now() - interval '26 hours'
+     AND validated_at IS NULL
+     AND EXTRACT(hour FROM created_at AT TIME ZONE 'America/Denver') BETWEEN 5 AND 9;
+" 2>/dev/null | tr -d ' ')
+
+# ── 15. PLANS THAT GOVERNED THE LAST 24 HOURS ─────────────────────
+# Replaces the single-plan "PREVIOUS PLAN REVIEW". Each row is one plan with
+# the wall-clock window it actually governed, plus its deterministic anchor
+# score vs Iris's self-grade. plan_evaluate() each plan with anchor_score
+# deviation in mind.
+echo "--- PLANS THAT GOVERNED THE LAST 24 HOURS (causal attribution; Phase 1) ---"
+if [ -n "${EVAL_BACKLOG}" ] && [ "${EVAL_BACKLOG}" -gt 0 ]; then
+  echo "EVALUATION BACKLOG: ${EVAL_BACKLOG} SUNRISE plans older than 26h still unevaluated — CALL plan_evaluate ON EACH BEFORE WRITING A NEW PLAN."
+fi
 $DB -c "
 SELECT pj.plan_id,
-  to_char(pj.created_at AT TIME ZONE 'America/Denver', 'MM-DD HH:MI AM') AS planned_at,
+  to_char(pj.created_at AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS planned_at,
+  round(pei.governed_hours::numeric, 1) AS gov_h,
+  pj.outcome_score AS iris_score,
+  pj.anchor_score AS anchor,
+  CASE
+    WHEN pj.anchor_score IS NOT NULL AND pj.outcome_score IS NOT NULL
+         AND ABS(pj.outcome_score - pj.anchor_score) > 2
+      THEN '⚠ DEVIATES'
+    WHEN pj.validated_at IS NULL THEN '⚠ NEEDS VALIDATION'
+    ELSE 'ok' END AS status,
   pj.hypothesis,
-  pj.experiment,
-  pj.expected_outcome,
   pj.actual_outcome,
-  pj.outcome_score,
-  pj.lesson_extracted,
-  CASE WHEN pj.validated_at IS NULL THEN '⚠ NEEDS VALIDATION' ELSE 'validated' END AS status
+  pj.lesson_extracted
 FROM plan_journal pj
-WHERE pj.plan_id NOT LIKE 'iris-reactive%'
-  AND pj.created_at::date <= '${YESTERDAY}'::date
-ORDER BY pj.created_at DESC LIMIT 1;
+JOIN v_plan_execution_intervals pei USING (plan_id)
+WHERE pei.interval_end >= now() - interval '24 hours' AND pei.interval_start < now()
+  AND pj.plan_id NOT LIKE 'iris-reactive%'
+ORDER BY pei.interval_start;
 " 2>/dev/null
-# Show accuracy for last 3 plans
-echo "Plan accuracy (last 3):"
-$DB -c "SELECT plan_id, waypoints, achieved, accuracy_pct, mean_abs_error FROM v_plan_accuracy WHERE plan_id NOT LIKE 'iris-reactive%' ORDER BY plan_start DESC LIMIT 3;" 2>/dev/null
-# Flag if governing plan is unvalidated (vars computed above section 15)
 if [ "${GOVERNING_VALIDATED}" = "no" ]; then
-  echo "ACTION REQUIRED: Governing plan ${GOVERNING_PLAN} is unvalidated. Include its validation in your previous_plan_validation output block using the MOST RECENT COMPLETE PLAN EVALUATION metrics below."
+  echo "ACTION REQUIRED: Primary governing plan ${GOVERNING_PLAN} is unvalidated. Include its validation in your previous_plan_validation output block using its window scorecard below."
 fi
-# Structured actuals for previous plan period — USE THIS for previous_plan_validation grading
-echo "--- MOST RECENT COMPLETE PLAN EVALUATION (${YESTERDAY} only, use for previous_plan_validation) ---"
-echo "governing_plan_id: ${GOVERNING_PLAN:-(unknown)}"
-echo "All values from daily_summary (frozen at end-of-day with the setpoints that were active then)."
-echo "metric|value"
+
+# Per-plan window scorecard — what the plan actually saw during its governed
+# interval, NOT the whole calendar day. Replaces the previous daily-summary
+# block which mis-attributed late-day plans to the whole day.
+echo ""
+echo "--- WINDOW SCORECARD per plan (use these for plan_evaluate, NOT daily_summary) ---"
+echo "Each row scopes stress + compliance + cost to ONLY the wall-clock time the plan governed."
 $DB -c "
-SELECT 'planner_score' AS metric, planner_score::text AS val FROM v_planner_performance WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'compliance_pct', compliance_pct::text FROM v_planner_performance WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'heat_stress_hrs', round(COALESCE(stress_hours_heat,0)::numeric, 1)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'cold_stress_hrs', round(COALESCE(stress_hours_cold,0)::numeric, 1)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'vpd_high_stress_hrs', round(COALESCE(stress_hours_vpd_high,0)::numeric, 1)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'vpd_low_stress_hrs', round(COALESCE(stress_hours_vpd_low,0)::numeric, 1)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'water_used_gal', round(COALESCE(water_used_gal,0)::numeric, 1)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'cost_total', round(COALESCE(cost_total,0)::numeric, 2)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'peak_temp_f', round(COALESCE(temp_max,0)::numeric, 1)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1
-UNION ALL SELECT 'peak_vpd_kpa', round(COALESCE(vpd_max,0)::numeric, 2)::text
-FROM daily_summary WHERE date = CURRENT_DATE - 1;
+SELECT pws.plan_id,
+  round(pws.governed_day_fraction::numeric, 3) AS gov_frac,
+  round(pws.compliance_pct::numeric, 1)        AS comp,
+  round(pws.temp_compliance_pct::numeric, 1)   AS temp_comp,
+  round(pws.vpd_compliance_pct::numeric, 1)    AS vpd_comp,
+  round(pws.heat_stress_h::numeric, 2)         AS heat_h,
+  round(pws.cold_stress_h::numeric, 2)         AS cold_h,
+  round(pws.vpd_high_stress_h::numeric, 2)     AS vpd_hi_h,
+  round(pws.vpd_low_stress_h::numeric, 2)      AS vpd_lo_h,
+  round(pws.cost_total::numeric, 2)            AS cost_usd,
+  round(pws.planner_score::numeric, 1)         AS score
+FROM v_plan_window_scorecard pws
+JOIN v_plan_execution_intervals pei USING (plan_id)
+WHERE pei.interval_end >= now() - interval '24 hours' AND pei.interval_start < now()
+ORDER BY pei.interval_start;
 " 2>/dev/null || echo "(unavailable)"
-# Dispatched changes removed — planner does not verify dispatch.
 echo ""
 
 # ── 15c. STRUCTURED HYPOTHESIS (G7: close the predict-vs-deliver loop) ─
