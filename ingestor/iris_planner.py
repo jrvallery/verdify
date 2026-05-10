@@ -238,8 +238,9 @@ Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to foc
 ### Tunable Dictionary — Tactical Tier 1 + Read-Only Bands
 
 Push via `set_tunable(parameter=..., value=..., reason=..., trigger_id=..., planner_instance=...)` or as a transition key in
-`set_plan`. Ranges are dispatcher clamp bounds; pushing outside clamps
-lands in `setpoint_clamps` (audited, rejected). Every Tier 1 knob below
+`set_plan`. Ranges are executable registry bounds; MCP rejects
+out-of-range writes before persistence. Dispatcher still audits and
+clamps stale active-plan rows before DB or ESP32 side effects. Every Tier 1 knob below
 is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
 drops within one planner cycle.
 
@@ -262,7 +263,7 @@ them before persistence. Old plans containing them create dispatcher clamps.
 Use tactical knobs below to shift behavior instead.
 
 **Band-adjacent tactical knob:**
-- `vpd_hysteresis` kPa, [0.05-1.0], def 0.3 — larger = fewer mist cycles
+- `vpd_hysteresis` kPa, [0.05-0.5], def 0.3 — larger = fewer mist cycles
 
 **Bias (daytime vs overnight posture):**
 - `bias_heat` °F, [-10 to +10], def 0 — adds to temp_low for internal Tlow
@@ -275,19 +276,19 @@ Use tactical knobs below to shift behavior instead.
 - `d_cool_stage_2` °F, [2-15], def 3 — fan2 engages at Thigh + this
 
 **Mister engagement:**
-- `mister_engage_kpa` kPa, [0.6-2.5], def 1.2 — SEALED_MIST S1 entry
-- `mister_all_kpa` kPa, [0.9-3.0], def 1.8 — S2 escalation (all zones)
-- `mister_engage_delay_s` s, [0-120], def 0 — dwell before S1
-- `mister_all_delay_s` s, [0-300], def 0 — dwell before S2
+- `mister_engage_kpa` kPa, [0.5-2.5], def 1.6 — SEALED_MIST S1 entry
+- `mister_all_kpa` kPa, [1.0-2.5], def 1.9 — S2 escalation (all zones)
+- `mister_engage_delay_s` s, [30-900], def 45 — dwell before S1
+- `mister_all_delay_s` s, [60-900], def 300 — dwell before S2
 
 **Mister pulse + budget:**
 - `mister_pulse_on_s` s, [30-90], def 60 — mister burst duration
 - `mister_pulse_gap_s` s, [10-60], def 45 — evaporation dwell; 15-20s dry, 45s humid
-- `mister_water_budget_gal` gal/d, [200-500], def 500 — daily water cap
-- `mister_vpd_weight` ×, [1.0-3.0], def 1.5 — driest-zone-first weighting
+- `mister_water_budget_gal` gal/d, [100-600], def 500 — daily water cap
+- `mister_vpd_weight` ×, [0.5-5.0], def 1.5 — driest-zone-first weighting
 
 **VPD state-machine + sealed-vent coordination (hot-dry-day oscillation):**
-- `vpd_watch_dwell_s` s, [30-120], def 60 — dwell in VPD_WATCH before sealing
+- `vpd_watch_dwell_s` s, [15-120], def 60 — dwell in VPD_WATCH before sealing
 - `mist_vent_close_lead_s` s, [0-60], def 15 — vent closes before misters start
 - `mist_max_closed_vent_s` s, [120-900], def 600 — max sealed time → THERMAL_RELIEF
 - `mist_vent_reopen_delay_s` s, [0-120], def 45 — vent held closed after misting
@@ -295,19 +296,19 @@ Use tactical knobs below to shift behavior instead.
 - `mist_backoff_s` s, [60-3600], def 600 — v2 lockout after a sealed mist attempt times out; prevents immediate reseal loops
 
 **Fog (AquaFog XE 2000 — Fog is 7x misters; firmware-gated by RH/temp/time window):**
-- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.5 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
+- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.4 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
 - `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle
 - `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles
 
 **Vent + heat timing (anti-chatter):**
-- `min_vent_on_s` s, [30-300], def 60 — min vent open duration
-- `min_vent_off_s` s, [30-300], def 60 — min vent closed duration
-- `min_heat_on_s` s, [60-300], def 120 — min heater on (ignition protection)
-- `min_heat_off_s` s, [120-600], def 300 — min gap between heater cycles
+- `min_vent_on_s` s, [10-300], def 60 — min vent open duration
+- `min_vent_off_s` s, [10-300], def 60 — min vent closed duration
+- `min_heat_on_s` s, [30-300], def 120 — min heater on (ignition protection)
+- `min_heat_off_s` s, [60-600], def 180 — min gap between heater cycles
 
 **Economiser (outdoor-air coupling):**
-- `enthalpy_open` kJ/kg Δ — vent opens when outdoor enthalpy better by this much
-- `enthalpy_close` kJ/kg Δ — vent closes when outdoor enthalpy worse
+- `enthalpy_open` kJ/kg Δ, [-5-0], def -2 — vent opens when outdoor enthalpy better by this much
+- `enthalpy_close` kJ/kg Δ, [-5-20], def 1 — vent closes when outdoor enthalpy worse
 
 **Summer thermal-driven vent gate (sprint-15 — short-circuits VPD-seal when outdoor is cooler+drier):**
 - `sw_summer_vent_enabled` — master switch; default ON
