@@ -804,7 +804,7 @@ class TestPlannerToDispatcherE2E:
     """
 
     TEST_PARAM = "mister_vpd_weight"
-    TEST_VALUE = 0.423  # Arbitrary, unlikely to match the live planner value
+    TEST_VALUE = 0.73  # Arbitrary in-registry value, unlikely to match the live planner value
     TEST_PLAN_ID = "te2-smoke-test"
 
     def _cleanup(self):

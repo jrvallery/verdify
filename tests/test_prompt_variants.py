@@ -129,6 +129,29 @@ class TestSplitInvariants:
         assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunrise_prompt("context")
         assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunset_prompt("context")
 
+    def test_core_uses_registry_bounds_for_incident_params(self, iris_planner):
+        """Incident-prone mist/VPD/timing knobs must match the executable registry."""
+        core = iris_planner._PLANNER_CORE
+        expected_lines = [
+            "`vpd_hysteresis` kPa, [0.05-0.5], def 0.3",
+            "`mister_engage_kpa` kPa, [0.5-2.5], def 1.6",
+            "`mister_all_kpa` kPa, [1.0-2.5], def 1.9",
+            "`mister_engage_delay_s` s, [30-900], def 45",
+            "`mister_all_delay_s` s, [60-900], def 300",
+            "`mister_water_budget_gal` gal/d, [100-600], def 500",
+            "`mister_vpd_weight` ×, [0.5-5.0], def 1.5",
+            "`vpd_watch_dwell_s` s, [15-120], def 60",
+            "`fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.4",
+            "`min_vent_on_s` s, [10-300], def 60",
+            "`min_vent_off_s` s, [10-300], def 60",
+            "`min_heat_on_s` s, [30-300], def 120",
+            "`min_heat_off_s` s, [60-600], def 180",
+            "`enthalpy_open` kJ/kg Δ, [-5-0], def -2",
+            "`enthalpy_close` kJ/kg Δ, [-5-20], def 1",
+        ]
+        missing = [line for line in expected_lines if line not in core]
+        assert not missing, missing
+
     def test_core_contains_decision_precedence(self, iris_planner):
         assert "Decision Precedence" in iris_planner._PLANNER_CORE
 

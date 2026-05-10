@@ -40,6 +40,7 @@ from verdify_schemas import (
     SetpointChange,
     SystemStateRow,
 )
+from verdify_schemas.tunable_registry import get as get_tunable
 from verdify_schemas.tunable_registry import registry_value_error
 
 log = logging.getLogger("tasks")
@@ -1815,6 +1816,28 @@ def _validate_physics(param: str, val: float) -> tuple[float, str | None]:
     return val, None
 
 
+def _coerce_registry_value(param: str, val: float) -> tuple[float | None, str | None]:
+    """Clamp numeric registry drift, reject other registry violations."""
+    error = registry_value_error(param, val)
+    if error is None:
+        return float(val), None
+
+    spec = get_tunable(param)
+    try:
+        numeric = float(val)
+    except (TypeError, ValueError):
+        log.error("Rejecting dispatcher setpoint %s=%s: %s", param, val, error)
+        return None, error
+    if spec and spec.kind == "numeric":
+        if spec.min is not None and numeric < spec.min:
+            return float(spec.min), error
+        if spec.max is not None and numeric > spec.max:
+            return float(spec.max), error
+
+    log.error("Rejecting dispatcher setpoint %s=%s: %s", param, val, error)
+    return None, error
+
+
 def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: float = 1e-3) -> bool:
     """DI-1 (Sprint 18): proportional dead-band for dispatcher.
 
@@ -2019,6 +2042,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             "mister_all_delay_s",
             "mister_center_penalty",
         }
+        dispatchable_changes: list[tuple[str, float, str]] = []
         for param, val in changes:
             if param in BAND_DRIVEN_PARAMS:
                 source = "band"
@@ -2032,6 +2056,25 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source = "manual"
             else:
                 source = "plan"
+
+            requested_val = float(val)
+            registry_val, registry_violation = _coerce_registry_value(param, requested_val)
+            if registry_val is None:
+                clamps_to_log.append(
+                    (param, requested_val, requested_val, 0.0, 0.0, registry_violation or "registry_violation")
+                )
+                continue
+            if registry_violation is not None:
+                clamps_to_log.append((param, requested_val, registry_val, 0.0, 0.0, registry_violation))
+                log.warning(
+                    "Dispatcher registry guard: %s=%s clamped to %s (%s)",
+                    param,
+                    requested_val,
+                    registry_val,
+                    registry_violation,
+                )
+            val = registry_val
+
             # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
             # Defense-in-depth: MCP's PlanTransition.params already validates
             # at write time, but a regression there would silently corrupt
@@ -2063,6 +2106,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 source,
             )
             _last_pushed[param] = val
+            dispatchable_changes.append((param, float(val), source))
         # Tier 1 #2: persist clamp audit
         for param, requested, applied, b_lo, b_hi, reason in clamps_to_log:
             await conn.execute(
@@ -2077,21 +2121,22 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             )
         if clamps_to_log:
             log.info(
-                "Dispatcher: clamped %d planner value(s) to band (%s)",
+                "Dispatcher: wrote %d clamp/audit row(s) (%s)",
                 len(clamps_to_log),
                 ", ".join(f"{p}={req}->{app}" for p, req, app, *_ in clamps_to_log),
             )
         log.info(
-            "Dispatcher: pushed %d setpoint changes (%d band, %d plan)",
-            len(changes),
-            sum(1 for p, _ in changes if p in BAND_DRIVEN_PARAMS),
-            sum(1 for p, _ in changes if p not in BAND_DRIVEN_PARAMS),
+            "Dispatcher: pushed %d setpoint changes (%d band, %d plan, %d manual)",
+            len(dispatchable_changes),
+            sum(1 for _, _, source in dispatchable_changes if source == "band"),
+            sum(1 for _, _, source in dispatchable_changes if source == "plan"),
+            sum(1 for _, _, source in dispatchable_changes if source == "manual"),
         )
 
     # Direct ESP32 push via shared ingestor connection (non-blocking optimization)
     # Tier 1 #4: retry on failure, escalate to alert_log after exhausted attempts.
     esp32_changes = []
-    for param, val in changes:
+    for param, val, _source in dispatchable_changes:
         if param.startswith("sw_"):
             eid = SWITCH_TO_ENTITY.get(param)
             if eid:

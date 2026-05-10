@@ -436,6 +436,38 @@ def test_active_future_plan_range_guard_uses_tunable_registry():
     assert "system.planner_tunable_range" in src
 
 
+def test_dispatcher_coerces_registry_bounds_before_insert_and_push():
+    import tasks
+
+    high_value, high_reason = tasks._coerce_registry_value("mister_all_kpa", 2.8)
+    assert high_value == 2.5
+    assert high_reason is not None
+    assert "nearest_safe=2.5" in high_reason
+
+    low_value, low_reason = tasks._coerce_registry_value("mister_engage_delay_s", 0)
+    assert low_value == 30.0
+    assert low_reason is not None
+    assert "nearest_safe=30" in low_reason
+
+    switch_value, switch_reason = tasks._coerce_registry_value("sw_dwell_gate_enabled", 2.0)
+    assert switch_value is None
+    assert switch_reason is not None
+    assert "outside registry switch values [0, 1]" in switch_reason
+
+
+def test_dispatcher_direct_push_uses_dispatchable_changes_only():
+    import tasks
+
+    src = Path(tasks.__file__).read_text()
+    start = src.index("async def setpoint_dispatcher")
+    end = src.index("def _fetch_forecast", start)
+    body = src[start:end]
+    assert "dispatchable_changes: list[tuple[str, float, str]] = []" in body
+    assert "dispatchable_changes.append((param, float(val), source))" in body
+    assert "for param, val, _source in dispatchable_changes:" in body
+    assert "for param, val in changes:" in body
+
+
 def test_send_to_iris_is_local_first_without_cloud_fallback():
     src = Path(iris_planner.__file__).read_text()
     start = src.index("def send_to_iris")
