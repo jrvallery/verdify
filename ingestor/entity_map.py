@@ -367,7 +367,11 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___temp_low___f_": "temp_low",
     "cfg___temp_high___f_": "temp_high",
     "cfg_____heat_s2___f_": "d_heat_stage_2",
+    "cfg___d_heat_stage_2___f_": "d_heat_stage_2",
+    "cfg_d_heat_stage_2_f": "d_heat_stage_2",
     "cfg_____cool_s2___f_": "d_cool_stage_2",
+    "cfg___d_cool_stage_2___f_": "d_cool_stage_2",
+    "cfg_d_cool_stage_2_f": "d_cool_stage_2",
     "cfg___temp_hyst___f_": "temp_hysteresis",
     "cfg___heat_hyst___f_": "heat_hysteresis",
     "cfg___vpd_low__kpa_": "vpd_low",
@@ -416,6 +420,7 @@ CFG_READBACK_MAP: dict[str, str] = {
     "mister_center_penalty": "mister_center_penalty",
     # Mister vent coordination
     "sw_mister_closes_vent": "sw_mister_closes_vent",
+    "mister_closes_vent": "sw_mister_closes_vent",
     # Sprint-15: summer thermal-driven vent readbacks.
     # 5 tunable readbacks (matching SETPOINT_MAP above) + 2 live outdoor
     # readings (firmware exposes the Tempest-sourced values it's comparing).
@@ -449,6 +454,10 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
     "cfg___mist_thermal_relief__s_": "mist_thermal_relief_s",
     "cfg___fog_escalation__kpa_": "fog_escalation_kpa",
+    "cfg___fog_rh_ceiling____": "fog_rh_ceiling_pct",
+    "cfg_fog_rh_ceiling_pct": "fog_rh_ceiling_pct",
+    "cfg___fog_min_temp___f_": "fog_min_temp_f",
+    "cfg_fog_min_temp_f": "fog_min_temp_f",
     "cfg___fog_window_start__hour_": "fog_time_window_start",
     "cfg___fog_window_end__hour_": "fog_time_window_end",
     "cfg___max_relief_cycles": "max_relief_cycles",

@@ -137,17 +137,21 @@ def test_classify_severity_non_forecast_non_deviation_is_minor():
     [
         ("SUNRISE", "local", 30),
         ("SUNSET", "local", 30),
+        ("SOLAR_MAX", "local", 30),
         ("MIDNIGHT", "local", 30),
-        ("TRANSITION", "local", 30),
-        ("FORECAST", "local", 60),
+        ("TRANSITION", "local", 45),
+        ("FORECAST", "local", 90),
         ("DEVIATION", "local", 20),
+        ("FORECAST_DEVIATION", "local", 20),
         ("HEARTBEAT", "local", 15),
         # explicit cloud escalation targets
         ("SUNRISE", "opus", 15),
         ("SUNSET", "opus", 15),
+        ("SOLAR_MAX", "opus", 15),
         ("MIDNIGHT", "opus", 15),
         ("FORECAST", "opus", 30),
         ("DEVIATION", "opus", 10),
+        ("FORECAST_DEVIATION", "opus", 10),
     ],
 )
 def test_sla_for_defined_pairs(trigger_type, instance, expected_min):
@@ -223,15 +227,19 @@ def test_defaults_match_contract_literals():
         ("local", "SUNRISE"): 30,
         ("local", "SUNSET"): 30,
         ("local", "MIDNIGHT"): 30,
-        ("local", "TRANSITION"): 30,
-        ("local", "FORECAST"): 60,
+        ("local", "SOLAR_MAX"): 30,
+        ("local", "TRANSITION"): 45,
+        ("local", "FORECAST"): 90,
         ("local", "DEVIATION"): 20,
+        ("local", "FORECAST_DEVIATION"): 20,
         ("local", "HEARTBEAT"): 15,
         ("opus", "SUNRISE"): 15,
         ("opus", "SUNSET"): 15,
         ("opus", "MIDNIGHT"): 15,
+        ("opus", "SOLAR_MAX"): 15,
         ("opus", "FORECAST"): 30,
         ("opus", "DEVIATION"): 10,
+        ("opus", "FORECAST_DEVIATION"): 10,
     }
     assert _DEFAULT_SLA_MIN == expected_pairs
 

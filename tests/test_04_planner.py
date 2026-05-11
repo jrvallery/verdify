@@ -52,7 +52,7 @@ class TestContextGathering:
         assert "dp_margin" in context or "dp_risk" in context
 
     def test_has_evaluation_block(self, context):
-        assert "MOST RECENT COMPLETE PLAN EVALUATION" in context
+        assert "PLANS THAT GOVERNED THE LAST 24 HOURS" in context
 
     def test_no_secrets_leaked(self, context):
         """Ensure no API keys or passwords appear in the context."""

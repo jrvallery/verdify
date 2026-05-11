@@ -4,7 +4,7 @@
 # firmware produced different mode, relay, or override decisions.
 #
 # Usage: scripts/firmware-replay-diff.sh OLD_REF NEW_REF [CSV_PATH]
-#        (default CSV_PATH: firmware/test/data/replay_overrides.csv)
+#        (default CSV_PATH: checked-in firmware/test/data/replay_overrides.csv.gz)
 #
 # Output: writes summary to stdout. Full diff saved to /tmp/replay_diff.tsv.
 # Exit code 0 if diff is empty or only within allowed-divergence bounds;
@@ -17,16 +17,25 @@ set -euo pipefail
 
 OLD_REF=${1:?"Usage: $0 OLD_REF NEW_REF [CSV_PATH]"}
 NEW_REF=${2:?"Usage: $0 OLD_REF NEW_REF [CSV_PATH]"}
-CSV=${3:-firmware/test/data/replay_overrides.csv}
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+BUILD_DIR=${BUILD_DIR:-/tmp/firmware-replay-diff}
+mkdir -p "$BUILD_DIR"
+
+if [ "${3:-}" ]; then
+    CSV="$3"
+else
+    CSV="$BUILD_DIR/replay_overrides.csv"
+    gzip -cd firmware/test/data/replay_overrides.csv.gz > "$CSV"
+fi
 
 if [ ! -f "$CSV" ]; then
     echo "CSV not found: $CSV — run make replay-corpus-refresh first" >&2
     exit 2
 fi
 CSV_ABS=$(readlink -f "$CSV")
-
-BUILD_DIR=${BUILD_DIR:-/tmp/firmware-replay-diff}
-mkdir -p "$BUILD_DIR"
 
 build_ref() {
     local ref="$1"

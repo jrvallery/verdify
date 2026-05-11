@@ -19,7 +19,7 @@ Every planner/operator tunable must have this chain:
 | Database | Written to `setpoint_plan` and/or `setpoint_changes`; latest value visible through MCP `get_setpoints` |
 | Dispatcher | `ingestor/entity_map.py::SETPOINT_MAP` maps canonical name to ESPHome Number/Switch object id |
 | ESPHome config | `firmware/greenhouse/tunables.yaml` exposes the Number/Switch and stores into a global |
-| Firmware ingest | `firmware/greenhouse/controls.yaml` `/setpoints` handler parses the canonical key and clamps it |
+| Firmware ingest | ESPHome native API number/switch callbacks store globals; `controls.yaml` reads them into `Setpoints` and `validate_setpoints()` clamps corrupt values |
 | Control model | `Setpoints` in `firmware/lib/greenhouse_types.h` receives the global value, not a literal |
 | Readback | `firmware/greenhouse/sensors.yaml` cfg sensor and `CFG_READBACK_MAP` let alerting confirm the value landed |
 
@@ -44,17 +44,24 @@ still assigned as literals in `controls.yaml`. They are now fully routed:
 
 | Canonical param | Previous literal | Current source |
 |---|---:|---|
-| `heat_hysteresis` | `1.0f` | `heat_hysteresis_f` global + Number + `/setpoints` + cfg readback |
-| `max_relief_cycles` | `3` | `max_relief_cycles` global + Number + `/setpoints` + cfg readback |
-| `dehum_aggressive_kpa` | `0.6f` | `dehum_aggressive_kpa` global + Number + `/setpoints` + cfg readback |
-| `vent_latch_timeout_ms` | `1800000u` | `vent_latch_timeout_ms` global + Number + `/setpoints` + cfg readback |
-| `safety_max_seal_margin_f` | `5.0f` | `safety_max_seal_margin_f` global + Number + `/setpoints` + cfg readback |
-| `econ_heat_margin_f` | `5.0f` | `econ_heat_margin_f` global + Number + `/setpoints` + cfg readback |
-| `gl_lux_hysteresis` | global-only | Number + `/setpoints` + cfg readback + registry |
+| `heat_hysteresis` | `1.0f` | `heat_hysteresis_f` global + ESPHome Number + cfg readback |
+| `max_relief_cycles` | `3` | `max_relief_cycles` global + ESPHome Number + cfg readback |
+| `dehum_aggressive_kpa` | `0.6f` | `dehum_aggressive_kpa` global + ESPHome Number + cfg readback |
+| `vent_latch_timeout_ms` | `1800000u` | `vent_latch_timeout_ms` global + ESPHome Number + cfg readback |
+| `safety_max_seal_margin_f` | `5.0f` | `safety_max_seal_margin_f` global + ESPHome Number + cfg readback |
+| `econ_heat_margin_f` | `5.0f` | `econ_heat_margin_f` global + ESPHome Number + cfg readback |
+| `gl_lux_hysteresis` | global-only | ESPHome Number + cfg readback + registry |
 
 Drift guards now fail if `Setpoints setpts = {...}` contains numeric policy
 literals, if a dispatcher route lacks a registry row, or if MCP stops using
 `PLANNER_PUSHABLE_REG` for `set_tunable`.
+
+## Removed HTTP Poller
+
+The earlier HTTP `/setpoints` poller is intentionally absent from v1.0. It
+created avoidable heap pressure on the ESP32 and duplicated the native ESPHome
+API path. Current delivery is direct number/switch push plus `cfg_*` readback
+confirmation into `setpoint_snapshot`.
 
 ## Remaining Firmware Literals
 

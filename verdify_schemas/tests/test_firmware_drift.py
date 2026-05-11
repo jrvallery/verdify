@@ -106,6 +106,42 @@ def _firmware_entity_ids() -> set[str]:
     return ids
 
 
+def _firmware_cfg_sensor_routes() -> dict[str, set[str]]:
+    """Return cfg_* sensor ids and their possible ESPHome object_id variants."""
+    routes: dict[str, set[str]] = {}
+    yaml_files: list[Path] = []
+    for yd in YAML_DIRS:
+        if yd.exists():
+            yaml_files.extend(sorted(yd.glob("*.yaml")))
+    yaml_files.extend(yf for yf in ROOT_YAMLS if yf.exists())
+
+    for yf in yaml_files:
+        try:
+            data = yaml.safe_load(yf.read_text())
+        except yaml.YAMLError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        items = data.get("sensor")
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            sensor_id = entry.get("id")
+            if not isinstance(sensor_id, str) or not sensor_id.startswith("cfg_"):
+                continue
+            candidates = {sensor_id}
+            object_id = entry.get("object_id")
+            if isinstance(object_id, str):
+                candidates.add(object_id)
+            name = entry.get("name")
+            if isinstance(name, str):
+                candidates.update(_slugify(name))
+            routes[sensor_id] = candidates
+    return routes
+
+
 pytestmark = pytest.mark.skipif(
     not any(p.exists() for p in [*YAML_DIRS, *ROOT_YAMLS]),
     reason="firmware YAML not available",
@@ -234,6 +270,17 @@ def test_known_drift_is_still_drifting(fw_ids, entity_map):
 def test_firmware_emits_a_reasonable_number_of_entities(fw_ids):
     """Sanity check — if the YAML parser silently lost everything we want to know."""
     assert len(fw_ids) >= 50, f"only {len(fw_ids)} firmware entity ids parsed; expected >=50"
+
+
+def test_cfg_readback_sensors_are_routed_to_entity_map(entity_map):
+    """Every firmware cfg_* sensor must have a CFG_READBACK_MAP route."""
+    routes = _firmware_cfg_sensor_routes()
+    map_keys = set(entity_map.CFG_READBACK_MAP.keys())
+    missing = {sensor_id: sorted(candidates) for sensor_id, candidates in routes.items() if not (candidates & map_keys)}
+    assert not missing, (
+        "firmware cfg_* sensors missing CFG_READBACK_MAP routes: "
+        f"{missing}. Add the ESPHome object_id/name slug to ingestor/entity_map.py."
+    )
 
 
 def _override_flag_fields() -> set[str]:

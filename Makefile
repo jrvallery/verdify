@@ -10,8 +10,10 @@ ESP32_DEVICE ?= 192.168.10.111
 QUIET_MINUTES ?= 30
 FIRMWARE_ESPHOME := scripts/firmware-esphome-worktree.sh
 FIRMWARE_OTA_BIN := firmware/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin
+REPLAY_CORPUS_GZ := firmware/test/data/replay_overrides.csv.gz
+REPLAY_CORPUS_TMP ?= /tmp/verdify-replay-overrides.csv
 
-.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all smoke clean
+.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all firmware-invariants firmware-replay firmware-dwell-preview firmware-deploy firmware-archive-artifacts smoke clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -43,20 +45,18 @@ test-firmware: ## Run native C++ logic tests + replay against golden CSV (same c
 	# Required gate per CLAUDE.md Firmware Change Protocol: unit tests alone
 	# cannot catch structural flag regressions (e.g. the shipped-and-caught
 	# vpd_dry_override dead code in commit 82b18ad → patched in caa2cea).
-	test -f firmware/test/data/replay_overrides.csv \
-	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	gzip -cd $(REPLAY_CORPUS_GZ) > $(REPLAY_CORPUS_TMP)
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp
-	./firmware/test/replay_overrides firmware/test/data/replay_overrides.csv | tail -30
+	./firmware/test/replay_overrides $(REPLAY_CORPUS_TMP) | tail -30
 
 test-replay-overrides: ## Validate evaluate_overrides() against full history + synthetic self-test (OBS-1e)
 	bash scripts/export-replay-overrides.sh
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_overrides test/replay_overrides.cpp && ./test/replay_overrides test/data/replay_overrides.csv
 
 firmware-invariants: ## Phase-0: run 15 invariants from invariants.h against the replay corpus (pass = bulletproof gate green)
-	test -f firmware/test/data/replay_overrides.csv \
-	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
+	gzip -cd $(REPLAY_CORPUS_GZ) > $(REPLAY_CORPUS_TMP)
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_invariants test/replay_invariants.cpp
-	./firmware/test/replay_invariants firmware/test/data/replay_overrides.csv
+	./firmware/test/replay_invariants $(REPLAY_CORPUS_TMP)
 
 firmware-replay: ## Phase-0: dual-ref diff of firmware mode/relay decisions between OLD and NEW git refs
 	@if [ -z "$(OLD)" ] || [ -z "$(NEW)" ]; then \
@@ -67,8 +67,6 @@ firmware-replay: ## Phase-0: dual-ref diff of firmware mode/relay decisions betw
 	bash scripts/firmware-replay-diff.sh "$(OLD)" "$(NEW)"
 
 firmware-dwell-preview: ## Phase-2: replay corpus with dwell-gate ON vs OFF, quantify whipsaw reduction
-	test -f firmware/test/data/replay_overrides.csv \
-	  || gunzip -k firmware/test/data/replay_overrides.csv.gz
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_emit test/replay_emit.cpp
 	bash scripts/firmware-dwell-preview.sh
 
@@ -107,6 +105,15 @@ firmware-check-worktree: firmware-check ## Back-compat alias; firmware-check alr
 firmware-check-all: firmware-check ## Compile firmware from the only supported deploy source
 	@echo "✓ Worktree firmware config compiles"
 
+firmware-archive-artifacts: ## Archive ESPHome build outputs for FW_VERSION=<version>; set PROMOTE_LAST_GOOD=1 to update rollback target
+	@if [ -z "$(FW_VERSION)" ]; then \
+	    echo "Usage: make firmware-archive-artifacts FW_VERSION=<version> [PROMOTE_LAST_GOOD=1]"; \
+	    exit 2; \
+	fi
+	@EXTRA=""; \
+	if [ "$(PROMOTE_LAST_GOOD)" = "1" ]; then EXTRA="--promote-last-good"; fi; \
+	bash scripts/archive-firmware-artifacts.sh "$(FW_VERSION)" $$EXTRA
+
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
@@ -120,6 +127,7 @@ site-lint: ## Run cheap launch lint for public-site content and routes
 	$(PYTHON) scripts/lint_public_site.py
 
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure
+	bash scripts/firmware-deploy-preflight.sh
 	@mkdir -p firmware/artifacts
 	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
 	FW_VERSION="$$(date +%Y.%-m.%-d.%H%M).$$(git rev-parse --short HEAD)$$DIRTY"; \
@@ -135,11 +143,10 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
 	@if bash scripts/wait-for-firmware-version.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" --timeout 180 && \
 		EXPECTED_FW_VERSION="$$(cat firmware/artifacts/pending-fw-version.txt)" $(MAKE) sensor-health SINCE='5 minutes'; then \
-		cp $(FIRMWARE_OTA_BIN) firmware/artifacts/last-good.ota.bin ; \
-		cp firmware/artifacts/pending-fw-version.txt firmware/artifacts/last-good.version ; \
+		FIRMWARE_DEPLOYED_AT="$$(date -Is)" bash scripts/archive-firmware-artifacts.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" --promote-last-good ; \
 		mkdir -p /srv/verdify/state ; \
 		cp firmware/artifacts/pending-fw-version.txt /srv/verdify/state/expected-firmware-version ; \
-		echo "✓ Deploy accepted. Promoted new binary + expected firmware pin (rollback target for next deploy)." ; \
+		echo "✓ Deploy accepted. Archived build outputs + promoted expected firmware pin (rollback target for next deploy)." ; \
 	else \
 		echo "" ; \
 		echo "▓▓▓  SENSOR-HEALTH FAILED POST-OTA  —  initiating auto-rollback  ▓▓▓" ; \

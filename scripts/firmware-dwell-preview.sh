@@ -16,8 +16,12 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT/firmware/test"
 
-CSV="${1:-data/replay_overrides.csv}"
-[ -f "$CSV" ] || [ -f "$CSV.gz" ] && ([ -f "$CSV" ] || gunzip -k "$CSV.gz")
+if [ "${1:-}" ]; then
+  CSV="$1"
+else
+  CSV="/tmp/verdify-replay-overrides.csv"
+  gzip -cd "$ROOT/firmware/test/data/replay_overrides.csv.gz" > "$CSV"
+fi
 [ -f "$CSV" ] || { echo "error: no $CSV found"; exit 2; }
 
 # Rebuild replay_emit if stale
@@ -77,8 +81,9 @@ reduction_pct=$(awk -v a="$total_off" -v b="$total_on" 'BEGIN{
   if (a == 0) print "0.0"; else printf "%.1f", (a-b)*100.0/a
 }')
 
-# Find the worst hour in baseline and show how it fared in projection
-worst_hr=$(sort -t$'\t' -k2 -n -r /tmp/hourly_off.tsv | head -1 | cut -f1)
+# Find the worst hour in baseline and show how it fared in projection. Avoid
+# sort|head under pipefail; sort can receive SIGPIPE after head exits.
+worst_hr=$(awk -F'\t' 'NR == 1 || $2 > max { max = $2; h = $1 } END { print h }' /tmp/hourly_off.tsv)
 worst_off=$(awk -F'\t' -v h="$worst_hr" '$1==h{print $2; exit}' /tmp/hourly_off.tsv)
 worst_on=$(awk -F'\t' -v h="$worst_hr" '$1==h{print $2; exit}' /tmp/hourly_on.tsv)
 worst_on=${worst_on:-0}

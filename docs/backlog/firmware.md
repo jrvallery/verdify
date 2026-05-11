@@ -80,7 +80,7 @@ Leaf MLX90614 (`leaf_temp_f` + computed `leaf_air_vpd_kpa`) is separately a hard
 ### P4 code health _(queued for sprint-13)_
 
 - **P4#17 — Remove dead occupancy branch in mist_stage progression.** `if (moisture_blocked) { state.mist_stage = MIST_WATCH; }` inside `if (mode == SEALED_MIST)` is unreachable (outer planner exits SEALED_MIST on occupancy first). Delete + add comment explaining absence.
-- **P4#19 — Consolidate R2-X / FW-X history into `DESIGN.md`.** Sprint-tag inline comments are great mid-sprint, obscure intent for cold readers. One-page DESIGN.md capturing priority tiers, override layers, observability contract; strip sprint tags in favor of `// See DESIGN.md §3.2` references.
+- **P4#19 — Consolidate R2-X / FW-X history into `DESIGN.md`.** `firmware/DESIGN.md` now captures the v1.0 control boundary, state machine, setpoint contract, safety layers, observability, and deployment contract. Remaining cleanup: strip old sprint-tag inline comments in favor of stable design-doc references.
 
 ### P4 larger refactor _(discretionary, sprint-14)_
 

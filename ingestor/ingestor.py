@@ -359,19 +359,23 @@ async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
         return
     changes = state.pending_setpoints.copy()
     state.pending_setpoints.clear()
-    validated: list[tuple[datetime, str, float, str]] = []
+    validated: list[tuple[datetime, str, float, str, datetime, str]] = []
     for param, val in changes:
         try:
             SetpointChange(ts=ts, parameter=param, value=val, source="esp32", greenhouse_id=GREENHOUSE_ID)
         except ValidationError as e:
             log.error(f"setpoint_changes skipped (validation failed: {e}): param={param} value={val}")
             continue
-        validated.append((ts, param, val, "esp32"))
+        validated.append((ts, param, val, "esp32", ts, "observed"))
     if not validated:
         return
     async with pool.acquire() as conn:
         await conn.executemany(
-            "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES ($1, $2, $3, $4)",
+            """
+            INSERT INTO setpoint_changes
+                (ts, parameter, value, source, confirmed_at, delivery_status)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
             validated,
         )
     log.debug(f"setpoint_changes: {len(validated)} changes written")
@@ -723,6 +727,49 @@ def _accept_outbound_setpoint(param: str, value: float) -> bool:
     return True
 
 
+def _record_cfg_readback(obj_id: str, value: Any) -> bool:
+    """Record a firmware cfg_* readback if this entity is part of that contract."""
+    cfg_param = CFG_READBACK_MAP.get(obj_id)
+    if not cfg_param:
+        return False
+
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        log.warning("cfg_readback rejected non-numeric: %s=%r", obj_id, value)
+        return True
+    if math.isnan(val):
+        return True
+
+    if cfg_param in _SETPOINT_RANGES:
+        lo, hi = _SETPOINT_RANGES[cfg_param]
+        if val < lo or val > hi:
+            log.warning(
+                "cfg_readback rejected out-of-range: %s=%.3f (valid %s-%s)",
+                cfg_param,
+                val,
+                lo,
+                hi,
+            )
+            return True
+
+    state.cfg_readback[cfg_param] = val
+    shared.cfg_readback[cfg_param] = val
+    if cfg_param in FORCED_ON_SWITCH_PARAMS and val < 0.5:
+        eid = SWITCH_TO_ENTITY.get(cfg_param)
+        if eid:
+            log.warning(
+                "Controller guardrail: cfg readback has %s=%.0f; immediate repair push queued",
+                cfg_param,
+                val,
+            )
+            try:
+                asyncio.get_running_loop().create_task(push_to_esp32([(eid, 1.0, "switch")]))
+            except RuntimeError:
+                shared.force_setpoint_push.set()
+    return True
+
+
 # ──────────────────────────────────────────────────────────────
 # ESP32 callbacks
 # ──────────────────────────────────────────────────────────────
@@ -739,39 +786,7 @@ def on_state_change(entity_state) -> None:
         if val is None or (isinstance(val, float) and math.isnan(val)):
             return
 
-        # ESP32 configured value readback (cfg_* sensors → setpoint_snapshot).
-        # Sprint 24.9 (G-1, HO-2): apply the same physical-range validation
-        # as the setpoint_changes path. Pre-first-push firmware init can
-        # report cfg_safety_min_f=0 etc.; without this gate those zero rows
-        # pollute setpoint_snapshot and break 30-day range reports (see
-        # firmware sprint-13 tunable-cascade doc §Historical impact).
-        cfg_param = CFG_READBACK_MAP.get(obj_id)
-        if cfg_param:
-            if cfg_param in _SETPOINT_RANGES:
-                lo, hi = _SETPOINT_RANGES[cfg_param]
-                if val < lo or val > hi:
-                    log.warning(
-                        "cfg_readback rejected out-of-range: %s=%.3f (valid %s-%s)",
-                        cfg_param,
-                        val,
-                        lo,
-                        hi,
-                    )
-                    return
-            state.cfg_readback[cfg_param] = val
-            shared.cfg_readback[cfg_param] = float(val)
-            if cfg_param in FORCED_ON_SWITCH_PARAMS and val < 0.5:
-                eid = SWITCH_TO_ENTITY.get(cfg_param)
-                if eid:
-                    log.warning(
-                        "Controller guardrail: cfg readback has %s=%.0f; immediate repair push queued",
-                        cfg_param,
-                        val,
-                    )
-                    try:
-                        asyncio.get_running_loop().create_task(push_to_esp32([(eid, 1.0, "switch")]))
-                    except RuntimeError:
-                        shared.force_setpoint_push.set()
+        if _record_cfg_readback(obj_id, val):
             return
 
         col = CLIMATE_MAP.get(obj_id)
@@ -826,6 +841,9 @@ def on_state_change(entity_state) -> None:
 
     elif etype == "switch":
         val = entity_state.state
+        if _record_cfg_readback(obj_id, 1.0 if val else 0.0):
+            return
+
         equip = EQUIPMENT_SWITCH_MAP.get(obj_id)
         if equip:
             old = state.equipment.get(equip)

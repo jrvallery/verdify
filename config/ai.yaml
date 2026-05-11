@@ -98,14 +98,18 @@ planner_sla:
   local:
     SUNRISE:    30
     SUNSET:     30
+    SOLAR_MAX:  30
     MIDNIGHT:   30
-    TRANSITION: 30
-    FORECAST:   60
+    TRANSITION: 45
+    FORECAST:   90
     DEVIATION:  20
+    FORECAST_DEVIATION: 20
     HEARTBEAT:  15
   opus:
     SUNRISE:    15
     SUNSET:     15
+    SOLAR_MAX:  15
     MIDNIGHT:   15
     FORECAST:   30
     DEVIATION:  10
+    FORECAST_DEVIATION: 10

@@ -334,25 +334,20 @@ def test_alert_monitor_detects_planner_delivery_outages():
     assert "status <> 'plan_written'" in src
 
 
-def test_planning_milestones_include_fixed_boundaries():
+def test_planning_milestones_use_phase4_trigger_set():
     import tasks
 
     src = Path(tasks.__file__).read_text()
     start = src.index("def _compute_milestones")
     end = src.index("async def _log_plan_delivery", start)
     body = src[start:end]
-    for key in (
-        "TRANSITION:fixed_midnight",
-        "TRANSITION:fixed_pre_dawn",
-        "TRANSITION:fixed_midday",
-        "TRANSITION:fixed_afternoon",
-        "TRANSITION:fixed_evening",
-    ):
-        assert key in body
-    assert "midnight + _td(hours=6)" in body
-    assert "midnight + _td(hours=12)" in body
-    assert "midnight + _td(hours=16)" in body
-    assert "midnight + _td(hours=20)" in body
+    cache_start = body.index("_milestones_cache = {")
+    cache_end = body.index("}", cache_start)
+    milestone_table = body[cache_start:cache_end]
+    for key in ("SUNRISE", "SOLAR_MAX", "TRANSITION:peak_stress", "TRANSITION:decline", "SUNSET"):
+        assert key in milestone_table
+    for retired in ("fixed_midnight", "fixed_pre_dawn", "fixed_midday", "fixed_afternoon", "fixed_evening"):
+        assert retired not in milestone_table
 
 
 # ── S24.9.3 — status='plan_written' on resolve ─────────────────────
@@ -474,10 +469,13 @@ def test_send_to_iris_is_local_first_without_cloud_fallback():
     body = src[start:]
     assert 'instance: PlannerInstance = "local"' in body
     assert "ENABLE_LOCAL_PLANNER" not in body
-    assert 'if instance == "local":' in body
-    assert 'session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"' in body
-    assert 'session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"' in body
-    assert '"MANUAL"' in body
+    assert "provider = AI_GATEWAY_BY_EVENT.get(event_type, AI_GATEWAY_PROVIDER).lower()" in body
+    assert 'if provider == "hermes":' in body
+    src_openclaw = src[src.index("def _send_to_openclaw") : start]
+    assert 'if instance == "local":' in src_openclaw
+    assert 'session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"' in src_openclaw
+    assert 'session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"' in src_openclaw
+    assert '"MANUAL"' in src
 
 
 def test_mcp_plan_run_uses_manual_trigger_and_delivery_log():

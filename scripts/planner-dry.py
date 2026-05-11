@@ -7,7 +7,7 @@ regressions can't land silently.
 Checks:
   1. iris_planner imports (fails on Python syntax, missing dependency, or
      missing playbook at PLANNER_PLAYBOOK_PATH).
-  2. `_STANDING_DIRECTIVES` still says "22 tools" — tool-inventory guard.
+  2. `_STANDING_DIRECTIVES` still says "24 tools" — tool-inventory guard.
   3. `_PLANNER_CORE` still carries the "Structured hypothesis" section —
      G7 write-side guard (CORE must include it so both opus and local see it).
   4. Sprint-3 split invariants: `_PLANNER_CORE` has the Tier 1 table;
@@ -19,7 +19,7 @@ Checks:
        - local preamble ≤ ~52000 Claude tokens (≈ 208000 chars at 4:1; we
          approximate with char-length since the anthropic tokenizer hits
          the network and this script must stay offline).
-       - "22 tools" preamble appears in both.
+       - "24 tools" preamble appears in both.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ import iris_planner as p  # noqa: E402
 LOCAL_PREAMBLE_MAX_CHARS = 52_000 * 4
 
 # Invariants that must hold regardless of instance.
-assert "22 tools" in p._STANDING_DIRECTIVES, "tool-count guard: '22 tools' missing"
+assert "24 tools" in p._STANDING_DIRECTIVES, "tool-count guard: '24 tools' missing"
 assert p.PLANNER_PLAYBOOK_PATH.exists(), f"playbook missing at {p.PLANNER_PLAYBOOK_PATH}"
 
 # Sprint-3 split + Phase-1d prompt slimming: CORE must have the hypothesis
@@ -82,13 +82,13 @@ print(f"  preamble local = {len(local_preamble):>6} chars (≈ {len(local_preamb
 print(f"  delta          = {len(opus_preamble) - len(local_preamble):>6} chars (EXTENDED)")
 
 # Every event-type builder renders cleanly for both instances.
-for event in ("SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION"):
+for event in ("SUNRISE", "SUNSET", "SOLAR_MAX", "TRANSITION", "FORECAST_DEVIATION"):
     for instance in ("opus", "local"):
         message = p._PROMPT_BUILDERS[event]("<context stub>", "<label stub>", instance)
         assert isinstance(message, str) and len(message) > 1000, (
             f"{event}/{instance} prompt suspiciously short: {len(message)} chars"
         )
-        assert "22 tools" in message, f"{event}/{instance} prompt missing _STANDING_DIRECTIVES preamble"
+        assert "24 tools" in message, f"{event}/{instance} prompt missing _STANDING_DIRECTIVES preamble"
         print(f"  {event:10s} {instance:5s} {len(message):>6} chars")
 
 print("planner-dry: all prompts render; split invariants hold")

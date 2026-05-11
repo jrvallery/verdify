@@ -182,17 +182,20 @@ class TestSplitInvariants:
         assert iris_planner._PLANNER_KNOWLEDGE == expected
 
 
+PROMPT_EVENTS = ["SUNRISE", "SUNSET", "SOLAR_MAX", "TRANSITION", "FORECAST_DEVIATION", "MANUAL"]
+
+
 class TestPromptBuilders:
-    @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION", "MANUAL"])
+    @pytest.mark.parametrize("event", PROMPT_EVENTS)
     @pytest.mark.parametrize("instance", ["opus", "local"])
     def test_builder_renders_for_every_event_instance_pair(self, iris_planner, event, instance):
         builder = iris_planner._PROMPT_BUILDERS[event]
         message = builder("<context stub>", "<label stub>", instance)
         assert isinstance(message, str) and len(message) > 1000
         # Every prompt carries the standing directives so Iris sees the MCP tool inventory.
-        assert "22 tools" in message
+        assert "24 tools" in message
 
-    @pytest.mark.parametrize("event", ["SUNRISE", "SUNSET", "TRANSITION", "FORECAST", "DEVIATION", "MANUAL"])
+    @pytest.mark.parametrize("event", PROMPT_EVENTS)
     def test_local_prompt_smaller_than_opus_for_every_event(self, iris_planner, event):
         builder = iris_planner._PROMPT_BUILDERS[event]
         opus_msg = builder("<context stub>", "<label stub>", "opus")
