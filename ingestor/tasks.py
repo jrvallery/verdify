@@ -865,7 +865,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
-        # 7a. Planner gateway delivery failures. A failed OpenClaw POST is a
+        # 7a. Planner gateway delivery failures. A failed Hermes POST is a
         # first-class outage, not a pending planner action. Keep the lookback
         # short so transient restarts auto-resolve once deliveries recover.
         gateway_failures = await conn.fetch(
@@ -911,7 +911,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "alert_type": "planner_gateway_delivery_failed",
                     "severity": severity,
                     "category": "system",
-                    "sensor_id": "system.openclaw",
+                    "sensor_id": "system.hermes",
                     "zone": None,
                     "message": (
                         f"{len(failures)} planner gateway delivery failure(s) in 2h; "
@@ -3244,7 +3244,7 @@ async def _ensure_expected_planner_triggers(
 ) -> dict[str, int]:
     """Materialize today's expected trigger ledger before delivery happens.
 
-    plan_delivery_log only exists after an OpenClaw POST returns. This ledger is
+    plan_delivery_log only exists after a Hermes POST returns. This ledger is
     written first so a missed SUNRISE/SUNSET is visible even if the POST path
     never runs.
     """
@@ -3494,9 +3494,9 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
     # just the 2h time-window fallback in _resolve_delivery_log).
     trigger_id = result.get("trigger_id")
     instance = result.get("instance")
-    # Phase 5 (migration 114): when the Hermes gateway is the dispatcher,
-    # send_to_hermes returns the /v1/runs run_id alongside the existing
-    # gateway_status / gateway_body. OpenClaw rows leave this NULL.
+    # send_to_iris returns Hermes's /v1/runs run_id alongside the existing
+    # gateway_status / gateway_body; stamped to plan_delivery_log.hermes_run_id
+    # (migration 114) for downstream Hermes-telemetry joins.
     hermes_run_id = result.get("hermes_run_id")
     async with pool.acquire() as conn:
         if explicit_status:

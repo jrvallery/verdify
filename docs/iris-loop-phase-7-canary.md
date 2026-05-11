@@ -41,7 +41,7 @@ journalctl -u verdify-ingestor -f | grep -E "(SUNRISE|SUNSET|SOLAR_MAX|TRANSITIO
 # 5. After 48 h, verify gates (next section). If any gate fails, see rollback.
 ```
 
-`scripts/iris-canary.sh promote <EVENT>` does steps 1–3 in one shot.
+(Phase 7 was superseded 2026-05-11: the operator chose to flip every event to Hermes at once and decommission OpenClaw immediately rather than soak each event for 48 h. The per-event canary tooling no longer exists; the steps above are kept as a historical record.)
 
 ## Per-step gates (must all pass before next promotion)
 
@@ -115,7 +115,7 @@ sudo sed -i "s|^AI_GATEWAY_BY_EVENT=.*|AI_GATEWAY_BY_EVENT='{}'|" /etc/verdify/i
 sudo systemctl restart verdify-ingestor
 ```
 
-`scripts/iris-canary.sh rollback <EVENT>` and `scripts/iris-canary.sh rollback-all` do these. `scripts/iris-canary.sh status` shows current routing + last-24h gateway breakdown.
+(Rollback to OpenClaw is no longer available — OpenClaw was fully decommissioned on 2026-05-11. Regressions are now investigated by iterating on the Hermes config and prompts in-repo.)
 
 ## Final state (end of Phase 7)
 

@@ -14,7 +14,6 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
-from time import perf_counter
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -63,7 +62,7 @@ if _env_path.exists():
         if line.startswith("POSTGRES_PASSWORD="):
             _db_pass = line.split("=", 1)[1].strip().strip('"').strip("'")
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
-# Legacy planner.py removed — planning now runs via iris_planner.py → OpenClaw hooks
+# Legacy planner.py removed — planning runs via iris_planner.py → Hermes /v1/runs
 BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}
 PLAN_REQUIRED_PARAMS = frozenset(
     {
@@ -233,36 +232,6 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
         row["instance"],
     )
     return explicit_status
-
-
-async def _record_openclaw_interaction(
-    conn: asyncpg.Connection,
-    action: str,
-    started_at: float,
-    *,
-    success: bool,
-    error_message: str | None = None,
-    model: str | None = None,
-    metadata: dict | None = None,
-) -> None:
-    """Best-effort MCP/OpenClaw observability row."""
-    duration_ms = int((perf_counter() - started_at) * 1000)
-    try:
-        await conn.execute(
-            """
-            INSERT INTO openclaw_interaction_log
-                (session_type, action, duration_ms, tokens_in, tokens_out, model, success, error_message, metadata)
-            VALUES ('mcp', $1, $2, 0, 0, $3, $4, $5, $6::jsonb)
-            """,
-            action,
-            duration_ms,
-            model,
-            success,
-            error_message,
-            json.dumps(metadata or {}),
-        )
-    except Exception as e:
-        print(f"openclaw interaction log failed (non-fatal): {e}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -656,10 +625,7 @@ async def plan_run(mode: str = "normal") -> str:
 @mcp.tool()
 async def plan_status() -> str:
     """Get the current active plan — waypoints, plan_id, hypothesis, compliance."""
-    started_at = perf_counter()
     conn = await _db()
-    success = False
-    error_message: str | None = None
     try:
         journal = await conn.fetchrow("""
             SELECT plan_id, to_char(created_at AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') as created,
@@ -676,20 +642,8 @@ async def plan_status() -> str:
             plan=PlanStatusJournal.model_validate(dict(journal)) if journal else None,
             future_waypoints=[PlanStatusWaypoint.model_validate(dict(w)) for w in waypoints],
         )
-        success = True
         return resp.model_dump_json(exclude_none=True)
-    except Exception as e:
-        error_message = str(e)
-        raise
     finally:
-        await _record_openclaw_interaction(
-            conn,
-            "plan_status",
-            started_at,
-            success=success,
-            error_message=error_message,
-            metadata={"source": "mcp.server.plan_status"},
-        )
         await conn.close()
 
 

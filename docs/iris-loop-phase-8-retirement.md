@@ -15,7 +15,7 @@ echo '{}' | sudo tee /etc/verdify/ai_gateway_by_event.json
 sudo systemctl restart verdify-ingestor
 ```
 
-Verify with `scripts/iris-canary.sh status` — the last-24h breakdown should show every event_type routing through Hermes (all `hermes_run_id IS NOT NULL`).
+Verify with a 24h plan_delivery_log scan: every row should have `hermes_run_id IS NOT NULL` and `gateway_status` 2xx.
 
 ## Stop OpenClaw
 
@@ -91,11 +91,6 @@ If the post-cutover report doesn't meet a delta target:
 - **Don't undo the gateway switch automatically.** A bad delta on
   hypothesis_structured rate, for instance, may be a prompt issue
   fixable in-place rather than a Hermes regression.
-- **Run `scripts/iris-canary.sh rollback <EVENT>` on the offending
-  event_type only.** The per-event granularity stays useful even after
-  the default flips — you can isolate a single regression while keeping
-  the rest of the system on Hermes.
-- **If the regression spans multiple events,** revert the default:
-  `scripts/iris-canary.sh rollback-all`. Investigate offline. The
-  OpenClaw container is still installed for 30 days post-stop precisely
-  for this case.
+- **Investigate the regression in place.** The Hermes config + prompts
+  are versioned in-repo; iterate there. OpenClaw is fully decommissioned
+  and is not a rollback target.

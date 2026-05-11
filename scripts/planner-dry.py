@@ -27,9 +27,8 @@ from __future__ import annotations
 import os
 import sys
 
-os.environ.setdefault("OPENCLAW_URL", "x")
-os.environ.setdefault("OPENCLAW_TOKEN", "x")
-os.environ.setdefault("OPENCLAW_SESSION_KEY", "x")
+os.environ.setdefault("HERMES_URL", "http://127.0.0.1:8642")
+os.environ.setdefault("HERMES_IRIS_API_KEY", "x")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingestor"))
 
 import iris_planner as p  # noqa: E402

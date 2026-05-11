@@ -51,50 +51,10 @@ FRIGATE_URL = os.environ.get("FRIGATE_URL", "http://192.168.30.142:5000")
 LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
 GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/jason/agents/shared/credentials/gemini_api_key.txt")
 
-# ── OpenClaw (Iris planner gateway) ──────────────────────────────
-OPENCLAW_URL = os.environ.get("OPENCLAW_URL", "http://127.0.0.1:18789")
-OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "iris-hooks-verdify-2026-04")
-
-# Contract v1.5: local Gemma-on-cortext is the default iris-planner path.
-# Cloud/opus is kept as an explicit operator escalation target only.
-OPENCLAW_LOCAL_AGENT_ID = os.environ.get("OPENCLAW_LOCAL_AGENT_ID", "iris-planner-local")
-# Prefix for trigger-scoped local sessions. send_to_iris appends
-# `:trigger:<uuid>` so Gemma gets a fresh bounded context for every planning
-# run; historical memory comes from the gathered DB/context pack.
-OPENCLAW_LOCAL_SESSION_KEY = os.environ.get("OPENCLAW_LOCAL_SESSION_KEY", "agent:iris-planner-local:main")
-OPENCLAW_OPUS_AGENT_ID = os.environ.get("OPENCLAW_OPUS_AGENT_ID", "iris-planner")
-OPENCLAW_OPUS_SESSION_KEY = os.environ.get("OPENCLAW_OPUS_SESSION_KEY", "agent:iris-planner:main")
-# DEPRECATED legacy alias. Defaults to the local planner session in v1.5.
-OPENCLAW_SESSION_KEY = os.environ.get("OPENCLAW_SESSION_KEY", OPENCLAW_LOCAL_SESSION_KEY)
-
-# Compatibility flag retained for old deploy env files. Routing is local-first
-# regardless of this value; explicit `instance="opus"` is the cloud path.
-ENABLE_LOCAL_PLANNER = os.environ.get("ENABLE_LOCAL_PLANNER", "true").lower() in (
-    "true",
-    "1",
-    "yes",
-)
-
-# ── Hermes Iris (Phase 5 of the Iris loop overhaul) ──────────────
-# Hermes is the OpenClaw replacement gateway. Default is OPENCLAW
-# until Phase 7 canary cutover completes; per-event override via
-# AI_GATEWAY_BY_EVENT lets us promote one event_type at a time.
-import json as _json_for_gateway  # noqa: E402
-
-AI_GATEWAY_PROVIDER = os.environ.get("AI_GATEWAY_PROVIDER", "openclaw")  # openclaw | hermes
+# ── Hermes Iris (sole planner gateway) ───────────────────────────
 HERMES_URL = os.environ.get("HERMES_URL", "http://127.0.0.1:8642")
 HERMES_API_KEY = os.environ.get("HERMES_IRIS_API_KEY", "")
 HERMES_SESSION_PREFIX = os.environ.get("HERMES_SESSION_PREFIX", "hermes:iris:main")
-# Per-event override map. JSON-encoded env var, e.g.
-#   AI_GATEWAY_BY_EVENT='{"MANUAL":"hermes","FORECAST_DEVIATION":"hermes"}'
-# A blank/invalid value yields {}, and send_to_iris falls back to AI_GATEWAY_PROVIDER.
-_ai_by_event_raw = os.environ.get("AI_GATEWAY_BY_EVENT", "")
-try:
-    AI_GATEWAY_BY_EVENT: dict[str, str] = _json_for_gateway.loads(_ai_by_event_raw) if _ai_by_event_raw else {}
-    if not isinstance(AI_GATEWAY_BY_EVENT, dict):
-        AI_GATEWAY_BY_EVENT = {}
-except _json_for_gateway.JSONDecodeError:
-    AI_GATEWAY_BY_EVENT = {}
 
 # ── Greenhouse ────────────────────────────────────────────────────
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")

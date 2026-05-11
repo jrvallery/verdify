@@ -257,8 +257,8 @@ class TestPlanRunResponse:
         assert r.planner_instance == "local"
 
     def test_error(self):
-        r = PlanRunResponse(ok=False, error="OpenClaw unreachable")
-        assert r.error.startswith("OpenClaw")
+        r = PlanRunResponse(ok=False, error="Hermes unreachable")
+        assert r.error.startswith("Hermes")
 
 
 class TestToolError:

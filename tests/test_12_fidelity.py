@@ -338,12 +338,12 @@ def test_mcp_set_tunable_treats_vpd_low_as_band_owned():
 
 
 def test_alert_monitor_detects_planner_delivery_outages():
-    """OpenClaw outages and missed required plans must be visible alerts."""
+    """Hermes outages and missed required plans must be visible alerts."""
     import tasks
 
     src = Path(tasks.__file__).read_text()
     assert "planner_gateway_delivery_failed" in src
-    assert "system.openclaw" in src
+    assert "system.hermes" in src
     assert "WITH last_success AS" in src
     assert "gateway_status = 0" in src
     assert "planner_required_plan_missed" in src
@@ -483,18 +483,16 @@ def test_dispatcher_direct_push_uses_dispatchable_changes_only():
     assert "for param, val in changes:" in body
 
 
-def test_send_to_iris_is_local_first_without_cloud_fallback():
+def test_send_to_iris_targets_hermes_gateway():
     src = Path(iris_planner.__file__).read_text()
     start = src.index("def send_to_iris")
     body = src[start:]
     assert 'instance: PlannerInstance = "local"' in body
-    assert "ENABLE_LOCAL_PLANNER" not in body
-    assert "provider = AI_GATEWAY_BY_EVENT.get(event_type, AI_GATEWAY_PROVIDER).lower()" in body
-    assert 'if provider == "hermes":' in body
-    src_openclaw = src[src.index("def _send_to_openclaw") : start]
-    assert 'if instance == "local":' in src_openclaw
-    assert 'session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"' in src_openclaw
-    assert 'session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"' in src_openclaw
+    assert "OPENCLAW" not in body
+    assert "/v1/runs" in body
+    assert "HERMES_URL" in body
+    assert "HERMES_API_KEY" in body
+    assert "hermes_run_id" in body
     assert '"MANUAL"' in src
 
 

@@ -68,7 +68,6 @@ ROUTE_SMOKE = [
     "/data/slack-ops",
     "/reference/intelligence",
     "/reference/inference",
-    "/reference/openclaw",
     "/reference/planning-loop",
     "/reference/context-window",
     "/reference/architecture",

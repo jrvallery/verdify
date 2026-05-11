@@ -47,10 +47,10 @@ class TestReplanFlow:
         assert os.path.isfile("/srv/verdify/scripts/check-replan-trigger.sh")
 
     def test_replan_trigger_routes_to_iris(self):
-        """Replan trigger should route to Iris planner via OpenClaw, not planner.py."""
+        """Replan trigger should route to the Hermes gateway."""
         with open("/srv/verdify/scripts/check-replan-trigger.sh") as f:
             content = f.read()
-        assert "hooks/agent" in content or "OPENCLAW" in content, "Replan trigger doesn't route to Iris"
+        assert "/v1/runs" in content or "HERMES" in content, "Replan trigger doesn't route to Iris"
 
     def test_planner_journal_has_recent_entries(self):
         """At least one plan should have been generated today."""

@@ -1,8 +1,8 @@
 """Unit tests for the CORE / EXTENDED prompt split (sprint-3, G6).
 
 These tests import `ingestor/iris_planner.py` from the worktree directly
-(not from /srv/verdify) with stubbed OpenClaw env so they run offline and
-don't depend on live services. Same import pattern as scripts/planner-dry.py.
+(not from /srv/verdify) with a stubbed config module so they run offline
+and don't depend on live services. Same import pattern as scripts/planner-dry.py.
 """
 
 from __future__ import annotations
@@ -17,29 +17,14 @@ import pytest
 
 _WORKTREE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Contract §5-Q4: the local preamble must fit under ~60k gemma tokens.
-# Claude tokenizer is the proxy (no gemma tokenizer in venv). 52k Claude
-# tokens at a 4:1 char:token approximation = 208k chars. Checked in
-# scripts/planner-dry.py as the authoritative gate; duplicated here so a
-# pytest run catches the same budget violation.
-_LOCAL_PREAMBLE_MAX_CHARS = 52_000 * 4
-
 
 @pytest.fixture(scope="module")
 def iris_planner():
     """Import iris_planner with stubbed config module, same pattern as planner-dry."""
-    os.environ.setdefault("OPENCLAW_URL", "x")
-    os.environ.setdefault("OPENCLAW_TOKEN", "x")
-    os.environ.setdefault("OPENCLAW_SESSION_KEY", "x")
-
     cfg = types.ModuleType("config")
-    cfg.OPENCLAW_URL = "x"
-    cfg.OPENCLAW_TOKEN = "x"
-    cfg.OPENCLAW_SESSION_KEY = "x"
-    cfg.OPENCLAW_OPUS_AGENT_ID = "iris-planner"
-    cfg.OPENCLAW_OPUS_SESSION_KEY = "agent:iris-planner:main"
-    cfg.OPENCLAW_LOCAL_AGENT_ID = "iris-planner-local"
-    cfg.OPENCLAW_LOCAL_SESSION_KEY = "agent:iris-planner-local:main"
+    cfg.HERMES_URL = "http://127.0.0.1:8642"
+    cfg.HERMES_API_KEY = "x"
+    cfg.HERMES_SESSION_PREFIX = "hermes:iris:main"
     sys.modules["config"] = cfg
 
     spec = importlib.util.spec_from_file_location(
@@ -59,28 +44,21 @@ class TestComposePreamble:
         assert isinstance(local, str) and len(local) > 1000
 
     def test_both_instances_include_core(self, iris_planner):
-        """Both prompt variants carry the shared standing directives and CORE."""
+        """Both audit labels produce the same prompt under Hermes/GPT-5.5."""
         opus = iris_planner._compose_preamble("opus")
         local = iris_planner._compose_preamble("local")
         assert iris_planner._STANDING_DIRECTIVES in opus
         assert iris_planner._STANDING_DIRECTIVES in local
         assert iris_planner._PLANNER_CORE in opus
         assert iris_planner._PLANNER_CORE in local
-        assert iris_planner._LOCAL_GEMMA_DIRECTIVES in local
-        assert iris_planner._LOCAL_GEMMA_DIRECTIVES not in opus
+        assert iris_planner._PLANNER_EXTENDED in opus
+        assert iris_planner._PLANNER_EXTENDED in local
 
-    def test_lite_smaller_than_full(self, iris_planner):
+    def test_instances_produce_identical_preamble(self, iris_planner):
+        """OpenClaw-era split is retired; both labels yield the same string."""
         opus = iris_planner._compose_preamble("opus")
         local = iris_planner._compose_preamble("local")
-        assert len(local) < len(opus)
-
-    def test_local_preamble_fits_gemma_budget(self, iris_planner):
-        """Contract §5-Q4: ≤60k gemma tokens → ≤52k Claude tokens → ≤208k chars."""
-        local = iris_planner._compose_preamble("local")
-        assert len(local) <= _LOCAL_PREAMBLE_MAX_CHARS, (
-            f"local preamble {len(local)} chars exceeds {_LOCAL_PREAMBLE_MAX_CHARS} char budget "
-            f"(≈ 52k Claude tokens / 60k gemma tokens)"
-        )
+        assert opus == local
 
     def test_default_instance_is_local(self, iris_planner):
         default = iris_planner._compose_preamble()
@@ -196,11 +174,12 @@ class TestPromptBuilders:
         assert "24 tools" in message
 
     @pytest.mark.parametrize("event", PROMPT_EVENTS)
-    def test_local_prompt_smaller_than_opus_for_every_event(self, iris_planner, event):
+    def test_prompt_is_identical_across_instances_for_every_event(self, iris_planner, event):
+        """Both audit labels collapse to the same Hermes/GPT-5.5 prompt."""
         builder = iris_planner._PROMPT_BUILDERS[event]
         opus_msg = builder("<context stub>", "<label stub>", "opus")
         local_msg = builder("<context stub>", "<label stub>", "local")
-        assert len(local_msg) < len(opus_msg)
+        assert opus_msg == local_msg
 
     def test_builder_default_instance_is_local(self, iris_planner):
         """Contract v1.5: existing callers that don't pass `instance` get local."""

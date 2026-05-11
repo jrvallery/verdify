@@ -1,13 +1,10 @@
 """
-iris_planner.py — Send planning events to Iris via the OpenClaw gateway.
+iris_planner.py — Send planning events to Iris via the Hermes gateway.
 
 Assembles greenhouse context by running gather-plan-context.sh, then delivers
-it to Iris's persistent planner session via the /hooks/agent HTTP endpoint.
-Each event type (SUNRISE, TRANSITION, SUNSET, FORECAST, DEVIATION) produces
-a tailored prompt that Iris processes with her MCP tools.
-
-The planner session is persistent — Iris retains conversation history across
-trigger invocations, building up operational memory over time.
+it to Hermes's API server (POST /v1/runs). Hermes drives GPT-5.5 with high
+reasoning over the Verdify MCP toolset; the gathered context pack is the
+planner memory source of truth.
 """
 
 import json
@@ -23,15 +20,6 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from config import (
-    OPENCLAW_LOCAL_AGENT_ID,
-    OPENCLAW_LOCAL_SESSION_KEY,
-    OPENCLAW_OPUS_AGENT_ID,
-    OPENCLAW_OPUS_SESSION_KEY,
-    OPENCLAW_TOKEN,
-    OPENCLAW_URL,
-)
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -40,10 +28,9 @@ from verdify_schemas import AlertEnvelope  # noqa: E402
 
 log = logging.getLogger("iris_planner")
 
-# Planner peer instances. Contract v1.5 makes "local" the default path:
-# OpenClaw agent `iris-planner` backed by local Gemma-on-cortext. "opus" is
-# explicit cloud escalation only. Callers pass instance explicitly; no implicit
-# failover.
+# Audit label only — both values collapse to the same Hermes/GPT-5.5 profile.
+# Retained so plan_delivery_log rows continue to carry the field; the value is
+# propagated into MCP write tools so plan_journal can be filtered by caller.
 PlannerInstance = Literal["opus", "local"]
 
 DENVER = ZoneInfo("America/Denver")
@@ -121,48 +108,20 @@ _STANDING_DIRECTIVES = """
    for full plans.
 """
 
-_LOCAL_GEMMA_DIRECTIVES = """
-## Local Gemma Context Budget (MANDATORY)
-
-You are running on local Gemma through OpenClaw. The assembled context below is
-already the greenhouse data pack: climate, scorecard, forecast, current
-setpoints, constraints, lessons, alerts, recent deliveries, clamps, and plan
-review. Treat it as the primary read source.
-
-- Do **not** call broad read tools (`history`, `query`, `forecast`,
-  `scorecard`, `lessons`, `alerts`, `climate`, `plan_status`,
-  `get_setpoints`) unless a required fact is missing from the assembled
-  context or a tool call is explicitly required to write/evaluate a plan.
-- Never call `history` or broad `query` during a routine SUNRISE/SUNSET plan;
-  those outputs can overflow the local context.
-- For full SUNRISE/SUNSET cycles, reason from the assembled context and then
-  call `set_plan` once with a compact hypothesis and 3-6 transitions. Include
-  every Tier 1 parameter in every transition, plus `trigger_id` and
-  `planner_instance`. Use the `CURRENT ACTIVE SETPOINTS` and `TUNABLE
-  CONSTRAINTS` sections for unchanged values and bounds.
-- If validation mode is active, only call `acknowledge_trigger`.
-"""
-
-# ── Planner knowledge — split for local/cloud prompt variants ──────
+# ── Planner knowledge ──────────────────────────────────────────────
 #
-# Two layers. Both are static per planner-session → opus-cacheable. The
-# order matters for Anthropic prompt-caching (stable prefix first, drop-in
-# addendum after). Local instance sends only _STANDING_DIRECTIVES + CORE;
-# opus sends directives + CORE + EXTENDED.
+# Two layers, both static per planner-session and so safely prompt-cacheable.
+# Order matters for the Anthropic cache (stable prefix first, drop-in addendum
+# after). Hermes/GPT-5.5 receives the full prompt = directives + CORE + EXTENDED.
 #
-#   _PLANNER_CORE      — must-send for both opus and local. Decision
-#                        precedence, KPIs, the tactical Tier 1 tunables table,
-#                        stress-type definitions, data quality rules, and
-#                        the structured-hypothesis format (G7). Without
-#                        these, neither instance can plan safely.
+#   _PLANNER_CORE      — decision precedence, KPIs, the tactical Tier 1
+#                        tunables table, stress-type definitions, data quality
+#                        rules, and the structured-hypothesis format (G7).
 #
-#   _PLANNER_EXTENDED  — opus-only reference material. Stress interpretation
-#                        long-form, controller modes, mist stages, vent
-#                        oscillation pattern, condensation safety, physical
-#                        reference, utility rates, full validated lessons.
-#                        Gemma-local gets the tables; it looks up the prose
-#                        in docs/planner/greenhouse-playbook.md if it needs
-#                        detail beyond the Tier 1 reference.
+#   _PLANNER_EXTENDED  — reference material: stress interpretation long-form,
+#                        controller modes, mist stages, vent oscillation
+#                        pattern, condensation safety, physical reference,
+#                        utility rates, validated lessons.
 #
 # Contract: docs/iris-planner-contract.md §2.B, §2.G.
 
@@ -471,23 +430,14 @@ Gas heating is 3.9x cheaper per BTU than electric.
 
 
 def _compose_preamble(instance: PlannerInstance = "local") -> str:
-    """Compose the prompt preamble for a given planner instance.
+    """Compose the prompt preamble. Always full prefix under Hermes/GPT-5.5.
 
-    The returned string is the stable, per-session prefix that the event
-    builder prepends to the per-cycle context. Order is intentional so
-    Anthropic prompt-caching gets a clean break on opus:
-
-        _STANDING_DIRECTIVES  (always — trigger handling rules)
-        _PLANNER_CORE         (always — must-know tables + hypothesis format)
-        _PLANNER_EXTENDED     (opus only — reference long-form)
-        {per-cycle context}   (appended by event builder; never cached)
-
-    `local` gets directives + core only, so the gemma prompt stays under
-    the contract's ≤60k gemma-token budget (≈ ≤52k Claude tokens with a
-    15% safety cushion for gemma's heavier encoding).
+    _STANDING_DIRECTIVES  (trigger handling rules)
+    _PLANNER_CORE         (must-know tables + hypothesis format)
+    _PLANNER_EXTENDED     (long-form reference)
+    {per-cycle context}   (appended by event builder; never cached)
     """
-    if instance == "local":
-        return _STANDING_DIRECTIVES + _LOCAL_GEMMA_DIRECTIVES + _PLANNER_CORE
+    del instance  # audit label only; preamble is identical for every cycle
     return _STANDING_DIRECTIVES + _PLANNER_CORE + _PLANNER_EXTENDED
 
 
@@ -871,241 +821,10 @@ def gather_context() -> str:
         return CONTEXT_GATHER_FAILED_SENTINEL
 
 
-# ── Gateway delivery ─────────────────────────────────────────────
+# ── Gateway delivery (Hermes) ────────────────────────────────────
 
 
-def _send_to_openclaw(
-    event_type: str,
-    label: str,
-    context: str | None = None,
-    instance: PlannerInstance = "local",
-) -> dict:
-    """Send a planning event to Iris's planner session via OpenClaw gateway.
-
-    Args:
-        event_type: One of SUNRISE, SUNSET, TRANSITION, FORECAST, DEVIATION, MANUAL
-        label: Human-readable event label (e.g. "Peak stress", deviation details)
-        context: Pre-gathered context string. If None, runs gather-plan-context.sh.
-        instance: 'local' (Gemma-on-cortext — default) or 'opus' (explicit
-            cloud escalation). Routes via OpenClaw agent/session pair and
-            X-Planner-Instance header.
-
-    Returns:
-        Result dict the caller writes to plan_delivery_log. Keys: delivered,
-        event_type, event_label, session_key, wake_mode, gateway_status,
-        gateway_body, trigger_id, instance.
-
-        `delivered=True` means gateway returned 2xx — it does NOT mean Iris
-        wrote a plan (verified separately by planning_heartbeat's 30-min pass).
-
-        `gateway_status` semantics:
-          0    — bare exception (Iris host down or network reset; see body)
-          200  — gateway accepted; Iris woken
-          4xx/5xx — gateway-level rejection
-          None — request never attempted (caller short-circuit)
-
-        `trigger_id` is a uuid4 generated per-call; mirrored into
-        plan_delivery_log.trigger_id for SLA + audit correlation. Sent on the
-        wire as X-Trigger-Id; MCP write tools (set_plan, set_tunable) extract
-        it and stamp plan_journal / setpoint_changes.
-    """
-    trigger_id = str(uuid.uuid4())
-    # Per-instance routing (contract v1.5 §2.G): local Gemma-on-cortext is the
-    # default. No implicit cloud fallback; cloud/opus requires an explicit
-    # instance="opus" caller override so audit rows reflect real delivery.
-    # Local uses a trigger-scoped session to prevent persistent chat history
-    # from overflowing Gemma's 131k-token context. The gathered DB/context pack
-    # is the planner memory source of truth.
-    if instance == "local":
-        agent_id = OPENCLAW_LOCAL_AGENT_ID
-        session_key = f"{OPENCLAW_LOCAL_SESSION_KEY}:trigger:{trigger_id}"
-    else:
-        agent_id = OPENCLAW_OPUS_AGENT_ID
-        session_key = f"{OPENCLAW_OPUS_SESSION_KEY}:trigger:{trigger_id}"
-
-    # Phase 2d (Codex 2026-05-07 incident): fail loud on malformed session_key
-    # before the POST. OpenClaw silently rejected sessionKey rows for reasons
-    # we couldn't reconstruct from gateway_body alone. Constrain to safe ASCII
-    # so the failure mode is local + logged with the offending value, not a
-    # downstream 4xx with no telemetry.
-    import re as _re_session
-
-    if not session_key or not _re_session.fullmatch(r"[A-Za-z0-9:_\-.]+", session_key):
-        log.error("send_to_iris: rejecting malformed session_key before POST: %r", session_key)
-        return {
-            "delivered": False,
-            "event_type": event_type,
-            "event_label": label,
-            "session_key": session_key,
-            "wake_mode": None,
-            "gateway_status": 0,
-            "gateway_body": f"client-side reject: malformed session_key {session_key!r}",
-            "trigger_id": trigger_id,
-            "instance": instance,
-        }
-
-    result = {
-        "delivered": False,
-        "event_type": event_type,
-        "event_label": label,
-        "session_key": session_key,
-        "wake_mode": None,
-        "gateway_status": None,
-        "gateway_body": None,
-        "trigger_id": trigger_id,
-        "instance": instance,
-    }
-
-    if context is None:
-        context = gather_context()
-
-    builder = _PROMPT_BUILDERS.get(event_type)
-    if not builder:
-        log.error("Unknown event type: %s", event_type)
-        result["gateway_body"] = f"unknown event_type: {event_type}"
-        return result
-
-    message = builder(context, label, instance)
-
-    # Contract v1.5 §2.A — embed trigger_id + instance in the per-cycle
-    # message body so Iris can pass them as kwargs to set_plan() and
-    # set_tunable(), or close no-op cycles with acknowledge_trigger().
-    # Stamping these on the writes lets us correlate
-    # plan_journal ↔ plan_delivery_log by uuid (not 2h time-window) and
-    # filter "all plans from opus" vs "all plans from local". Banner sits
-    # AFTER the cached preamble so prompt-cache breakpoints stay clean.
-    audit_banner = (
-        "\n\n---\n"
-        f"**Audit headers** — pass these to `set_plan`, `set_tunable`, or\n"
-        f"`acknowledge_trigger` so the\n"
-        f"plan-journal and setpoint-changes rows record which trigger and which\n"
-        f"planner instance produced them.\n\n"
-        f"- `trigger_id={trigger_id}`\n"
-        f"- `planner_instance={instance!r}`\n"
-        f"---\n\n"
-    )
-    message = message + audit_banner
-
-    # If Iris's agent-host playbook is missing, prepend a warning so she
-    # knows detailed tuning guidance isn't available this cycle and flags
-    # it in her Slack brief. The canonical in-repo copy is pointed at so
-    # the operator can restore it. Without this check the degradation is
-    # silent — Iris would reference skills/greenhouse-planner.md in her
-    # reasoning but be unable to open it.
-    if not PLANNER_PLAYBOOK_PATH.exists():
-        log.critical("Sending planning event with missing playbook: %s", PLANNER_PLAYBOOK_PATH)
-        message = (
-            "## ⚠ DEGRADED MODE — Planner playbook missing\n\n"
-            f"`{PLANNER_PLAYBOOK_PATH}` is not readable at this cycle. Do NOT\n"
-            "reference `skills/greenhouse-planner.md` in your reasoning. Operate\n"
-            "from the embedded _PLANNER_KNOWLEDGE block in this prompt only, and\n"
-            "mention the degradation in your Slack brief so Jason can restore it\n"
-            "from `docs/planner/greenhouse-playbook.md` in the verdify repo.\n\n"
-            "---\n\n"
-        ) + message
-
-    # SUNRISE/SUNSET/DEVIATION/MANUAL are high-priority — process immediately.
-    # FORECAST/TRANSITION can wait for the next heartbeat.
-    wake_now = event_type in ("SUNRISE", "SUNSET", "DEVIATION", "MANUAL")
-    result["wake_mode"] = "now" if wake_now else "next-heartbeat"
-
-    payload = {
-        "message": message,
-        "agentId": agent_id,
-        "sessionKey": session_key,
-        "wakeMode": result["wake_mode"],
-        "deliver": False,
-    }
-
-    url = f"{OPENCLAW_URL}/hooks/agent"
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "Authorization": f"Bearer {OPENCLAW_TOKEN}",
-            "Content-Type": "application/json",
-            # Contract v1.5 §2.A — propagate to MCP tool context so
-            # plan_journal / setpoint_changes writes can stamp the
-            # originating trigger and the planner instance.
-            "X-Trigger-Id": trigger_id,
-            "X-Planner-Instance": instance,
-            "X-Planner-Type": event_type,
-        },
-        method="POST",
-    )
-
-    # Sprint 25 (Fix 2): structured request/response logging so the
-    # NULL-gateway_status pattern is queryable. Pre-fix, bare-exception
-    # paths (Connection refused / reset) left `gateway_status` NULL —
-    # indistinguishable in plan_delivery_log from "row never reached
-    # gateway_status assignment." Post-fix, gateway_status=0 means
-    # "no HTTP response received" (Iris's host down or restarting),
-    # so SLA monitors and ops queries can split that from real 4xx/5xx.
-    t_start = time.monotonic()
-    payload_bytes = len(data)
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            status = resp.getcode()
-            body = resp.read().decode("utf-8", errors="replace")
-            elapsed_ms = int((time.monotonic() - t_start) * 1000)
-            result["gateway_status"] = status
-            result["gateway_body"] = body[:2000]
-            if status < 300:
-                log.info(
-                    "Iris planner: %s/%s delivered (status=%d, elapsed=%dms, payload=%dB)",
-                    event_type,
-                    label,
-                    status,
-                    elapsed_ms,
-                    payload_bytes,
-                )
-                result["delivered"] = True
-            else:
-                log.error(
-                    "Iris planner: %s/%s rejected (status=%d, elapsed=%dms): %s",
-                    event_type,
-                    label,
-                    status,
-                    elapsed_ms,
-                    body[:200],
-                )
-    except urllib.error.HTTPError as e:
-        elapsed_ms = int((time.monotonic() - t_start) * 1000)
-        body_s = e.read().decode(errors="replace")[:2000]
-        log.error(
-            "Iris planner HTTP error: %s/%s — status=%d elapsed=%dms body=%s",
-            event_type,
-            label,
-            e.code,
-            elapsed_ms,
-            body_s[:200],
-        )
-        result["gateway_status"] = e.code
-        result["gateway_body"] = body_s
-    except Exception as e:
-        elapsed_ms = int((time.monotonic() - t_start) * 1000)
-        # Distinguish "no HTTP response" from "no attempt logged" — set
-        # status=0 so plan_delivery_log queries can identify host-down
-        # / network-reset cases without hunting through journalctl.
-        log.error(
-            "Iris planner delivery failed: %s/%s — exception=%s elapsed=%dms err=%s",
-            event_type,
-            label,
-            type(e).__name__,
-            elapsed_ms,
-            e,
-        )
-        result["gateway_status"] = 0
-        result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
-
-    return result
-
-
-# ── Hermes gateway (Phase 5) ─────────────────────────────────────
-
-
-def _send_to_hermes(
+def send_to_iris(
     event_type: str,
     label: str,
     context: str | None = None,
@@ -1113,28 +832,29 @@ def _send_to_hermes(
 ) -> dict:
     """Send a planning event to Iris via the Hermes API server (POST /v1/runs).
 
-    Mirror of `_send_to_openclaw` with the same return contract — every key
-    in the result dict carries the same semantic as the OpenClaw path so
-    plan_delivery_log writes and the SLA verifier see a uniform shape. The
-    Hermes-specific addition is `hermes_run_id` (stored to the column added
-    by migration 114) so the post-cycle correlator can join through to
-    Hermes's own run telemetry.
+    Returns the result dict the caller writes to plan_delivery_log. Keys:
+    delivered, event_type, event_label, session_key, wake_mode,
+    gateway_status, gateway_body, trigger_id, instance, hermes_run_id.
+
+    `delivered=True` means gateway returned 2xx — it does NOT mean Iris
+    wrote a plan (verified separately by planning_heartbeat's 30-min pass).
+
+    `gateway_status` semantics:
+      0    — bare exception (Hermes host down or network reset; see body)
+      200  — gateway accepted; run_id returned
+      4xx/5xx — gateway-level rejection
+      None — request never attempted (caller short-circuit)
     """
     from config import HERMES_API_KEY, HERMES_SESSION_PREFIX, HERMES_URL  # noqa: E402
 
     trigger_id = str(uuid.uuid4())
 
-    # Single profile under Phase 5 — both legacy "local" and "opus" instances
-    # collapse to the same Hermes profile (GPT-5.5 high-reasoning). The
-    # instance label is still propagated for plan_delivery_log audit so we
-    # can answer "which cycles ran through Hermes-iris" without grepping logs.
     session_id = f"{HERMES_SESSION_PREFIX}:trigger:{trigger_id}"
 
-    # Same regex hygiene as the OpenClaw path.
     import re as _re_session
 
     if not _re_session.fullmatch(r"[A-Za-z0-9:_\-.]+", session_id):
-        log.error("send_to_iris/hermes: rejecting malformed session_id before POST: %r", session_id)
+        log.error("send_to_iris: rejecting malformed session_id before POST: %r", session_id)
         return {
             "delivered": False,
             "event_type": event_type,
@@ -1166,14 +886,12 @@ def _send_to_hermes(
 
     builder = _PROMPT_BUILDERS.get(event_type)
     if not builder:
-        log.error("Unknown event type (hermes): %s", event_type)
+        log.error("Unknown event type: %s", event_type)
         result["gateway_body"] = f"unknown event_type: {event_type}"
         return result
 
     message = builder(context, label, instance)
 
-    # Same audit banner format as OpenClaw — Iris reads the same prompt
-    # contract regardless of gateway.
     audit_banner = (
         "\n\n---\n"
         f"**Audit headers** — pass these to `set_plan`, `set_tunable`, or\n"
@@ -1187,7 +905,7 @@ def _send_to_hermes(
     message = message + audit_banner
 
     if not PLANNER_PLAYBOOK_PATH.exists():
-        log.critical("Sending planning event with missing playbook (hermes): %s", PLANNER_PLAYBOOK_PATH)
+        log.critical("Sending planning event with missing playbook: %s", PLANNER_PLAYBOOK_PATH)
         message = (
             "## ⚠ DEGRADED MODE — Planner playbook missing\n\n"
             f"`{PLANNER_PLAYBOOK_PATH}` is not readable at this cycle. Operate\n"
@@ -1195,7 +913,6 @@ def _send_to_hermes(
             "---\n\n"
         ) + message
 
-    # Same wake_mode contract as OpenClaw so plan_delivery_log diffs cleanly.
     wake_now = event_type in ("SUNRISE", "SUNSET", "FORECAST_DEVIATION", "MANUAL")
     result["wake_mode"] = "now" if wake_now else "next-heartbeat"
 
@@ -1228,7 +945,8 @@ def _send_to_hermes(
             result["gateway_status"] = status
             result["gateway_body"] = body[:2000]
             # Hermes returns {"run_id": "..."} on accept; surface it for the
-            # post-cycle SLA verifier and migration-114 hermes_run_id column.
+            # post-cycle SLA verifier and the plan_delivery_log.hermes_run_id
+            # column added in migration 114.
             try:
                 parsed = json.loads(body)
                 if isinstance(parsed, dict):
@@ -1237,7 +955,7 @@ def _send_to_hermes(
                 pass
             if status < 300:
                 log.info(
-                    "Iris planner (hermes): %s/%s delivered run_id=%s status=%d elapsed=%dms payload=%dB",
+                    "Iris planner: %s/%s delivered run_id=%s status=%d elapsed=%dms payload=%dB",
                     event_type,
                     label,
                     result["hermes_run_id"],
@@ -1248,7 +966,7 @@ def _send_to_hermes(
                 result["delivered"] = True
             else:
                 log.error(
-                    "Iris planner (hermes): %s/%s rejected (status=%d, elapsed=%dms): %s",
+                    "Iris planner: %s/%s rejected (status=%d, elapsed=%dms): %s",
                     event_type,
                     label,
                     status,
@@ -1259,7 +977,7 @@ def _send_to_hermes(
         elapsed_ms = int((time.monotonic() - t_start) * 1000)
         body_s = e.read().decode("utf-8", errors="replace") if e.fp else ""
         log.error(
-            "Iris planner (hermes) HTTP error: %s/%s — code=%d elapsed=%dms err=%s",
+            "Iris planner HTTP error: %s/%s — code=%d elapsed=%dms err=%s",
             event_type,
             label,
             e.code,
@@ -1271,7 +989,7 @@ def _send_to_hermes(
     except Exception as e:
         elapsed_ms = int((time.monotonic() - t_start) * 1000)
         log.error(
-            "Iris planner (hermes) delivery failed: %s/%s — exception=%s elapsed=%dms err=%s",
+            "Iris planner delivery failed: %s/%s — exception=%s elapsed=%dms err=%s",
             event_type,
             label,
             type(e).__name__,
@@ -1282,27 +1000,3 @@ def _send_to_hermes(
         result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
 
     return result
-
-
-# ── Public dispatcher: send_to_iris ──────────────────────────────
-
-
-def send_to_iris(
-    event_type: str,
-    label: str,
-    context: str | None = None,
-    instance: PlannerInstance = "local",
-) -> dict:
-    """Dispatcher: routes to OpenClaw or Hermes based on the gateway switch.
-
-    Public callers (ingestor/tasks.py) keep the same signature they've always
-    had. AI_GATEWAY_BY_EVENT (per-event JSON) takes precedence over the
-    global AI_GATEWAY_PROVIDER, so Phase 7 canary cutover can promote one
-    event_type at a time without redeploying.
-    """
-    from config import AI_GATEWAY_BY_EVENT, AI_GATEWAY_PROVIDER  # noqa: E402
-
-    provider = AI_GATEWAY_BY_EVENT.get(event_type, AI_GATEWAY_PROVIDER).lower()
-    if provider == "hermes":
-        return _send_to_hermes(event_type, label, context, instance)
-    return _send_to_openclaw(event_type, label, context, instance)
