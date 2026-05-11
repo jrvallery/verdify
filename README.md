@@ -4,7 +4,7 @@
 
 367 sq ft. Longmont, Colorado. 5,090 feet. 15% humidity. 95°F solar peaks. Mixed crops. One deterministic controller.
 
-About 172 ESPHome entities feed an 8-state firmware controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Iris runs through OpenClaw with a local Gemma4-26B inference path for routine planning and a larger cloud peer for heavyweight reviews. It reads telemetry, forecasts, prior plans, scorecards, site context, and validated lessons before writing bounded tactical plans. The system measures outcomes, scores plans, and feeds validated lessons into future planning.
+About 172 ESPHome entities feed an 8-state firmware controller that evaluates conditions every 5 seconds. Crop profiles define what each zone needs at each hour. Iris runs through Hermes with OpenAI GPT-5.5 high-reasoning as the sole planner gateway. It reads telemetry, forecasts, prior plans, scorecards, site context, and validated lessons through typed MCP tools before writing bounded tactical plans. The system measures outcomes, scores plans, and feeds validated lessons into future planning.
 
 **[verdify.ai](https://verdify.ai)**
 
@@ -22,7 +22,7 @@ TimescaleDB (telemetry, views, scorecards, lessons)
   ├── MCP Server (typed tools for Iris)
   └── Quartz (static site with embedded panels)
 
-Iris Planner (OpenClaw: local Gemma4 + cloud peer)
+Iris Planner (Hermes + GPT-5.5, MCP-only tool surface)
   └── Event-driven: sunrise, transitions, sunset, forecast, deviation
       → MCP tools → set_tunable() → Slack #greenhouse
 ```
@@ -56,7 +56,7 @@ make check
 # Individual commands
 make lint              # Ruff linter (0 errors)
 make format            # Auto-format Python
-make test              # 83 smoke tests (~65s)
+make test              # 324 Python tests (~65s)
 make firmware-check    # Compile ESP32 firmware
 make planner-dry       # Render planner prompt (no API call)
 make help              # List all targets

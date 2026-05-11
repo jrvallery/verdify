@@ -1,5 +1,11 @@
 # Iris Planner Contract v1.5
 
+> Historical contract: this document describes the pre-2026-05-11 OpenClaw /
+> local-Gemma planner path. Production planning now routes through Hermes
+> (`hermes-iris`) with OpenAI GPT-5.5 high-reasoning and the MCP-only tool
+> allowlist in `hermes/iris/config.yaml`. Use `plan_delivery_log.hermes_run_id`
+> as the active gateway correlation field.
+
 **Status:** v1.5 by coordinator, 2026-05-04. Ratified direction: local-first planning. `iris-planner` is the production OpenClaw agent and is backed by local Gemma4 on cortext. Cloud planning is an explicit `cloud_escalation` path, not the default or an implicit fallback.
 
 **v1.5 change log (2026-05-04):** makes local Gemma4-on-cortext the default production planner path, defines the trigger ledger shape before more code changes, and closes the unsafe correlation rule: new planner rows correlate to triggers by exact `trigger_id` only. Legacy time-window fallback is permitted only for historical rows where both sides lack a UUID.

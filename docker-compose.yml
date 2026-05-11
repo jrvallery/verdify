@@ -356,9 +356,9 @@ services:
     ports:
       - "127.0.0.1:8642:8642"   # loopback only — never expose publicly
     volumes:
-      - /srv/verdify/hermes/iris:/opt/data
+      - /var/lib/verdify/hermes/iris:/opt/data
     env_file:
-      - /srv/verdify/hermes/iris/.env
+      - /etc/verdify/hermes-iris.env
     networks:
       - verdify-internal
     # host.docker.internal lets the container reach verdify-mcp.service
@@ -392,9 +392,9 @@ services:
     ports:
       - "127.0.0.1:8643:8642"
     volumes:
-      - /srv/verdify/hermes/iris-shadow:/opt/data
+      - /var/lib/verdify/hermes/iris-shadow:/opt/data
     env_file:
-      - /srv/verdify/hermes/iris-shadow/.env
+      - /etc/verdify/hermes-iris-shadow.env
     networks:
       - verdify-internal
     extra_hosts:

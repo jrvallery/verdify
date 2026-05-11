@@ -55,8 +55,8 @@ Run in this order; all should pass. Takes <30 seconds.
 # 1. DB
 docker exec verdify-timescaledb pg_isready  # → accepting connections
 
-# 2. OpenClaw gateway (Iris's dispatch endpoint)
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18789/status  # → 200
+# 2. Hermes gateway (Iris's dispatch endpoint)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8642/health  # → 200
 
 # 3. Core services
 for s in verdify-ingestor verdify-mcp verdify-setpoint-server; do

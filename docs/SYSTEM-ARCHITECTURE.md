@@ -1,12 +1,12 @@
 # Verdify System Architecture
 
-**Last Updated:** 2026-04-09
+**Last Updated:** 2026-05-11
 **Host:** vm-docker-iris (192.168.30.150)
 **Platform:** Debian 13, Docker 28, Python 3.13
 
 ## Overview
 
-Verdify is a greenhouse automation platform running primarily on a single VM. An ESP32 controller manages 367 sq ft of greenhouse climate (fans, heaters, misters, fog) using a deterministic controller (`greenhouse_logic.h`). A Python ingestor captures 172 sensor entities into TimescaleDB, and an AI agent named Iris runs through OpenClaw with a local Gemma4-26B inference path for routine events plus a larger cloud peer for heavyweight reviews. Iris manages tunables event-driven at solar milestones and deviations, but the ESP32 owns real-time relay control.
+Verdify is a greenhouse automation platform running primarily on a single VM. An ESP32 controller manages 367 sq ft of greenhouse climate (fans, heaters, misters, fog) using a deterministic controller (`greenhouse_logic.h`). A Python ingestor captures 172 sensor entities into TimescaleDB, and an AI agent named Iris runs through Hermes with OpenAI GPT-5.5 high-reasoning as the sole planner gateway. Iris manages tunables event-driven at solar milestones and deviations through typed MCP tools, but the ESP32 owns real-time relay control.
 
 ```
 ESP32 (192.168.10.111, IoT VLAN)
@@ -19,7 +19,7 @@ TimescaleDB (44 tables, 54 views, 23 functions, 2.54M+ rows)
   ├─→ API (api.verdify.ai, 14 crop endpoints + /setpoints)
   └─→ verdify.ai (Quartz static site with embedded Grafana panels)
 
-Iris Planner (OpenClaw: local Gemma4 + cloud peer)
+Iris Planner (Hermes + GPT-5.5, MCP-only tool surface)
   └─→ Event-driven (sunrise/transitions/sunset/forecast/deviation)
       → MCP tools (climate, scorecard, set_tunable) → setpoint_changes table
 ```
@@ -146,17 +146,16 @@ The ingestor (`/srv/verdify/ingestor/ingestor.py`, 945 lines) is the core data e
 | daily_summary_live | 1800s | Rolling daily cost/energy accumulator | — |
 | grow_light_daily | 86400s | Equipment runtime rollup + utility_cost | — |
 
-## Cron Jobs (9)
+## Cron Jobs (host crontab excerpt)
 
 | Schedule (MDT) | Script | Purpose |
 |----------------|--------|---------|
-| */5 * * * * | sync-openclaw-tokens.sh | OAuth token refresh for agent TUI sessions |
 | 0 1 * * * | pg_dump (inline) | Daily DB backup → /mnt/iris/backups/ |
 | 5 0 * * * | daily-summary-snapshot.py | End-of-day climate/cost finalization |
 | 10 0 * * * | vault-daily-writer.py | Daily summary → Obsidian vault markdown |
 | 15 0 * * * | vault-crop-writer.py | Per-crop status → Obsidian vault |
 | 15 0 * * * | generate-hydro-map.py | 60-position hydroponic layout HTML |
-| (event-driven) | iris_planner.py | Iris planner via OpenClaw (local Gemma4 routine path + cloud escalation, replaces cron) |
+| (event-driven) | iris_planner.py | Iris planner via Hermes `/v1/runs`, audited in `plan_delivery_log` |
 | 0 12,16,20,0 * * * | frigate-snapshot.py | Camera snapshots + Gemini vision analysis |
 | 0 13 * * * | checklist-to-slack.sh | Daily checklist → #greenhouse Slack |
 

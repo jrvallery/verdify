@@ -2,7 +2,7 @@
 
 > Authoritative map of where every file lives across the stack. When something moves, update this doc.
 
-Last updated: 2026-04-18
+Last updated: 2026-05-11
 
 ## The three git-tracked trees
 
@@ -27,7 +27,7 @@ All source-of-truth content lives on NFS (`/mnt/iris/` or `/mnt/jason/`). Three 
 │   ├── ingestor.py                ESP32 subscribe loop + on_state_change router
 │   ├── tasks.py                   15 periodic tasks
 │   ├── entity_map.py              ESP32 object_id → DB column routing
-│   ├── iris_planner.py            Event-driven OpenClaw planner dispatch
+│   ├── iris_planner.py            Event-driven Hermes planner dispatch
 │   ├── config.py / shared.py      env + global state
 │   ├── templates.py               planner prompt rendering
 │   ├── ai_config.py               AI model selection for planner, vision, embeddings
@@ -37,7 +37,7 @@ All source-of-truth content lives on NFS (`/mnt/iris/` or `/mnt/jason/`). Three 
 │   ├── main.py                    builds Docker image verdify-api
 │   └── Dockerfile
 │
-├── mcp/                        MCP server (18 tools exposed to Iris planner)
+├── mcp/                        MCP server (22 production tools exposed to Iris planner)
 │   └── server.py                  systemd verdify-mcp.service on localhost:8000
 │
 ├── firmware/                   ESPHome + C++ logic + native tests + replay harness
@@ -235,7 +235,7 @@ github.com/jrvallery/verdify                 TimescaleDB (local SSD volume)
 Manual on VM:
   systemctl restart <svc>
   docker compose up -d <svc>
-  make firmware-deploy                Iris planner (OpenClaw) ──HTTP──▶ MCP (18 tools)
+  make firmware-deploy                Iris planner (Hermes) ──HTTP──▶ MCP (22 tools)
                                                                         │
                                                                         ▼
                                                             DB writes + ESP32 dispatches

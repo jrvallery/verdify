@@ -2,13 +2,13 @@
 # OpenAI GPT-5.5 with reasoning_effort=high, MCP-only tool surface.
 #
 # Canonical source: hermes/iris/config.yaml (this repo).
-# Runtime location: /srv/verdify/hermes/iris/config.yaml (bind-mounted into
+# Runtime location: /var/lib/verdify/hermes/iris/config.yaml (bind-mounted into
 # the hermes-iris Docker container per docker-compose.yml).
 #
 # Deploy: this file is copied to the runtime location via
-# `make hermes-deploy-config` (or rsync). The runtime .env (containing
-# OPENAI_API_KEY, VERDIFY_MCP_TOKEN, HERMES_IRIS_API_KEY) is NEVER versioned
-# and lives only on the host.
+# `make hermes-deploy-config`. Runtime secrets live in
+# /etc/verdify/hermes-iris.env, are injected by docker-compose.yml, and are
+# NEVER versioned.
 
 model:
   # Hermes doesn't expose a generic "openai" provider — direct OpenAI access

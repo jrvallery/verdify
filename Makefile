@@ -12,8 +12,10 @@ FIRMWARE_ESPHOME := scripts/firmware-esphome-worktree.sh
 FIRMWARE_OTA_BIN := firmware/.esphome/build/greenhouse/.pioenvs/greenhouse/firmware.ota.bin
 REPLAY_CORPUS_GZ := firmware/test/data/replay_overrides.csv.gz
 REPLAY_CORPUS_TMP ?= /tmp/verdify-replay-overrides.csv
+HERMES_IRIS_RUNTIME_DIR ?= /var/lib/verdify/hermes/iris
+HERMES_IRIS_ENV_FILE ?= /etc/verdify/hermes-iris.env
 
-.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all firmware-invariants firmware-replay firmware-dwell-preview firmware-deploy firmware-archive-artifacts smoke clean
+.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all firmware-invariants firmware-replay firmware-dwell-preview firmware-deploy firmware-archive-artifacts smoke hermes-deploy-config hermes-restart hermes-smoke clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -181,6 +183,17 @@ planner-publish: ## Publish today's plan to verdify.ai
 
 planner-dry: ## Dry-run planner prompts — render every event type and assert G2/G4/G7 invariants
 	@$(PYTHON) scripts/planner-dry.py
+
+# ── Hermes ─────────────────────────────────────────────────────────
+
+hermes-deploy-config: ## Sync versioned Hermes config/SOUL into the host runtime
+	HERMES_IRIS_RUNTIME_DIR='$(HERMES_IRIS_RUNTIME_DIR)' HERMES_IRIS_ENV_FILE='$(HERMES_IRIS_ENV_FILE)' bash scripts/hermes-deploy-config.sh
+
+hermes-restart: hermes-deploy-config ## Recreate Hermes after config changes
+	docker compose --profile hermes up -d --force-recreate hermes-iris
+
+hermes-smoke: ## Check the local Hermes gateway health endpoint
+	curl -fsS http://127.0.0.1:8642/health
 
 # ── Stack ───────────────────────────────────────────────────────────
 
