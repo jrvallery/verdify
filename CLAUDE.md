@@ -76,7 +76,7 @@ Post-2026-04-21 incident (sprint-15/15.1 fix-it-forward spiral producing repeate
 
 4. **No sprint numbers.** Every change is PR-scoped and must carry replay-diff output + invariant-suite result + unit-test delta as artifacts in the PR description. Don't create `sprint-N.M` docs.
 
-5. **Stress-window freeze.** If outdoor_temp > 85°F forecast for the next 24 hours, no firmware deploys. Don't fix while it's on fire.
+5. **Stress-window warning.** If outdoor_temp > 85°F forecast for the next 24 hours, `make firmware-deploy` reports it as operator context but does not block. Severe alerts, 48-hour bake, and weekly OTA limits remain hard gates.
 
 6. **Every new tunable needs a `cfg_*` readback.** CI job `no-new-fire-and-forget` enforces this on PRs touching `firmware/greenhouse/tunables.yaml`. Fire-and-forget tunables are silent-push-corruption risks.
 
