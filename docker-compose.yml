@@ -346,9 +346,19 @@ services:
   # the AI_GATEWAY_PROVIDER env var on the ingestor flips between
   # OpenClaw (current default) and Hermes per-event.
   hermes-iris:
-    # Pin a specific digest after the first successful smoke. The
-    # gateway runtime is sensitive enough that :latest is a Phase-0
-    # blocker per the plan.
+    # Profile-gated. Default `docker compose up -d` does NOT start this
+    # service. To opt in: `docker compose --profile hermes up -d hermes-iris`.
+    #
+    # 2026-05-10 audit (coordinator) found that hermes-iris in the default
+    # profile destabilizes production: the container exits because it can't
+    # reach the host MCP at the wired URL, and it writes runtime data
+    # (gateway.lock, kanban.db, bin/, cron/, hooks/, ...) into hermes/iris/
+    # which IS the repo path — creating Git drift. Until (a) the MCP routing
+    # is fixed, (b) the runtime data dir is moved out of the repo, and (c)
+    # the image is pinned by digest, this service stays opt-in. OpenClaw
+    # remains the live planner gateway path.
+    profiles:
+      - hermes
     image: nousresearch/hermes-agent:latest
     container_name: hermes-iris
     restart: unless-stopped
