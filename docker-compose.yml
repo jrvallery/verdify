@@ -338,6 +338,35 @@ services:
     command: -config.file=/etc/promtail/config.yml
     restart: unless-stopped
 
+  # ── Hermes Iris (Phase 5 of the Iris loop overhaul) ────────────────
+  # Replaces OpenClaw as the planner gateway. OpenAI GPT-5.5 with
+  # reasoning_effort=high, single profile, MCP-only tool surface.
+  # Loopback-bound on 127.0.0.1:8642 — the ingestor calls /v1/runs from
+  # the same host. See hermes/iris/README.md for the canary cutover plan;
+  # the AI_GATEWAY_PROVIDER env var on the ingestor flips between
+  # OpenClaw (current default) and Hermes per-event.
+  hermes-iris:
+    # Pin a specific digest after the first successful smoke. The
+    # gateway runtime is sensitive enough that :latest is a Phase-0
+    # blocker per the plan.
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-iris
+    restart: unless-stopped
+    command: gateway run
+    ports:
+      - "127.0.0.1:8642:8642"   # loopback only — never expose publicly
+    volumes:
+      - /srv/verdify/hermes/iris:/opt/data
+    env_file:
+      - /srv/verdify/hermes/iris/.env
+    networks:
+      - verdify-internal
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
 volumes:
   tsdb_data:
   grafana_data:

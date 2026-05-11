@@ -3397,13 +3397,18 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
     # just the 2h time-window fallback in _resolve_delivery_log).
     trigger_id = result.get("trigger_id")
     instance = result.get("instance")
+    # Phase 5 (migration 114): when the Hermes gateway is the dispatcher,
+    # send_to_hermes returns the /v1/runs run_id alongside the existing
+    # gateway_status / gateway_body. OpenClaw rows leave this NULL.
+    hermes_run_id = result.get("hermes_run_id")
     async with pool.acquire() as conn:
         if explicit_status:
             return await conn.fetchval(
                 """
                 INSERT INTO plan_delivery_log
-                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, status, trigger_id, instance)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9)
+                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body,
+                   status, trigger_id, instance, hermes_run_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9, $10)
                 RETURNING id
                 """,
                 row["event_type"],
@@ -3415,12 +3420,14 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
                 explicit_status,
                 trigger_id,
                 instance,
+                hermes_run_id,
             )
         return await conn.fetchval(
             """
             INSERT INTO plan_delivery_log
-              (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body, trigger_id, instance)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
+              (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body,
+               trigger_id, instance, hermes_run_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9)
             RETURNING id
             """,
             row["event_type"],
@@ -3431,6 +3438,7 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
             row["gateway_body"],
             trigger_id,
             instance,
+            hermes_run_id,
         )
 
 

@@ -874,7 +874,7 @@ def gather_context() -> str:
 # ── Gateway delivery ─────────────────────────────────────────────
 
 
-def send_to_iris(
+def _send_to_openclaw(
     event_type: str,
     label: str,
     context: str | None = None,
@@ -1100,3 +1100,209 @@ def send_to_iris(
         result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
 
     return result
+
+
+# ── Hermes gateway (Phase 5) ─────────────────────────────────────
+
+
+def _send_to_hermes(
+    event_type: str,
+    label: str,
+    context: str | None = None,
+    instance: PlannerInstance = "local",
+) -> dict:
+    """Send a planning event to Iris via the Hermes API server (POST /v1/runs).
+
+    Mirror of `_send_to_openclaw` with the same return contract — every key
+    in the result dict carries the same semantic as the OpenClaw path so
+    plan_delivery_log writes and the SLA verifier see a uniform shape. The
+    Hermes-specific addition is `hermes_run_id` (stored to the column added
+    by migration 114) so the post-cycle correlator can join through to
+    Hermes's own run telemetry.
+    """
+    from config import HERMES_API_KEY, HERMES_SESSION_PREFIX, HERMES_URL  # noqa: E402
+
+    trigger_id = str(uuid.uuid4())
+
+    # Single profile under Phase 5 — both legacy "local" and "opus" instances
+    # collapse to the same Hermes profile (GPT-5.5 high-reasoning). The
+    # instance label is still propagated for plan_delivery_log audit so we
+    # can answer "which cycles ran through Hermes-iris" without grepping logs.
+    session_id = f"{HERMES_SESSION_PREFIX}:trigger:{trigger_id}"
+
+    # Same regex hygiene as the OpenClaw path.
+    import re as _re_session
+
+    if not _re_session.fullmatch(r"[A-Za-z0-9:_\-.]+", session_id):
+        log.error("send_to_iris/hermes: rejecting malformed session_id before POST: %r", session_id)
+        return {
+            "delivered": False,
+            "event_type": event_type,
+            "event_label": label,
+            "session_key": session_id,
+            "wake_mode": None,
+            "gateway_status": 0,
+            "gateway_body": f"client-side reject: malformed session_id {session_id!r}",
+            "trigger_id": trigger_id,
+            "instance": instance,
+            "hermes_run_id": None,
+        }
+
+    result = {
+        "delivered": False,
+        "event_type": event_type,
+        "event_label": label,
+        "session_key": session_id,
+        "wake_mode": None,
+        "gateway_status": None,
+        "gateway_body": None,
+        "trigger_id": trigger_id,
+        "instance": instance,
+        "hermes_run_id": None,
+    }
+
+    if context is None:
+        context = gather_context()
+
+    builder = _PROMPT_BUILDERS.get(event_type)
+    if not builder:
+        log.error("Unknown event type (hermes): %s", event_type)
+        result["gateway_body"] = f"unknown event_type: {event_type}"
+        return result
+
+    message = builder(context, label, instance)
+
+    # Same audit banner format as OpenClaw — Iris reads the same prompt
+    # contract regardless of gateway.
+    audit_banner = (
+        "\n\n---\n"
+        f"**Audit headers** — pass these to `set_plan`, `set_tunable`, or\n"
+        f"`acknowledge_trigger` so the\n"
+        f"plan-journal and setpoint-changes rows record which trigger and which\n"
+        f"planner instance produced them.\n\n"
+        f"- `trigger_id={trigger_id}`\n"
+        f"- `planner_instance={instance!r}`\n"
+        f"---\n\n"
+    )
+    message = message + audit_banner
+
+    if not PLANNER_PLAYBOOK_PATH.exists():
+        log.critical("Sending planning event with missing playbook (hermes): %s", PLANNER_PLAYBOOK_PATH)
+        message = (
+            "## ⚠ DEGRADED MODE — Planner playbook missing\n\n"
+            f"`{PLANNER_PLAYBOOK_PATH}` is not readable at this cycle. Operate\n"
+            "from the embedded _PLANNER_KNOWLEDGE block in this prompt only.\n\n"
+            "---\n\n"
+        ) + message
+
+    # Same wake_mode contract as OpenClaw so plan_delivery_log diffs cleanly.
+    wake_now = event_type in ("SUNRISE", "SUNSET", "FORECAST_DEVIATION", "MANUAL")
+    result["wake_mode"] = "now" if wake_now else "next-heartbeat"
+
+    payload = {
+        "input": message,
+        "session_id": session_id,
+        "metadata": {
+            "trigger_id": trigger_id,
+            "planner_instance": instance,
+            "event_type": event_type,
+            "event_label": label,
+            "wake_mode": result["wake_mode"],
+        },
+    }
+    url = f"{HERMES_URL}/v1/runs"
+    data = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {HERMES_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+    t_start = time.monotonic()
+    payload_bytes = len(data)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            status = resp.getcode()
+            body = resp.read().decode("utf-8", errors="replace")
+            elapsed_ms = int((time.monotonic() - t_start) * 1000)
+            result["gateway_status"] = status
+            result["gateway_body"] = body[:2000]
+            # Hermes returns {"run_id": "..."} on accept; surface it for the
+            # post-cycle SLA verifier and migration-114 hermes_run_id column.
+            try:
+                parsed = json.loads(body)
+                if isinstance(parsed, dict):
+                    result["hermes_run_id"] = parsed.get("run_id") or parsed.get("id")
+            except Exception:
+                pass
+            if status < 300:
+                log.info(
+                    "Iris planner (hermes): %s/%s delivered run_id=%s status=%d elapsed=%dms payload=%dB",
+                    event_type,
+                    label,
+                    result["hermes_run_id"],
+                    status,
+                    elapsed_ms,
+                    payload_bytes,
+                )
+                result["delivered"] = True
+            else:
+                log.error(
+                    "Iris planner (hermes): %s/%s rejected (status=%d, elapsed=%dms): %s",
+                    event_type,
+                    label,
+                    status,
+                    elapsed_ms,
+                    body[:200],
+                )
+    except urllib.error.HTTPError as e:
+        elapsed_ms = int((time.monotonic() - t_start) * 1000)
+        body_s = e.read().decode("utf-8", errors="replace") if e.fp else ""
+        log.error(
+            "Iris planner (hermes) HTTP error: %s/%s — code=%d elapsed=%dms err=%s",
+            event_type,
+            label,
+            e.code,
+            elapsed_ms,
+            body_s[:200],
+        )
+        result["gateway_status"] = e.code
+        result["gateway_body"] = body_s
+    except Exception as e:
+        elapsed_ms = int((time.monotonic() - t_start) * 1000)
+        log.error(
+            "Iris planner (hermes) delivery failed: %s/%s — exception=%s elapsed=%dms err=%s",
+            event_type,
+            label,
+            type(e).__name__,
+            elapsed_ms,
+            e,
+        )
+        result["gateway_status"] = 0
+        result["gateway_body"] = f"exception: {type(e).__name__}: {e}"[:2000]
+
+    return result
+
+
+# ── Public dispatcher: send_to_iris ──────────────────────────────
+
+
+def send_to_iris(
+    event_type: str,
+    label: str,
+    context: str | None = None,
+    instance: PlannerInstance = "local",
+) -> dict:
+    """Dispatcher: routes to OpenClaw or Hermes based on the gateway switch.
+
+    Public callers (ingestor/tasks.py) keep the same signature they've always
+    had. AI_GATEWAY_BY_EVENT (per-event JSON) takes precedence over the
+    global AI_GATEWAY_PROVIDER, so Phase 7 canary cutover can promote one
+    event_type at a time without redeploying.
+    """
+    from config import AI_GATEWAY_BY_EVENT, AI_GATEWAY_PROVIDER  # noqa: E402
+
+    provider = AI_GATEWAY_BY_EVENT.get(event_type, AI_GATEWAY_PROVIDER).lower()
+    if provider == "hermes":
+        return _send_to_hermes(event_type, label, context, instance)
+    return _send_to_openclaw(event_type, label, context, instance)

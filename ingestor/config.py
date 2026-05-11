@@ -75,6 +75,27 @@ ENABLE_LOCAL_PLANNER = os.environ.get("ENABLE_LOCAL_PLANNER", "true").lower() in
     "yes",
 )
 
+# ── Hermes Iris (Phase 5 of the Iris loop overhaul) ──────────────
+# Hermes is the OpenClaw replacement gateway. Default is OPENCLAW
+# until Phase 7 canary cutover completes; per-event override via
+# AI_GATEWAY_BY_EVENT lets us promote one event_type at a time.
+import json as _json_for_gateway  # noqa: E402
+
+AI_GATEWAY_PROVIDER = os.environ.get("AI_GATEWAY_PROVIDER", "openclaw")  # openclaw | hermes
+HERMES_URL = os.environ.get("HERMES_URL", "http://127.0.0.1:8642")
+HERMES_API_KEY = os.environ.get("HERMES_IRIS_API_KEY", "")
+HERMES_SESSION_PREFIX = os.environ.get("HERMES_SESSION_PREFIX", "hermes:iris:main")
+# Per-event override map. JSON-encoded env var, e.g.
+#   AI_GATEWAY_BY_EVENT='{"MANUAL":"hermes","FORECAST_DEVIATION":"hermes"}'
+# A blank/invalid value yields {}, and send_to_iris falls back to AI_GATEWAY_PROVIDER.
+_ai_by_event_raw = os.environ.get("AI_GATEWAY_BY_EVENT", "")
+try:
+    AI_GATEWAY_BY_EVENT: dict[str, str] = _json_for_gateway.loads(_ai_by_event_raw) if _ai_by_event_raw else {}
+    if not isinstance(AI_GATEWAY_BY_EVENT, dict):
+        AI_GATEWAY_BY_EVENT = {}
+except _json_for_gateway.JSONDecodeError:
+    AI_GATEWAY_BY_EVENT = {}
+
 # ── Greenhouse ────────────────────────────────────────────────────
 GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "vallery")
 LATITUDE = float(os.environ.get("LATITUDE", "40.1672"))

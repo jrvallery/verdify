@@ -1,0 +1,90 @@
+# Hermes profile config for the Verdify Iris planner — single profile,
+# OpenAI GPT-5.5 with reasoning_effort=high, MCP-only tool surface.
+#
+# Canonical source: hermes/iris/config.yaml (this repo).
+# Runtime location: /srv/verdify/hermes/iris/config.yaml (bind-mounted into
+# the hermes-iris Docker container per docker-compose.yml).
+#
+# Deploy: this file is copied to the runtime location via
+# `make hermes-deploy-config` (or rsync). The runtime .env (containing
+# OPENAI_API_KEY, VERDIFY_MCP_TOKEN, HERMES_IRIS_API_KEY) is NEVER versioned
+# and lives only on the host.
+
+model:
+  provider: openai
+  model: gpt-5.5
+  reasoning_effort: high
+  api_key_env: OPENAI_API_KEY
+
+agent:
+  # Iris's longest cycles (SUNRISE/SUNSET) read ~6-10 MCP tools in sequence
+  # plus write a plan. 30 turns is generous; over that, suspect a tool-call
+  # loop and surface as a Hermes alert instead of letting the cycle run away.
+  max_turns: 30
+  # Hermes-side capabilities Verdify doesn't want in the production planner.
+  # Memory: Verdify already has TimescaleDB-backed plan_journal + planner_lessons.
+  # Web/browser/terminal/filesystem: Iris must not browse the live site, exec
+  # shell commands, read raw files, or hit arbitrary URLs. Every write goes
+  # through the MCP allowlist below.
+  disabled_toolsets:
+    - memory
+    - web
+    - terminal
+    - filesystem
+    - browser
+
+mcp_servers:
+  verdify_greenhouse:
+    url: "http://verdify-mcp:8080/mcp"
+    headers:
+      Authorization: "Bearer ${VERDIFY_MCP_TOKEN}"
+    tools:
+      include:
+        # Monitoring
+        - climate
+        - scorecard
+        - equipment_state
+        - forecast
+        - get_setpoints
+        - plan_status
+        - history
+        - alerts
+        # Knowledge
+        - lessons
+        - lessons_search       # Phase 3
+        - knowledge_search     # Phase 3
+        # Crops + topology
+        - crops
+        - observations
+        - topology
+        - position_current
+        - crop_history
+        - crop_lifecycle
+        # Writes — all carry trigger_id + planner_instance audit
+        - set_plan
+        - set_tunable
+        - acknowledge_trigger
+        - plan_evaluate
+        - lessons_manage
+      exclude:
+        - query  # raw-SQL escape hatch — deliberately denied in production
+      resources: false
+      prompts: false
+
+skills:
+  # Hermes own skill system is dormant for Verdify — Iris's identity + tactics
+  # come from gather-plan-context.sh + _STANDING_DIRECTIVES + _PLANNER_CORE
+  # in ingestor/iris_planner.py. Guarding new skills protects against drift.
+  guard_agent_created: true
+
+# API server: loopback only. The ingestor calls /v1/runs from the same host.
+api_server:
+  enabled: true
+  host: "0.0.0.0"   # inside the container; docker-compose binds 127.0.0.1
+  port: 8642
+  api_key_env: HERMES_IRIS_API_KEY
+
+# Dashboard off — the API server is the only interface. Avoids accidental
+# port-forward exposure.
+dashboard:
+  enabled: false
