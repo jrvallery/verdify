@@ -183,6 +183,7 @@ int main(int argc, char* argv[]) {
         in.rh_pct = parse_float(get("rh_avg"), 60.0f);
         in.outdoor_rh_pct = parse_float(get("outdoor_rh_pct"), 30.0f);
         in.enthalpy_delta = parse_float(get("enthalpy_delta"), -5.0f);
+        in.solar_w_m2 = parse_float(get("solar_irradiance_w_m2"), 0.0f);
         in.dew_point_f = parse_float(get("indoor_dew_point"), in.temp_f - 10.0f);
         in.vpd_south = in.vpd_kpa;
         in.vpd_west = in.vpd_kpa;
@@ -388,7 +389,8 @@ int main(int argc, char* argv[]) {
         p.in = SensorInputs{};
         p.in.temp_f = 72.0f; p.in.vpd_kpa = 1.5f; p.in.rh_pct = 60.0f;
         p.in.dew_point_f = 55.0f; p.in.outdoor_rh_pct = 30.0f;
-        p.in.enthalpy_delta = -5.0f; p.in.vpd_south = 1.5f; p.in.vpd_west = 1.5f;
+        p.in.enthalpy_delta = -5.0f; p.in.solar_w_m2 = 0.0f;
+        p.in.vpd_south = 1.5f; p.in.vpd_west = 1.5f;
         p.in.vpd_east = 1.5f; p.in.local_hour = 12; p.in.occupied = false;
         p.sp = default_setpoints();
         // Sprint-11: default_setpoints() is now wide (2-band model —

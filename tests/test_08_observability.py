@@ -687,6 +687,9 @@ class TestSetpointConfirmation:
         assert "zone_temp_stress" in controls_source
         assert "target_temp_high_f" in controls_source
         assert "east_temp" in controls_source
+        assert "zone_mister_demand" in controls_source
+        assert "bool global_stressed = (avg_vpd > id(mister_engage_kpa));" in controls_source
+        assert "id(mister_engage_kpa) - MISTER_HYST" in controls_source
 
     def test_confirmation_monitor_ignores_superseded_rows(self):
         body = Path("/srv/verdify/ingestor/tasks.py").read_text()

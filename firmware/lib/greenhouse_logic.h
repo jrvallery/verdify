@@ -138,25 +138,40 @@ inline Mode determine_mode_v2(
     const bool safety_cool = in.temp_f >= sp.safety_max;
     const bool safety_heat = in.temp_f <= sp.safety_min;
     const bool was_cooling = (prev == VENTILATE) || (prev == THERMAL_RELIEF);
+    const bool vpd_high = in.vpd_kpa > sp.vpd_high;
+    const bool vpd_high_resolved = in.vpd_kpa <= (sp.vpd_high - HV);
     const bool outdoor_cold_for_vent =
         std::isfinite(in.outdoor_temp_f) && in.outdoor_temp_f < (sp.temp_low - 10.0f);
+    const bool solar_feedforward =
+        std::isfinite(in.solar_w_m2)
+        && in.solar_w_m2 >= 500.0f
+        && in.local_hour >= 10
+        && in.local_hour <= 17
+        && !vpd_high
+        && vpd_high_resolved;
     const float cooling_exit_hysteresis =
         outdoor_cold_for_vent ? std::max(sp.temp_hysteresis, 3.0f) : sp.temp_hysteresis;
     const float cooling_entry_margin =
         outdoor_cold_for_vent ? v2_cool_stage2_delta_f(sp) : 0.0f;
+    const float solar_cooling_lead_f = (solar_feedforward && !outdoor_cold_for_vent) ? 1.0f : 0.0f;
+    const float cooling_entry_threshold =
+        std::max(sp.temp_low + 1.0f, temp_high + cooling_entry_margin - solar_cooling_lead_f);
+    const float cooling_hold_threshold =
+        std::min(temp_high - cooling_exit_hysteresis, cooling_entry_threshold - cooling_exit_hysteresis);
     const bool needs_cooling = was_cooling
-        ? in.temp_f > (temp_high - cooling_exit_hysteresis)
-        : in.temp_f > (temp_high + cooling_entry_margin);
+        ? in.temp_f > cooling_hold_threshold
+        : in.temp_f > cooling_entry_threshold;
+    const bool solar_preventive_cooling =
+        needs_cooling && !was_cooling && solar_cooling_lead_f > 0.0f && in.temp_f <= temp_high;
     const float heat_target = v2_heat_target_f(sp);
     const bool temp_below_band = in.temp_f < sp.temp_low;
     const bool needs_heating_s1 = in.temp_f < (heat_target + sp.heat_hysteresis);
 
-    const bool vpd_high = in.vpd_kpa > sp.vpd_high;
-    const bool vpd_high_resolved = in.vpd_kpa <= (sp.vpd_high - HV);
     const bool cold_dehum_allowed =
         !outdoor_cold_for_vent || in.temp_f > (sp.temp_low + std::max(2.0f, sp.temp_hysteresis));
-    const bool vpd_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block && cold_dehum_allowed;
-    const bool vpd_dehum_exit = in.vpd_kpa >= sp.vpd_low || !cold_dehum_allowed;
+    const float vpd_dehum_entry_threshold = outdoor_cold_for_vent ? (sp.vpd_low - HV) : sp.vpd_low;
+    const bool vpd_low_enter = in.vpd_kpa < vpd_dehum_entry_threshold && !sp.econ_block && cold_dehum_allowed;
+    const bool vpd_dehum_exit = in.vpd_kpa >= (sp.vpd_low + HV) || !cold_dehum_allowed;
     const bool was_dehum = prev == DEHUM_VENT;
     const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
 
@@ -262,7 +277,9 @@ inline Mode determine_mode_v2(
         }
     } else if (needs_cooling) {
         mode = VENTILATE;
-        state.last_mode_reason = state.override_summer_vent ? "v2_summer_vent" : "v2_temp_high";
+        state.last_mode_reason = state.override_summer_vent
+            ? "v2_summer_vent"
+            : (solar_preventive_cooling ? "v2_solar_preventive_cool" : "v2_temp_high");
         state.sealed_timer_ms = 0;
     } else if (vpd_low_enter) {
         mode = DEHUM_VENT;

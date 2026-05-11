@@ -10,6 +10,7 @@ Replaces 10 cron jobs with a single in-process task scheduler.
 import asyncio
 import json
 import logging
+import math
 import sys
 import time
 import urllib.error
@@ -1894,6 +1895,61 @@ def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: f
     return abs(last - val) / max(abs(val), abs_floor) < rel
 
 
+def _finite_positive(value: object) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isfinite(numeric) and numeric > 0.0:
+        return numeric
+    return None
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _house_vpd_control_band(band_row, zone_row) -> dict[str, float]:
+    """Derive the firmware's house VPD band from crop and zone policy.
+
+    `fn_band_setpoints()` is crop-science policy and can be pulled toward the
+    strictest crop. Firmware controls one air mass, so its global VPD band uses
+    the median zone target while per-zone mister targets still protect localized
+    crop stress.
+    """
+    base_low = float(band_row["vpd_low"])
+    base_high = float(band_row["vpd_high"])
+    if not zone_row:
+        return {"vpd_low": base_low, "vpd_high": base_high}
+
+    targets = [
+        target
+        for param in (
+            "vpd_target_south",
+            "vpd_target_west",
+            "vpd_target_east",
+            "vpd_target_center",
+        )
+        if (target := _finite_positive(zone_row[param])) is not None
+    ]
+    if not targets:
+        return {"vpd_low": base_low, "vpd_high": base_high}
+
+    min_target = min(targets)
+    max_target = max(targets)
+    house_high = min(max_target, max(base_high, _median(targets)))
+    house_low = max(base_low, min_target - 0.15)
+    house_low = min(house_low, house_high - 0.25)
+    house_low = max(0.1, house_low)
+    if house_high - house_low < 0.25:
+        house_high = min(max_target, house_low + 0.25)
+    return {"vpd_low": round(house_low, 3), "vpd_high": round(house_high, 3)}
+
+
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     global _last_pushed
     # On ESP32 reconnect, rebuild the cache from firmware cfg_* readbacks.
@@ -1914,6 +1970,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         # Compute crop-science band (outer envelope) + per-zone VPD targets
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
+        control_band = _house_vpd_control_band(band_row, zone_row) if band_row else None
 
         planned = await conn.fetch("SELECT parameter, value, ts, plan_id, reason FROM v_active_plan")
         raw_planner_params = {r["parameter"]: r["value"] for r in (planned or [])}
@@ -1952,10 +2009,11 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             planner_params[param] = clean_val
 
         # Band-driven params: planner can tighten within band, clamped to edges
-        if band_row:
+        if band_row and control_band:
             for param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):
-                band_lo = float(band_row["temp_low" if param.startswith("temp") else "vpd_low"])
-                band_hi = float(band_row["temp_high" if param.startswith("temp") else "vpd_high"])
+                source_row = band_row if param.startswith("temp") else control_band
+                band_lo = float(source_row["temp_low" if param.startswith("temp") else "vpd_low"])
+                band_hi = float(source_row["temp_high" if param.startswith("temp") else "vpd_high"])
                 planner_val = planner_params.get(param)
                 if planner_val is not None:
                     planner_f = float(planner_val)
@@ -1973,8 +2031,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                             )
                         )
                 else:
-                    val = float(band_row[param])
-                val = round(val, 1)
+                    val = float(source_row[param])
+                val = round(val, 1 if param.startswith("temp") else 2)
                 if _should_skip(_last_pushed.get(param), val):
                     continue
                 changes.append((param, val))
@@ -2002,8 +2060,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
 
         # Mister tuning defaults: band-derived fallbacks, planner can override
         # engage/all_kpa default to band ceiling; planner may set different values
-        if band_row:
-            vpd_hi = float(band_row["vpd_high"])
+        if band_row and control_band:
+            vpd_hi = float(control_band["vpd_high"])
             mister_defaults = {
                 "mister_engage_kpa": round(vpd_hi, 2),
                 "mister_all_kpa": round(vpd_hi + 0.3, 2),

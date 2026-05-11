@@ -246,6 +246,7 @@ int main(int argc, char** argv) {
         in.dew_point_f = r.dew_point_f;
         in.outdoor_rh_pct = r.outdoor_rh_pct;
         in.enthalpy_delta = parse_float(get("enthalpy_delta"), -5.0f);
+        in.solar_w_m2 = r.solar_w_m2;
         in.vpd_south = r.vpd_kpa;
         in.vpd_west = r.vpd_kpa;
         in.vpd_east = r.vpd_kpa;
