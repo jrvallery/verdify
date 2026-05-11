@@ -11,10 +11,13 @@
 # and lives only on the host.
 
 model:
-  provider: openai
-  model: gpt-5.5
+  # Hermes doesn't expose a generic "openai" provider — direct OpenAI access
+  # goes through the "custom" provider with an OpenAI-compatible base_url.
+  # OPENAI_API_KEY is picked up automatically.
+  default: "gpt-5.5"
+  provider: "custom"
+  base_url: "https://api.openai.com/v1"
   reasoning_effort: high
-  api_key_env: OPENAI_API_KEY
 
 agent:
   # Iris's longest cycles (SUNRISE/SUNSET) read ~6-10 MCP tools in sequence
@@ -78,11 +81,15 @@ skills:
   guard_agent_created: true
 
 # API server: loopback only. The ingestor calls /v1/runs from the same host.
-api_server:
-  enabled: true
-  host: "0.0.0.0"   # inside the container; docker-compose binds 127.0.0.1
-  port: 8642
-  api_key_env: HERMES_IRIS_API_KEY
+# api_server platform: Hermes reads under platforms.<name>.extra (see
+# /opt/hermes/gateway/config.py:PlatformConfig). API_SERVER_KEY env var
+# is the actual auth source — config.api_key_env is not a Hermes schema.
+platforms:
+  api_server:
+    enabled: true
+    extra:
+      host: "0.0.0.0"   # container-internal; docker-compose binds 127.0.0.1
+      port: 8642
 
 # Dashboard off — the API server is the only interface. Avoids accidental
 # port-forward exposure.
