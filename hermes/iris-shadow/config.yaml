@@ -26,7 +26,7 @@ agent:
 mcp_servers:
   verdify_greenhouse_shadow:
     # ← The only material difference from production hermes/iris/config.yaml
-    url: "http://verdify-mcp:8001/mcp"
+    url: "http://host.docker.internal:8001/mcp"
     headers:
       Authorization: "Bearer ${VERDIFY_MCP_TOKEN}"
     tools:
