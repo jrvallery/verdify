@@ -25,6 +25,7 @@ from verdify_schemas.alerts import (
     LeakDetectedAlert,
     PlanContextFailedAlert,
     PlannerBandOwnershipDriftAlert,
+    PlannerEvaluationMissedAlert,
     PlannerGatewayDeliveryFailedAlert,
     PlannerRequiredPlanMissedAlert,
     PlannerStaleAlert,
@@ -165,6 +166,10 @@ CASES = {
     "planner_stale": (
         PlannerStaleAlert,
         {"age_s": 50_500, "age_h": 14.0},
+    ),
+    "planner_evaluation_missed": (
+        PlannerEvaluationMissedAlert,
+        {"plan_id": "iris-20260509-0551", "age_hours": 27},
     ),
     "planner_tunable_range_drift": (
         PlannerTunableRangeDriftAlert,
