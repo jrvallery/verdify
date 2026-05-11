@@ -35,7 +35,7 @@ agent:
 
 mcp_servers:
   verdify_greenhouse:
-    url: "http://verdify-mcp:8080/mcp"
+    url: "http://host.docker.internal:8000/mcp"
     headers:
       Authorization: "Bearer ${VERDIFY_MCP_TOKEN}"
     tools:
