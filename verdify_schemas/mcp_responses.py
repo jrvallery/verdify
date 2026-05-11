@@ -254,6 +254,7 @@ class PlanRunResponse(BaseModel):
     planner_instance: str | None = None
     session_key: str | None = None
     status: str | None = None
+    hermes_run_id: str | None = None
 
 
 # ── Date stub used only to keep the import block tidy ─

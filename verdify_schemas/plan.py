@@ -262,3 +262,4 @@ class PlanDeliveryLogRow(BaseModel):
     instance: PlannerInstance | None = None
     acked_at: AwareDatetime | None = None
     status: PlanDeliveryStatus | None = None
+    hermes_run_id: str | None = None

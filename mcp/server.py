@@ -188,6 +188,7 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
         "gateway_body": result.get("gateway_body"),
         "trigger_id": result.get("trigger_id"),
         "instance": result.get("instance"),
+        "hermes_run_id": result.get("hermes_run_id"),
     }
     explicit_status = result.get("status")
     if explicit_status is None and result.get("delivered") is False:
@@ -201,8 +202,8 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
             """
             INSERT INTO plan_delivery_log
               (event_type, event_label, session_key, wake_mode, gateway_status,
-               gateway_body, trigger_id, instance, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9)
+               gateway_body, trigger_id, instance, status, hermes_run_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10)
             """,
             row["event_type"],
             row["event_label"],
@@ -213,14 +214,15 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
             row["trigger_id"],
             row["instance"],
             explicit_status,
+            row["hermes_run_id"],
         )
         return explicit_status
     await conn.execute(
         """
         INSERT INTO plan_delivery_log
           (event_type, event_label, session_key, wake_mode, gateway_status,
-           gateway_body, trigger_id, instance)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
+           gateway_body, trigger_id, instance, hermes_run_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9)
         """,
         row["event_type"],
         row["event_label"],
@@ -230,6 +232,7 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
         row["gateway_body"],
         row["trigger_id"],
         row["instance"],
+        row["hermes_run_id"],
     )
     return explicit_status
 
@@ -609,13 +612,14 @@ async def plan_run(mode: str = "normal") -> str:
         status = explicit_status or "pending"
         resp = PlanRunResponse(
             ok=bool(result.get("delivered")),
-            note="MANUAL event sent to local iris-planner. Check plan_delivery_log for ack/plan correlation.",
+            note="MANUAL event sent to Hermes. Check plan_delivery_log for ack/plan correlation.",
             error=None if result.get("delivered") else result.get("gateway_body"),
             trigger_id=result.get("trigger_id"),
             event_type=result.get("event_type"),
             planner_instance=result.get("instance"),
             session_key=result.get("session_key"),
             status=status,
+            hermes_run_id=result.get("hermes_run_id"),
         )
         return resp.model_dump_json(exclude_none=True)
     except Exception as e:
