@@ -31,6 +31,7 @@ AlertType = Literal[
     "leak_detected",
     "plan_context_failed",
     "planner_band_ownership_drift",
+    "planner_evaluation_missed",
     "planner_gateway_delivery_failed",
     "planner_required_plan_missed",
     "planner_stale",
@@ -60,6 +61,7 @@ ALERT_TYPES: tuple[str, ...] = (
     "leak_detected",
     "plan_context_failed",
     "planner_band_ownership_drift",
+    "planner_evaluation_missed",
     "planner_gateway_delivery_failed",
     "planner_required_plan_missed",
     "planner_stale",
@@ -124,6 +126,11 @@ class ESP32RebootDetails(_DetailsBase):
 class PlannerStaleDetails(_DetailsBase):
     age_s: int = Field(..., ge=0)
     age_h: float = Field(..., ge=0)
+
+
+class PlannerEvaluationMissedDetails(_DetailsBase):
+    plan_id: str
+    age_hours: int = Field(..., ge=0)
 
 
 class PlanDeliveryFailureDetails(_DetailsBase):
@@ -323,6 +330,11 @@ class PlannerStaleAlert(_AlertBase):
     details: PlannerStaleDetails
 
 
+class PlannerEvaluationMissedAlert(_AlertBase):
+    alert_type: Literal["planner_evaluation_missed"]
+    details: PlannerEvaluationMissedDetails
+
+
 class PlannerGatewayDeliveryFailedAlert(_AlertBase):
     alert_type: Literal["planner_gateway_delivery_failed"]
     details: PlannerGatewayDeliveryFailedDetails
@@ -427,6 +439,7 @@ AlertEnvelopeUnion = Annotated[
     | LeakDetectedAlert
     | PlanContextFailedAlert
     | PlannerBandOwnershipDriftAlert
+    | PlannerEvaluationMissedAlert
     | PlannerGatewayDeliveryFailedAlert
     | PlannerRequiredPlanMissedAlert
     | PlannerStaleAlert
