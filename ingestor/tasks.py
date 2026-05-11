@@ -825,6 +825,45 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
+        # 7b. planner_evaluation_missed — Phase 2 of Iris loop overhaul.
+        # SUNRISE plans older than 26h with no validated_at. The SUNRISE
+        # prompt declares plan_evaluate MANDATORY but the 2026-05-10 baseline
+        # showed only 41.5% of SUNRISE plans get evaluated within 25h.
+        # Warning at 26h, critical at 48h. This rule was originally drafted
+        # in scripts/alert-monitor.py (Phase 2 PR) but the live alert engine
+        # is this file — the rule lives here so it actually fires.
+        eval_missed = await conn.fetch(
+            """
+            SELECT plan_id,
+                   EXTRACT(EPOCH FROM (now() - created_at))::int AS age_seconds
+              FROM plan_journal
+             WHERE plan_id LIKE 'iris-%'
+               AND validated_at IS NULL
+               AND created_at < now() - interval '26 hours'
+               AND EXTRACT(hour FROM created_at AT TIME ZONE 'America/Denver') BETWEEN 5 AND 9
+             ORDER BY created_at
+            """
+        )
+        for row in eval_missed:
+            age_h = row["age_seconds"] // 3600
+            severity = "critical" if row["age_seconds"] > 48 * 3600 else "warning"
+            alerts.append(
+                {
+                    "alert_type": "planner_evaluation_missed",
+                    "severity": severity,
+                    "category": "system",
+                    "sensor_id": "system.planner.evaluation",
+                    "zone": None,
+                    "message": (
+                        f"SUNRISE plan {row['plan_id']} not evaluated ({age_h}h since created); "
+                        f"plan_evaluate is MANDATORY per the SUNRISE prompt contract"
+                    ),
+                    "details": {"plan_id": row["plan_id"], "age_hours": age_h},
+                    "metric_value": float(age_h),
+                    "threshold_value": 26.0,
+                }
+            )
+
         # 7a. Planner gateway delivery failures. A failed OpenClaw POST is a
         # first-class outage, not a pending planner action. Keep the lookback
         # short so transient restarts auto-resolve once deliveries recover.
