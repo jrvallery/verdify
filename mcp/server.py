@@ -163,6 +163,14 @@ mcp = FastMCP(
     The planner sets registry-approved tunables that shape how the controller responds.
     Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
     read-only context in routine plans; use direct tunable pushes only for explicit overrides.""",
+    # Bind explicitly so MCP_HTTP_HOST/PORT env vars actually take effect.
+    # FastMCP only auto-reads FASTMCP_-prefixed env vars, so the
+    # os.environ.setdefault block in __main__ was dead code. Reading the env
+    # here lets a systemd drop-in (Environment=MCP_HTTP_HOST=0.0.0.0) make
+    # the server reachable from the hermes-iris Docker container via the
+    # docker0 / verdify-internal bridge IP. Default stays 127.0.0.1:8000.
+    host=os.environ.get("MCP_HTTP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("MCP_HTTP_PORT", "8000")),
 )
 
 
