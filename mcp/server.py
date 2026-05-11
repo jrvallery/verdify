@@ -163,6 +163,13 @@ mcp = FastMCP(
     The planner sets registry-approved tunables that shape how the controller responds.
     Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
     read-only context in routine plans; use direct tunable pushes only for explicit overrides.""",
+    # Bind explicitly so MCP_HTTP_HOST/PORT env vars work as expected.
+    # FastMCP only reads FASTMCP_-prefixed env vars by default, so the
+    # os.environ.setdefault block in __main__ was previously dead. Reading
+    # the env here makes 0.0.0.0 binding selectable for the hermes-iris
+    # container-to-host bridge (Phase 5 of the Iris loop overhaul).
+    host=os.environ.get("MCP_HTTP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("MCP_HTTP_PORT", "8000")),
 )
 
 
