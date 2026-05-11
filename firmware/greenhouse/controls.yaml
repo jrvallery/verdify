@@ -349,6 +349,7 @@ interval:
               .dew_point_f = isnan(id(dewpoint_avg).state) ? Tin - 10.0f : id(dewpoint_avg).state,
               .outdoor_rh_pct = isnan(id(ha_outdoor_rh).state) ? 30.0f : id(ha_outdoor_rh).state,
               .enthalpy_delta = isnan(dH) ? -5.0f : dH,
+              .solar_w_m2 = isnan(id(tempest_solar_w_m2)) ? 0.0f : id(tempest_solar_w_m2),
               .vpd_south = id(vpd_south).state,
               .vpd_west = id(vpd_west).state,
               .vpd_east = id(vpd_east).state,
@@ -542,17 +543,25 @@ interval:
             // Fog remains the heavy escalation and is still gated by the vent
             // close interlock above when fog_closes_vent is enabled.
             bool occupancy_blocks = id(occupancy_inhibit_enabled) && id(greenhouse_occupied);
+            // Quick check: is any zone above its crop VPD target?
+            bool any_zone_stressed = false;
+            if(!isnan(south_vpd) && id(vpd_target_south) > 0 && south_vpd > id(vpd_target_south)) any_zone_stressed = true;
+            if(!isnan(west_vpd) && id(vpd_target_west) > 0 && west_vpd > id(vpd_target_west)) any_zone_stressed = true;
+            if(!isnan(east_vpd) && id(vpd_target_east) > 0 && east_vpd > id(vpd_target_east)) any_zone_stressed = true;
+            if(id(vpd_target_center) > 0 && avg_vpd > id(vpd_target_center)) any_zone_stressed = true;
+            bool zone_mister_demand = (humidity_demand || any_zone_stressed) && mister_vent_ok;
             // FW-9: VPD emergency override — allow misting even if budget exhausted
             float vpd_max_zone = fmax(south_vpd, fmax(west_vpd, east_vpd));
             bool vpd_emergency = !isnan(vpd_max_zone) && (vpd_max_zone > id(safety_vpd_max_kpa));
             bool mister_blocked =
                 (id(mister_water_today) >= id(mister_water_budget_gal) && !vpd_emergency)
-                || !humidity_demand
+                || !zone_mister_demand
                 || occupancy_blocks;
 
             if(mister_blocked && id(mister_state) > 0){
-              ESP_LOGI("mister","BLOCKED (budget=%.0f/%.0f humid=%d occ=%d)",
-                       id(mister_water_today), id(mister_water_budget_gal), humidity_demand, occupancy_blocks);
+              ESP_LOGI("mister","BLOCKED (budget=%.0f/%.0f humid=%d zone=%d occ=%d)",
+                       id(mister_water_today), id(mister_water_budget_gal),
+                       humidity_demand, any_zone_stressed, occupancy_blocks);
               id(south_wall_mister).turn_off();
               id(west_wall_mister).turn_off();
               id(center_mister).turn_off();
@@ -566,13 +575,6 @@ interval:
             }
 
             if(!mister_blocked){
-              // Quick check: is any zone above its crop VPD target?
-              bool any_zone_stressed = false;
-              if(!isnan(south_vpd) && id(vpd_target_south) > 0 && south_vpd > id(vpd_target_south)) any_zone_stressed = true;
-              if(!isnan(west_vpd) && id(vpd_target_west) > 0 && west_vpd > id(vpd_target_west)) any_zone_stressed = true;
-              if(!isnan(east_vpd) && id(vpd_target_east) > 0 && east_vpd > id(vpd_target_east)) any_zone_stressed = true;
-              if(id(vpd_target_center) > 0 && avg_vpd > id(vpd_target_center)) any_zone_stressed = true;
-
               // Track humidity duration for mister engage delay
               // Per-zone stress counts toward engage delay even if global state is HUM_IDLE
               if((humidity_demand || any_zone_stressed) && id(mister_state) == 0){
@@ -596,6 +598,7 @@ interval:
 
               const uint32_t PULSE_ON_MS  = uint32_t(id(mister_pulse_on_s)) * 1000UL;
               const uint32_t PULSE_GAP_MS = uint32_t(id(mister_pulse_gap_s)) * 1000UL;
+              const float MISTER_HYST = fminf(HV, fmaxf(0.05f, id(mister_engage_kpa) * 0.25f));
 
               // Helper: select mister zone with highest stress score.
               // Each zone has its own VPD target from its planted crops.
@@ -713,7 +716,7 @@ interval:
               };
 
               // --- S1 ENGAGE: misters start when any zone is stressed OR global threshold exceeded ---
-              bool global_stressed = (avg_vpd > VPDhi);
+              bool global_stressed = (avg_vpd > id(mister_engage_kpa));
 
               if(id(mister_state) == 0
                  && (humidity_demand || any_zone_stressed)
@@ -761,7 +764,7 @@ interval:
               // This is tracked separately — see willFog gate at line ~439.
 
               // --- DE-ESCALATE S2 → S1 ---
-              if(id(mister_state) == 2 && avg_vpd < (id(mister_all_kpa) - HV)){
+              if(id(mister_state) == 2 && avg_vpd < (id(mister_all_kpa) - MISTER_HYST)){
                 ESP_LOGI("mister","S2→S1: VPD=%.2f", avg_vpd);
                 id(mister_state) = 1;
                 id(humid_s2_duration_ms) = 0;
@@ -771,7 +774,7 @@ interval:
               }
 
               // --- DE-ESCALATE S1 → off ---
-              if(id(mister_state) == 1 && avg_vpd < (VPDhi - HV)){
+              if(id(mister_state) == 1 && !any_zone_stressed && avg_vpd < (id(mister_engage_kpa) - MISTER_HYST)){
                 ESP_LOGI("mister","S1→off: VPD=%.2f", avg_vpd);
                 turn_off_all_misters();
                 id(mister_state) = 0;

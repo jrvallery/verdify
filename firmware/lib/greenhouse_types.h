@@ -43,6 +43,7 @@ struct SensorInputs {
     float dew_point_f;      // indoor dew point (°F)
     float outdoor_rh_pct;   // outdoor RH (%)
     float enthalpy_delta;   // outdoor - indoor enthalpy (kJ/kg)
+    float solar_w_m2;       // Tempest solar radiation (W/m²), used for cooling feed-forward
     float vpd_south;        // zone VPD sensors (NaN-tolerant — checked where used)
     float vpd_west;
     float vpd_east;

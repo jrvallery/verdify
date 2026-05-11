@@ -40,6 +40,7 @@ static SensorInputs make_inputs(float temp, float vpd, float rh = 60.0f) {
     return { .temp_f = temp, .vpd_kpa = vpd, .rh_pct = rh,
              .dew_point_f = temp - 10.0f, .outdoor_rh_pct = 30.0f,
              .enthalpy_delta = -5.0f,
+             .solar_w_m2 = 0.0f,
              .vpd_south = vpd, .vpd_west = vpd, .vpd_east = vpd,
              .local_hour = 12, .occupied = false,
              .outdoor_temp_f = NAN, .outdoor_dewpoint_f = NAN,
@@ -1947,6 +1948,33 @@ TEST(fsm_v2_cold_outdoor_cooling_entry_uses_band_margin) {
     PASS();
 }
 
+TEST(fsm_v2_solar_preventive_cooling_before_temp_high) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(sp.temp_high - 0.5f, 0.9f);
+    in.solar_w_m2 = 700.0f;
+    in.local_hour = 14;
+
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_solar_preventive_cool");
+    PASS();
+}
+
+TEST(fsm_v2_solar_preventive_cooling_respects_cold_outdoor_guard) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+    auto in = make_inputs(sp.temp_high - 0.5f, 0.9f);
+    in.solar_w_m2 = 700.0f;
+    in.local_hour = 14;
+    in.outdoor_temp_f = sp.temp_low - 11.0f;
+
+    Mode m = determine_mode(in, sp, s, 5000);
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_idle");
+    PASS();
+}
+
 TEST(fsm_v2_cooling_stage2_is_band_scaled) {
     auto sp = fsm_v2_setpoints();  // 6°F band => v2 S2 fan delta = 1.5°F
     sp.dC2 = 3.0f;                 // legacy margin would wait until 81°F
@@ -1956,6 +1984,23 @@ TEST(fsm_v2_cooling_stage2_is_band_scaled) {
     ASSERT_TRUE(out.vent);
     ASSERT_TRUE(out.fan1);
     ASSERT_TRUE(out.fan2);
+    PASS();
+}
+
+TEST(fsm_v2_dehum_enters_at_vpd_low_edge_and_holds_to_hysteresis) {
+    auto sp = fsm_v2_setpoints();
+    auto s = initial_state();
+
+    Mode m1 = determine_mode(make_inputs(75.0f, sp.vpd_low - 0.01f), sp, s, 5000);
+    ASSERT_EQ(m1, DEHUM_VENT);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_vpd_low");
+
+    Mode m2 = determine_mode(make_inputs(75.0f, sp.vpd_low + 0.05f), sp, s, 5000);
+    ASSERT_EQ(m2, DEHUM_VENT);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_dehum_continue");
+
+    Mode m3 = determine_mode(make_inputs(75.0f, sp.vpd_low + v2_vpd_hysteresis(sp) + 0.01f), sp, s, 5000);
+    ASSERT_EQ(m3, IDLE);
     PASS();
 }
 

@@ -305,6 +305,26 @@ def test_dispatcher_band_owned_contract_is_explicit():
     assert "param in BAND_DRIVEN_PARAMS" in src
 
 
+def test_house_vpd_control_band_uses_zone_median_not_strictest_crop():
+    """The firmware controls one air mass; zone targets still drive misters."""
+    import tasks
+
+    band = {"vpd_low": 0.375, "vpd_high": 0.635}
+    zones = {
+        "vpd_target_south": 1.15,
+        "vpd_target_west": 1.20,
+        "vpd_target_east": 0.70,
+        "vpd_target_center": 0.635,
+    }
+
+    control = tasks._house_vpd_control_band(band, zones)
+
+    assert control["vpd_high"] > band["vpd_high"]
+    assert 0.90 <= control["vpd_high"] <= 1.00
+    assert control["vpd_low"] > band["vpd_low"]
+    assert control["vpd_high"] <= max(zones.values())
+
+
 def test_mcp_set_tunable_treats_vpd_low_as_band_owned():
     """MCP should expose crop-band params as read-only context, not Tier 1
     tactical tuning. The dispatcher owns vpd_low through fn_band_setpoints().

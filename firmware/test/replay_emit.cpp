@@ -109,6 +109,7 @@ int main(int argc, char** argv) {
         in.vpd_kpa = parse_float(get("vpd_avg"), 0.8f);
         in.dew_point_f = parse_float(get("indoor_dew_point"), in.temp_f - 10.0f);
         in.enthalpy_delta = parse_float(get("enthalpy_delta"), -5.0f);
+        in.solar_w_m2 = parse_float(get("solar_irradiance_w_m2"), 0.0f);
         // zone vpds unavailable in this CSV; use avg
         in.vpd_south = in.vpd_kpa; in.vpd_west = in.vpd_kpa;
         in.vpd_east = in.vpd_kpa;

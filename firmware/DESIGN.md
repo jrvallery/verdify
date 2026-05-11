@@ -17,6 +17,11 @@ tunables through ESPHome native API numbers and switches. Firmware does not
 invent day/night bands or forecast policy; when upstream setpoints are missing,
 it falls back to wide safety-bounded defaults.
 
+Crop VPD targets and house-control VPD targets are intentionally separate. The
+dispatcher derives the global firmware VPD band from the median zone target so
+the ESP32 controls the shared air mass, while the per-zone crop targets continue
+to drive directional mister selection and zone stress response.
+
 ## State Machine
 
 The active controller is an 8-state band-first FSM:
@@ -35,6 +40,18 @@ enough to ventilate but VPD remains too high, the controller may pulse misters
 while the vent remains open. This is explicit in the v2 relay resolver and is
 not the older "open-vent misting is impossible" invariant.
 
+During high solar load, v2 can enter `VENTILATE` before the upper temperature
+edge is crossed. The hard-coded feed-forward is deliberately small: Tempest
+solar radiation at or above 500 W/m2 from 10:00-17:00 local lowers the cooling
+entry point by 1°F, never below `temp_low + 1°F`, and is disabled when outdoor
+air is cold enough to trigger the cold-vent guard or VPD is already high.
+
+Night and shoulder-period dehumidification is edge-based: v2 enters
+`DEHUM_VENT` as soon as VPD falls below `vpd_low` and exits only after
+recovering above `vpd_low + hysteresis`. When outdoor air is cold enough to
+trigger the cold-vent guard, entry remains conservative at `vpd_low -
+hysteresis`.
+
 ## Setpoint Contract
 
 Every planner/operator-controlled value should have:
@@ -49,6 +66,10 @@ Every planner/operator-controlled value should have:
 Values arrive through direct ESPHome API pushes. The removed HTTP `/setpoints`
 poller is intentionally not part of the v1.0 runtime because it held buffers
 and sockets on an ESP32 that was already close to heap limits.
+
+`mister_engage_kpa` is the global S1 mister threshold. It is separate from
+`vpd_high`, which is the house mode-control ceiling; zone misters may also fire
+when an individual zone exceeds its crop VPD target.
 
 ## Safety Layers
 
