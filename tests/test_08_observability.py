@@ -131,7 +131,11 @@ class TestDispatcherWiring:
 
     def test_dispatcher_heap_skip_marks_deferred_without_realtime_bypass(self):
         body = self._read()
-        assert "heap_free < 38.0" in body
+        assert "HEAP_DEFER_FREE_KB = 30.0" in body
+        assert "HEAP_DEFER_MIN_FREE_KB = 10.0" in body
+        assert "HEAP_DEFER_LARGEST_BLOCK_KB = 18.0" in body
+        assert "_heap_push_defer_active" in body
+        assert "return heap_alert_open" in body
         assert "heap_defer_active" in body
         assert "recent_heap_deferred" in body
         assert "ts > now() - interval '30 minutes'" in body

@@ -2551,6 +2551,13 @@ from quiet_mode import (
 # In-memory cache of last pushed values — prevents re-pushing unchanged setpoints
 _last_pushed: dict[str, float] = {}
 
+# Direct ESP32 pushes are heap-expensive, but an open heap alert can also be
+# stale after the controller has rebooted and current fragmentation is healthy.
+# Gate on fresh diagnostics so post-OTA setpoint reconciliation can recover.
+HEAP_DEFER_FREE_KB = 30.0
+HEAP_DEFER_MIN_FREE_KB = 10.0
+HEAP_DEFER_LARGEST_BLOCK_KB = 18.0
+
 # Unified band-first controller compatibility/readback field. ESPHome control
 # loop, dispatcher, MCP, and outbound-listener guardrails force it ON.
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
@@ -2696,6 +2703,25 @@ def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: f
     if last is None:
         return False
     return abs(last - val) / max(abs(val), abs_floor) < rel
+
+
+def _heap_push_defer_active(
+    heap_alert_open: bool,
+    heap_free_kb: float | None,
+    heap_min_free_kb: float | None,
+    heap_largest_free_block_kb: float | None,
+) -> bool:
+    """Return true when direct ESP32 setpoint pushes should be deferred."""
+
+    if heap_free_kb is None:
+        return heap_alert_open
+    if heap_free_kb < HEAP_DEFER_FREE_KB:
+        return True
+    if heap_min_free_kb is not None and heap_min_free_kb < HEAP_DEFER_MIN_FREE_KB:
+        return True
+    if heap_largest_free_block_kb is not None and heap_largest_free_block_kb < HEAP_DEFER_LARGEST_BLOCK_KB:
+        return True
+    return False
 
 
 def _readback_drift(param: str, desired: float) -> bool:
@@ -3269,7 +3295,15 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             """
         )
         heap_free = float(heap_guard["heap_bytes"]) if heap_guard and heap_guard["heap_bytes"] is not None else None
-        heap_defer_active = bool(heap_alert_open or (heap_free is not None and heap_free < 38.0))
+        heap_min = (
+            float(heap_guard["heap_min_free_kb"]) if heap_guard and heap_guard["heap_min_free_kb"] is not None else None
+        )
+        heap_largest = (
+            float(heap_guard["heap_largest_free_block_kb"])
+            if heap_guard and heap_guard["heap_largest_free_block_kb"] is not None
+            else None
+        )
+        heap_defer_active = _heap_push_defer_active(bool(heap_alert_open), heap_free, heap_min, heap_largest)
         recent_heap_deferred: dict[str, float] = {}
         if heap_defer_active:
             recent_heap_deferred = {
@@ -3449,7 +3483,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             if heap_guard and heap_guard["heap_largest_free_block_kb"] is not None
             else None
         )
-        if heap_alert_open or (heap_free is not None and heap_free < 38.0):
+        if _heap_push_defer_active(bool(heap_alert_open), heap_free, heap_min, heap_largest):
             log.warning(
                 "Dispatcher: skipped direct ESP32 push of %d change(s) due to heap pressure "
                 "(heap=%.1fKB min=%sKB largest=%sKB alert_open=%s)",
