@@ -726,7 +726,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts),\n  CASE\n    WHEN value = 'v2_sensor_fault' THEN 'SENSOR_FAULT'\n    WHEN value = 'v2_safety_heat' THEN 'SAFETY_HEAT'\n    WHEN value = 'v2_safety_cool' THEN 'SAFETY_COOL'\n    WHEN value = 'v2_heat_stage2' THEN 'HEAT_S2'\n    WHEN value = 'v2_heat_stage1' THEN 'HEAT_S1'\n    WHEN value IN ('v2_temp_high', 'v2_summer_vent', 'v2_temp_preempts_humidify') THEN 'COOL_S1'\n    WHEN value = 'v2_dwell_hold' THEN 'DWELL_HOLD'\n    ELSE 'TEMP_IDLE'\n  END AS \"Temperature Axis\"\nFROM system_state\nWHERE entity = 'mode_reason' AND $__timeFilter(ts)\nORDER BY ts",
+          "rawSql": "SELECT $__time(ts),\n  CASE\n    WHEN value IN ('v2_sensor_fault', 'sensor_fault') THEN 'SENSOR_FAULT'\n    WHEN value IN ('v2_safety_heat', 'safety_heat') THEN 'SAFETY_HEAT'\n    WHEN value IN ('v2_safety_cool', 'safety_cool') THEN 'SAFETY_COOL'\n    WHEN value IN ('v2_heat_stage2', 'heat_stage2') THEN 'HEAT_S2'\n    WHEN value IN ('v2_heat_stage1', 'heat_stage1') THEN 'HEAT_S1'\n    WHEN value IN ('v2_temp_high', 'temp_high', 'v2_summer_vent', 'summer_vent', 'v2_temp_preempts_humidify', 'temp_preempts_humidify', 'v2_solar_preventive_cool', 'solar_preventive_cool') THEN 'COOL_S1'\n    WHEN value IN ('v2_dwell_hold', 'dwell_hold') THEN 'DWELL_HOLD'\n    ELSE 'TEMP_IDLE'\n  END AS \"Temperature Axis\"\nFROM system_state\nWHERE entity = 'mode_reason' AND $__timeFilter(ts)\nORDER BY ts",
           "refId": "B"
         },
         {
@@ -735,7 +735,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts),\n  CASE\n    WHEN value IN ('v2_vpd_low', 'v2_dehum_continue') THEN 'VPD_LOW'\n    WHEN value = 'v2_humidify_enter' THEN 'HUMID_S1'\n    WHEN value = 'v2_humidify_continue' THEN 'HUMIDIFY'\n    WHEN value = 'v2_humidify_resolved' THEN 'VPD_RESOLVED'\n    WHEN value = 'v2_mist_backoff' THEN 'MIST_BACKOFF'\n    WHEN value = 'v2_moisture_blocked' THEN 'MOISTURE_BLOCKED'\n    WHEN value = 'v2_temp_preempts_humidify' THEN 'TEMP_PREEMPT'\n    WHEN value = 'v2_summer_vent' THEN 'SUMMER_VENT'\n    ELSE 'VPD_IDLE'\n  END AS \"VPD Axis\"\nFROM system_state\nWHERE entity = 'mode_reason' AND $__timeFilter(ts)\nORDER BY ts",
+          "rawSql": "SELECT $__time(ts),\n  CASE\n    WHEN value IN ('v2_vpd_low', 'vpd_low', 'v2_dehum_continue', 'dehum_continue') THEN 'VPD_LOW'\n    WHEN value IN ('v2_humidify_enter', 'humidify_enter') THEN 'HUMID_S1'\n    WHEN value IN ('v2_humidify_continue', 'humidify_continue') THEN 'HUMIDIFY'\n    WHEN value IN ('v2_humidify_resolved', 'humidify_resolved') THEN 'VPD_RESOLVED'\n    WHEN value IN ('v2_mist_backoff', 'mist_backoff') THEN 'MIST_BACKOFF'\n    WHEN value IN ('v2_moisture_blocked', 'moisture_blocked') THEN 'MOISTURE_BLOCKED'\n    WHEN value IN ('v2_temp_preempts_humidify', 'temp_preempts_humidify') THEN 'TEMP_PREEMPT'\n    WHEN value IN ('v2_summer_vent', 'summer_vent') THEN 'SUMMER_VENT'\n    ELSE 'VPD_IDLE'\n  END AS \"VPD Axis\"\nFROM system_state\nWHERE entity = 'mode_reason' AND $__timeFilter(ts)\nORDER BY ts",
           "refId": "C"
         }
       ],
@@ -928,6 +928,9 @@
       "description": "Shows how many setpoint writes were issued over the last 24 hours.",
       "fieldConfig": {
         "defaults": {
+          "custom": {
+            "axisLabel": "Hours"
+          },
           "thresholds": {
             "steps": [
               {
@@ -943,7 +946,8 @@
                 "value": 1000
               }
             ]
-          }
+          },
+          "unit": "short"
         }
       },
       "gridPos": {

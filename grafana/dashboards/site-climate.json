@@ -8,7 +8,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Observed indoor temperature and outdoor/forecast temperature against the crop-safe target band. Equipment markers show when heat, fan, and fog outputs were active.",
+      "description": "Indoor temperature against the green firmware compliance band, with only the heat entry and fan/cooling entry thresholds rendered. Crop/planner provenance, dispatcher math, cfg readbacks, and padding details remain in the band traceability SQL contract.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -106,68 +106,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Band High"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#2E7D32",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.fillBelowTo",
-                "value": "Band Low"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 18
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Band Low"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#2E7D32",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Outdoor"
             },
             "properties": [
@@ -181,75 +119,6 @@
               {
                 "id": "custom.lineWidth",
                 "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Fan 1"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#26A69A",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "points"
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Fan 2"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#5C6BC0",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "points"
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Fog"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#00ACC1",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "points"
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 3
               }
             ]
           },
@@ -296,6 +165,298 @@
               {
                 "id": "custom.pointSize",
                 "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Compliant High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2E7D32",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Compliant Low"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Compliant Low"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2E7D32",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#26A69A",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1 (Electric)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2 (Gas)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(255,140,50,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -384,7 +545,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH timeline AS (\n    SELECT generate_series($__timeFrom(), $__timeTo(), interval '30 minutes') AS ts\n)\nSELECT t.ts AS time,\n    (fn_band_setpoints(t.ts)).temp_low::float AS \"Band Low\",\n    (fn_band_setpoints(t.ts)).temp_high::float AS \"Band High\"\nFROM timeline t ORDER BY t.ts",
+          "rawSql": "SELECT ts AS time,\n    firmware_temp_low::float AS \"Compliant Low\",\n    firmware_temp_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
           "refId": "C",
           "sql": {
             "columns": [
@@ -440,39 +601,6 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "refId": "E",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 82 ELSE NULL END AS \"Fan 1\" FROM equipment_state WHERE equipment='fan1' AND $__timeFilter(ts) ORDER BY ts"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "F",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 84 ELSE NULL END AS \"Fan 2\" FROM equipment_state WHERE equipment='fan2' AND $__timeFilter(ts) ORDER BY ts"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "H",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 86 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
           "refId": "G",
           "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 58 ELSE NULL END AS \"Heat 1\" FROM equipment_state WHERE equipment='heat1' AND $__timeFilter(ts) ORDER BY ts"
         },
@@ -486,9 +614,149 @@
           "rawQuery": true,
           "refId": "I",
           "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 56 ELSE NULL END AS \"Heat 2 (gas)\" FROM equipment_state WHERE equipment='heat2' AND $__timeFilter(ts) ORDER BY ts"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 82 ELSE NULL END AS \"Fan 1\" FROM equipment_state WHERE equipment='fan1' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "E",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 84 ELSE NULL END AS \"Fan 2\" FROM equipment_state WHERE equipment='fan2' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "F",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 86 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "H",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 58 ELSE NULL END AS \"Heat 1 (Electric)\" FROM equipment_state WHERE equipment='heat1' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "J",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 56 ELSE NULL END AS \"Heat 2 (Gas)\" FROM equipment_state WHERE equipment='heat2' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "K",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
-      "title": "Temperature Control Against Safe Band",
+      "title": "Temperature Compliance Band",
       "type": "timeseries"
     },
     {
@@ -496,7 +764,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Observed indoor VPD and outdoor/forecast VPD against the crop-safe target band. Mister and fog markers show when humidity equipment was active.",
+      "description": "Indoor VPD against the green firmware compliance band, with only the dehumidify/fan entry and fog entry thresholds rendered. Crop/planner provenance, dispatcher math, cfg readbacks, and padding details remain in the band traceability SQL contract.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -594,68 +862,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Band High"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#2E7D32",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.fillBelowTo",
-                "value": "Band Low"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 18
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Band Low"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#2E7D32",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Outdoor VPD"
             },
             "properties": [
@@ -675,69 +881,62 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Mister South"
+              "options": "Compliant High"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#CE93D8",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
               {
-                "id": "custom.drawStyle",
-                "value": "points"
+                "id": "custom.lineWidth",
+                "value": 1
               },
               {
-                "id": "custom.pointSize",
-                "value": 3
+                "id": "custom.fillBelowTo",
+                "value": "Compliant Low"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Mister West"
+              "options": "Compliant Low"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#F48FB1",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
               {
-                "id": "custom.drawStyle",
-                "value": "points"
+                "id": "custom.lineWidth",
+                "value": 1
               },
               {
-                "id": "custom.pointSize",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Mister Center"
-            },
-            "properties": [
-              {
-                "id": "color",
+                "id": "custom.hideFrom",
                 "value": {
-                  "fixedColor": "#E040FB",
-                  "mode": "fixed"
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
                 }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "points"
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 3
               }
             ]
           },
@@ -761,6 +960,167 @@
               {
                 "id": "custom.pointSize",
                 "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -849,7 +1209,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH timeline AS (\n    SELECT generate_series($__timeFrom(), $__timeTo(), interval '30 minutes') AS ts\n)\nSELECT t.ts AS time,\n    (fn_band_setpoints(t.ts)).vpd_low::float AS \"Band Low\",\n    (fn_band_setpoints(t.ts)).vpd_high::float AS \"Band High\"\nFROM timeline t ORDER BY t.ts",
+          "rawSql": "SELECT ts AS time,\n    firmware_vpd_low::float AS \"Compliant Low\",\n    firmware_vpd_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
           "refId": "C",
           "sql": {
             "columns": [
@@ -899,50 +1259,118 @@
         },
         {
           "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
           },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.8 ELSE NULL END AS \"Mister South\" FROM equipment_state WHERE equipment='mister_south' AND $__timeFilter(ts) ORDER BY ts",
           "refId": "E",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.8 ELSE NULL END AS \"Mister South\" FROM equipment_state WHERE equipment='mister_south' AND $__timeFilter(ts) ORDER BY ts"
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         },
         {
           "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
           },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.9 ELSE NULL END AS \"Mister West\" FROM equipment_state WHERE equipment='mister_west' AND $__timeFilter(ts) ORDER BY ts",
           "refId": "F",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.9 ELSE NULL END AS \"Mister West\" FROM equipment_state WHERE equipment='mister_west' AND $__timeFilter(ts) ORDER BY ts"
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         },
         {
           "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
           },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.0 ELSE NULL END AS \"Mister Center\" FROM equipment_state WHERE equipment='mister_center' AND $__timeFilter(ts) ORDER BY ts",
           "refId": "G",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.0 ELSE NULL END AS \"Mister Center\" FROM equipment_state WHERE equipment='mister_center' AND $__timeFilter(ts) ORDER BY ts"
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         },
         {
           "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
           },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts",
           "refId": "H",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts"
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
-      "title": "VPD Control Against Safe Band",
+      "title": "VPD Compliance Band",
       "type": "timeseries"
     },
     {

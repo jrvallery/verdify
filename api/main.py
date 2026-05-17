@@ -17,10 +17,12 @@ import os
 import re
 import smtplib
 import sys
+import time
 import urllib.parse
 import urllib.request
 from contextlib import asynccontextmanager
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from typing import Annotated
@@ -41,6 +43,12 @@ def _coerce_jsonb(row_dict: dict, *keys: str) -> dict:
         if isinstance(v, str):
             row_dict[k] = json.loads(v)
     return row_dict
+
+
+def _round_half_up(value: float, precision: int) -> float:
+    """Match PostgreSQL numeric round() for setpoint values sent to firmware."""
+    quantum = Decimal("1").scaleb(-precision)
+    return float(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
 
 
 # verdify_schemas is mounted at /app/verdify_schemas inside the container
@@ -64,9 +72,17 @@ from verdify_schemas import (  # noqa: E402
     ObservationCreate,
     ObservationWithCrop,
     PositionCurrentEntry,
+    PublicBandTraceLatest,
+    PublicBandTraceResponse,
+    PublicBandTraceSummary,
     PublicDataHealthCheck,
     PublicDataHealthResponse,
+    PublicGpuPowerLatest,
+    PublicGpuPowerPoint,
+    PublicGpuPowerResponse,
     PublicHomeMetrics,
+    PublicInfraCpuLatest,
+    PublicInfraCpuPoint,
     PublicPipelineHealthSource,
     PublicPlannerHealthResponse,
     PublicPlannerTrigger,
@@ -93,10 +109,23 @@ def get_db_dsn():
 pool: asyncpg.Pool = None
 
 
+async def _init_db_connection(conn: asyncpg.Connection) -> None:
+    # Public proof endpoints hit planner/data-health views that are small but
+    # complex enough for Postgres JIT to spend seconds compiling. Keep API
+    # sessions latency-first; the DB still uses JIT for other clients.
+    await conn.execute("SET jit = off")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global pool
-    pool = await asyncpg.create_pool(get_db_dsn(), min_size=1, max_size=3, max_inactive_connection_lifetime=60)
+    pool = await asyncpg.create_pool(
+        get_db_dsn(),
+        min_size=1,
+        max_size=3,
+        max_inactive_connection_lifetime=60,
+        init=_init_db_connection,
+    )
     yield
     await pool.close()
 
@@ -137,6 +166,10 @@ async def noindex_api_responses(request: Request, call_next):
 DEFAULT_GREENHOUSE = "vallery"
 WRITE_API_KEY_ENV = "VERDIFY_WRITE_API_KEY"
 ALLOW_UNAUTHENTICATED_WRITES_ENV = "VERDIFY_ALLOW_UNAUTHENTICATED_WRITES"
+PUBLIC_HOME_METRICS_CACHE_TTL_S = 30.0
+_PUBLIC_HOME_METRICS_CACHE: dict[str, tuple[float, PublicHomeMetrics]] = {}
+PUBLIC_GPU_POWER_CACHE_TTL_S = 30.0
+_PUBLIC_GPU_POWER_CACHE: dict[str, tuple[float, dict]] = {}
 CONTACT_ALLOWED_TOPICS = {"build", "control", "data", "press", "collaboration", "correction", "other"}
 CONTACT_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 CONTACT_URL_RE = re.compile(r"(https?://|www\.)", re.IGNORECASE)
@@ -486,8 +519,11 @@ async def _parse_contact_submission(request: Request) -> tuple[PublicContactSubm
 @app.get("/api/v1/greenhouses/{greenhouse_id}/setpoints")
 async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     """Return setpoints in key=value format for ESP32 consumption."""
-    # Band-driven params that fn_band_setpoints() computes from crop profiles
+    # Dispatcher-owned params: temperature uses crop profile envelope directly,
+    # VPD uses the DB-owned house control band, and lighting uses the highest
+    # active crop DLI to set the photoperiod window firmware enforces.
     BAND_COMPUTED = {"temp_high", "temp_low", "vpd_high", "vpd_low"}
+    LIGHTING_COMPUTED = {"gl_dli_target", "gl_sunrise_hour", "gl_sunset_hour", "sw_gl_auto_mode"}
     async with pool.acquire() as conn:
         # Get latest value per parameter (Tier 1 + band-driven only, no legacy params)
         rows = await conn.fetch(
@@ -507,23 +543,34 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 'lead_rotate_s','min_fan_on_s','min_fan_off_s',
                 'east_adjacency_factor','irrig_vpd_boost_pct','irrig_vpd_boost_threshold_hrs',
                 'fog_rh_ceiling_pct','fog_min_temp_f','fog_time_window_start','fog_time_window_end',
-                'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold',
+                'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold','gl_lux_hysteresis',
+                'gl_main_dli_target','gl_main_sunrise_hour','gl_main_sunset_hour',
+                'gl_main_lux_threshold','gl_main_lux_hysteresis','gl_main_min_on_s','gl_main_min_off_s',
+                'gl_grow_dli_target','gl_grow_sunrise_hour','gl_grow_sunset_hour',
+                'gl_grow_lux_threshold','gl_grow_lux_hysteresis','gl_grow_min_on_s','gl_grow_min_off_s',
+                'sw_gl_main_auto_mode','sw_gl_grow_auto_mode',
                 'safety_min','safety_max','safety_vpd_min','safety_vpd_max',
                 'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min',
-                'sw_fsm_controller_enabled','mist_backoff_s'
+                'sw_fsm_controller_enabled','sw_gl_auto_mode','mist_backoff_s'
               )
             ORDER BY parameter, ts DESC
         """,
             greenhouse_id,
         )
-        # For band-driven params, compute from crop science + sun angle
+        # For band-driven params, compute from crop science + house VPD policy.
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
+        house_row = await conn.fetchrow("SELECT * FROM fn_house_vpd_control_band(now())")
+        lighting_row = await conn.fetchrow("SELECT * FROM fn_lighting_policy(now(), $1)", greenhouse_id)
+        lighting_circuit_rows = await conn.fetch(
+            "SELECT * FROM fn_lighting_circuit_policy(now(), $1) ORDER BY light_key",
+            greenhouse_id,
+        )
         # Tier 1 #3: fail loud if band computation returned NULL.
         # Without band, ESP32 receives no temp/VPD band params and silently
         # runs whatever it cached last, which can be hours stale. Better to
         # 503 and let ESP32 retry in 5 min than return a partial response.
-        if band_row is None or zone_row is None:
+        if band_row is None or zone_row is None or house_row is None or lighting_row is None:
             existing = await conn.fetchval(
                 "SELECT id FROM alert_log WHERE alert_type = 'band_fn_null' AND disposition = 'open' LIMIT 1"
             )
@@ -534,12 +581,13 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                         "severity": "critical",
                         "category": "system",
                         "message": (
-                            "fn_band_setpoints or fn_zone_vpd_targets returned NULL — "
-                            "ESP32 cannot refresh band setpoints"
+                            "band or lighting policy function returned NULL — ESP32 cannot refresh policy setpoints"
                         ),
                         "details": {
                             "band_row_null": band_row is None,
                             "zone_row_null": zone_row is None,
+                            "house_row_null": house_row is None,
+                            "lighting_row_null": lighting_row is None,
                         },
                     }
                 )
@@ -551,39 +599,64 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 )
             raise HTTPException(
                 status_code=503,
-                detail="band setpoint computation unavailable — check fn_band_setpoints + crop catalog",
+                detail="policy setpoint computation unavailable — check band and lighting policy functions",
             )
         plan_rows = await conn.fetch("SELECT parameter, value FROM v_active_plan")
         params = {r["parameter"]: r["value"] for r in rows}
-        # Planner overrides for all params (band params will be clamped below)
+        plan_params = {r["parameter"] for r in plan_rows}
+        # Planner overrides for all params. Band params are overwritten below by
+        # the same crop/house-band functions used by the dispatcher.
         for r in plan_rows:
             params[r["parameter"]] = r["value"]
-        # Band-driven params: always use fn_band_setpoints as the authoritative source.
-        # If a planner value exists and is tighter than the band, use it (clamped).
-        # Otherwise, use the band value directly.
-        if band_row:
-            # Collect planner values (from v_active_plan only, not stale setpoint_changes)
-            planner_band = {r["parameter"]: r["value"] for r in plan_rows if r["parameter"] in BAND_COMPUTED}
+        # Band-driven params: use the same source as the live dispatcher so the
+        # legacy ESP32 polling fallback cannot diverge from direct pushes.
+        if band_row and house_row:
             for param in BAND_COMPUTED:
-                band_val = round(float(band_row[param]), 1)
-                if param in planner_band:
-                    pv = float(planner_band[param])
-                    band_lo = float(band_row["temp_low" if param.startswith("temp") else "vpd_low"])
-                    band_hi = float(band_row["temp_high" if param.startswith("temp") else "vpd_high"])
-                    params[param] = round(max(band_lo, min(band_hi, pv)), 1)
+                if param.startswith("temp"):
+                    band_val = float(band_row[param])
+                    precision = 1
                 else:
-                    params[param] = band_val
+                    key = f"house_{param}"
+                    band_val = float(house_row[key])
+                    precision = 2
+                params[param] = _round_half_up(band_val, precision)
+        # Lighting policy params: keep the pull fallback identical to the live
+        # dispatcher so stale active plans cannot shorten crop photoperiod.
+        if lighting_row:
+            lighting_values = {
+                "gl_dli_target": _round_half_up(float(lighting_row["target_dli"]), 1),
+                "gl_sunrise_hour": int(lighting_row["sunrise_hour"]),
+                "gl_sunset_hour": int(lighting_row["cutoff_hour"]),
+                "sw_gl_auto_mode": 1,
+            }
+            for param in LIGHTING_COMPUTED:
+                params[param] = lighting_values[param]
+        for row in lighting_circuit_rows:
+            key = row["light_key"]
+            lighting_values = {
+                f"gl_{key}_dli_target": _round_half_up(float(row["dli_target"]), 1),
+                f"gl_{key}_sunrise_hour": int(row["start_hour"]),
+                f"gl_{key}_sunset_hour": int(row["cutoff_hour"]),
+                f"gl_{key}_lux_threshold": _round_half_up(float(row["lux_on_threshold"]), 0),
+                f"gl_{key}_lux_hysteresis": _round_half_up(float(row["lux_hysteresis"]), 0),
+                f"gl_{key}_min_on_s": int(row["min_on_s"]),
+                f"gl_{key}_min_off_s": int(row["min_off_s"]),
+                f"sw_gl_{key}_auto_mode": 1 if row["auto_enabled"] else 0,
+            }
+            for param, value in lighting_values.items():
+                if param not in plan_params:
+                    params[param] = value
         # Per-zone VPD targets (from crop data per zone)
         if zone_row:
             for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):
-                params[param] = round(float(zone_row[param]), 2)
+                params[param] = _round_half_up(float(zone_row[param]), 2)
         # Mister tuning: band provides defaults, planner can override.
         # Set band-derived values first, then planner values overwrite if present.
-        if band_row:
-            vpd_hi = float(band_row["vpd_high"])
+        if house_row:
+            vpd_hi = float(house_row["house_vpd_high"])
             # Band defaults — will be overwritten by planner values from setpoint_changes if present
-            params.setdefault("mister_engage_kpa", round(vpd_hi, 2))
-            params.setdefault("mister_all_kpa", round(vpd_hi + 0.3, 2))
+            params.setdefault("mister_engage_kpa", _round_half_up(vpd_hi, 2))
+            params.setdefault("mister_all_kpa", _round_half_up(vpd_hi + 0.3, 2))
         outdoor = await conn.fetchrow(
             """
             SELECT outdoor_temp_f, outdoor_rh_pct FROM climate
@@ -594,9 +667,9 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         )
         if outdoor:
             if outdoor["outdoor_temp_f"]:
-                params["outdoor_temp"] = round(outdoor["outdoor_temp_f"], 1)
+                params["outdoor_temp"] = _round_half_up(outdoor["outdoor_temp_f"], 1)
             if outdoor["outdoor_rh_pct"]:
-                params["outdoor_rh"] = round(outdoor["outdoor_rh_pct"], 0)
+                params["outdoor_rh"] = _round_half_up(outdoor["outdoor_rh_pct"], 0)
     lines = [f"{k}={v}" for k, v in sorted(params.items())]
     from fastapi.responses import PlainTextResponse
 
@@ -643,8 +716,10 @@ async def root():
         "docs": "/docs" if app.docs_url else None,
         "status": "/api/v1/status",
         "public_home_metrics": "/api/v1/public/home-metrics",
+        "public_band_trace": "/api/v1/public/band-trace",
         "public_data_health": "/api/v1/public/data-health",
         "public_planner_health": "/api/v1/public/planner-health",
+        "public_gpu_power": "/api/v1/public/gpu-power",
         "public_contact": "/api/v1/public/contact",
     }
 
@@ -1123,20 +1198,76 @@ async def planner_scorecard(scorecard_date: Annotated[date | None, Query(alias="
     return ScorecardResponse.from_metric_rows(rows)
 
 
+@app.get("/api/v1/public/band-trace", response_model=PublicBandTraceResponse)
+async def public_band_trace(
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
+):
+    """Public-safe crop-vs-firmware-vs-readback band trace summary."""
+    async with pool.acquire() as conn:
+        generated_at = await conn.fetchval("SELECT now()")
+        latest = await conn.fetchrow(
+            """
+            SELECT *
+              FROM fn_band_trace(now() - interval '2 hours', now(), $1)
+             ORDER BY ts DESC
+             LIMIT 1
+            """,
+            greenhouse_id,
+        )
+        summary = await conn.fetchrow(
+            """
+            WITH rows AS (
+                SELECT *
+                  FROM fn_band_trace(now() - ($1::int * interval '1 hour'), now(), $2)
+            )
+            SELECT count(*)::int AS sample_count,
+                   round(avg(CASE WHEN crop_temp_in_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS crop_temp_compliance_pct,
+                   round(avg(CASE WHEN crop_vpd_in_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS crop_vpd_compliance_pct,
+                   round(avg(CASE WHEN crop_both_in_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS crop_both_compliance_pct,
+                   round(avg(CASE WHEN fw_temp_in_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS fw_temp_compliance_pct,
+                   round(avg(CASE WHEN fw_vpd_in_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS fw_vpd_compliance_pct,
+                   round(avg(CASE WHEN fw_both_in_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS fw_both_compliance_pct,
+                   round(avg(CASE WHEN readback_matches_fw_band THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS readback_match_pct,
+                   round(avg(CASE WHEN trace_quality_flag = 'ok' THEN 100.0 ELSE 0.0 END)::numeric, 1)::float
+                       AS ok_trace_pct
+              FROM rows
+            """,
+            hours,
+            greenhouse_id,
+        )
+
+    return PublicBandTraceResponse(
+        generated_at=generated_at,
+        greenhouse_id=greenhouse_id,
+        latest=PublicBandTraceLatest.model_validate(dict(latest)) if latest else None,
+        summary=PublicBandTraceSummary(
+            hours=hours,
+            sample_count=summary["sample_count"] if summary else 0,
+            crop_temp_compliance_pct=_to_float(summary["crop_temp_compliance_pct"]) if summary else None,
+            crop_vpd_compliance_pct=_to_float(summary["crop_vpd_compliance_pct"]) if summary else None,
+            crop_both_compliance_pct=_to_float(summary["crop_both_compliance_pct"]) if summary else None,
+            fw_temp_compliance_pct=_to_float(summary["fw_temp_compliance_pct"]) if summary else None,
+            fw_vpd_compliance_pct=_to_float(summary["fw_vpd_compliance_pct"]) if summary else None,
+            fw_both_compliance_pct=_to_float(summary["fw_both_compliance_pct"]) if summary else None,
+            readback_match_pct=_to_float(summary["readback_match_pct"]) if summary else None,
+            ok_trace_pct=_to_float(summary["ok_trace_pct"]) if summary else None,
+        ),
+    )
+
+
 @app.get("/api/v1/public/data-health", response_model=PublicDataHealthResponse)
 async def public_data_health():
     """Public-safe proof freshness and trust-ledger status for launch pages."""
     async with pool.acquire() as conn:
         generated_at = await conn.fetchval("SELECT now()")
-        check_rows = await conn.fetch(
-            """
-            SELECT check_name, lower(status) AS status, metric_value, threshold_value, details
-            FROM v_data_trust_ledger
-            ORDER BY
-              CASE lower(status) WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
-              check_name
-            """
-        )
         pipeline_rows = await conn.fetch(
             """
             SELECT source, rows_1h, rows_24h, age_s, null_pct_1h
@@ -1144,14 +1275,68 @@ async def public_data_health():
             ORDER BY source
             """
         )
+        open_critical_high = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM alert_log
+            WHERE disposition = 'open'
+              AND severity IN ('critical', 'high')
+            """
+        )
+        try:
+            async with conn.transaction():
+                await conn.execute("SET LOCAL jit = off")
+                await conn.execute("SET LOCAL statement_timeout = '6000ms'")
+                trust_rows = await conn.fetch(
+                    """
+                    SELECT check_name, lower(status) AS status, metric_value, threshold_value, details
+                    FROM v_data_trust_ledger
+                    ORDER BY
+                      CASE lower(status) WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
+                      check_name
+                    """
+                )
+        except Exception:
+            trust_rows = []
 
+    pipeline_by_source = {r["source"]: r for r in pipeline_rows}
+    climate_pipeline = pipeline_by_source.get("climate")
+    forecast_pipeline = pipeline_by_source.get("forecast")
+    climate_age_s = climate_pipeline["age_s"] if climate_pipeline else None
+    forecast_age_s = forecast_pipeline["age_s"] if forecast_pipeline else None
+    fallback_check_rows = [
+        {
+            "check_name": "climate_freshness",
+            "status": "ok" if climate_age_s is not None and climate_age_s <= 300 else "fail",
+            "metric_value": climate_age_s,
+            "threshold_value": 300,
+            "details": "climate age seconds",
+        },
+        {
+            "check_name": "forecast_freshness",
+            "status": "ok" if forecast_age_s is not None and forecast_age_s <= 21600 else "fail",
+            "metric_value": forecast_age_s,
+            "threshold_value": 21600,
+            "details": "weather_forecast fetched_at age seconds",
+        },
+        {
+            "check_name": "open_critical_or_high_alerts",
+            "status": "ok" if not open_critical_high else "fail",
+            "metric_value": open_critical_high or 0,
+            "threshold_value": 0,
+            "details": "open critical/high alerts",
+        },
+    ]
+    check_rows = [dict(r) for r in trust_rows] if trust_rows else fallback_check_rows
+    if not any(r["check_name"] == "open_critical_or_high_alerts" for r in check_rows):
+        check_rows.append(fallback_check_rows[-1])
     checks = [
         PublicDataHealthCheck(
             name=r["check_name"],
             status=r["status"],
             metric_value=_to_float(r["metric_value"]),
             threshold_value=_to_float(r["threshold_value"]),
-            details=r["details"],
+            details=r["details"] if isinstance(r["details"], str) else json.dumps(r["details"], sort_keys=True),
         )
         for r in check_rows
     ]
@@ -1171,6 +1356,205 @@ async def public_data_health():
         checks=checks,
         pipeline_sources=pipeline_sources,
     )
+
+
+@app.get("/api/v1/public/gpu-power", response_model=PublicGpuPowerResponse)
+async def public_gpu_power(
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
+    step_minutes: Annotated[int, Query(ge=1, le=60)] = 5,
+):
+    """Public-safe inference-fleet GPU and CPU telemetry mirrored from exporters."""
+    if hours * 60 / step_minutes > 2000:
+        raise HTTPException(
+            status_code=400, detail="gpu-power request exceeds 2000 time buckets; increase step_minutes"
+        )
+    cache_key = f"{greenhouse_id}:{hours}:{step_minutes}"
+    now_mono = time.monotonic()
+    cached = _PUBLIC_GPU_POWER_CACHE.get(cache_key)
+    if cached and now_mono - cached[0] < PUBLIC_GPU_POWER_CACHE_TTL_S:
+        return cached[1]
+
+    async with pool.acquire() as conn:
+        generated_at = await conn.fetchval("SELECT now()")
+        latest_rows = await conn.fetch(
+            """
+            SELECT ts, host, vm_name, purpose, gpu, device, model_name, watts,
+                   gpu_util_pct, temperature_c, memory_used_mb, memory_free_mb, age_s
+              FROM v_gpu_power_latest
+             WHERE greenhouse_id = $1
+             ORDER BY host, gpu
+            """,
+            greenhouse_id,
+        )
+        series_rows = await conn.fetch(
+            """
+            SELECT time_bucket($2::int * interval '1 minute', ts) AS bucket_ts,
+                   host,
+                   max(vm_name) AS vm_name,
+                   gpu,
+                   avg(watts)::double precision AS watts
+              FROM gpu_power
+             WHERE ts >= now() - ($1::int * interval '1 hour')
+               AND greenhouse_id = $3
+             GROUP BY bucket_ts, host, gpu
+             ORDER BY bucket_ts, host, gpu
+            """,
+            hours,
+            step_minutes,
+            greenhouse_id,
+        )
+        summary = await conn.fetchrow(
+            """
+            WITH by_bucket AS (
+                SELECT time_bucket($2::int * interval '1 minute', ts) AS bucket_ts,
+                       host,
+                       gpu,
+                       avg(watts)::double precision AS watts
+                  FROM gpu_power
+                 WHERE ts >= now() - ($1::int * interval '1 hour')
+                   AND greenhouse_id = $3
+                 GROUP BY bucket_ts, host, gpu
+            ),
+            totals AS (
+                SELECT bucket_ts, sum(watts)::double precision AS total_watts
+                  FROM by_bucket
+                 GROUP BY bucket_ts
+            )
+            SELECT max(total_watts)::double precision AS peak_total_watts,
+                   avg(total_watts)::double precision AS avg_total_watts
+              FROM totals
+            """,
+            hours,
+            step_minutes,
+            greenhouse_id,
+        )
+        cpu_latest_rows = await conn.fetch(
+            """
+            SELECT ts, host, vm_name, purpose, cpu_util_pct, load1, cores,
+                   memory_used_pct, age_s
+              FROM v_infra_cpu_latest
+             WHERE greenhouse_id = $1
+             ORDER BY host
+            """,
+            greenhouse_id,
+        )
+        cpu_series_rows = await conn.fetch(
+            """
+            SELECT time_bucket($2::int * interval '1 minute', ts) AS bucket_ts,
+                   host,
+                   max(vm_name) AS vm_name,
+                   avg(cpu_util_pct)::double precision AS cpu_util_pct,
+                   avg(memory_used_pct)::double precision AS memory_used_pct
+              FROM infra_cpu
+             WHERE ts >= now() - ($1::int * interval '1 hour')
+               AND greenhouse_id = $3
+             GROUP BY bucket_ts, host
+             ORDER BY bucket_ts, host
+            """,
+            hours,
+            step_minutes,
+            greenhouse_id,
+        )
+        cpu_summary = await conn.fetchrow(
+            """
+            WITH by_bucket AS (
+                SELECT time_bucket($2::int * interval '1 minute', ts) AS bucket_ts,
+                       avg(cpu_util_pct)::double precision AS avg_cpu_util_pct
+                  FROM infra_cpu
+                 WHERE ts >= now() - ($1::int * interval '1 hour')
+                   AND greenhouse_id = $3
+                 GROUP BY bucket_ts
+            )
+            SELECT max(avg_cpu_util_pct)::double precision AS peak_avg_cpu_util_pct
+              FROM by_bucket
+            """,
+            hours,
+            step_minutes,
+            greenhouse_id,
+        )
+
+    latest = [
+        PublicGpuPowerLatest(
+            ts=r["ts"],
+            host=r["host"],
+            vm_name=r["vm_name"],
+            purpose=r["purpose"],
+            gpu=r["gpu"],
+            device=r["device"],
+            model_name=r["model_name"],
+            watts=round(float(r["watts"]), 1),
+            gpu_util_pct=round(float(r["gpu_util_pct"]), 1) if r["gpu_util_pct"] is not None else None,
+            temperature_c=round(float(r["temperature_c"]), 1) if r["temperature_c"] is not None else None,
+            memory_used_mb=round(float(r["memory_used_mb"]), 1) if r["memory_used_mb"] is not None else None,
+            memory_free_mb=round(float(r["memory_free_mb"]), 1) if r["memory_free_mb"] is not None else None,
+            age_s=r["age_s"],
+        )
+        for r in latest_rows
+    ]
+    series = [
+        PublicGpuPowerPoint(
+            ts=r["bucket_ts"],
+            host=r["host"],
+            vm_name=r["vm_name"],
+            gpu=r["gpu"],
+            watts=round(float(r["watts"]), 1),
+        )
+        for r in series_rows
+    ]
+    cpu_latest = [
+        PublicInfraCpuLatest(
+            ts=r["ts"],
+            host=r["host"],
+            vm_name=r["vm_name"],
+            purpose=r["purpose"],
+            cpu_util_pct=round(float(r["cpu_util_pct"]), 1) if r["cpu_util_pct"] is not None else None,
+            load1=round(float(r["load1"]), 2) if r["load1"] is not None else None,
+            cores=r["cores"],
+            memory_used_pct=round(float(r["memory_used_pct"]), 1) if r["memory_used_pct"] is not None else None,
+            age_s=r["age_s"],
+        )
+        for r in cpu_latest_rows
+    ]
+    cpu_series = [
+        PublicInfraCpuPoint(
+            ts=r["bucket_ts"],
+            host=r["host"],
+            vm_name=r["vm_name"],
+            cpu_util_pct=round(float(r["cpu_util_pct"]), 1) if r["cpu_util_pct"] is not None else None,
+            memory_used_pct=round(float(r["memory_used_pct"]), 1) if r["memory_used_pct"] is not None else None,
+        )
+        for r in cpu_series_rows
+    ]
+    latest_total = round(sum(item.watts for item in latest), 1) if latest else None
+    latest_gpu_utils = [item.gpu_util_pct for item in latest if item.gpu_util_pct is not None]
+    latest_cpu_utils = [item.cpu_util_pct for item in cpu_latest if item.cpu_util_pct is not None]
+    payload = PublicGpuPowerResponse(
+        generated_at=generated_at,
+        greenhouse_id=greenhouse_id,
+        source="Verdify mirror of Nexus-scraped DCGM and node-exporter telemetry",
+        hours=hours,
+        step_minutes=step_minutes,
+        latest_total_watts=latest_total,
+        latest_gpu_count=len(latest),
+        latest_avg_gpu_util_pct=round(sum(latest_gpu_utils) / len(latest_gpu_utils), 1) if latest_gpu_utils else None,
+        peak_total_watts=round(float(summary["peak_total_watts"]), 1)
+        if summary and summary["peak_total_watts"] is not None
+        else None,
+        avg_total_watts=round(float(summary["avg_total_watts"]), 1)
+        if summary and summary["avg_total_watts"] is not None
+        else None,
+        latest_avg_cpu_util_pct=round(sum(latest_cpu_utils) / len(latest_cpu_utils), 1) if latest_cpu_utils else None,
+        peak_avg_cpu_util_pct=round(float(cpu_summary["peak_avg_cpu_util_pct"]), 1)
+        if cpu_summary and cpu_summary["peak_avg_cpu_util_pct"] is not None
+        else None,
+        latest=latest,
+        series=series,
+        cpu_latest=cpu_latest,
+        cpu_series=cpu_series,
+    )
+    _PUBLIC_GPU_POWER_CACHE[cache_key] = (time.monotonic(), payload)
+    return payload
 
 
 @app.get("/api/v1/public/planner-health", response_model=PublicPlannerHealthResponse)
@@ -1417,6 +1801,12 @@ async def retry_contact_notifications(
 @app.get("/api/v1/public/home-metrics", response_model=PublicHomeMetrics)
 async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
     """Launch-safe live metrics for verdify.ai proof cards."""
+    cache_key = greenhouse_id
+    now_mono = time.monotonic()
+    cached = _PUBLIC_HOME_METRICS_CACHE.get(cache_key)
+    if cached and now_mono - cached[0] < PUBLIC_HOME_METRICS_CACHE_TTL_S:
+        return cached[1]
+
     async with pool.acquire() as conn:
         generated_at = await conn.fetchval("SELECT now()")
         climate_summary = await conn.fetchrow(
@@ -1499,16 +1889,39 @@ async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
             """,
             greenhouse_id,
         )
-        data_checks = await conn.fetch(
+        forecast_health = await conn.fetchrow(
             """
-            SELECT check_name, lower(status) AS status, metric_value, threshold_value, details
-            FROM v_data_trust_ledger
-            ORDER BY
-              CASE lower(status) WHEN 'fail' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
-              check_name
+            SELECT age_s
+            FROM v_data_pipeline_health
+            WHERE source = 'forecast'
             """
         )
 
+    climate_age_s = latest_climate["age_s"] if latest_climate else None
+    forecast_age_s = forecast_health["age_s"] if forecast_health else None
+    data_checks = [
+        {
+            "check_name": "climate_freshness",
+            "status": "ok" if climate_age_s is not None and climate_age_s <= 300 else "fail",
+            "metric_value": climate_age_s,
+            "threshold_value": 300,
+            "details": "climate age seconds",
+        },
+        {
+            "check_name": "forecast_freshness",
+            "status": "ok" if forecast_age_s is not None and forecast_age_s <= 21600 else "fail",
+            "metric_value": forecast_age_s,
+            "threshold_value": 21600,
+            "details": "weather_forecast fetched_at age seconds",
+        },
+        {
+            "check_name": "open_critical_or_high_alerts",
+            "status": "ok" if not open_critical_high else "fail",
+            "metric_value": open_critical_high or 0,
+            "threshold_value": 0,
+            "details": "open critical/high alerts",
+        },
+    ]
     warning_checks = [
         PublicDataHealthCheck(
             name=r["check_name"],
@@ -1520,7 +1933,7 @@ async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
         for r in data_checks
         if r["status"] != "ok"
     ]
-    return PublicHomeMetrics(
+    metrics = PublicHomeMetrics(
         generated_at=generated_at,
         greenhouse_id=greenhouse_id,
         climate_rows=climate_summary["climate_rows"] if climate_summary else 0,
@@ -1545,6 +1958,8 @@ async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
         data_health_status=_overall_data_health(data_checks),
         data_health_warnings=warning_checks[:8],
     )
+    _PUBLIC_HOME_METRICS_CACHE[cache_key] = (time.monotonic(), metrics)
+    return metrics
 
 
 @app.get("/api/v1/public/evidence-snapshot")

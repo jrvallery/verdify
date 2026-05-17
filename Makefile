@@ -15,7 +15,7 @@ REPLAY_CORPUS_TMP ?= /tmp/verdify-replay-overrides.csv
 HERMES_IRIS_RUNTIME_DIR ?= /var/lib/verdify/hermes/iris
 HERMES_IRIS_ENV_FILE ?= /etc/verdify/hermes-iris.env
 
-.PHONY: help test lint format check firmware-check firmware-check-worktree firmware-check-all firmware-invariants firmware-replay firmware-dwell-preview firmware-deploy firmware-archive-artifacts smoke hermes-deploy-config hermes-restart hermes-smoke clean
+.PHONY: help test lint format check lighting-audit-static lighting-audit-current lighting-audit-live lighting-audit-complete firmware-check firmware-check-worktree firmware-check-all firmware-invariants firmware-replay firmware-replay-worktree firmware-dwell-preview firmware-deploy firmware-archive-artifacts firmware-promote-last-good smoke hermes-deploy-config hermes-restart hermes-smoke clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -29,9 +29,21 @@ format: ## Auto-format Python files with ruff
 	$(RUFF) format ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
 	$(RUFF) check --fix ingestor/ api/ mcp/ scripts/*.py tests/ verdify_schemas/
 
-check: lint test test-firmware firmware-check ## Run all checks (lint + test + native firmware tests + firmware compile)
+check: lint test lighting-audit-static test-firmware firmware-check ## Run all checks (lint + test + lighting audit + native firmware tests + firmware compile)
 	@echo ""
 	@echo "✓ All checks passed"
+
+lighting-audit-static: ## Static lighting automation prompt-to-artifact audit
+	$(PYTHON) scripts/audit-lighting-automation.py --static-only
+
+lighting-audit-current: ## Live lighting audit; allow known OTA/post-OTA blocked status
+	$(PYTHON) scripts/audit-lighting-automation.py --live --allow-blocked
+
+lighting-audit-live: ## Strict live lighting audit; fails until OTA/post-OTA proof is complete
+	$(PYTHON) scripts/audit-lighting-automation.py --live
+
+lighting-audit-complete: ## Final lighting audit; requires OTA/post-OTA proof with no blockers
+	$(PYTHON) scripts/audit-lighting-automation.py --live --require-ota
 
 # ── Testing ─────────────────────────────────────────────────────────
 
@@ -67,6 +79,9 @@ firmware-replay: ## Phase-0: dual-ref diff of firmware mode/relay decisions betw
 	    exit 2; \
 	fi
 	bash scripts/firmware-replay-diff.sh "$(OLD)" "$(NEW)"
+
+firmware-replay-worktree: ## Compare firmware behavior from OLD=<ref> against current uncommitted worktree
+	bash scripts/firmware-replay-worktree-diff.sh "$(OLD)"
 
 firmware-dwell-preview: ## Phase-2: replay corpus with dwell-gate ON vs OFF, quantify whipsaw reduction
 	cd firmware && g++ -std=c++17 -O2 -I lib -o test/replay_emit test/replay_emit.cpp
@@ -116,6 +131,23 @@ firmware-archive-artifacts: ## Archive ESPHome build outputs for FW_VERSION=<ver
 	if [ "$(PROMOTE_LAST_GOOD)" = "1" ]; then EXTRA="--promote-last-good"; fi; \
 	bash scripts/archive-firmware-artifacts.sh "$(FW_VERSION)" $$EXTRA
 
+firmware-promote-last-good: ## Promote a baked archived firmware FW_VERSION=<version> to rollback target
+	@if [ -z "$(FW_VERSION)" ]; then \
+	    echo "Usage: make firmware-promote-last-good FW_VERSION=<archived-version>"; \
+	    exit 2; \
+	fi
+	@SRC="firmware/artifacts/$(FW_VERSION)"; \
+	if [ ! -f "$$SRC/firmware.ota.bin" ] || [ ! -f "$$SRC/metadata.env" ]; then \
+	    echo "Missing archived firmware artifacts under $$SRC"; \
+	    exit 1; \
+	fi; \
+	cp "$$SRC/firmware.ota.bin" firmware/artifacts/last-good.ota.bin; \
+	printf '%s\n' "$(FW_VERSION)" > firmware/artifacts/last-good.version; \
+	cp "$$SRC/metadata.env" firmware/artifacts/last-good.metadata.env; \
+	DEPLOYED_AT="$$(sed -n 's/^deployed_at=//p' "$$SRC/metadata.env" | tail -1)"; \
+	if [ -n "$$DEPLOYED_AT" ]; then touch -d "$$DEPLOYED_AT" firmware/artifacts/last-good.ota.bin; fi; \
+	echo "✓ Promoted rollback target: $(FW_VERSION)"
+
 site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
@@ -132,6 +164,14 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	bash scripts/firmware-deploy-preflight.sh
 	@mkdir -p firmware/artifacts
 	@DIRTY="$$(git diff --quiet -- . && git diff --cached --quiet -- . || echo .dirty)"; \
+	if [ -n "$$DIRTY" ] && [ "$(ALLOW_DIRTY_FIRMWARE_DEPLOY)" != "1" ]; then \
+		echo "✗ Dirty firmware OTA refused. Commit/stash changes or rerun with ALLOW_DIRTY_FIRMWARE_DEPLOY=1 for an operator-approved emergency."; \
+		git status --short; \
+		exit 1; \
+	elif [ -n "$$DIRTY" ] && { [ "$(FIRMWARE_DEPLOY_OPERATOR_SIGNOFF)" != "1" ] || [ -z "$(FIRMWARE_DEPLOY_OVERRIDE_REASON)" ]; }; then \
+		echo "✗ Dirty firmware OTA override requires FIRMWARE_DEPLOY_OPERATOR_SIGNOFF=1 and FIRMWARE_DEPLOY_OVERRIDE_REASON."; \
+		exit 1; \
+	fi; \
 	FW_VERSION="$$(date +%Y.%-m.%-d.%H%M).$$(git rev-parse --short HEAD)$$DIRTY"; \
 	echo "$$FW_VERSION" > firmware/artifacts/pending-fw-version.txt; \
 	echo "─── Deploying fw_version=$$FW_VERSION ───"; \
@@ -141,14 +181,16 @@ firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sw
 	@echo "Waiting 60s for ESP32 reboot + ingestor reconnect + first diagnostics cycle..."
 	@sleep 60
 	# FW-15 (Sprint 17): sensor-health decides whether this deploy is accepted.
-	# Pass → promote new binary to last-good (rollback target for next deploy).
+	# Pass → archive the new binary and update the expected-firmware pin.
+	# Rollback target stays on the prior last-good until an explicit
+	# firmware-promote-last-good after the 48-hour bake.
 	# Fail → flash last-good back to ESP32 via firmware-rollback.sh.
 	@if bash scripts/wait-for-firmware-version.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" --timeout 180 && \
 		EXPECTED_FW_VERSION="$$(cat firmware/artifacts/pending-fw-version.txt)" $(MAKE) sensor-health SINCE='5 minutes'; then \
-		FIRMWARE_DEPLOYED_AT="$$(date -Is)" bash scripts/archive-firmware-artifacts.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" --promote-last-good ; \
+		FIRMWARE_DEPLOYED_AT="$$(date -Is)" bash scripts/archive-firmware-artifacts.sh "$$(cat firmware/artifacts/pending-fw-version.txt)" ; \
 		mkdir -p /srv/verdify/state ; \
 		cp firmware/artifacts/pending-fw-version.txt /srv/verdify/state/expected-firmware-version ; \
-		echo "✓ Deploy accepted. Archived build outputs + promoted expected firmware pin (rollback target for next deploy)." ; \
+		echo "✓ Deploy accepted. Archived build outputs + promoted expected firmware pin. Rollback target unchanged while this build bakes." ; \
 	else \
 		echo "" ; \
 		echo "▓▓▓  SENSOR-HEALTH FAILED POST-OTA  —  initiating auto-rollback  ▓▓▓" ; \

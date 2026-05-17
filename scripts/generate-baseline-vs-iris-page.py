@@ -300,7 +300,7 @@ This is an operational comparison, not a controlled A/B test, and it does not is
 
 The comparison is still useful because it answers the launch question a skeptical reader will ask first: when the planning loop is online, do the public scorecards look different from the period where the ESP32 had to keep running without normal AI plans?
 
-For the exact parameters Iris can change when it is online, see [AI-Writable Tunables](/reference/planning-loop/#ai-writable-tunables).
+For the exact parameters Iris can change when it is online, see [AI Tunables Traceability](/reference/ai-tunables/).
 
 For the broader caveat language, see the [Launch FAQ](/reference/faq/#does-verdify-claim-better-yield-or-profit). For the live receipts behind this page, use [Planning Quality](/data/planning-quality/), [Operations](/data/operations/), and the [planning archive](/data/plans/).
 
@@ -365,7 +365,7 @@ Cost, water, and misting are not success metrics by themselves. They matter beca
 ## Definitions
 
 <div class="data-table">
-  <div class="data-row"><strong>Both-axis compliance</strong><span><code>daily_summary.compliance_pct</code></span><p>Percent of samples where temperature and VPD were both inside the active crop band.</p></div>
+  <div class="data-row"><strong>Both-axis compliance</strong><span><code>daily_summary.compliance_pct</code></span><p>Percent of samples where temperature and VPD were both inside the firmware-enforced band.</p></div>
   <div class="data-row"><strong>Cumulative stress-axis hours/day</strong><span>Heat + cold + VPD-high + VPD-low</span><p>Summed daily stress duration from corrected daily summary fields. This is not capped at one stress type; a hot-dry hour can count on more than one axis.</p></div>
   <div class="data-row"><strong>Planner score</strong><span><code>v_planner_performance.planner_score</code></span><p>Composite score: 80% compliance and 20% cost efficiency. It is useful as an operational KPI, not as a yield claim.</p></div>
   <div class="data-row"><strong>Metered electric energy/day</strong><span><code>daily_summary.kwh_total</code></span><p>Electric energy from the greenhouse power meter where available, with runtime estimates kept as a separate diagnostic.</p></div>
@@ -390,7 +390,7 @@ For raw launch-safe data, use the [7-day climate CSV](/static/data/verdify-sampl
 
 - [Why the AI Does Not Control Relays](/reference/safety/) explains the safety split behind the outage window.
 - [Planning Loop](/reference/planning-loop/) shows how Iris writes hypotheses and waypoints.
-- [AI-Writable Tunables](/reference/planning-loop/#ai-writable-tunables) lists the bounded control surface behind those waypoints.
+- [AI Tunables Traceability](/reference/ai-tunables/) lists the bounded control surface behind those waypoints.
 - [Planning Quality](/data/planning-quality/) shows the live scorecard and forecast-plan-outcome panels.
 - [Generated Lessons](/reference/lessons/) shows what the planner reads before future plans.
 - [Data Model](/reference/data-model/) explains the tables, views, and sample exports behind this comparison.

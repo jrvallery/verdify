@@ -8,8 +8,7 @@
 # Uses ESPHome's espota2 module directly (the same transport esphome
 # upload uses) to flash an arbitrary .ota.bin over the network without
 # recompiling. By default, the rollback target is this repo worktree's
-# firmware/artifacts/last-good.ota.bin, promoted by firmware-deploy after
-# post-OTA sensor health passes.
+# firmware/artifacts/last-good.ota.bin, promoted explicitly after a bake window.
 
 set -uo pipefail
 

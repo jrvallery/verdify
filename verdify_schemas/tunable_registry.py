@@ -13,16 +13,17 @@ and sprint-15.1 each hit this as the drift cause of planner-rejected pushes
 SETPOINT_MAP + CFG_READBACK_MAP become computed views.
 
 Phase 1b.3: registry covers every SETPOINT_MAP entry. MCP set_tunable gates
-on PLANNER_PUSHABLE_REG so tier-2 escape-hatch params are pushable without
-adding them to the Tier 1 daily prompt.
+on PLANNER_PUSHABLE_REG so only canonical planner-policy tunables are writable
+from the planner. Operator, crop-band, safety, readback, and retired values remain
+visible for traceability but are not planner write targets.
 
 Phase 1c adds cfg_* readbacks for the last fire-and-forget tunables; Phase 1d
 retires the legacy tunables.py layer so ALL_TUNABLES derives from here.
 
-Three readback-only params (fallback_window_s, outdoor_temp_f,
-outdoor_dewpoint_f) are present in CFG_READBACK_MAP but have no SETPOINT_MAP
-route and thus no esp_object_id. They can't be registered until `esp_object_id`
-becomes Optional (Phase 1c schema change, out of scope here).
+Readback-only params (fallback_window_s, outdoor_temp_f, outdoor_dewpoint_f)
+are registered with no SETPOINT_MAP route. They are not planner-pushable, but
+they are still part of the control contract because firmware consumes or
+publishes them and the planner needs to understand their evidence surface.
 
 See the rewrite plan at
 `.claude-agents/iris-dev/plans/yo-iris-dev-you-help-humming-stonebraker.md`
@@ -49,12 +50,15 @@ class TunableDef(BaseModel):
             ESPHome number entity min_value/max_value in
             firmware/greenhouse/tunables.yaml. Drift guard checks this every CI run.
         esp_object_id: ESPHome entity object_id (slug). Same string as
-            SETPOINT_MAP key today; mcp/ingestor will derive from here.
+            SETPOINT_MAP key today for dispatcher-routed tunables. None for
+            readback-only firmware inputs.
         cfg_readback_object_id: `cfg_*` sensor slug, if firmware publishes one.
             None ⇒ fire-and-forget; must document rationale in `notes`.
         push_owner: who is the source of truth.
-        planner_pushable: can Iris push it via `set_tunable`?
-        tier: 1 ⇒ appears in `_PLANNER_CORE` prompt; 2 ⇒ escape-hatch only.
+        planner_pushable: true only for canonical planner-policy knobs. Effective
+            MCP write access is the intersection of this flag and `control_class`.
+        tier: 1 ⇒ canonical planner-policy surface in `_PLANNER_CORE`; 2 ⇒
+            visible contract/context only.
         enum_values: for `kind == "enum"`, int value ↔ symbolic name.
         notes: anything human.
     """
@@ -66,7 +70,7 @@ class TunableDef(BaseModel):
     default: float
     fw_clamp_lo: float | None = None
     fw_clamp_hi: float | None = None
-    esp_object_id: str
+    esp_object_id: str | None
     cfg_readback_object_id: str | None = None
     push_owner: Literal["planner", "band", "safety", "operator", "dispatcher_default", "firmware_internal"]
     planner_pushable: bool = True
@@ -74,22 +78,29 @@ class TunableDef(BaseModel):
     enum_values: dict[str, int] | None = None
     notes: str = ""
 
+    @property
+    def control_class(
+        self,
+    ) -> Literal["planner_policy", "crop_band", "controller_safety", "readback_context", "retired"]:
+        """Canonical cleanup class used by planner/MCP/site surfaces."""
+        return tunable_control_class(self.name, self)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REGISTRY — complete coverage for every SETPOINT_MAP entry. Entries are
 # grouped by functional area.
 #
-# Tier assignment rule: tier=1 is the planner's core knob set (must match MCP
-# TIER1 to satisfy test_registry_tier1_is_subset_of_mcp_tier1). Everything
-# else (crop-band pushes, operator toggles, safety rails, irrigation schedule
-# knobs) is tier=2 — the planner CAN push via set_tunable but normally won't.
+# Tier assignment rule: tier=1 is the planner's canonical policy surface (must
+# match MCP TIER1 and PLAN_REQUIRED_PARAMS). Everything else (crop bands,
+# operator toggles, safety rails, irrigation schedule knobs, readback-only
+# inputs, and retired aliases) is tier=2 context and MCP rejects planner writes.
 # ─────────────────────────────────────────────────────────────────────────────
 
 REGISTRY: dict[str, TunableDef] = {
     # ─────────────────────────────────────────────────────────────────────
     # Crop band (push_owner="band"). Dispatcher pushes every planner cycle
-    # from the active crop profile. Planner only pushes these when it wants
-    # a transient override; tier=2 so the mcp TIER1 subset test stays happy.
+    # from the active crop profile. The planner sees these as read-only context and
+    # MCP rejects planner writes.
     # ─────────────────────────────────────────────────────────────────────
     "temp_low": TunableDef(
         name="temp_low",
@@ -102,7 +113,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="set_temp_low__f",
         cfg_readback_object_id="cfg___temp_low___f_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Crop band — dispatcher pushes every cycle. Firmware default wide (40) so safety rails govern if dispatcher silent.",
     ),
@@ -117,7 +128,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="set_temp_high__f",
         cfg_readback_object_id="cfg___temp_high___f_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Crop band — dispatcher pushes every cycle.",
     ),
@@ -134,7 +145,7 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="band",
         planner_pushable=True,
         tier=1,
-        notes="Forecast-tuned heating aggressiveness. In v2, °F below the interior heating target "
+        notes="Forecast-tuned heating aggressiveness. °F below the interior heating target "
         "(temp_low + 25% band + bias_heat) where heat stage 2 latches.",
     ),
     "d_cool_stage_2": TunableDef(
@@ -193,7 +204,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="set_vpd_low_kpa",
         cfg_readback_object_id="cfg___vpd_low__kpa_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Crop band low-VPD threshold. Dispatcher pushes every cycle.",
     ),
@@ -208,7 +219,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="set_vpd_high_kpa",
         cfg_readback_object_id="cfg___vpd_high__kpa_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Crop band high-VPD threshold; firmware seal entry trigger.",
     ),
@@ -303,7 +314,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="safety_seal_margin__f",
         cfg_readback_object_id="cfg___safety_seal_margin___f_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Blocks new sealed-mist entries when temp is within this margin of safety_max.",
     ),
@@ -323,7 +334,12 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="VPD threshold to engage first mister zone.",
+        notes=(
+            "Physical S1 mister-pulse threshold once humidity/zone demand exists. "
+            "SEALED_MIST entry is vpd_high plus vpd_watch_dwell_s. During live "
+            "VPD-high stress with healthy dew margin, dispatcher clamps overly "
+            "conservative values back near the active vpd_high band."
+        ),
     ),
     "mister_all_kpa": TunableDef(
         name="mister_all_kpa",
@@ -338,7 +354,11 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="VPD threshold to engage all mister zones (escalation).",
+        notes=(
+            "Physical all-zone mister rotation threshold. Keep close to active "
+            "vpd_high on hot/dry ventilation cycles; dispatcher clamps values "
+            "that would prevent all-zone assist during live VPD-high or near-edge VENTILATE stress."
+        ),
     ),
     "mister_engage_delay_s": TunableDef(
         name="mister_engage_delay_s",
@@ -349,11 +369,11 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_lo=30,
         fw_clamp_hi=900,
         esp_object_id="mister_engage_delay__s_",
-        cfg_readback_object_id=None,
+        cfg_readback_object_id="cfg___mister_engage_delay__s_",
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="Delay before first v2 mister pulse during a sealed or vent-assist moisture cycle.",
+        notes="Delay before first physical mister pulse during a sealed or vent-assist moisture cycle.",
     ),
     "mister_all_delay_s": TunableDef(
         name="mister_all_delay_s",
@@ -364,11 +384,11 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_lo=60,
         fw_clamp_hi=900,
         esp_object_id="mister_all_delay__s_",
-        cfg_readback_object_id=None,
+        cfg_readback_object_id="cfg___mister_all_delay__s_",
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="Legacy duty-cycle delay. Phase 1c may add cfg_* readback.",
+        notes="Dwell before physical all-zone rotation. Also feeds the header mist-stage delay.",
     ),
     "mister_on_s": TunableDef(
         name="mister_on_s",
@@ -381,9 +401,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mister_on__s_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Legacy mister duty-cycle ON duration.",
+        notes="Deprecated legacy duty-cycle ON duration. Current pulse controller does not consume it.",
     ),
     "mister_off_s": TunableDef(
         name="mister_off_s",
@@ -396,9 +416,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mister_off__s_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Legacy mister duty-cycle OFF duration.",
+        notes="Deprecated legacy duty-cycle OFF duration. Current pulse controller does not consume it.",
     ),
     "mister_all_on_s": TunableDef(
         name="mister_all_on_s",
@@ -411,9 +431,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mister_all_on__s_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Legacy all-zone mister duty-cycle ON duration.",
+        notes="Deprecated legacy all-zone duty-cycle ON duration. Current pulse controller does not consume it.",
     ),
     "mister_all_off_s": TunableDef(
         name="mister_all_off_s",
@@ -426,9 +446,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mister_all_off__s_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Legacy all-zone mister duty-cycle OFF duration.",
+        notes="Deprecated legacy all-zone duty-cycle OFF duration. Current pulse controller does not consume it.",
     ),
     "mister_water_budget_gal": TunableDef(
         name="mister_water_budget_gal",
@@ -456,9 +476,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mister_max_runtime__min_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Daily legacy mister runtime cap.",
+        notes="Deprecated legacy runtime cap. Current water-budget logic uses mister_water_budget_gal.",
     ),
     # ─────────────────────────────────────────────────────────────────────
     # Mister pulse-rotation model (tier=1). Phase-1c added cfg_* readbacks.
@@ -510,7 +530,8 @@ REGISTRY: dict[str, TunableDef] = {
     ),
     # ─────────────────────────────────────────────────────────────────────
     # Per-zone VPD targets (push_owner="band" — dispatcher pushes from crop
-    # profile) + related scoring tunables. Tier=2: planner rarely overrides.
+    # profile) + related scoring tunables. Tier=2: visible context, not
+    # planner-writable unless promoted in a replay-backed contract PR.
     # ─────────────────────────────────────────────────────────────────────
     "vpd_target_south": TunableDef(
         name="vpd_target_south",
@@ -523,7 +544,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="vpd_target_south__kpa_",
         cfg_readback_object_id="cfg___vpd_target_south__kpa_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Per-zone VPD target — dispatcher pushes from crop band.",
     ),
@@ -538,7 +559,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="vpd_target_west__kpa_",
         cfg_readback_object_id="cfg___vpd_target_west__kpa_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "vpd_target_east": TunableDef(
@@ -552,7 +573,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="vpd_target_east__kpa_",
         cfg_readback_object_id="cfg___vpd_target_east__kpa_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "vpd_target_center": TunableDef(
@@ -566,7 +587,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="vpd_target_center__kpa_",
         cfg_readback_object_id="cfg___vpd_target_center__kpa_",
         push_owner="band",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Center zone has wider floor (0.1) to tolerate seedling propagation.",
     ),
@@ -581,7 +602,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mister_center_penalty",
         cfg_readback_object_id="cfg___mister_center_penalty",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Score penalty on center zone to discourage over-misting seedlings.",
     ),
@@ -596,7 +617,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="east_adjacency_factor",
         cfg_readback_object_id="cfg___east_adjacency_factor",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Weight for borrowing east-zone signal into adjacent scoring (no east mister).",
     ),
@@ -609,7 +630,7 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_lo=15,
         fw_clamp_hi=300,
         esp_object_id="min_fog_on__s_",
-        cfg_readback_object_id=None,
+        cfg_readback_object_id="cfg___min_fog_on__s_",
         push_owner="planner",
         planner_pushable=True,
         tier=1,
@@ -624,7 +645,7 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_lo=15,
         fw_clamp_hi=300,
         esp_object_id="min_fog_off__s_",
-        cfg_readback_object_id=None,
+        cfg_readback_object_id="cfg___min_fog_off__s_",
         push_owner="planner",
         planner_pushable=True,
         tier=1,
@@ -659,7 +680,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="min_fan_on__s_",
         cfg_readback_object_id="cfg___min_fan_on__s_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Fan min-on dwell. Rarely tuned by planner.",
     ),
@@ -674,7 +695,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="min_fan_off__s_",
         cfg_readback_object_id="cfg___min_fan_off__s_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "min_vent_on_s": TunableDef(
@@ -718,7 +739,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="lead_rotate__s_",
         cfg_readback_object_id="cfg___lead_rotate_timeout__s_",
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Lead/lag fan rotation timer. Operator-tuned.",
     ),
@@ -733,9 +754,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="fan_burst__min_",
         cfg_readback_object_id="cfg___fan_burst__min_",
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Manual fan-burst duration (HA button).",
+        notes="Manual fan-burst duration placeholder. Current firmware does not consume it for timing.",
     ),
     "vent_bypass_min": TunableDef(
         name="vent_bypass_min",
@@ -748,9 +769,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="vent_bypass__min_",
         cfg_readback_object_id="cfg___vent_bypass__min_",
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Manual vent-bypass duration (HA button).",
+        notes="Manual vent-bypass duration placeholder. Current firmware does not consume it for timing.",
     ),
     "fog_burst_min": TunableDef(
         name="fog_burst_min",
@@ -763,9 +784,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="fog_burst__min_",
         cfg_readback_object_id="cfg___fog_burst__min_",
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
-        notes="Manual fog-burst duration (HA button).",
+        notes="Manual fog-burst duration placeholder. Current firmware updates the value but does not consume it for timing.",
     ),
     # ─────────────────────────────────────────────────────────────────────
     # Fog safety gates. Tier=2 — operator rarely tunes.
@@ -781,7 +802,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="fog_rh_ceiling____",
         cfg_readback_object_id="cfg___fog_rh_ceiling____",
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Fog blocks when indoor RH exceeds this. Safety-adjacent.",
     ),
@@ -796,7 +817,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="fog_min_temp__f_",
         cfg_readback_object_id="cfg___fog_min_temp___f_",
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Fog blocks when indoor temp below this (evap cooling hurts in cold).",
     ),
@@ -811,7 +832,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="fog_window_start__hr_",
         cfg_readback_object_id="cfg___fog_window_start__hour_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Start hour for fog eligibility window.",
     ),
@@ -826,7 +847,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="fog_window_end__hr_",
         cfg_readback_object_id="cfg___fog_window_end__hour_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="End hour for fog eligibility window.",
     ),
@@ -841,7 +862,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="max_relief_cycles",
         cfg_readback_object_id="cfg___max_relief_cycles",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Consecutive sealed→relief cycles before forced ventilation latch.",
     ),
@@ -856,7 +877,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="dehum_aggressive_kpa",
         cfg_readback_object_id="cfg___dehum_aggressive__kpa_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Margin below vpd_low that upgrades dehumidification demand; validate_setpoints also caps it below vpd_low.",
     ),
@@ -871,7 +892,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="vent_latch_timeout__ms_",
         cfg_readback_object_id="cfg___vent_latch_timeout__ms_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Maximum forced-vent latch duration after relief-cycle breaker trips.",
     ),
@@ -904,9 +925,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mist_vent_close_lead__s_",
         cfg_readback_object_id="cfg___mist_vent_close_lead__s_",
         push_owner="planner",
-        planner_pushable=True,
-        tier=1,
-        notes="Lead time for vent close before mist engages.",
+        planner_pushable=False,
+        tier=2,
+        notes="Reserved/no-op in current firmware. Exposed/read back but not consumed by the control loop.",
     ),
     "mist_max_closed_vent_s": TunableDef(
         name="mist_max_closed_vent_s",
@@ -934,9 +955,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="mist_vent_reopen_delay__s_",
         cfg_readback_object_id="cfg___mist_vent_reopen_delay__s_",
         push_owner="planner",
-        planner_pushable=True,
-        tier=1,
-        notes="Delay after mist completes before vent reopens (lets evap settle).",
+        planner_pushable=False,
+        tier=2,
+        notes="Reserved/no-op in current firmware. Exposed/read back but not consumed by the control loop.",
     ),
     "mist_thermal_relief_s": TunableDef(
         name="mist_thermal_relief_s",
@@ -967,7 +988,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_start_hour",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Wall-drip schedule — operator configures.",
     ),
@@ -982,7 +1003,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_start_min",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_wall_duration_min": TunableDef(
@@ -996,7 +1017,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_duration__min_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_wall_fert_duration_min": TunableDef(
@@ -1010,7 +1031,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_fert_duration__min_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_wall_fert_every_n": TunableDef(
@@ -1024,7 +1045,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_fert_every_n_cycles",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Naming quirk: canonical drops '_cycles' suffix that SETPOINT_MAP key carries.",
     ),
@@ -1039,7 +1060,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_flush__min_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_wall_interval_days": TunableDef(
@@ -1053,7 +1074,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_wall_interval__days_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_center_start_hour": TunableDef(
@@ -1067,7 +1088,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_start_hour",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_center_start_min": TunableDef(
@@ -1081,7 +1102,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_start_min",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_center_duration_min": TunableDef(
@@ -1095,7 +1116,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_duration__min_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_center_fert_duration_min": TunableDef(
@@ -1109,7 +1130,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_fert_duration__min_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_center_fert_every_n": TunableDef(
@@ -1123,7 +1144,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_fert_every_n_cycles",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Naming quirk: canonical drops '_cycles' suffix.",
     ),
@@ -1138,7 +1159,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_flush__min_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_center_interval_days": TunableDef(
@@ -1152,7 +1173,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_center_interval__days_",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "irrig_vpd_boost_pct": TunableDef(
@@ -1166,7 +1187,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_vpd_boost__",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Irrigation duration boost after sustained high-VPD stress.",
     ),
@@ -1181,7 +1202,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrig_vpd_boost_threshold__hrs_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Accumulated high-VPD hours before irrigation boost applies.",
     ),
@@ -1199,7 +1220,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="gl_dli_target__mol_",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Daily light integral target for supplemental grow-light automation.",
     ),
@@ -1213,10 +1234,10 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_hi=50000,
         esp_object_id="gl_lux_threshold",
         cfg_readback_object_id=None,
-        push_owner="planner",
-        planner_pushable=True,
+        push_owner="dispatcher_default",
+        planner_pushable=False,
         tier=2,
-        notes="Indoor lux below this threshold requests supplemental light.",
+        notes="Legacy shared grow-light threshold. Read-only fallback now that per-circuit gl_main_* and gl_grow_* thresholds are planner-writable.",
     ),
     "gl_lux_hysteresis": TunableDef(
         name="gl_lux_hysteresis",
@@ -1228,10 +1249,10 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_hi=10000,
         esp_object_id="gl_lux_hysteresis",
         cfg_readback_object_id="cfg___gl_lux_hysteresis",
-        push_owner="planner",
-        planner_pushable=True,
+        push_owner="dispatcher_default",
+        planner_pushable=False,
         tier=2,
-        notes="Lux deadband around gl_lux_threshold to prevent grow-light cycling.",
+        notes="Legacy shared grow-light hysteresis. Read-only fallback now that per-circuit hysteresis tunables are planner-writable.",
     ),
     "gl_sunrise_hour": TunableDef(
         name="gl_sunrise_hour",
@@ -1244,7 +1265,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="gl_start_hour",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Earliest local hour grow lights may turn on.",
     ),
@@ -1259,9 +1280,219 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="gl_cutoff_hour",
         cfg_readback_object_id=None,
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Latest local hour grow lights may remain on.",
+    ),
+    "gl_main_dli_target": TunableDef(
+        name="gl_main_dli_target",
+        kind="numeric",
+        min=1,
+        max=50,
+        default=14.0,
+        fw_clamp_lo=1,
+        fw_clamp_hi=50,
+        esp_object_id="gl_main_dli_target",
+        cfg_readback_object_id="cfg_gl_main_dli_target",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Main/overhead lighting DLI goal. Crop policy seeds the default; Iris can tune per circuit.",
+    ),
+    "gl_main_lux_threshold": TunableDef(
+        name="gl_main_lux_threshold",
+        kind="numeric",
+        min=100,
+        max=100000,
+        default=40000.0,
+        fw_clamp_lo=100,
+        fw_clamp_hi=100000,
+        esp_object_id="gl_main_lux_threshold",
+        cfg_readback_object_id="cfg_gl_main_lux_threshold",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Main/overhead circuit ON threshold from Tempest outdoor lux.",
+    ),
+    "gl_main_lux_hysteresis": TunableDef(
+        name="gl_main_lux_hysteresis",
+        kind="numeric",
+        min=0,
+        max=25000,
+        default=8000.0,
+        fw_clamp_lo=0,
+        fw_clamp_hi=25000,
+        esp_object_id="gl_main_lux_hysteresis",
+        cfg_readback_object_id="cfg_gl_main_lux_hysteresis",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Main/overhead circuit OFF threshold is ON threshold plus this hysteresis.",
+    ),
+    "gl_main_sunrise_hour": TunableDef(
+        name="gl_main_sunrise_hour",
+        kind="numeric",
+        min=0,
+        max=23,
+        default=7,
+        fw_clamp_lo=0,
+        fw_clamp_hi=23,
+        esp_object_id="gl_main_sunrise_hour",
+        cfg_readback_object_id="cfg_gl_main_sunrise_hour",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Earliest local hour the main/overhead circuit may turn on.",
+    ),
+    "gl_main_sunset_hour": TunableDef(
+        name="gl_main_sunset_hour",
+        kind="numeric",
+        min=0,
+        max=23,
+        default=19,
+        fw_clamp_lo=0,
+        fw_clamp_hi=23,
+        esp_object_id="gl_main_sunset_hour",
+        cfg_readback_object_id="cfg_gl_main_sunset_hour",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Latest local hour the main/overhead circuit may remain on.",
+    ),
+    "gl_main_min_on_s": TunableDef(
+        name="gl_main_min_on_s",
+        kind="numeric",
+        min=0,
+        max=3600,
+        default=120,
+        fw_clamp_lo=0,
+        fw_clamp_hi=3600,
+        esp_object_id="gl_main_min_on_s",
+        cfg_readback_object_id="cfg_gl_main_min_on_s",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Minimum ON dwell for main/overhead lighting state machine.",
+    ),
+    "gl_main_min_off_s": TunableDef(
+        name="gl_main_min_off_s",
+        kind="numeric",
+        min=0,
+        max=3600,
+        default=60,
+        fw_clamp_lo=0,
+        fw_clamp_hi=3600,
+        esp_object_id="gl_main_min_off_s",
+        cfg_readback_object_id="cfg_gl_main_min_off_s",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Minimum OFF dwell for main/overhead lighting state machine.",
+    ),
+    "gl_grow_dli_target": TunableDef(
+        name="gl_grow_dli_target",
+        kind="numeric",
+        min=1,
+        max=50,
+        default=14.0,
+        fw_clamp_lo=1,
+        fw_clamp_hi=50,
+        esp_object_id="gl_grow_dli_target",
+        cfg_readback_object_id="cfg_gl_grow_dli_target",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Grow/secondary lighting DLI goal. Crop policy seeds the default; Iris can tune per circuit.",
+    ),
+    "gl_grow_lux_threshold": TunableDef(
+        name="gl_grow_lux_threshold",
+        kind="numeric",
+        min=100,
+        max=100000,
+        default=40000.0,
+        fw_clamp_lo=100,
+        fw_clamp_hi=100000,
+        esp_object_id="gl_grow_lux_threshold",
+        cfg_readback_object_id="cfg_gl_grow_lux_threshold",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Grow/secondary circuit ON threshold from Tempest outdoor lux.",
+    ),
+    "gl_grow_lux_hysteresis": TunableDef(
+        name="gl_grow_lux_hysteresis",
+        kind="numeric",
+        min=0,
+        max=25000,
+        default=8000.0,
+        fw_clamp_lo=0,
+        fw_clamp_hi=25000,
+        esp_object_id="gl_grow_lux_hysteresis",
+        cfg_readback_object_id="cfg_gl_grow_lux_hysteresis",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Grow/secondary circuit OFF threshold is ON threshold plus this hysteresis.",
+    ),
+    "gl_grow_sunrise_hour": TunableDef(
+        name="gl_grow_sunrise_hour",
+        kind="numeric",
+        min=0,
+        max=23,
+        default=7,
+        fw_clamp_lo=0,
+        fw_clamp_hi=23,
+        esp_object_id="gl_grow_sunrise_hour",
+        cfg_readback_object_id="cfg_gl_grow_sunrise_hour",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Earliest local hour the grow/secondary circuit may turn on.",
+    ),
+    "gl_grow_sunset_hour": TunableDef(
+        name="gl_grow_sunset_hour",
+        kind="numeric",
+        min=0,
+        max=23,
+        default=19,
+        fw_clamp_lo=0,
+        fw_clamp_hi=23,
+        esp_object_id="gl_grow_sunset_hour",
+        cfg_readback_object_id="cfg_gl_grow_sunset_hour",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Latest local hour the grow/secondary circuit may remain on.",
+    ),
+    "gl_grow_min_on_s": TunableDef(
+        name="gl_grow_min_on_s",
+        kind="numeric",
+        min=0,
+        max=3600,
+        default=120,
+        fw_clamp_lo=0,
+        fw_clamp_hi=3600,
+        esp_object_id="gl_grow_min_on_s",
+        cfg_readback_object_id="cfg_gl_grow_min_on_s",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Minimum ON dwell for grow/secondary lighting state machine.",
+    ),
+    "gl_grow_min_off_s": TunableDef(
+        name="gl_grow_min_off_s",
+        kind="numeric",
+        min=0,
+        max=3600,
+        default=60,
+        fw_clamp_lo=0,
+        fw_clamp_hi=3600,
+        esp_object_id="gl_grow_min_off_s",
+        cfg_readback_object_id="cfg_gl_grow_min_off_s",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Minimum OFF dwell for grow/secondary lighting state machine.",
     ),
     # ─────────────────────────────────────────────────────────────────────
     # Economiser (enthalpy-based vent gating).
@@ -1307,7 +1538,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="econ_heat_margin__f",
         cfg_readback_object_id="cfg___econ_heat_margin___f_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Blocks economiser venting when heating demand is active and temp is far below high band.",
     ),
@@ -1333,7 +1564,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="economiser_enabled",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Economiser master enable. Default ON.",
     ),
@@ -1344,13 +1575,35 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="gl_auto_mode",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Grow-light automation master enable.",
     ),
+    "sw_gl_main_auto_mode": TunableDef(
+        name="sw_gl_main_auto_mode",
+        kind="switch",
+        default=1,
+        esp_object_id="gl_main_auto_mode",
+        cfg_readback_object_id="cfg_gl_main_auto_mode",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Per-circuit automation enable for main/overhead lighting.",
+    ),
+    "sw_gl_grow_auto_mode": TunableDef(
+        name="sw_gl_grow_auto_mode",
+        kind="switch",
+        default=1,
+        esp_object_id="gl_grow_auto_mode",
+        cfg_readback_object_id="cfg_gl_grow_auto_mode",
+        push_owner="planner",
+        planner_pushable=True,
+        tier=2,
+        notes="Per-circuit automation enable for grow/secondary lighting.",
+    ),
     # ─────────────────────────────────────────────────────────────────────
-    # Operator switches (push_owner="operator", tier=2). Planner CAN push
-    # (e.g. weather-skip toggle on storm forecast) but rarely does.
+    # Operator switches (push_owner="operator", tier=2). Planner reads these
+    # as context; operator tooling owns changes.
     # ─────────────────────────────────────────────────────────────────────
     "sw_irrigation_enabled": TunableDef(
         name="sw_irrigation_enabled",
@@ -1359,7 +1612,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrigation_enabled",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Master irrigation enable.",
     ),
@@ -1370,7 +1623,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrigation_wall_enabled",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "sw_irrigation_center_enabled": TunableDef(
@@ -1380,7 +1633,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrigation_center_enabled",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
     ),
     "sw_irrigation_weather_skip": TunableDef(
@@ -1390,7 +1643,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="irrigation_weather_skip",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Skip irrigation on rainy-day forecast.",
     ),
@@ -1401,7 +1654,7 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="occupancy_mist_inhibit",
         cfg_readback_object_id=None,
         push_owner="operator",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
         notes="Block misting while greenhouse is occupied.",
     ),
@@ -1463,7 +1716,7 @@ REGISTRY: dict[str, TunableDef] = {
         cfg_readback_object_id="cfg___outdoor_staleness_max__s_",
         push_owner="planner",
         planner_pushable=True,
-        tier=2,
+        tier=1,
         notes="Gate disables when outdoor data older than this. Sprint-15.1 "
         "raised default 300→600 and floor 60→120 so dispatcher cadence "
         "jitter doesn't intermittently disqualify the gate.",
@@ -1479,8 +1732,9 @@ REGISTRY: dict[str, TunableDef] = {
         esp_object_id="summer_vent_min_runtime__s_",
         cfg_readback_object_id="cfg___summer_vent_min_runtime__s_",
         push_owner="planner",
-        planner_pushable=True,
+        planner_pushable=False,
         tier=2,
+        notes="Reserved/no-op in current firmware. Setpoints field is clamped but not consumed by the gate.",
     ),
     # ── Sprint-15.1 vent-close interlocks (fixes 4/5/7) ──────────────
     "sw_fog_closes_vent": TunableDef(
@@ -1488,23 +1742,24 @@ REGISTRY: dict[str, TunableDef] = {
         kind="switch",
         default=1,
         esp_object_id="fog_closes_vent",
-        cfg_readback_object_id=None,  # switch entity; state tracked in equipment_state not setpoint_snapshot
-        push_owner="operator",
+        cfg_readback_object_id="fog_closes_vent",
+        push_owner="planner",
         planner_pushable=True,
-        tier=2,
-        notes="Fog fires only when vent is closed. Default ON; disabling "
-        "re-enables FW-9b emergency fog during VENTILATE (tradeoff).",
+        tier=1,
+        notes="Fog is suppressed while the vent is physically open, except vent-mist assist. "
+        "Default ON; disabling re-enables open-vent fog during VENTILATE (tradeoff).",
     ),
     "sw_mister_closes_vent": TunableDef(
         name="sw_mister_closes_vent",
         kind="switch",
         default=0,  # globals.yaml initial_value 'false'
         esp_object_id="mister_closes_vent",
-        cfg_readback_object_id="sw_mister_closes_vent",  # Phase 1c routed the readback
-        push_owner="operator",
+        cfg_readback_object_id="mister_closes_vent",
+        push_owner="planner",
         planner_pushable=True,
-        tier=2,
-        notes="Mister fires only when vent is closed. Sprint-15.1 fix 5+7.",
+        tier=1,
+        notes="Normal mister pulses are suppressed while the vent is physically open. "
+        "The explicit VENTILATE vent-mist assist path bypasses this interlock.",
     ),
     # ─────────────────────────────────────────────────────────────────────
     # Representative Tier 1 planner knobs — proof of pattern.
@@ -1562,7 +1817,7 @@ REGISTRY: dict[str, TunableDef] = {
         kind="switch",
         default=0,
         esp_object_id="dwell_gate_enabled",
-        cfg_readback_object_id=None,  # switch; state in equipment_state
+        cfg_readback_object_id="cfg_dwell_gate_enabled",
         push_owner="planner",
         planner_pushable=True,
         tier=1,
@@ -1578,10 +1833,10 @@ REGISTRY: dict[str, TunableDef] = {
         fw_clamp_lo=60000,
         fw_clamp_hi=1800000,
         esp_object_id="dwell_gate__ms_",
-        cfg_readback_object_id=None,
+        cfg_readback_object_id="cfg_dwell_gate_ms",
         push_owner="planner",
         planner_pushable=True,
-        tier=2,
+        tier=1,
         notes="Dwell hold duration. Default 5 min. Safety rails + R2-3 "
         "dry override + vpd_min_safe rescue preempt unconditionally.",
     ),
@@ -1594,9 +1849,9 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="operator",
         planner_pushable=True,
         tier=1,
-        notes="Controller v2 band-first FSM is the live controller path. "
-        "Dispatcher, MCP, and outbound-listener guardrails force this ON; "
-        "legacy fallback requires an explicit operator/firmware rollback.",
+        notes="Unified band-first controller is the live controller path. "
+        "ESPHome control loop, dispatcher, MCP, and outbound-listener guardrails force this ON; "
+        "rollback requires an explicit firmware/config rollback outside the planner surface.",
     ),
     "mist_backoff_s": TunableDef(
         name="mist_backoff_s",
@@ -1611,7 +1866,7 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="Controller v2 lockout after sealed humidification times out. "
+        notes="Controller lockout after sealed humidification times out. "
         "Suppresses another SEALED_MIST attempt without forcing venting.",
     ),
     "fog_escalation_kpa": TunableDef(
@@ -1627,7 +1882,68 @@ REGISTRY: dict[str, TunableDef] = {
         push_owner="planner",
         planner_pushable=True,
         tier=1,
-        notes="VPD delta above vpd_high that escalates from mist → fog.",
+        notes=(
+            "VPD delta above active vpd_high that escalates from mist to fog. "
+            "Lower values mean earlier fog inside VENTILATE mist assist; dispatcher "
+            "caps overly conservative deltas during live VPD-high or near-edge VENTILATE stress when dew "
+            "margin is healthy."
+        ),
+    ),
+    # ─────────────────────────────────────────────────────────────────────
+    # Readback-only firmware inputs. These are in ALL_TUNABLES because
+    # setpoint_snapshot rows validate against that schema, but there is no
+    # dispatcher route and MCP must never expose them for planner writes.
+    # ─────────────────────────────────────────────────────────────────────
+    "fallback_window_s": TunableDef(
+        name="fallback_window_s",
+        kind="numeric",
+        min=60.0,
+        max=3600.0,
+        default=900.0,
+        fw_clamp_lo=None,
+        fw_clamp_hi=None,
+        esp_object_id=None,
+        cfg_readback_object_id="cfg___fallback_window__s_",
+        push_owner="firmware_internal",
+        planner_pushable=False,
+        tier=2,
+        notes=(
+            "Readback-only external-probe watchdog window. Firmware reboots if all external probes "
+            "are silent longer than this; not a planner control knob."
+        ),
+    ),
+    "outdoor_temp_f": TunableDef(
+        name="outdoor_temp_f",
+        kind="numeric",
+        min=None,
+        max=None,
+        default=math.nan,
+        fw_clamp_lo=None,
+        fw_clamp_hi=None,
+        esp_object_id=None,
+        cfg_readback_object_id="cfg___outdoor_temp___f_",
+        push_owner="firmware_internal",
+        planner_pushable=False,
+        tier=2,
+        notes=("Readback-only Tempest outdoor temperature input consumed by the summer-vent cooler-and-drier gate."),
+    ),
+    "outdoor_dewpoint_f": TunableDef(
+        name="outdoor_dewpoint_f",
+        kind="numeric",
+        min=None,
+        max=None,
+        default=math.nan,
+        fw_clamp_lo=None,
+        fw_clamp_hi=None,
+        esp_object_id=None,
+        cfg_readback_object_id="cfg___outdoor_dewpoint___f_",
+        push_owner="firmware_internal",
+        planner_pushable=False,
+        tier=2,
+        notes=(
+            "Readback-only outdoor dew point derived from Tempest temperature/RH; consumed by "
+            "the summer-vent drier-air comparator."
+        ),
     ),
 }
 
@@ -1636,24 +1952,71 @@ REGISTRY: dict[str, TunableDef] = {
 # Derived views — ONE source of truth above, many consumers below.
 # ─────────────────────────────────────────────────────────────────────────────
 
+RETIRED_TUNABLES_REG: frozenset[str] = frozenset(
+    {
+        "fan_burst_min",
+        "fog_burst_min",
+        "mist_vent_close_lead_s",
+        "mist_vent_reopen_delay_s",
+        "mister_all_off_s",
+        "mister_all_on_s",
+        "mister_max_runtime_min",
+        "mister_off_s",
+        "mister_on_s",
+        "summer_vent_min_runtime_s",
+        "vent_bypass_min",
+    }
+)
+
+
+def tunable_control_class(
+    name: str, spec: TunableDef
+) -> Literal["planner_policy", "crop_band", "controller_safety", "readback_context", "retired"]:
+    """Classify a tunable for the cleanup contract.
+
+    This is the single policy split used by MCP, planner context, and the
+    public AI Tunables page. It deliberately separates visibility from
+    writeability: non-policy rows stay documented and searchable, but planner
+    may only write `planner_policy` rows.
+    """
+    if name in RETIRED_TUNABLES_REG:
+        return "retired"
+    if spec.esp_object_id is None or spec.push_owner == "firmware_internal":
+        return "readback_context"
+    if spec.planner_pushable:
+        return "planner_policy"
+    if spec.push_owner == "band":
+        return "crop_band"
+    return "controller_safety"
+
+
+def _contract_classes() -> dict[str, str]:
+    return {n: d.control_class for n, d in REGISTRY.items()}
+
 
 def _all_tunables() -> frozenset[str]:
     return frozenset(REGISTRY)
 
 
 def _tier1() -> frozenset[str]:
-    """Planner-accessible via MCP set_tunable. Replaces mcp/server.py TIER1."""
+    """Canonical planner-policy surface. Replaces mcp/server.py TIER1."""
     return frozenset(n for n, d in REGISTRY.items() if d.planner_pushable and d.tier == 1)
 
 
 def _planner_pushable() -> frozenset[str]:
-    """Broader set: everything the planner CAN push (includes tier-2 escape hatch)."""
-    return frozenset(n for n, d in REGISTRY.items() if d.planner_pushable)
+    """Everything the planner may write via MCP.
+
+    Tier 1 planner-policy rows are mandatory full-plan waypoints. Tier 2
+    planner-policy rows are optional tactical knobs such as per-circuit lighting
+    thresholds. MCP accepts both, while operator, crop-band, safety,
+    readback-only, and retired rows remain read-only to the planner.
+    """
+    return frozenset(n for n, d in REGISTRY.items() if d.control_class == "planner_policy")
 
 
 def _setpoint_map() -> dict[str, str]:
     """ESPHome object_id → canonical name. Replaces ingestor.entity_map.SETPOINT_MAP."""
-    return {d.esp_object_id: n for n, d in REGISTRY.items()}
+    return {d.esp_object_id: n for n, d in REGISTRY.items() if d.esp_object_id}
 
 
 def _cfg_readback_map() -> dict[str, str]:
@@ -1668,6 +2031,7 @@ def _cfg_readback_map() -> dict[str, str]:
 ALL_TUNABLES_REG: frozenset[str] = _all_tunables()
 TIER1_REG: frozenset[str] = _tier1()
 PLANNER_PUSHABLE_REG: frozenset[str] = _planner_pushable()
+TUNABLE_CONTRACT_CLASSES_REG: dict[str, str] = _contract_classes()
 SETPOINT_MAP_REG: dict[str, str] = _setpoint_map()
 CFG_READBACK_MAP_REG: dict[str, str] = _cfg_readback_map()
 

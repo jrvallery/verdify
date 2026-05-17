@@ -33,6 +33,20 @@ SLACK_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/slack_bot_token.txt"
 SLACK_CHANNEL = "C0ANVVAPLD6"
 
 INTERVAL_MAP = {"24h": "24 hours", "48h": "48 hours", "12h": "12 hours", "6h": "6 hours"}
+BAND_OWNED_PARAMS = {
+    "temp_low",
+    "temp_high",
+    "vpd_low",
+    "vpd_high",
+    "vpd_target_south",
+    "vpd_target_west",
+    "vpd_target_east",
+    "vpd_target_center",
+    "gl_dli_target",
+    "gl_sunrise_hour",
+    "gl_sunset_hour",
+    "sw_gl_auto_mode",
+}
 
 
 def get_db_url():
@@ -201,6 +215,28 @@ async def main():
             log.info(
                 "RULE TRIGGERED: %s — %s %s %s (actual: %s at %s)", name, metric, op, threshold, trigger_val, trigger_ts
             )
+
+            if action_type == "setpoint" and param in BAND_OWNED_PARAMS:
+                log.warning("Skipping dispatcher-owned forecast action %s for %s; dispatcher owns policy", name, param)
+                await conn.execute(
+                    "INSERT INTO forecast_action_log "
+                    "(rule_id, rule_name, triggered_at, forecast_condition, action_taken, param, old_value, new_value, outcome, outcome_evaluated_at, outcome_metrics) "
+                    "VALUES ($1, $2, $3, $4, 'skipped_band_owned', $5, NULL, $6, 'no_action_required', now(), $7)",
+                    rule_id,
+                    name,
+                    now,
+                    json.dumps(forecast_snapshot),
+                    param,
+                    float(adj_value),
+                    json.dumps(
+                        {
+                            "evaluator": "forecast-action-engine",
+                            "reason": "band_owned_dispatcher_contract",
+                            "band_owned_params": sorted(BAND_OWNED_PARAMS),
+                        }
+                    ),
+                )
+                continue
 
             if action_type == "setpoint" and param and adj_value is not None:
                 # Get current value

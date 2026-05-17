@@ -49,8 +49,8 @@ OCCUPANCY_ENTITIES = {
 
 # --- Grow light entities ---
 LIGHT_ENTITIES = {
-    "light.greenhouse_main": "grow_light_main",
-    "light.greenhouse_grow": "grow_light_grow",
+    "switch.greenhouse_main": "grow_light_main",
+    "switch.greenhouse_grow": "grow_light_grow",
 }
 
 # --- Hydroponic water tester (LocalTuya + WiFi) ---

@@ -14,6 +14,19 @@ DATA_INDEX = CONTENT_ROOT / "data" / "plans" / "index.md"
 DB_CMD = ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-F", "|"]
 
 
+def public_text(value: object) -> str:
+    text = str(value or "")
+    text = re.sub(r"iris-hermes-validation", "iris-validation", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bHermes\b", "planning gateway", text)
+    text = re.sub(r"\bhermes\b", "planner-gateway", text)
+    text = re.sub(r"\bOpenClaw/Iris\b", "planner", text)
+    text = re.sub(r"\bOpenClaw\b", "planner gateway", text)
+    text = re.sub(r"\blocal Gemma context overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
+    text = re.sub(r"\blocal Gemma overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
+    text = re.sub(r"\blocal Gemma\b", "planner", text, flags=re.IGNORECASE)
+    return re.sub(r"\$(\d)", r"USD \1", text)
+
+
 def db_rows(sql: str) -> list[list[str]]:
     result = subprocess.run([*DB_CMD, "-c", sql], capture_output=True, text=True, timeout=15, check=True)
     return [row.split("|") for row in result.stdout.strip().splitlines() if row.strip()]
@@ -35,7 +48,7 @@ Iris normally runs up to three planning cycles per day. Missed cycles are intent
 
 The individual daily pages are generated records, not polished articles. The important story is what the AI planned, what the greenhouse actually experienced, how much stress remained, and what the next plan learned.
 
-To understand the exact parameters behind the plan rows, see [AI-Writable Tunables](/reference/planning-loop/#ai-writable-tunables).
+To understand the exact parameters behind the plan rows, see [AI Tunables Traceability](/reference/ai-tunables/).
 
 *Generated planning archive: daily pages are lab notebook records. Pending rows and missed cycles stay visible because planner availability is part of the evidence.*
 
@@ -58,9 +71,8 @@ def existing_header(today: date) -> str:
     if not header:
         return default_header(today)
     header = re.sub(r"^date: .*$", f"date: {today}", header, flags=re.MULTILINE)
-    header = header.replace(
-        "/intelligence/planning/#ai-writable-tunables", "/reference/planning-loop/#ai-writable-tunables"
-    )
+    header = header.replace("/intelligence/planning/#ai-writable-tunables", "/reference/ai-tunables/")
+    header = header.replace("/reference/planning-loop/#ai-writable-tunables", "/reference/ai-tunables/")
     if "Generated planning archive" not in header:
         header = header.replace(
             "## What the Archive Shows",
@@ -82,8 +94,9 @@ def render(rows: list[list[str]], today: date) -> str:
         if len(row) < 7:
             continue
         d, plans, temp_range, vpd, cost, experiment, score = [item.strip() for item in row[:7]]
+        experiment_public = public_text(experiment)
         lines.append(
-            f"| [{d}](/plans/{d}) | {plans} | {temp_range}°F | {vpd}h | ${cost} | {experiment[:40]} | {score} |"
+            f"| [{d}](/plans/{d}) | {plans} | {temp_range}°F | {vpd}h | ${cost} | {experiment_public[:40]} | {score} |"
         )
     lines.extend(
         [

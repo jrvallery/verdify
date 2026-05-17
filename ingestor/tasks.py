@@ -8,9 +8,12 @@ Replaces 10 cron jobs with a single in-process task scheduler.
 """
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import math
+import os
+import re
 import sys
 import time
 import urllib.error
@@ -61,10 +64,50 @@ from config import (
     load_token as _load_token,
 )
 
-# Crop-band params are not planner-owned waypoints. The dispatcher derives all
-# four from fn_band_setpoints(now()) every cycle and pushes them to firmware.
+# Crop-band and lighting-policy params are not planner-owned waypoints. The
+# dispatcher derives them from DB policy functions every cycle and pushes them
+# to firmware.
 # A missing setpoint_plan row for vpd_low is therefore not a firmware fallback:
 # vpd_low is explicit in the band contract here.
+LIGHTING_POLICY_PARAMS = frozenset(
+    {
+        "gl_dli_target",
+        "gl_sunrise_hour",
+        "gl_sunset_hour",
+        "sw_gl_auto_mode",
+    }
+)
+
+LIGHTING_CIRCUIT_DEFAULT_PARAMS = frozenset(
+    {
+        "gl_main_dli_target",
+        "gl_main_sunrise_hour",
+        "gl_main_sunset_hour",
+        "gl_main_lux_threshold",
+        "gl_main_lux_hysteresis",
+        "gl_main_min_on_s",
+        "gl_main_min_off_s",
+        "sw_gl_main_auto_mode",
+        "gl_grow_dli_target",
+        "gl_grow_sunrise_hour",
+        "gl_grow_sunset_hour",
+        "gl_grow_lux_threshold",
+        "gl_grow_lux_hysteresis",
+        "gl_grow_min_on_s",
+        "gl_grow_min_off_s",
+        "sw_gl_grow_auto_mode",
+    }
+)
+
+LIGHTING_CIRCUIT_SUPPORT_SENTINELS = frozenset(
+    {
+        "gl_main_lux_threshold",
+        "gl_grow_lux_threshold",
+        "sw_gl_main_auto_mode",
+        "sw_gl_grow_auto_mode",
+    }
+)
+
 BAND_DRIVEN_PARAMS = frozenset(
     {
         "temp_high",
@@ -75,8 +118,126 @@ BAND_DRIVEN_PARAMS = frozenset(
         "vpd_target_west",
         "vpd_target_east",
         "vpd_target_center",
+        "gl_dli_target",
+        "gl_sunrise_hour",
+        "gl_sunset_hour",
+        "sw_gl_auto_mode",
     }
 )
+
+HOUSE_VPD_MIN_WIDTH_KPA = 0.55
+HOUSE_VPD_LOW_MARGIN_KPA = 0.20
+AIR_EXCHANGE_RELAY_STUCK_MODES = frozenset({"VENTILATE", "DEHUM_VENT", "THERMAL_RELIEF", "SAFETY_COOL"})
+VPD_HIGH_GUARD_MARGIN_KPA = 0.02
+VPD_MOISTURE_DEW_MARGIN_F = 7.0
+VPD_MOISTURE_RECOVERY_WINDOW_MIN = 15
+VPD_MOISTURE_RECOVERY_FRACTION = 0.50
+VPD_DRY_AIR_OUTDOOR_RH_PCT = 25.0
+VPD_VENT_FOG_ESCALATION_KPA = 0.20
+VPD_HOT_DRY_FOG_ESCALATION_KPA = 0.15
+VPD_VENT_MIN_FOG_OFF_S = 60.0
+VPD_HOT_DRY_MIN_FOG_OFF_S = 45.0
+VPD_HIGH_MOISTURE_GUARDRAIL_PARAMS = frozenset(
+    {
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_engage_delay_s",
+        "mister_all_delay_s",
+        "mister_pulse_gap_s",
+        "min_fog_off_s",
+        "fog_escalation_kpa",
+    }
+)
+GPU_POWER_EXPORTER_URL = os.environ.get("GPU_POWER_EXPORTER_URL", "http://192.168.30.105:9400/metrics")
+GPU_POWER_HOST = os.environ.get("GPU_POWER_HOST", "cortex")
+INFRA_TELEMETRY_GREENHOUSE_ID = os.environ.get("INFRA_TELEMETRY_GREENHOUSE_ID", "vallery")
+GPU_POWER_EXPORTERS = (
+    {
+        "host": GPU_POWER_HOST,
+        "vm_name": "vm-docker-ai",
+        "purpose": "Iris/Hermes inference, embeddings, retrieval, and agent workloads",
+        "url": os.environ.get("CORTEX_DCGM_EXPORTER_URL", GPU_POWER_EXPORTER_URL),
+    },
+    {
+        "host": "sentinel",
+        "vm_name": "vm-docker-frigate",
+        "purpose": "Camera and vision inference for Frigate, greenhouse video, and visual evidence",
+        "url": os.environ.get("SENTINEL_DCGM_EXPORTER_URL", "http://192.168.30.142:9400/metrics"),
+    },
+    {
+        "host": "immich",
+        "vm_name": "vm-docker-immich",
+        "purpose": "Photo/media ML, CLIP search, and archive embeddings",
+        "url": os.environ.get("IMMICH_DCGM_EXPORTER_URL", "http://192.168.30.108:9400/metrics"),
+    },
+)
+CPU_EXPORTERS = (
+    {
+        "host": "iris",
+        "vm_name": "vm-docker-iris",
+        "purpose": "Verdify greenhouse ingestor, planner support, MCP, API, and site data jobs",
+        "url": os.environ.get("IRIS_NODE_EXPORTER_URL", "http://192.168.30.150:9100/metrics"),
+    },
+    {
+        "host": "cortex",
+        "vm_name": "vm-docker-ai",
+        "purpose": "Hermes planner, embeddings, retrieval, and agent workloads",
+        "url": os.environ.get("CORTEX_NODE_EXPORTER_URL", "http://192.168.30.105:9100/metrics"),
+    },
+    {
+        "host": "sentinel",
+        "vm_name": "vm-docker-frigate",
+        "purpose": "Camera ingest, Frigate, and vision workloads",
+        "url": os.environ.get("SENTINEL_NODE_EXPORTER_URL", "http://192.168.30.142:9100/metrics"),
+    },
+    {
+        "host": "web",
+        "vm_name": "vm-docker-web",
+        "purpose": "Public website publishing and edge-adjacent web jobs",
+        "url": os.environ.get("WEB_NODE_EXPORTER_URL", "http://192.168.30.151:9100/metrics"),
+    },
+    {
+        "host": "opal",
+        "vm_name": "pve-opal",
+        "purpose": "Proxmox host for the Cortex GPU VM",
+        "url": os.environ.get("OPAL_NODE_EXPORTER_URL", "http://192.168.30.212:9100/metrics"),
+    },
+    {
+        "host": "oro",
+        "vm_name": "pve-oro",
+        "purpose": "Proxmox host for Sentinel, Web, and GPU/edge workloads",
+        "url": os.environ.get("ORO_NODE_EXPORTER_URL", "http://192.168.30.211:9100/metrics"),
+    },
+    {
+        "host": "onyx",
+        "vm_name": "pve-onyx",
+        "purpose": "Proxmox host for Iris and HA-capable services",
+        "url": os.environ.get("ONYX_NODE_EXPORTER_URL", "http://192.168.30.213:9100/metrics"),
+    },
+    {
+        "host": "olivine",
+        "vm_name": "pve-olivine",
+        "purpose": "Proxmox management and quorum host",
+        "url": os.environ.get("OLIVINE_NODE_EXPORTER_URL", "http://192.168.30.214:9100/metrics"),
+    },
+    {
+        "host": "ore",
+        "vm_name": "pve-ore",
+        "purpose": "Proxmox host for the Immich GPU VM",
+        "url": os.environ.get("ORE_NODE_EXPORTER_URL", "http://192.168.30.215:9100/metrics"),
+    },
+)
+PROM_SAMPLE_RE = re.compile(
+    r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+"
+    r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?|[-+]?Inf|NaN)(?:\s|$)"
+)
+GPU_DCGM_METRICS = {
+    "DCGM_FI_DEV_POWER_USAGE": "watts",
+    "DCGM_FI_DEV_GPU_UTIL": "gpu_util_pct",
+    "DCGM_FI_DEV_GPU_TEMP": "temperature_c",
+    "DCGM_FI_DEV_FB_USED": "memory_used_mb",
+    "DCGM_FI_DEV_FB_FREE": "memory_free_mb",
+}
 
 
 def _expected_firmware_version() -> str | None:
@@ -143,6 +304,194 @@ def _fetch_ha_batch(token: str, entity_ids: list[str]) -> dict[str, dict]:
         if data:
             results[eid] = data
     return results
+
+
+def _parse_prometheus_labels(label_blob: str) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    key = []
+    value = []
+    in_value = False
+    in_quote = False
+    escaped = False
+    current_key = ""
+    for ch in label_blob:
+        if in_value:
+            if escaped:
+                value.append(ch)
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_quote = not in_quote
+            elif ch == "," and not in_quote:
+                labels[current_key.strip()] = "".join(value)
+                current_key = ""
+                value = []
+                in_value = False
+            else:
+                value.append(ch)
+        elif ch == "=":
+            current_key = "".join(key)
+            key = []
+            in_value = True
+        elif ch == ",":
+            key = []
+        else:
+            key.append(ch)
+    if in_value and current_key:
+        labels[current_key.strip()] = "".join(value)
+    return labels
+
+
+def _fetch_url_text(url: str, timeout: int = 8) -> str:
+    req = urllib.request.Request(url, headers={"Accept": "text/plain"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _iter_prometheus_samples(body: str):
+    for line in body.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        match = PROM_SAMPLE_RE.match(line)
+        if not match:
+            continue
+        metric, label_blob, raw_value = match.groups()
+        try:
+            value = float(raw_value)
+        except ValueError:
+            continue
+        if not math.isfinite(value):
+            continue
+        yield metric, _parse_prometheus_labels(label_blob or ""), value
+
+
+def _fetch_gpu_power_samples(source: dict | None = None) -> list[dict]:
+    source = source or GPU_POWER_EXPORTERS[0]
+    body = _fetch_url_text(source["url"])
+    by_gpu: dict[str, dict] = {}
+    for metric, labels, value in _iter_prometheus_samples(body):
+        field = GPU_DCGM_METRICS.get(metric)
+        if not field:
+            continue
+        gpu = labels.get("gpu", "unknown")
+        sample = by_gpu.setdefault(
+            gpu,
+            {
+                "host": source["host"],
+                "vm_name": source.get("vm_name"),
+                "purpose": source.get("purpose"),
+                "gpu": gpu,
+                "device": labels.get("device"),
+                "model_name": labels.get("modelName"),
+                "raw": {},
+            },
+        )
+        sample[field] = value
+        sample["device"] = sample.get("device") or labels.get("device")
+        sample["model_name"] = sample.get("model_name") or labels.get("modelName")
+        sample["raw"][metric] = labels
+
+    samples: list[dict] = []
+    for sample in by_gpu.values():
+        if sample.get("watts") is None:
+            continue
+        samples.append(
+            {
+                **sample,
+                "watts": float(sample["watts"]),
+            }
+        )
+    return samples
+
+
+def _fetch_all_gpu_power_samples() -> list[dict]:
+    samples: list[dict] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(3, len(GPU_POWER_EXPORTERS))) as executor:
+        future_to_source = {executor.submit(_fetch_gpu_power_samples, source): source for source in GPU_POWER_EXPORTERS}
+        for future in concurrent.futures.as_completed(future_to_source):
+            source = future_to_source[future]
+            try:
+                samples.extend(future.result())
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                log.warning("GPU power sync failed from %s (%s): %s", source["host"], source["url"], exc)
+    return samples
+
+
+def _extract_node_snapshot(body: str) -> dict:
+    total_cpu = 0.0
+    idle_cpu = 0.0
+    cores: set[str] = set()
+    load1: float | None = None
+    mem_total: float | None = None
+    mem_available: float | None = None
+
+    for metric, labels, value in _iter_prometheus_samples(body):
+        if metric == "node_cpu_seconds_total":
+            total_cpu += value
+            if labels.get("mode") == "idle":
+                idle_cpu += value
+            if labels.get("cpu"):
+                cores.add(labels["cpu"])
+        elif metric == "node_load1":
+            load1 = value
+        elif metric == "node_memory_MemTotal_bytes":
+            mem_total = value
+        elif metric == "node_memory_MemAvailable_bytes":
+            mem_available = value
+
+    memory_used_pct = None
+    if mem_total and mem_available is not None and mem_total > 0:
+        memory_used_pct = max(0.0, min(100.0, 100.0 * (1.0 - mem_available / mem_total)))
+
+    return {
+        "total_cpu": total_cpu,
+        "idle_cpu": idle_cpu,
+        "cores": len(cores) or None,
+        "load1": load1,
+        "memory_total_bytes": mem_total,
+        "memory_available_bytes": mem_available,
+        "memory_used_pct": memory_used_pct,
+    }
+
+
+def _fetch_cpu_sample(source: dict) -> dict:
+    first = _extract_node_snapshot(_fetch_url_text(source["url"], timeout=5))
+    time.sleep(1.0)
+    second = _extract_node_snapshot(_fetch_url_text(source["url"], timeout=5))
+
+    delta_total = second["total_cpu"] - first["total_cpu"]
+    delta_idle = second["idle_cpu"] - first["idle_cpu"]
+    cpu_util_pct = None
+    if delta_total > 0:
+        cpu_util_pct = max(0.0, min(100.0, 100.0 * (1.0 - delta_idle / delta_total)))
+
+    return {
+        "host": source["host"],
+        "vm_name": source.get("vm_name"),
+        "purpose": source.get("purpose"),
+        "cpu_util_pct": cpu_util_pct,
+        "load1": second.get("load1"),
+        "cores": second.get("cores"),
+        "memory_used_pct": second.get("memory_used_pct"),
+        "raw": {
+            "memory_total_bytes": second.get("memory_total_bytes"),
+            "memory_available_bytes": second.get("memory_available_bytes"),
+        },
+    }
+
+
+def _fetch_all_cpu_samples() -> list[dict]:
+    samples: list[dict] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(CPU_EXPORTERS))) as executor:
+        future_to_source = {executor.submit(_fetch_cpu_sample, source): source for source in CPU_EXPORTERS}
+        for future in concurrent.futures.as_completed(future_to_source):
+            source = future_to_source[future]
+            try:
+                samples.append(future.result())
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                log.warning("CPU telemetry sync failed from %s (%s): %s", source["host"], source["url"], exc)
+    return samples
 
 
 def _post_slack(token: str, channel: str, text: str, thread_ts: str | None = None) -> str | None:
@@ -310,6 +659,114 @@ async def shelly_sync(pool: asyncpg.Pool) -> None:
     log.debug("Shelly: %dW (ch0=%d ch1=%d)", watts_total, vals.get("ch0_power_w", 0), vals.get("ch1_power_w", 0))
 
 
+async def gpu_power_sync(pool: asyncpg.Pool) -> None:
+    """Mirror inference-fleet GPU telemetry from DCGM into TimescaleDB for public charts."""
+    loop = asyncio.get_event_loop()
+    samples = await loop.run_in_executor(None, _fetch_all_gpu_power_samples)
+    if not samples:
+        log.warning("GPU power sync found no DCGM_FI_DEV_POWER_USAGE samples")
+        return
+
+    ts = datetime.now(UTC)
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO gpu_power (
+                ts, host, vm_name, purpose, gpu, device, model_name, watts,
+                gpu_util_pct, temperature_c, memory_used_mb, memory_free_mb, source, raw, greenhouse_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'dcgm', $13::jsonb, $14)
+            ON CONFLICT (greenhouse_id, ts, host, gpu) DO UPDATE SET
+                vm_name = EXCLUDED.vm_name,
+                purpose = EXCLUDED.purpose,
+                device = EXCLUDED.device,
+                model_name = EXCLUDED.model_name,
+                watts = EXCLUDED.watts,
+                gpu_util_pct = EXCLUDED.gpu_util_pct,
+                temperature_c = EXCLUDED.temperature_c,
+                memory_used_mb = EXCLUDED.memory_used_mb,
+                memory_free_mb = EXCLUDED.memory_free_mb,
+                source = EXCLUDED.source,
+                raw = EXCLUDED.raw
+            """,
+            [
+                (
+                    ts,
+                    s["host"],
+                    s.get("vm_name"),
+                    s.get("purpose"),
+                    s["gpu"],
+                    s.get("device"),
+                    s.get("model_name"),
+                    s["watts"],
+                    s.get("gpu_util_pct"),
+                    s.get("temperature_c"),
+                    s.get("memory_used_mb"),
+                    s.get("memory_free_mb"),
+                    json.dumps(s.get("raw") or {}),
+                    INFRA_TELEMETRY_GREENHOUSE_ID,
+                )
+                for s in samples
+            ],
+        )
+    log.debug(
+        "GPU power: %s",
+        ", ".join(f"{s['host']}/gpu{s['gpu']}={s['watts']:.1f}W" for s in samples),
+    )
+
+
+async def infra_cpu_sync(pool: asyncpg.Pool) -> None:
+    """Mirror public-safe CPU telemetry from node exporters into TimescaleDB."""
+    loop = asyncio.get_event_loop()
+    samples = await loop.run_in_executor(None, _fetch_all_cpu_samples)
+    if not samples:
+        log.warning("CPU telemetry sync found no node-exporter samples")
+        return
+
+    ts = datetime.now(UTC)
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO infra_cpu (
+                ts, host, vm_name, purpose, cpu_util_pct, load1, cores,
+                memory_used_pct, source, raw, greenhouse_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'node_exporter', $9::jsonb, $10)
+            ON CONFLICT (greenhouse_id, ts, host) DO UPDATE SET
+                vm_name = EXCLUDED.vm_name,
+                purpose = EXCLUDED.purpose,
+                cpu_util_pct = EXCLUDED.cpu_util_pct,
+                load1 = EXCLUDED.load1,
+                cores = EXCLUDED.cores,
+                memory_used_pct = EXCLUDED.memory_used_pct,
+                source = EXCLUDED.source,
+                raw = EXCLUDED.raw
+            """,
+            [
+                (
+                    ts,
+                    s["host"],
+                    s.get("vm_name"),
+                    s.get("purpose"),
+                    s.get("cpu_util_pct"),
+                    s.get("load1"),
+                    s.get("cores"),
+                    s.get("memory_used_pct"),
+                    json.dumps(s.get("raw") or {}),
+                    INFRA_TELEMETRY_GREENHOUSE_ID,
+                )
+                for s in samples
+            ],
+        )
+    log.debug(
+        "CPU telemetry: %s",
+        ", ".join(
+            f"{s['host']}={s['cpu_util_pct']:.1f}%" if s.get("cpu_util_pct") is not None else f"{s['host']}=n/a"
+            for s in samples
+        ),
+    )
+
+
 # ═════════════════════════════════════════════════════════════════
 # 4. TEMPEST WEATHER SYNC (every 300s)
 # ═════════════════════════════════════════════════════════════════
@@ -416,8 +873,8 @@ _HYDRO_MAP = {
     "sensor.greenhouse_hydroponic_yinmik_battery": ("hydro_battery_pct", None),
 }
 _LIGHT_ENTITIES = {
-    "light.greenhouse_main": "grow_light_main",
-    "light.greenhouse_grow": "grow_light_grow",
+    "switch.greenhouse_main": "grow_light_main",
+    "switch.greenhouse_grow": "grow_light_grow",
 }
 _HA_SWITCHES = {
     "switch.greenhouse_economiser_enabled": "economiser_enabled",
@@ -577,7 +1034,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # above the active band where it is physically contradictory.
         relay_context = await conn.fetchrow(
             """
-            SELECT temp_avg, sp_temp_high, heat1, heat2, greenhouse_mode, ts
+            SELECT temp_avg, vpd_avg, sp_temp_high, sp_vpd_low, sp_vpd_high,
+                   heat1, heat2, vent, fan1, fan2, greenhouse_mode, ts
               FROM v_greenhouse_state
              WHERE ts >= now() - interval '10 minutes'
              ORDER BY ts DESC
@@ -616,6 +1074,37 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     f"Heater `{equipment}` commanded ON for {r['hours_on']:.1f}h "
                     f"while temp is not below the active band"
                 )
+            elif equipment in ("vent", "fan1", "fan2") and relay_context:
+                temp_avg = relay_context["temp_avg"]
+                vpd_avg = relay_context["vpd_avg"]
+                sp_temp_high = relay_context["sp_temp_high"]
+                sp_vpd_low = relay_context["sp_vpd_low"]
+                greenhouse_mode = (relay_context["greenhouse_mode"] or "").upper()
+                relay_commanded = bool(relay_context[equipment])
+                temp_demands_air_exchange = (
+                    temp_avg is not None and sp_temp_high is not None and float(temp_avg) > float(sp_temp_high)
+                )
+                vpd_demands_dehum = (
+                    vpd_avg is not None and sp_vpd_low is not None and float(vpd_avg) < float(sp_vpd_low)
+                )
+                details.update(
+                    {
+                        "temp_avg": float(temp_avg) if temp_avg is not None else None,
+                        "vpd_avg": float(vpd_avg) if vpd_avg is not None else None,
+                        "sp_temp_high": float(sp_temp_high) if sp_temp_high is not None else None,
+                        "sp_vpd_low": float(sp_vpd_low) if sp_vpd_low is not None else None,
+                        "sp_vpd_high": float(relay_context["sp_vpd_high"])
+                        if relay_context["sp_vpd_high"] is not None
+                        else None,
+                        "greenhouse_mode": relay_context["greenhouse_mode"],
+                        "context_ts": relay_context["ts"].isoformat() if relay_context["ts"] else None,
+                    }
+                )
+                if relay_commanded and (
+                    greenhouse_mode in AIR_EXCHANGE_RELAY_STUCK_MODES or temp_demands_air_exchange or vpd_demands_dehum
+                ):
+                    continue
+                message = f"Relay `{equipment}` commanded ON for {r['hours_on']:.1f}h without current mode demand"
             else:
                 message = f"Relay `{equipment}` commanded ON for {r['hours_on']:.1f}h without an OFF command"
             alerts.append(
@@ -693,6 +1182,165 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     },
                     "metric_value": hrs,
                     "threshold_value": 2.0,
+                }
+            )
+
+        # 3b. VPD-high while ventilating but moisture is not active. This is a
+        # control-path alert: VPD demand exists, the firmware is in the mode that
+        # should allow vent mist assist, and the relay surface is not carrying it.
+        row = await conn.fetchrow(
+            """
+            WITH recent AS (
+                SELECT *
+                  FROM v_greenhouse_state
+                 WHERE ts >= now() - interval '15 minutes'
+            ),
+            agg AS (
+                SELECT count(*)::int AS samples,
+                       count(*) FILTER (WHERE greenhouse_mode = 'VENTILATE')::int AS vent_samples,
+                       count(*) FILTER (
+                           WHERE greenhouse_mode = 'VENTILATE'
+                             AND vpd_avg > sp_vpd_high
+                             AND NOT (fog OR mist_south OR mist_west OR mist_center)
+                       )::int AS high_no_moisture_samples,
+                       avg(vpd_avg)::float AS avg_vpd,
+                       avg(sp_vpd_high)::float AS avg_vpd_high,
+                       avg(temp_avg)::float AS avg_temp,
+                       avg(sp_temp_high)::float AS avg_temp_high,
+                       avg(outdoor_temp_f)::float AS avg_outdoor_temp_f,
+                       avg(outdoor_rh_pct)::float AS avg_outdoor_rh_pct,
+                       count(*) FILTER (WHERE fog OR mist_south OR mist_west OR mist_center)::int
+                           AS moisture_samples
+                  FROM recent
+            )
+            SELECT *,
+                   CASE WHEN samples > 0 THEN high_no_moisture_samples::float / samples ELSE 0.0 END
+                       AS high_no_moisture_fraction,
+                   CASE WHEN samples > 0 THEN moisture_samples::float / samples ELSE 0.0 END
+                       AS moisture_fraction
+              FROM agg
+            """
+        )
+        if (
+            row
+            and int(row["samples"] or 0) >= 10
+            and int(row["high_no_moisture_samples"] or 0) >= 10
+            and float(row["high_no_moisture_fraction"] or 0.0) >= 0.60
+        ):
+            fraction = float(row["high_no_moisture_fraction"] or 0.0)
+            alerts.append(
+                {
+                    "alert_type": "vent_vpd_moisture_gap",
+                    "severity": "warning",
+                    "category": "climate",
+                    "sensor_id": "climate.vent_vpd_moisture",
+                    "zone": None,
+                    "message": f"VENTILATE VPD-high with no moisture assist in {fraction:.0%} of last 15m",
+                    "details": {
+                        "recent_minutes": 15,
+                        "samples": int(row["samples"] or 0),
+                        "vent_samples": int(row["vent_samples"] or 0),
+                        "high_no_moisture_samples": int(row["high_no_moisture_samples"] or 0),
+                        "high_no_moisture_fraction": fraction,
+                        "moisture_fraction": float(row["moisture_fraction"] or 0.0),
+                        "avg_vpd": float(row["avg_vpd"]) if row["avg_vpd"] is not None else None,
+                        "avg_vpd_high": float(row["avg_vpd_high"]) if row["avg_vpd_high"] is not None else None,
+                        "avg_temp": float(row["avg_temp"]) if row["avg_temp"] is not None else None,
+                        "avg_temp_high": float(row["avg_temp_high"]) if row["avg_temp_high"] is not None else None,
+                        "avg_outdoor_temp_f": float(row["avg_outdoor_temp_f"])
+                        if row["avg_outdoor_temp_f"] is not None
+                        else None,
+                        "avg_outdoor_rh_pct": float(row["avg_outdoor_rh_pct"])
+                        if row["avg_outdoor_rh_pct"] is not None
+                        else None,
+                    },
+                    "metric_value": fraction,
+                    "threshold_value": 0.60,
+                }
+            )
+
+        # 3c. Moisture is active but the hot/dry air mass is still outside both
+        # bands. This separates actuator timing bugs from physical capacity gaps.
+        row = await conn.fetchrow(
+            """
+            WITH recent AS (
+                SELECT *
+                  FROM v_greenhouse_state
+                 WHERE ts >= now() - interval '30 minutes'
+            ),
+            agg AS (
+                SELECT count(*)::int AS samples,
+                       count(*) FILTER (WHERE greenhouse_mode = 'VENTILATE')::int AS vent_samples,
+                       count(*) FILTER (WHERE fog OR mist_south OR mist_west OR mist_center)::int
+                           AS moisture_samples,
+                       count(*) FILTER (
+                           WHERE greenhouse_mode = 'VENTILATE'
+                             AND (fog OR mist_south OR mist_west OR mist_center)
+                             AND temp_avg > sp_temp_high
+                             AND vpd_avg > sp_vpd_high
+                       )::int AS capacity_limited_samples,
+                       avg(temp_avg - sp_temp_high)::float AS avg_temp_excess_f,
+                       max(temp_avg - sp_temp_high)::float AS max_temp_excess_f,
+                       avg(vpd_avg - sp_vpd_high)::float AS avg_vpd_excess_kpa,
+                       max(vpd_avg - sp_vpd_high)::float AS max_vpd_excess_kpa,
+                       avg(outdoor_temp_f)::float AS avg_outdoor_temp_f,
+                       avg(outdoor_rh_pct)::float AS avg_outdoor_rh_pct,
+                       avg(solar_irradiance_w_m2)::float AS avg_solar_w_m2
+                  FROM recent
+            )
+            SELECT *,
+                   CASE WHEN samples > 0 THEN moisture_samples::float / samples ELSE 0.0 END
+                       AS moisture_fraction,
+                   CASE WHEN samples > 0 THEN capacity_limited_samples::float / samples ELSE 0.0 END
+                       AS capacity_limited_fraction
+              FROM agg
+            """
+        )
+        if (
+            row
+            and int(row["samples"] or 0) >= 20
+            and int(row["capacity_limited_samples"] or 0) >= 20
+            and float(row["capacity_limited_fraction"] or 0.0) >= 0.67
+        ):
+            fraction = float(row["capacity_limited_fraction"] or 0.0)
+            alerts.append(
+                {
+                    "alert_type": "vent_moisture_capacity_limit",
+                    "severity": "warning",
+                    "category": "climate",
+                    "sensor_id": "climate.vent_moisture_capacity",
+                    "zone": None,
+                    "message": f"VENTILATE moisture assist active but temp+VPD remain high in {fraction:.0%} of last 30m",
+                    "details": {
+                        "recent_minutes": 30,
+                        "samples": int(row["samples"] or 0),
+                        "vent_samples": int(row["vent_samples"] or 0),
+                        "moisture_samples": int(row["moisture_samples"] or 0),
+                        "capacity_limited_samples": int(row["capacity_limited_samples"] or 0),
+                        "capacity_limited_fraction": fraction,
+                        "moisture_fraction": float(row["moisture_fraction"] or 0.0),
+                        "avg_temp_excess_f": float(row["avg_temp_excess_f"])
+                        if row["avg_temp_excess_f"] is not None
+                        else None,
+                        "max_temp_excess_f": float(row["max_temp_excess_f"])
+                        if row["max_temp_excess_f"] is not None
+                        else None,
+                        "avg_vpd_excess_kpa": float(row["avg_vpd_excess_kpa"])
+                        if row["avg_vpd_excess_kpa"] is not None
+                        else None,
+                        "max_vpd_excess_kpa": float(row["max_vpd_excess_kpa"])
+                        if row["max_vpd_excess_kpa"] is not None
+                        else None,
+                        "avg_outdoor_temp_f": float(row["avg_outdoor_temp_f"])
+                        if row["avg_outdoor_temp_f"] is not None
+                        else None,
+                        "avg_outdoor_rh_pct": float(row["avg_outdoor_rh_pct"])
+                        if row["avg_outdoor_rh_pct"] is not None
+                        else None,
+                        "avg_solar_w_m2": float(row["avg_solar_w_m2"]) if row["avg_solar_w_m2"] is not None else None,
+                    },
+                    "metric_value": fraction,
+                    "threshold_value": 0.67,
                 }
             )
 
@@ -986,9 +1634,9 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 }
             )
 
-        # 7c. Planner band ownership drift. Crop-band params are dispatcher-
-        # owned read-only context; active rows in setpoint_plan can outrank the
-        # crop-profile band function and create repeated clamp storms.
+        # 7c. Planner ownership drift. Crop-band and lighting-policy params
+        # are dispatcher-owned read-only context; active rows in setpoint_plan
+        # can outrank the DB policy functions and create repeated clamp storms.
         band_owned_rows = await conn.fetch(
             """
             SELECT parameter,
@@ -997,7 +1645,11 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                    count(*)::int AS rows
               FROM setpoint_plan
              WHERE is_active = true
-               AND parameter IN ('temp_low', 'temp_high', 'vpd_low', 'vpd_high')
+               AND parameter IN (
+                   'temp_low', 'temp_high', 'vpd_low', 'vpd_high',
+                   'vpd_target_south', 'vpd_target_west', 'vpd_target_east', 'vpd_target_center',
+                   'gl_dli_target', 'gl_sunrise_hour', 'gl_sunset_hour', 'sw_gl_auto_mode'
+               )
              GROUP BY parameter, coalesce(plan_id, '<null>'), coalesce(source, '<null>')
              ORDER BY parameter, plan_id, source
             """
@@ -1021,11 +1673,22 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "category": "system",
                     "sensor_id": "system.planner_band_ownership",
                     "zone": None,
-                    "message": (
-                        f"{total_rows} active planner row(s) contain dispatcher-owned crop-band params: {sample}"
-                    ),
+                    "message": (f"{total_rows} active planner row(s) contain dispatcher-owned policy params: {sample}"),
                     "details": {
-                        "band_owned_params": ["temp_low", "temp_high", "vpd_low", "vpd_high"],
+                        "band_owned_params": [
+                            "temp_low",
+                            "temp_high",
+                            "vpd_low",
+                            "vpd_high",
+                            "vpd_target_south",
+                            "vpd_target_west",
+                            "vpd_target_east",
+                            "vpd_target_center",
+                            "gl_dli_target",
+                            "gl_sunrise_hour",
+                            "gl_sunset_hour",
+                            "sw_gl_auto_mode",
+                        ],
                         "offenders": offenders,
                     },
                     "metric_value": float(total_rows),
@@ -1043,10 +1706,9 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             SELECT ts, parameter, value, plan_id, source, reason
               FROM setpoint_plan
              WHERE is_active = true
-               AND ts >= now() - interval '10 minutes'
                AND source IN ('iris', 'plan')
              ORDER BY ts, parameter
-             LIMIT 500
+             LIMIT 10000
             """
         )
         tunable_violations = []
@@ -1055,7 +1717,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             value = float(r["value"])
             error = registry_value_error(parameter, value)
             if parameter in FORCED_ON_SWITCH_PARAMS and value < 0.5:
-                error = "controller_v2_locked_on: fallback to legacy FSM is blocked outside operator/firmware rollback"
+                error = "controller_locked_on: unified controller rollback requires firmware/config rollback"
             if not error:
                 continue
             tunable_violations.append(
@@ -1082,6 +1744,75 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     "details": {"violations": tunable_violations[:20]},
                     "metric_value": float(len(tunable_violations)),
                     "threshold_value": 0.0,
+                }
+            )
+
+        # 7e. Future plan horizon guard. Validation smoke must never leave the
+        # production planner with only a current-past waypoint surface; SUNRISE /
+        # SUNSET/MIDNIGHT are expected to maintain future non-oneshot waypoints.
+        horizon = await conn.fetchrow(
+            """
+            WITH future AS (
+                SELECT count(*)::int AS future_waypoints
+                  FROM setpoint_plan
+                 WHERE is_active = true
+                   AND ts > now()
+                   AND source IN ('iris', 'plan')
+                   AND plan_id NOT LIKE 'iris-oneshot-%'
+            ),
+            latest AS (
+                SELECT plan_id, max(created_at) AS created_at, max(ts) AS latest_waypoint_ts
+                  FROM setpoint_plan
+                 WHERE is_active = true
+                   AND source IN ('iris', 'plan')
+                   AND plan_id NOT LIKE 'iris-oneshot-%'
+                 GROUP BY plan_id
+                 ORDER BY max(created_at) DESC NULLS LAST
+                 LIMIT 1
+            ),
+            next_required AS (
+                SELECT event_type, due_at
+                  FROM planner_trigger_ledger
+                 WHERE event_type IN ('SUNRISE', 'SUNSET', 'MIDNIGHT')
+                   AND status IN ('expected', 'delivered')
+                   AND due_at >= now() - interval '2 hours'
+                 ORDER BY due_at
+                 LIMIT 1
+            )
+            SELECT future.future_waypoints,
+                   latest.plan_id,
+                   latest.created_at,
+                   latest.latest_waypoint_ts,
+                   next_required.event_type AS next_required_event_type,
+                   next_required.due_at AS next_required_due_at
+              FROM future
+              LEFT JOIN latest ON true
+              LEFT JOIN next_required ON true
+            """
+        )
+        if horizon and int(horizon["future_waypoints"] or 0) == 0:
+            next_due = horizon["next_required_due_at"]
+            severity = "critical" if next_due and next_due < datetime.now(UTC) else "warning"
+            alerts.append(
+                {
+                    "alert_type": "planner_plan_horizon_missing",
+                    "severity": severity,
+                    "category": "system",
+                    "sensor_id": "system.planner_plan_horizon",
+                    "zone": None,
+                    "message": "Planner has no active future non-oneshot setpoint_plan waypoints",
+                    "details": {
+                        "active_plan_id": horizon["plan_id"],
+                        "active_plan_created_at": horizon["created_at"].isoformat() if horizon["created_at"] else None,
+                        "latest_waypoint_ts": horizon["latest_waypoint_ts"].isoformat()
+                        if horizon["latest_waypoint_ts"]
+                        else None,
+                        "future_waypoints": 0,
+                        "next_required_event_type": horizon["next_required_event_type"],
+                        "next_required_due_at": next_due.isoformat() if next_due else None,
+                    },
+                    "metric_value": 0.0,
+                    "threshold_value": 1.0,
                 }
             )
 
@@ -1310,7 +2041,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 alerts.append(
                     {
                         "alert_type": "firmware_version_mismatch",
-                        "severity": "high",
+                        "severity": "warning",
                         "category": "system",
                         "sensor_id": "diag.firmware_version",
                         "zone": None,
@@ -1331,6 +2062,20 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         # 13. ESP32 heap pressure watchdogs. Firmware publishes debounced
         # binary sensors; route them into alert_log so heap exhaustion has the
         # same lifecycle and Slack path as the other system-owned alerts.
+        heap_resolution_rows = await conn.fetch(
+            """
+            SELECT sensor_id, max(resolved_at) AS resolved_at
+              FROM alert_log
+             WHERE disposition = 'resolved'
+               AND resolved_at IS NOT NULL
+               AND alert_type IN ('heap_pressure_warning', 'heap_pressure_critical')
+               AND sensor_id IN ('equipment.heap_pressure_warning', 'equipment.heap_pressure_critical')
+             GROUP BY sensor_id
+            """
+        )
+        heap_event_floor = {row["sensor_id"]: row["resolved_at"] for row in heap_resolution_rows}
+        heap_critical_floor = heap_event_floor.get("equipment.heap_pressure_critical")
+        heap_warning_floor = heap_event_floor.get("equipment.heap_pressure_warning")
         heap_rows = await conn.fetch(
             """
             SELECT equipment,
@@ -1340,8 +2085,14 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                    max(ts) FILTER (WHERE state) AS last_true_ts
               FROM equipment_state
              WHERE equipment IN ('heap_pressure_warning', 'heap_pressure_critical')
+               AND (
+                   (equipment = 'heap_pressure_critical' AND ts > COALESCE($1, '-infinity'::timestamptz))
+                   OR (equipment = 'heap_pressure_warning' AND ts > COALESCE($2, '-infinity'::timestamptz))
+               )
              GROUP BY equipment
-            """
+            """,
+            heap_critical_floor,
+            heap_warning_floor,
         )
         heap_log = await conn.fetchrow(
             """
@@ -1366,13 +2117,25 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
               FROM esp32_logs
              WHERE ts > now() - interval '30 minutes'
                AND message ILIKE '%Heap pressure%'
-            """
+               AND (
+                   (message ILIKE '%Heap pressure CRITICAL%' AND ts > COALESCE($1, '-infinity'::timestamptz))
+                   OR (message ILIKE '%Heap pressure WARNING%' AND ts > COALESCE($2, '-infinity'::timestamptz))
+               )
+            """,
+            heap_critical_floor,
+            heap_warning_floor,
         )
         heap_diag = await conn.fetchrow(
             """
-            SELECT heap_bytes, uptime_s, ts
+            SELECT heap_bytes,
+                   heap_min_free_kb,
+                   heap_largest_free_block_kb,
+                   uptime_s,
+                   ts
               FROM diagnostics
              WHERE heap_bytes IS NOT NULL
+                OR heap_min_free_kb IS NOT NULL
+                OR heap_largest_free_block_kb IS NOT NULL
              ORDER BY ts DESC
              LIMIT 1
             """
@@ -1381,6 +2144,14 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         heap_critical = heap_state.get("heap_pressure_critical")
         heap_warning = heap_state.get("heap_pressure_warning")
         heap_bytes = float(heap_diag["heap_bytes"]) if heap_diag and heap_diag["heap_bytes"] is not None else None
+        heap_min_free_kb = (
+            float(heap_diag["heap_min_free_kb"]) if heap_diag and heap_diag["heap_min_free_kb"] is not None else None
+        )
+        heap_largest_free_block_kb = (
+            float(heap_diag["heap_largest_free_block_kb"])
+            if heap_diag and heap_diag["heap_largest_free_block_kb"] is not None
+            else None
+        )
         critical_logs = int(heap_log["critical_logs"] or 0) if heap_log else 0
         warning_logs = int(heap_log["warning_logs"] or 0) if heap_log else 0
         last_critical_event_ts = max(
@@ -1438,6 +2209,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             startup_heap_grace = 0 <= age_after_boot_s <= 180
         critical_active = bool((heap_critical and heap_critical["recent_true"]) or critical_logs > 0)
         warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
+        low_watermark_warning = bool(heap_min_free_kb is not None and heap_min_free_kb < 10.0)
+        fragmentation_warning = bool(heap_largest_free_block_kb is not None and heap_largest_free_block_kb < 20.0)
         if heap_bytes is not None:
             # The binary sensors and diagnostics can arrive at the same second;
             # a recent true event still matters even if a same-second false
@@ -1448,6 +2221,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 warning_active = False
             elif heap_bytes < 30.0 and not critical_active:
                 critical_active = False
+                warning_active = True
+            elif (low_watermark_warning or fragmentation_warning) and not critical_active:
                 warning_active = True
             elif heap_bytes >= 35.0 and heap_diag:
                 # Recovery is explicit once firmware publishes a false binary
@@ -1481,6 +2256,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     warning_active = False
             if critical_active and startup_heap_grace and heap_bytes >= 35.0:
                 critical_active = False
+        elif low_watermark_warning or fragmentation_warning:
+            warning_active = True
         if critical_active:
             alerts.append(
                 {
@@ -1497,6 +2274,12 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         if heap_critical and heap_critical["last_true_ts"]
                         else None,
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
+                        "heap_min_free_kb": round(heap_min_free_kb, 1) if heap_min_free_kb is not None else None,
+                        "heap_largest_free_block_kb": round(heap_largest_free_block_kb, 1)
+                        if heap_largest_free_block_kb is not None
+                        else None,
+                        "heap_low_watermark_warning": low_watermark_warning,
+                        "heap_fragmentation_warning": fragmentation_warning,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
                         "critical_logs_30m": critical_logs,
                         "healthy_heap_samples_after_event": healthy_after_critical,
@@ -1525,6 +2308,12 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                         if heap_warning and heap_warning["last_true_ts"]
                         else None,
                         "heap_free_kb": round(heap_bytes, 1) if heap_bytes is not None else None,
+                        "heap_min_free_kb": round(heap_min_free_kb, 1) if heap_min_free_kb is not None else None,
+                        "heap_largest_free_block_kb": round(heap_largest_free_block_kb, 1)
+                        if heap_largest_free_block_kb is not None
+                        else None,
+                        "heap_low_watermark_warning": low_watermark_warning,
+                        "heap_fragmentation_warning": fragmentation_warning,
                         "heap_diag_ts": heap_diag["ts"].isoformat() if heap_diag else None,
                         "warning_logs_30m": warning_logs,
                         "healthy_heap_samples_after_event": healthy_after_warning,
@@ -1749,9 +2538,8 @@ from quiet_mode import (
 # In-memory cache of last pushed values — prevents re-pushing unchanged setpoints
 _last_pushed: dict[str, float] = {}
 
-# Controller v2 is the live controller path. Keep the old switch as a
-# non-OTA rollback surface, but prevent accidental planner/manual drift back
-# to the legacy cascade.
+# Unified band-first controller compatibility/readback field. ESPHome control
+# loop, dispatcher, MCP, and outbound-listener guardrails force it ON.
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
 
 QUIET_STATE_ENTITIES = (
@@ -1895,6 +2683,63 @@ def _should_skip(last: float | None, val: float, rel: float = 0.01, abs_floor: f
     return abs(last - val) / max(abs(val), abs_floor) < rel
 
 
+def _readback_drift(param: str, desired: float) -> bool:
+    """True when ESP32 cfg_* readback disagrees with the desired value."""
+    readback = shared.cfg_readback.get(param)
+    if readback is None:
+        return False
+    try:
+        return not _should_skip(float(readback), float(desired))
+    except (TypeError, ValueError):
+        return False
+
+
+async def _write_clamp_audit_rows(
+    conn: asyncpg.Connection,
+    clamp_rows: list[dict[str, object]],
+    dispatched_params: set[str],
+) -> int:
+    """Persist dispatcher guardrail decisions, including unchanged holds.
+
+    Historically `setpoint_clamps` only recorded rows that also produced a
+    `setpoint_changes` push. That hid the important case where the planner
+    requested a transition, the guardrail kept the already-applied value, and no
+    ESP32 write was needed. These rows make that hold traceable to a plan
+    transition without changing the relay/control path.
+    """
+    written = 0
+    for row in clamp_rows:
+        param = str(row["parameter"])
+        reason = str(row["reason"])
+        if param in dispatched_params:
+            status = "guardrailed"
+        elif reason in {"vpd_high_moisture_guardrail", "forced_on_guardrail"} or "guardrail" in reason:
+            status = "held_by_guardrail"
+        else:
+            status = "rejected"
+        await conn.execute(
+            """
+            INSERT INTO setpoint_clamps
+              (parameter, requested, applied, band_lo, band_hi, reason,
+               status, plan_id, plan_ts, trigger_id, planner_instance)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid, $11)
+            """,
+            param,
+            float(row["requested"]),
+            float(row["applied"]),
+            float(row["band_lo"]),
+            float(row["band_hi"]),
+            reason,
+            status,
+            row.get("plan_id"),
+            row.get("plan_ts"),
+            row.get("trigger_id"),
+            row.get("planner_instance"),
+        )
+        written += 1
+    return written
+
+
 def _finite_positive(value: object) -> float | None:
     try:
         numeric = float(value)
@@ -1942,12 +2787,125 @@ def _house_vpd_control_band(band_row, zone_row) -> dict[str, float]:
     min_target = min(targets)
     max_target = max(targets)
     house_high = min(max_target, max(base_high, _median(targets)))
-    house_low = max(base_low, min_target - 0.15)
-    house_low = min(house_low, house_high - 0.25)
+    # Crop policy can create a very narrow tactical VPD band when one zone is
+    # strict and another is dry. The firmware controls one air mass, so keep a
+    # minimum deadband by relaxing the low side instead of pushing high-side
+    # stress above the crop target.
+    house_low = max(base_low, min_target - HOUSE_VPD_LOW_MARGIN_KPA)
+    house_low = min(house_low, house_high - HOUSE_VPD_MIN_WIDTH_KPA)
     house_low = max(0.1, house_low)
-    if house_high - house_low < 0.25:
-        house_high = min(max_target, house_low + 0.25)
+    if house_high - house_low < HOUSE_VPD_MIN_WIDTH_KPA:
+        house_low = max(0.1, house_high - HOUSE_VPD_MIN_WIDTH_KPA)
     return {"vpd_low": round(house_low, 3), "vpd_high": round(house_high, 3)}
+
+
+def _control_band_from_house_row(house_row) -> dict[str, float] | None:
+    if not house_row:
+        return None
+    return {
+        "vpd_low": float(house_row["house_vpd_low"]),
+        "vpd_high": float(house_row["house_vpd_high"]),
+    }
+
+
+async def _fetch_moisture_guard_context(conn) -> dict[str, float | str | None] | None:
+    row = await conn.fetchrow(
+        """
+        WITH latest AS (
+            SELECT temp_avg,
+                   sp_temp_high,
+                   vpd_avg,
+                   dew_point,
+                   greenhouse_mode,
+                   outdoor_temp_f,
+                   outdoor_rh_pct
+              FROM v_greenhouse_state
+             ORDER BY ts DESC
+             LIMIT 1
+        ),
+        recent AS (
+            SELECT count(*)::int AS recent_samples,
+                   count(*) FILTER (
+                       WHERE vpd_avg >= fn_setpoint_at('vpd_high', ts) - 0.05
+                   )::int AS recent_near_high_samples,
+                   avg(vpd_avg)::float AS recent_avg_vpd
+              FROM climate
+             WHERE ts >= now() - ($1::int * interval '1 minute')
+               AND vpd_avg IS NOT NULL
+        )
+        SELECT latest.*,
+               recent.recent_samples,
+               recent.recent_near_high_samples,
+               recent.recent_avg_vpd,
+               CASE WHEN recent.recent_samples > 0
+                    THEN recent.recent_near_high_samples::float / recent.recent_samples
+                    ELSE 0.0
+               END AS recent_near_high_fraction
+          FROM latest CROSS JOIN recent
+        """,
+        VPD_MOISTURE_RECOVERY_WINDOW_MIN,
+    )
+    return dict(row) if row else None
+
+
+def _vpd_high_moisture_guardrails(
+    control_band: dict[str, float] | None,
+    context: dict[str, float | str | None] | None,
+) -> dict[str, float]:
+    """Clamp conservative moisture thresholds during live dry-side stress.
+
+    Firmware already supports VENTILATE mist assist. This guard keeps planner
+    policy from setting physical mist/fog thresholds far above the active house
+    VPD band when the latest state is above band and dew margin is healthy.
+    """
+    if not control_band or not context:
+        return {}
+
+    vpd_high = _finite_positive(control_band.get("vpd_high"))
+    vpd_avg = _finite_positive(context.get("vpd_avg"))
+    if vpd_high is None or vpd_avg is None:
+        return {}
+    mode = str(context.get("greenhouse_mode") or "")
+    recent_samples = int(context.get("recent_samples") or 0)
+    recent_fraction = float(context.get("recent_near_high_fraction") or 0.0)
+    recent_avg_vpd = _finite_positive(context.get("recent_avg_vpd"))
+    vent_near_high = mode == "VENTILATE" and vpd_avg >= (vpd_high - 0.10)
+    above_high = vpd_avg > vpd_high + VPD_HIGH_GUARD_MARGIN_KPA
+    recovery_not_sustained = (
+        mode == "VENTILATE"
+        and recent_samples >= 5
+        and recent_fraction >= VPD_MOISTURE_RECOVERY_FRACTION
+        and recent_avg_vpd is not None
+        and recent_avg_vpd >= vpd_high - 0.05
+    )
+    if not above_high and not vent_near_high and not recovery_not_sustained:
+        return {}
+
+    temp_avg = _finite_positive(context.get("temp_avg"))
+    temp_high = _finite_positive(context.get("sp_temp_high"))
+    dew_point = _finite_positive(context.get("dew_point"))
+    if temp_avg is not None and dew_point is not None:
+        dew_margin = temp_avg - dew_point
+        if dew_margin < VPD_MOISTURE_DEW_MARGIN_F:
+            return {}
+
+    outdoor_rh = _finite_positive(context.get("outdoor_rh_pct"))
+    temp_hot = temp_avg is not None and temp_high is not None and temp_avg > temp_high + 0.5
+    outdoor_dry = outdoor_rh is not None and outdoor_rh <= VPD_DRY_AIR_OUTDOOR_RH_PCT
+    hot_dry_vent = mode == "VENTILATE" and temp_hot and outdoor_dry
+    vent_stress = mode == "VENTILATE" and (above_high or vent_near_high or recovery_not_sustained)
+    fog_escalation = VPD_HOT_DRY_FOG_ESCALATION_KPA if hot_dry_vent else VPD_VENT_FOG_ESCALATION_KPA
+    min_fog_off = VPD_HOT_DRY_MIN_FOG_OFF_S if hot_dry_vent else VPD_VENT_MIN_FOG_OFF_S
+
+    return {
+        "mister_engage_kpa": round(max(0.5, vpd_high + 0.05), 2),
+        "mister_all_kpa": round(max(1.0, vpd_high + 0.25), 2),
+        "mister_engage_delay_s": 45.0,
+        "mister_all_delay_s": 90.0,
+        "mister_pulse_gap_s": 30.0,
+        "min_fog_off_s": min_fog_off,
+        "fog_escalation_kpa": fog_escalation if vent_stress else 0.30,
+    }
 
 
 async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
@@ -1955,25 +2913,54 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     # On ESP32 reconnect, rebuild the cache from firmware cfg_* readbacks.
     # Values already confirmed by the device do not need to be pushed again;
     # params without a readback still flow through as a conservative fallback.
+    # Dispatcher-owned band params are excluded from this seed so an OTA reboot
+    # cannot let firmware defaults suppress the authoritative crop-band push.
     if shared.force_setpoint_push.is_set():
         shared.force_setpoint_push.clear()
         _last_pushed.clear()
         seeded = 0
+        forced_band = 0
         for param, val in shared.cfg_readback.items():
+            if param in BAND_DRIVEN_PARAMS:
+                forced_band += 1
+                continue
             _last_pushed[param] = float(val)
             seeded += 1
         log.info(
-            "Dispatcher: reconnect reconcile — seeded %d cfg readbacks; pushing drift/missing setpoints",
+            "Dispatcher: reconnect reconcile — seeded %d cfg readbacks; forcing %d band setpoint(s)",
             seeded,
+            forced_band,
         )
     async with pool.acquire() as conn:
-        # Compute crop-science band (outer envelope) + per-zone VPD targets
+        # Compute crop-science band, per-zone VPD targets, the DB-owned house
+        # VPD control band, and crop-driven lighting policy used by firmware.
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
-        control_band = _house_vpd_control_band(band_row, zone_row) if band_row else None
+        house_row = await conn.fetchrow("SELECT * FROM fn_house_vpd_control_band(now())")
+        lighting_row = await conn.fetchrow("SELECT * FROM fn_lighting_policy(now())")
+        lighting_circuit_rows = await conn.fetch("SELECT * FROM fn_lighting_circuit_policy(now()) ORDER BY light_key")
+        control_band = _control_band_from_house_row(house_row)
+        moisture_guardrails = _vpd_high_moisture_guardrails(
+            control_band,
+            await _fetch_moisture_guard_context(conn) if control_band else None,
+        )
 
-        planned = await conn.fetch("SELECT parameter, value, ts, plan_id, reason FROM v_active_plan")
+        planned = await conn.fetch(
+            "SELECT parameter, value, ts, plan_id, reason, trigger_id, planner_instance FROM v_active_plan"
+        )
         raw_planner_params = {r["parameter"]: r["value"] for r in (planned or [])}
+        lighting_circuit_supported = any(
+            param in shared.cfg_readback or param in _last_pushed for param in LIGHTING_CIRCUIT_SUPPORT_SENTINELS
+        )
+        planner_meta = {
+            r["parameter"]: {
+                "trigger_id": str(r["trigger_id"]) if r["trigger_id"] else None,
+                "planner_instance": r["planner_instance"],
+                "plan_id": r["plan_id"],
+                "plan_ts": r["ts"],
+            }
+            for r in (planned or [])
+        }
         quiet_state = await _fetch_quiet_state(conn)
         quiet_mode = quiet_state.get(QUIET_MODE_ENTITY)
         quiet_until = quiet_state.get(QUIET_UNTIL_ENTITY)
@@ -1985,12 +2972,37 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         # use. Clamped values replace the planner's originals; violations
         # get logged alongside band-clamps in setpoint_clamps for audit.
         changes = []
-        clamps_to_log: list[tuple[str, float, float, float, float, str]] = []
+        clamps_to_log: list[dict[str, object]] = []
+
+        def add_clamp_audit(
+            param: str,
+            requested: float,
+            applied: float,
+            band_lo: float,
+            band_hi: float,
+            reason: str,
+        ) -> None:
+            meta = planner_meta.get(param, {})
+            clamps_to_log.append(
+                {
+                    "parameter": param,
+                    "requested": float(requested),
+                    "applied": float(applied),
+                    "band_lo": float(band_lo),
+                    "band_hi": float(band_hi),
+                    "reason": reason,
+                    "plan_id": meta.get("plan_id"),
+                    "plan_ts": meta.get("plan_ts"),
+                    "trigger_id": meta.get("trigger_id"),
+                    "planner_instance": meta.get("planner_instance"),
+                }
+            )
+
         planner_params: dict[str, float] = {}
         for param, raw_val in raw_planner_params.items():
             clean_val, violation = _validate_physics(param, float(raw_val))
             if violation is not None:
-                clamps_to_log.append((param, float(raw_val), clean_val, 0.0, 0.0, violation))
+                add_clamp_audit(param, float(raw_val), clean_val, 0.0, 0.0, violation)
                 log.warning(
                     "FW-3 invariant: %s=%s clamped to %s (%s)",
                     param,
@@ -1999,13 +3011,30 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     violation,
                 )
             if param in FORCED_ON_SWITCH_PARAMS and clean_val < 0.5:
-                clamps_to_log.append((param, float(raw_val), 1.0, 1.0, 1.0, "forced_on_guardrail"))
+                add_clamp_audit(param, float(raw_val), 1.0, 1.0, 1.0, "forced_on_guardrail")
                 log.warning(
-                    "Controller guardrail: ignoring fallback request %s=%s; v2 remains locked ON",
+                    "Controller guardrail: ignoring OFF request %s=%s; unified band-first controller remains locked ON",
                     param,
                     raw_val,
                 )
                 clean_val = 1.0
+            guardrail_max = moisture_guardrails.get(param)
+            if guardrail_max is not None and clean_val > guardrail_max:
+                add_clamp_audit(
+                    param,
+                    float(raw_val),
+                    float(guardrail_max),
+                    0.0,
+                    float(guardrail_max),
+                    "vpd_high_moisture_guardrail",
+                )
+                log.warning(
+                    "VPD-high moisture guardrail: %s=%s clamped to %s while live VPD is above band",
+                    param,
+                    raw_val,
+                    guardrail_max,
+                )
+                clean_val = guardrail_max
             planner_params[param] = clean_val
 
         # Band-driven params: planner can tighten within band, clamped to edges
@@ -2020,20 +3049,18 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     val = max(band_lo, min(band_hi, planner_f))
                     # Tier 1 #2: audit clamp when planner request was modified
                     if abs(val - planner_f) > 1e-6:
-                        clamps_to_log.append(
-                            (
-                                param,
-                                planner_f,
-                                val,
-                                band_lo,
-                                band_hi,
-                                "band_lo" if planner_f < band_lo else "band_hi",
-                            )
+                        add_clamp_audit(
+                            param,
+                            planner_f,
+                            val,
+                            band_lo,
+                            band_hi,
+                            "band_lo" if planner_f < band_lo else "band_hi",
                         )
                 else:
                     val = float(source_row[param])
                 val = round(val, 1 if param.startswith("temp") else 2)
-                if _should_skip(_last_pushed.get(param), val):
+                if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
                     continue
                 changes.append((param, val))
 
@@ -2041,7 +3068,46 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         if zone_row:
             for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):
                 val = round(float(zone_row[param]), 2)
-                if _should_skip(_last_pushed.get(param), val):
+                if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
+                    continue
+                changes.append((param, val))
+
+        # Crop-driven lighting policy: highest active crop DLI determines the
+        # target photoperiod. Firmware owns enforcement once these values are
+        # pushed, so this remains reliable without the planner VM online.
+        if lighting_row:
+            lighting_defaults = {
+                "gl_dli_target": round(float(lighting_row["target_dli"]), 1),
+                "gl_sunrise_hour": float(int(lighting_row["sunrise_hour"])),
+                "gl_sunset_hour": float(int(lighting_row["cutoff_hour"])),
+                "sw_gl_auto_mode": 1.0,
+            }
+            for param, val in lighting_defaults.items():
+                if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
+                    continue
+                changes.append((param, val))
+
+        # Per-circuit lighting state machines: crop policy + Tempest history
+        # seed both circuits, but active planner rows are allowed to diverge
+        # circuit targets, thresholds, windows, dwell, and auto enable.
+        for row in lighting_circuit_rows or []:
+            if not lighting_circuit_supported:
+                continue
+            key = row["light_key"]
+            circuit_defaults = {
+                f"gl_{key}_dli_target": round(float(row["dli_target"]), 1),
+                f"gl_{key}_sunrise_hour": float(int(row["start_hour"])),
+                f"gl_{key}_sunset_hour": float(int(row["cutoff_hour"])),
+                f"gl_{key}_lux_threshold": round(float(row["lux_on_threshold"]), 0),
+                f"gl_{key}_lux_hysteresis": round(float(row["lux_hysteresis"]), 0),
+                f"gl_{key}_min_on_s": float(int(row["min_on_s"])),
+                f"gl_{key}_min_off_s": float(int(row["min_off_s"])),
+                f"sw_gl_{key}_auto_mode": 1.0 if row["auto_enabled"] else 0.0,
+            }
+            for param, val in circuit_defaults.items():
+                if param in planner_params:
+                    continue
+                if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
                     continue
                 changes.append((param, val))
 
@@ -2054,7 +3120,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             planner_val = planner_params.get(param)
             if planner_val is not None:
                 val = float(planner_val)
-            if _should_skip(_last_pushed.get(param), val):
+            if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
                 continue
             changes.append((param, val))
 
@@ -2073,26 +3139,38 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             for param, val in mister_defaults.items():
                 if param in planner_params:
                     continue  # Planner owns this — don't override
-                if _should_skip(_last_pushed.get(param), val):
+                if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
                     continue
                 changes.append((param, val))
 
         # Process planner setpoints (tactical knobs — skip band params already handled)
         for row in planned or []:
-            param, planned_val = row["parameter"], row["value"]
+            param = row["parameter"]
+            planned_val = planner_params.get(param, row["value"])
+            if param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and not lighting_circuit_supported:
+                continue
             if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue
 
             if param in FORCED_ON_SWITCH_PARAMS:
                 planned_val = 1.0
+            readback = shared.cfg_readback.get(param)
+            readback_drift = _readback_drift(param, planned_val)
+            if readback_drift:
+                log.warning(
+                    "Dispatcher readback drift: %s active plan=%s cfg_readback=%s; re-pushing",
+                    param,
+                    planned_val,
+                    readback,
+                )
             last = _last_pushed.get(param)
             if param.startswith("sw_"):
                 planned_bool = planned_val > 0.5
-                if last is not None and ((last > 0.5) == planned_bool):
+                if last is not None and ((last > 0.5) == planned_bool) and not readback_drift:
                     continue
                 changes.append((param, 1.0 if planned_bool else 0.0))
             else:
-                if _should_skip(last, planned_val):
+                if _should_skip(last, planned_val) and not readback_drift:
                     continue
                 changes.append((param, planned_val))
 
@@ -2128,6 +3206,12 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 log.warning("Dispatcher: recording quiet mode expired without a restore payload")
 
         if not changes:
+            clamp_rows_written = await _write_clamp_audit_rows(conn, clamps_to_log, set())
+            if clamp_rows_written:
+                log.info(
+                    "Dispatcher: wrote %d guardrail hold/audit row(s) with no ESP32 push",
+                    clamp_rows_written,
+                )
             (STATE_DIR / "setpoint-dispatcher.log").touch()
             return
 
@@ -2143,6 +3227,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         for param, val in changes:
             if param in BAND_DRIVEN_PARAMS:
                 source = "band"
+            elif param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and param not in planner_params:
+                source = "band"
             elif param in SAFETY_PARAMS and param not in planner_params:
                 source = "band"
             elif param in MISTER_DEFAULTS and param not in planner_params:
@@ -2157,12 +3243,17 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             requested_val = float(val)
             registry_val, registry_violation = _coerce_registry_value(param, requested_val)
             if registry_val is None:
-                clamps_to_log.append(
-                    (param, requested_val, requested_val, 0.0, 0.0, registry_violation or "registry_violation")
+                add_clamp_audit(
+                    param,
+                    requested_val,
+                    requested_val,
+                    0.0,
+                    0.0,
+                    registry_violation or "registry_violation",
                 )
                 continue
             if registry_violation is not None:
-                clamps_to_log.append((param, requested_val, registry_val, 0.0, 0.0, registry_violation))
+                add_clamp_audit(param, requested_val, registry_val, 0.0, 0.0, registry_violation)
                 log.warning(
                     "Dispatcher registry guard: %s=%s clamped to %s (%s)",
                     param,
@@ -2179,7 +3270,17 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             # cheap (one row at a time) vs. downstream where it blows up a
             # grafana panel or planner scorecard.
             try:
-                SetpointChange(ts=datetime.now(UTC), parameter=param, value=float(val), source=source)
+                meta = planner_meta.get(param, {})
+                change_trigger_id = meta.get("trigger_id")
+                change_planner_instance = meta.get("planner_instance")
+                SetpointChange(
+                    ts=datetime.now(UTC),
+                    parameter=param,
+                    value=float(val),
+                    source=source,
+                    trigger_id=change_trigger_id,
+                    planner_instance=change_planner_instance,
+                )
             except ValidationError as e:
                 log.error(
                     "dispatcher setpoint_change skipped (validation failed: %s): param=%s value=%s source=%s",
@@ -2197,30 +3298,27 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             shared.recently_pushed[param] = time.time()
             shared.recently_pushed_values[param] = float(val)
             await conn.execute(
-                "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
+                "INSERT INTO setpoint_changes "
+                "(ts, parameter, value, source, trigger_id, planner_instance) "
+                "VALUES (now(), $1, $2, $3, $4::uuid, $5)",
                 param,
                 val,
                 source,
+                change_trigger_id,
+                change_planner_instance,
             )
             _last_pushed[param] = val
             dispatchable_changes.append((param, float(val), source))
-        # Tier 1 #2: persist clamp audit
-        for param, requested, applied, b_lo, b_hi, reason in clamps_to_log:
-            await conn.execute(
-                "INSERT INTO setpoint_clamps (parameter, requested, applied, band_lo, band_hi, reason) "
-                "VALUES ($1, $2, $3, $4, $5, $6)",
-                param,
-                requested,
-                applied,
-                b_lo,
-                b_hi,
-                reason,
-            )
-        if clamps_to_log:
+        # Tier 1 #2: persist guardrail audit. Rows are written even when the
+        # guardrail intentionally holds an unchanged applied value and no
+        # setpoint_changes row is emitted.
+        dispatched_params = {param for param, _value, _source in dispatchable_changes}
+        clamp_rows_written = await _write_clamp_audit_rows(conn, clamps_to_log, dispatched_params)
+        if clamp_rows_written:
             log.info(
                 "Dispatcher: wrote %d clamp/audit row(s) (%s)",
-                len(clamps_to_log),
-                ", ".join(f"{p}={req}->{app}" for p, req, app, *_ in clamps_to_log),
+                clamp_rows_written,
+                ", ".join(f"{row['parameter']}={row['requested']}->{row['applied']}" for row in clamps_to_log),
             )
         log.info(
             "Dispatcher: pushed %d setpoint changes (%d band, %d plan, %d manual)",
@@ -2242,6 +3340,48 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             eid = PARAM_TO_ENTITY.get(param)
             if eid:
                 esp32_changes.append((eid, val, "number"))
+
+    if esp32_changes:
+        async with pool.acquire() as conn:
+            heap_guard = await conn.fetchrow(
+                """
+                SELECT heap_bytes, heap_min_free_kb, heap_largest_free_block_kb
+                  FROM diagnostics
+                 WHERE heap_bytes IS NOT NULL
+                 ORDER BY ts DESC
+                 LIMIT 1
+                """
+            )
+            heap_alert_open = await conn.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM alert_log
+                     WHERE disposition = 'open'
+                       AND alert_type = 'heap_pressure_critical'
+                )
+                """
+            )
+        heap_free = float(heap_guard["heap_bytes"]) if heap_guard and heap_guard["heap_bytes"] is not None else None
+        heap_min = (
+            float(heap_guard["heap_min_free_kb"]) if heap_guard and heap_guard["heap_min_free_kb"] is not None else None
+        )
+        heap_largest = (
+            float(heap_guard["heap_largest_free_block_kb"])
+            if heap_guard and heap_guard["heap_largest_free_block_kb"] is not None
+            else None
+        )
+        if heap_alert_open or (heap_free is not None and heap_free < 38.0):
+            log.warning(
+                "Dispatcher: skipped direct ESP32 push of %d change(s) due to heap pressure "
+                "(heap=%.1fKB min=%sKB largest=%sKB alert_open=%s)",
+                len(esp32_changes),
+                heap_free if heap_free is not None else -1.0,
+                f"{heap_min:.1f}" if heap_min is not None else "unknown",
+                f"{heap_largest:.1f}" if heap_largest is not None else "unknown",
+                bool(heap_alert_open),
+            )
+            esp32_changes = []
 
     if esp32_changes:
         last_err: Exception | None = None
@@ -2799,8 +3939,303 @@ _DS_WATTAGES = {
 }
 
 
+async def _refresh_daily_summary_for_date(conn: asyncpg.Connection, target_day) -> tuple[float, float, float]:
+    """Refresh daily_summary derived aggregates for a local greenhouse day."""
+    # Ensure row exists
+    await conn.execute("INSERT INTO daily_summary (date) VALUES ($1) ON CONFLICT (date) DO NOTHING", target_day)
+
+    # Climate aggregates
+    climate = await conn.fetchrow(
+        """
+        SELECT MIN(temp_avg) AS temp_min, MAX(temp_avg) AS temp_max, AVG(temp_avg) AS temp_avg,
+               MIN(vpd_avg) AS vpd_min, MAX(vpd_avg) AS vpd_max, AVG(vpd_avg) AS vpd_avg,
+               MIN(rh_avg) AS rh_min, MAX(rh_avg) AS rh_max, AVG(rh_avg) AS rh_avg,
+               MIN(outdoor_temp_f) AS outdoor_temp_min, MAX(outdoor_temp_f) AS outdoor_temp_max,
+               AVG(co2_ppm) AS co2_avg, MAX(dli_today) AS dli_final,
+               MAX(mister_water_today) AS mister_water_gal
+        FROM climate
+        WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+          AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
+          AND temp_avg IS NOT NULL
+    """,
+        target_day,
+    )
+
+    # Stress hours — computed with time-appropriate setpoints.
+    band_changes = await conn.fetch(
+        """
+        SELECT parameter, value, ts
+        FROM setpoint_changes
+        WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
+          AND ts <= ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
+          AND CASE
+              WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
+              WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
+          END
+        ORDER BY parameter, ts
+        """,
+        target_day,
+    )
+    from bisect import bisect_right
+
+    timelines: dict[str, list[tuple]] = {}
+    timeline_ts: dict[str, list] = {}
+    for r in band_changes:
+        param = r["parameter"]
+        timelines.setdefault(param, []).append((r["ts"], float(r["value"])))
+        timeline_ts.setdefault(param, []).append(r["ts"])
+
+    def _band_at(param: str, ts):
+        tl = timelines.get(param, [])
+        times = timeline_ts.get(param, [])
+        if not tl or not times:
+            return None
+        idx = bisect_right(times, ts) - 1
+        return tl[idx][1] if idx >= 0 else None
+
+    readings = await conn.fetch(
+        """
+        SELECT ts, temp_avg, vpd_avg FROM climate
+        WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+          AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
+          AND temp_avg IS NOT NULL
+        ORDER BY ts
+        """,
+        target_day,
+    )
+
+    heat_s = cold_s = vpd_hi_s = vpd_lo_s = 0
+    temp_in_band = vpd_in_band = both_in_band = 0
+    scored_readings = 0
+    interval_h = 1.0 / 60.0  # greenhouse telemetry is nominally one row/minute
+    for r in readings:
+        th = _band_at("temp_high", r["ts"])
+        tl = _band_at("temp_low", r["ts"])
+        vh = _band_at("vpd_high", r["ts"])
+        vl = _band_at("vpd_low", r["ts"])
+        if th is None or tl is None or vh is None or vl is None:
+            continue
+        scored_readings += 1
+        temp = float(r["temp_avg"])
+        vpd = float(r["vpd_avg"])
+        if temp > th:
+            heat_s += interval_h
+        elif temp < tl:
+            cold_s += interval_h
+        if vpd > vh:
+            vpd_hi_s += interval_h
+        elif vpd < vl:
+            vpd_lo_s += interval_h
+        t_ok = tl <= temp <= th
+        v_ok = vl <= vpd <= vh
+        if t_ok:
+            temp_in_band += 1
+        if v_ok:
+            vpd_in_band += 1
+        if t_ok and v_ok:
+            both_in_band += 1
+
+    n = scored_readings or len(readings) or 1
+    compliance_pct = round((both_in_band / n) * 100, 1)
+    temp_compliance_pct = round((temp_in_band / n) * 100, 1)
+    vpd_compliance_pct = round((vpd_in_band / n) * 100, 1)
+    stress = {
+        "heat": round(heat_s, 2),
+        "vpd_high": round(vpd_hi_s, 2),
+        "cold": round(cold_s, 2),
+        "vpd_low": round(vpd_lo_s, 2),
+    }
+
+    # Dew point margin (condensation risk)
+    dp = await conn.fetchrow(
+        """
+        SELECT min_margin_f, COALESCE(risk_hours, 0) AS risk_hours
+        FROM v_dew_point_risk WHERE date = $1
+    """,
+        target_day,
+    )
+
+    _RT_EQUIP = (
+        "fan1",
+        "fan2",
+        "fog",
+        "heat1",
+        "heat2",
+        "vent",
+        "grow_light_main",
+        "grow_light_grow",
+        "mister_south",
+        "mister_west",
+        "mister_center",
+        "drip_wall",
+        "drip_center",
+    )
+    rt_rows = await conn.fetch(
+        """
+        WITH day_bounds AS (
+            SELECT $1::date::timestamp AT TIME ZONE 'America/Denver' AS day_start,
+                   ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver' AS day_end
+        ),
+        transitions AS (
+            SELECT equipment, ts, state,
+                   lag(state) OVER (PARTITION BY equipment ORDER BY ts) AS prev_state,
+                   lead(ts) OVER (PARTITION BY equipment ORDER BY ts) AS next_ts
+            FROM equipment_state, day_bounds
+            WHERE ts >= day_bounds.day_start AND ts < day_bounds.day_end
+              AND equipment = ANY($2::text[])
+        )
+        SELECT equipment,
+               round(sum(extract(epoch FROM
+                   coalesce(next_ts, (SELECT day_end FROM day_bounds)) - ts
+               ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes,
+               count(*) FILTER (
+                   WHERE state IS TRUE
+                     AND COALESCE(prev_state, FALSE) IS FALSE
+               ) AS cycles
+        FROM transitions
+        GROUP BY equipment
+    """,
+        target_day,
+        list(_RT_EQUIP),
+    )
+    rt = {r["equipment"]: float(r["on_minutes"] or 0) for r in rt_rows}
+    cycles = {r["equipment"]: int(r["cycles"] or 0) for r in rt_rows}
+
+    kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
+    therms = rt.get("heat2", 0) / 60.0 * 75000 / 100000
+
+    mister_water_gal = float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0.0
+    meter_water_gal = (
+        await conn.fetchval(
+            """
+        SELECT COALESCE(
+            (SELECT used_gal FROM v_water_daily WHERE day::date = $1 ORDER BY day DESC LIMIT 1),
+            (SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
+               FROM climate
+              WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
+                AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
+                AND water_total_gal > 0)
+        )
+    """,
+            target_day,
+        )
+        or 0
+    )
+    water_gal = max(float(meter_water_gal), mister_water_gal)
+
+    ce = round(kwh * 0.111, 2)
+    cg = round(therms * 0.83, 2)
+    cw = round(float(water_gal) * 0.00484, 2)
+    ct = round(ce + cg + cw, 2)
+
+    gl_min = rt.get("grow_light_main", 0) + rt.get("grow_light_grow", 0)
+
+    await conn.execute(
+        """
+        UPDATE daily_summary SET
+            temp_min=$2, temp_max=$3, temp_avg=$4,
+            vpd_min=$5, vpd_max=$6, vpd_avg=$7,
+            rh_min=$8, rh_max=$9, rh_avg=$10,
+            co2_avg=$11, dli_final=$12,
+            outdoor_temp_min=$13, outdoor_temp_max=$14,
+            stress_hours_heat=$15, stress_hours_vpd_high=$16,
+            stress_hours_cold=$17, stress_hours_vpd_low=$18,
+            runtime_fan1_min=$19, runtime_fan2_min=$20,
+            runtime_heat1_min=$21, runtime_heat2_min=$22,
+            runtime_fog_min=$23, runtime_vent_min=$24,
+            runtime_grow_light_min=$25,
+            runtime_mister_south_h=$26, runtime_mister_west_h=$27, runtime_mister_center_h=$28,
+            runtime_drip_wall_h=$29, runtime_drip_center_h=$30,
+            kwh_estimated=$31, therms_estimated=$32,
+            cost_electric=$33, cost_gas=$34, cost_water=$35, cost_total=$36,
+            water_used_gal=$37, mister_water_gal=$38,
+            min_dp_margin_f=$39, dp_risk_hours=$40,
+            compliance_pct=$41,
+            temp_compliance_pct=$42,
+            vpd_compliance_pct=$43,
+            cycles_mister_south=$44,
+            cycles_mister_west=$45,
+            cycles_mister_center=$46,
+            cycles_drip_wall=$47,
+            cycles_drip_center=$48,
+            captured_at=now()
+        WHERE date = $1
+    """,
+        target_day,
+        climate["temp_min"] if climate else None,
+        climate["temp_max"] if climate else None,
+        climate["temp_avg"] if climate else None,
+        climate["vpd_min"] if climate else None,
+        climate["vpd_max"] if climate else None,
+        climate["vpd_avg"] if climate else None,
+        climate["rh_min"] if climate else None,
+        climate["rh_max"] if climate else None,
+        climate["rh_avg"] if climate else None,
+        climate["co2_avg"] if climate else None,
+        climate["dli_final"] if climate else None,
+        climate["outdoor_temp_min"] if climate else None,
+        climate["outdoor_temp_max"] if climate else None,
+        float(stress["heat"]) if stress else 0,
+        float(stress["vpd_high"]) if stress else 0,
+        float(stress["cold"]) if stress else 0,
+        float(stress["vpd_low"]) if stress else 0,
+        rt.get("fan1", 0),
+        rt.get("fan2", 0),
+        rt.get("heat1", 0),
+        rt.get("heat2", 0),
+        rt.get("fog", 0),
+        rt.get("vent", 0),
+        gl_min,
+        rt.get("mister_south", 0) / 60.0,
+        rt.get("mister_west", 0) / 60.0,
+        rt.get("mister_center", 0) / 60.0,
+        rt.get("drip_wall", 0) / 60.0,
+        rt.get("drip_center", 0) / 60.0,
+        round(kwh, 2),
+        round(therms, 3),
+        ce,
+        cg,
+        cw,
+        ct,
+        float(water_gal),
+        mister_water_gal,
+        float(dp["min_margin_f"]) if dp and dp["min_margin_f"] is not None else None,
+        float(dp["risk_hours"]) if dp else 0,
+        compliance_pct,
+        temp_compliance_pct,
+        vpd_compliance_pct,
+        cycles.get("mister_south", 0),
+        cycles.get("mister_west", 0),
+        cycles.get("mister_center", 0),
+        cycles.get("drip_wall", 0),
+        cycles.get("drip_center", 0),
+    )
+    await conn.execute(
+        """
+        UPDATE daily_summary ds
+           SET kwh_total = ed.measured_kwh::double precision,
+               peak_kw = (ed.peak_watts / 1000.0)::double precision,
+               cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
+               cost_total = round((
+                   COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
+                   + COALESCE(ds.cost_gas::numeric, 0)
+                   + COALESCE(ds.cost_water::numeric, 0)
+               ), 2)::double precision,
+               captured_at = now()
+          FROM v_energy_daily ed
+         WHERE ds.date = $1
+           AND ed.date = ds.date
+           AND ed.measured_kwh IS NOT NULL
+        """,
+        target_day,
+    )
+
+    temp_max = float(climate["temp_max"]) if climate and climate["temp_max"] else 0.0
+    return ct, temp_max, compliance_pct
+
+
 async def daily_summary_live(pool: asyncpg.Pool) -> None:
-    """Update daily_summary for today with live running aggregates.
+    """Update recent daily_summary rows with live running aggregates.
 
     Two-writer contract (paired with ingestor.py::write_daily_summary):
       - `write_daily_summary` owns the midnight UPSERT of raw ESP32 accumulators.
@@ -2814,306 +4249,18 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
     """
     async with pool.acquire() as conn:
         today = await conn.fetchval("SELECT (now() AT TIME ZONE 'America/Denver')::date")
+        refreshed = []
+        for offset in (0, 1):
+            day = today - _td(days=offset)
+            ct, temp_max, compliance_pct = await _refresh_daily_summary_for_date(conn, day)
+            refreshed.append((day, ct, temp_max, compliance_pct))
 
-        # Ensure row exists
-        await conn.execute("INSERT INTO daily_summary (date) VALUES ($1) ON CONFLICT (date) DO NOTHING", today)
-
-        # Climate aggregates
-        climate = await conn.fetchrow(
-            """
-            SELECT MIN(temp_avg) AS temp_min, MAX(temp_avg) AS temp_max, AVG(temp_avg) AS temp_avg,
-                   MIN(vpd_avg) AS vpd_min, MAX(vpd_avg) AS vpd_max, AVG(vpd_avg) AS vpd_avg,
-                   MIN(rh_avg) AS rh_min, MAX(rh_avg) AS rh_max, AVG(rh_avg) AS rh_avg,
-                   MIN(outdoor_temp_f) AS outdoor_temp_min, MAX(outdoor_temp_f) AS outdoor_temp_max,
-                   AVG(co2_ppm) AS co2_avg, MAX(dli_today) AS dli_final,
-                   MAX(mister_water_today) AS mister_water_gal
-            FROM climate
-            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
-              AND temp_avg IS NOT NULL
-        """,
-            today,
-        )
-
-        # Stress hours — computed with time-appropriate setpoints
-        # Load today's setpoint timeline for band parameters
-        band_changes = await conn.fetch(
-            """
-            SELECT parameter, value, ts
-            FROM setpoint_changes
-            WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
-              AND ts <= ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
-              AND CASE
-                  WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
-                  WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
-              END
-            ORDER BY parameter, ts
-            """,
-            today,
-        )
-        # Build per-parameter sorted timeline
-        from bisect import bisect_right
-
-        _timelines: dict[str, list[tuple]] = {}
-        for r in band_changes:
-            _timelines.setdefault(r["parameter"], []).append((r["ts"], float(r["value"])))
-
-        def _band_at(param: str, ts):
-            tl = _timelines.get(param, [])
-            if not tl:
-                return None
-            idx = bisect_right(tl, (ts,)) - 1
-            return tl[idx][1] if idx >= 0 else tl[0][1]
-
-        # Load today's climate readings
-        readings = await conn.fetch(
-            """
-            SELECT ts, temp_avg, vpd_avg FROM climate
-            WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
-              AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
-              AND temp_avg IS NOT NULL
-            ORDER BY ts
-            """,
-            today,
-        )
-
-        # Compute stress with time-appropriate bands
-        heat_s = cold_s = vpd_hi_s = vpd_lo_s = 0
-        temp_in_band = vpd_in_band = both_in_band = 0
-        interval_h = 1.0 / 60.0  # ~1 minute per reading
-        for r in readings:
-            th = _band_at("temp_high", r["ts"])
-            tl = _band_at("temp_low", r["ts"])
-            vh = _band_at("vpd_high", r["ts"])
-            vl = _band_at("vpd_low", r["ts"])
-            if th is None or tl is None or vh is None or vl is None:
-                continue
-            temp = float(r["temp_avg"])
-            vpd = float(r["vpd_avg"])
-            if temp > th:
-                heat_s += interval_h
-            elif temp < tl:
-                cold_s += interval_h
-            if vpd > vh:
-                vpd_hi_s += interval_h
-            elif vpd < vl:
-                vpd_lo_s += interval_h
-            t_ok = tl <= temp <= th
-            v_ok = vl <= vpd <= vh
-            if t_ok:
-                temp_in_band += 1
-            if v_ok:
-                vpd_in_band += 1
-            if t_ok and v_ok:
-                both_in_band += 1
-
-        n = len(readings) or 1
-        compliance_pct = round((both_in_band / n) * 100, 1)
-        temp_compliance_pct = round((temp_in_band / n) * 100, 1)
-        vpd_compliance_pct = round((vpd_in_band / n) * 100, 1)
-        stress = {
-            "heat": round(heat_s, 2),
-            "vpd_high": round(vpd_hi_s, 2),
-            "cold": round(cold_s, 2),
-            "vpd_low": round(vpd_lo_s, 2),
-        }
-
-        # Dew point margin (condensation risk)
-        dp = await conn.fetchrow(
-            """
-            SELECT min_margin_f, COALESCE(risk_hours, 0) AS risk_hours
-            FROM v_dew_point_risk WHERE date = $1
-        """,
-            today,
-        )
-
-        # Equipment runtimes calculated directly from equipment_state transitions
-        _RT_EQUIP = (
-            "fan1",
-            "fan2",
-            "fog",
-            "heat1",
-            "heat2",
-            "vent",
-            "grow_light_main",
-            "grow_light_grow",
-            "mister_south",
-            "mister_west",
-            "mister_center",
-            "drip_wall",
-            "drip_center",
-        )
-        rt_rows = await conn.fetch(
-            """
-            WITH day_bounds AS (
-                SELECT $1::date::timestamp AT TIME ZONE 'America/Denver' AS day_start,
-                       ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver' AS day_end
-            ),
-            transitions AS (
-                SELECT equipment, ts, state,
-                       lag(state) OVER (PARTITION BY equipment ORDER BY ts) AS prev_state,
-                       lead(ts) OVER (PARTITION BY equipment ORDER BY ts) AS next_ts
-                FROM equipment_state, day_bounds
-                WHERE ts >= day_bounds.day_start AND ts < day_bounds.day_end
-                  AND equipment = ANY($2::text[])
-            )
-            SELECT equipment,
-                   round(sum(extract(epoch FROM
-                       coalesce(next_ts, (SELECT day_end FROM day_bounds)) - ts
-                   ) / 60.0) FILTER (WHERE state = true), 1) AS on_minutes,
-                   count(*) FILTER (
-                       WHERE state IS TRUE
-                         AND COALESCE(prev_state, FALSE) IS FALSE
-                   ) AS cycles
-            FROM transitions
-            GROUP BY equipment
-        """,
-            today,
-            list(_RT_EQUIP),
-        )
-        rt = {r["equipment"]: float(r["on_minutes"] or 0) for r in rt_rows}
-        cycles = {r["equipment"]: int(r["cycles"] or 0) for r in rt_rows}
-
-        # Energy from runtimes
-        kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
-        therms = rt.get("heat2", 0) / 60.0 * 75000 / 100000
-
-        # Water. The main cumulative pulse meter can reset or miss periods
-        # during the current day, but mister_water_today is a same-day subset
-        # accumulator. Keep total water at least as large as the known subset
-        # so public accounting never reports impossible negative unaccounted
-        # water while the hardware attribution layer is incomplete.
-        mister_water_gal = float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0.0
-        meter_water_gal = (
-            await conn.fetchval(
-                """
-            SELECT COALESCE(
-                (SELECT used_gal FROM v_water_daily WHERE day::date = $1 ORDER BY day DESC LIMIT 1),
-                (SELECT COALESCE(MAX(water_total_gal) - MIN(water_total_gal), 0)
-                   FROM climate
-                  WHERE ts >= $1::date::timestamp AT TIME ZONE 'America/Denver'
-                    AND ts < ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
-                    AND water_total_gal > 0)
-            )
-        """,
-                today,
-            )
-            or 0
-        )
-        water_gal = max(float(meter_water_gal), mister_water_gal)
-
-        # Costs
-        ce = round(kwh * 0.111, 2)
-        cg = round(therms * 0.83, 2)
-        cw = round(float(water_gal) * 0.00484, 2)
-        ct = round(ce + cg + cw, 2)
-
-        gl_min = rt.get("grow_light_main", 0) + rt.get("grow_light_grow", 0)
-
-        await conn.execute(
-            """
-            UPDATE daily_summary SET
-                temp_min=$2, temp_max=$3, temp_avg=$4,
-                vpd_min=$5, vpd_max=$6, vpd_avg=$7,
-                rh_min=$8, rh_max=$9, rh_avg=$10,
-                co2_avg=$11, dli_final=$12,
-                outdoor_temp_min=$13, outdoor_temp_max=$14,
-                stress_hours_heat=$15, stress_hours_vpd_high=$16,
-                stress_hours_cold=$17, stress_hours_vpd_low=$18,
-                runtime_fan1_min=$19, runtime_fan2_min=$20,
-                runtime_heat1_min=$21, runtime_heat2_min=$22,
-                runtime_fog_min=$23, runtime_vent_min=$24,
-                runtime_grow_light_min=$25,
-                runtime_mister_south_h=$26, runtime_mister_west_h=$27, runtime_mister_center_h=$28,
-                runtime_drip_wall_h=$29, runtime_drip_center_h=$30,
-                kwh_estimated=$31, therms_estimated=$32,
-                cost_electric=$33, cost_gas=$34, cost_water=$35, cost_total=$36,
-                water_used_gal=$37, mister_water_gal=$38,
-                min_dp_margin_f=$39, dp_risk_hours=$40,
-                compliance_pct=$41,
-                temp_compliance_pct=$42,
-                vpd_compliance_pct=$43,
-                cycles_mister_south=$44,
-                cycles_mister_west=$45,
-                cycles_mister_center=$46,
-                cycles_drip_wall=$47,
-                cycles_drip_center=$48,
-                captured_at=now()
-            WHERE date = $1
-        """,
-            today,
-            climate["temp_min"] if climate else None,
-            climate["temp_max"] if climate else None,
-            climate["temp_avg"] if climate else None,
-            climate["vpd_min"] if climate else None,
-            climate["vpd_max"] if climate else None,
-            climate["vpd_avg"] if climate else None,
-            climate["rh_min"] if climate else None,
-            climate["rh_max"] if climate else None,
-            climate["rh_avg"] if climate else None,
-            climate["co2_avg"] if climate else None,
-            climate["dli_final"] if climate else None,
-            climate["outdoor_temp_min"] if climate else None,
-            climate["outdoor_temp_max"] if climate else None,
-            float(stress["heat"]) if stress else 0,
-            float(stress["vpd_high"]) if stress else 0,
-            float(stress["cold"]) if stress else 0,
-            float(stress["vpd_low"]) if stress else 0,
-            rt.get("fan1", 0),
-            rt.get("fan2", 0),
-            rt.get("heat1", 0),
-            rt.get("heat2", 0),
-            rt.get("fog", 0),
-            rt.get("vent", 0),
-            gl_min,
-            rt.get("mister_south", 0) / 60.0,
-            rt.get("mister_west", 0) / 60.0,
-            rt.get("mister_center", 0) / 60.0,
-            rt.get("drip_wall", 0) / 60.0,
-            rt.get("drip_center", 0) / 60.0,
-            round(kwh, 2),
-            round(therms, 3),
-            ce,
-            cg,
-            cw,
-            ct,
-            float(water_gal),
-            mister_water_gal,
-            float(dp["min_margin_f"]) if dp and dp["min_margin_f"] is not None else None,
-            float(dp["risk_hours"]) if dp else 0,
-            compliance_pct,
-            temp_compliance_pct,
-            vpd_compliance_pct,
-            cycles.get("mister_south", 0),
-            cycles.get("mister_west", 0),
-            cycles.get("mister_center", 0),
-            cycles.get("drip_wall", 0),
-            cycles.get("drip_center", 0),
-        )
-        await conn.execute(
-            """
-            UPDATE daily_summary ds
-               SET kwh_total = ed.measured_kwh::double precision,
-                   peak_kw = (ed.peak_watts / 1000.0)::double precision,
-                   cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
-                   cost_total = round((
-                       COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
-                       + COALESCE(ds.cost_gas::numeric, 0)
-                       + COALESCE(ds.cost_water::numeric, 0)
-                   ), 2)::double precision,
-                   captured_at = now()
-              FROM v_energy_daily ed
-             WHERE ds.date = $1
-               AND ed.date = ds.date
-               AND ed.measured_kwh IS NOT NULL
-            """,
-            today,
-        )
-
+    latest_day, ct, temp_max, compliance_pct = refreshed[0]
     log.info(
-        "Daily summary live: $%.2f, %.1f°F max, compliance %.1f%%",
+        "Daily summary live: %s $%.2f, %.1f°F max, compliance %.1f%% (yesterday also refreshed)",
+        latest_day,
         ct,
-        float(climate["temp_max"]) if climate and climate["temp_max"] else 0,
+        temp_max,
         compliance_pct,
     )
 
@@ -3124,7 +4271,7 @@ async def daily_summary_live(pool: asyncpg.Pool) -> None:
 
 from astral import LocationInfo
 from astral.sun import sun as _sun
-from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
+from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, prepare_delivery_result, send_to_iris
 from planner_routing import (
     SeverityContext,
     classify_severity,
@@ -3186,7 +4333,7 @@ def _compute_milestones() -> dict[str, datetime]:
     # to 5. Retired keys (fixed_midnight, fixed_pre_dawn, fixed_midday,
     # fixed_afternoon, fixed_evening, tree_shade, evening_settle, plus the
     # FORECAST poll in planning_heartbeat) produced low-signal cycles that
-    # blew through Iris's local-Gemma context budget without changing the
+    # blew through Iris's planner context budget without changing the
     # plan. SOLAR_MAX is new: a deterministic solar-noon checkpoint that
     # replaces the implicit "peak stress is noon + 2h" guess. See plan
     # /home/jason/.claude-agents/iris-dev/plans/i-d-like-you-to-cozy-frost.md.
@@ -3466,7 +4613,7 @@ async def _expire_planner_trigger_slas(pool: asyncpg.Pool) -> None:
 async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
     """F14 (Sprint 24.6): persist a send_to_iris result to plan_delivery_log
     for later delivery→plan correlation. Validated through PlanDeliveryLogRow
-    before INSERT; a ValidationError here means an unexpected event_type
+    before INSERT/UPSERT; a ValidationError here means an unexpected event_type
     (not in the Literal) or wake_mode — safer to drop than bleed bad data.
 
     Sprint 24.9 (G-7): honor an explicit `status` in the result dict when
@@ -3487,7 +4634,7 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
         log.error("plan_delivery_log skipped (validation failed: %s): %r", e, row)
         return
     explicit_status = result.get("status")
-    if explicit_status is None and result.get("delivered") is False:
+    if explicit_status is None and result.get("delivered") is False and result.get("gateway_status") is not None:
         explicit_status = "delivery_failed"
     # Contract v1.4 §2.D — both columns now populated on every INSERT so
     # correlation queries can match deliveries to plans by uuid (not
@@ -3499,32 +4646,25 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
     # (migration 114) for downstream Hermes-telemetry joins.
     hermes_run_id = result.get("hermes_run_id")
     async with pool.acquire() as conn:
-        if explicit_status:
-            return await conn.fetchval(
-                """
-                INSERT INTO plan_delivery_log
-                  (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body,
-                   status, trigger_id, instance, hermes_run_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9, $10)
-                RETURNING id
-                """,
-                row["event_type"],
-                row["event_label"],
-                row["session_key"],
-                row["wake_mode"],
-                row["gateway_status"],
-                row["gateway_body"],
-                explicit_status,
-                trigger_id,
-                instance,
-                hermes_run_id,
-            )
         return await conn.fetchval(
             """
-            INSERT INTO plan_delivery_log
+            INSERT INTO plan_delivery_log AS pdl
               (event_type, event_label, session_key, wake_mode, gateway_status, gateway_body,
-               trigger_id, instance, hermes_run_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9)
+               status, trigger_id, instance, hermes_run_id)
+            VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'pending'), $8::uuid, $9, $10)
+            ON CONFLICT (trigger_id) DO UPDATE
+              SET event_type     = EXCLUDED.event_type,
+                  event_label    = EXCLUDED.event_label,
+                  session_key    = COALESCE(EXCLUDED.session_key, pdl.session_key),
+                  wake_mode      = COALESCE(EXCLUDED.wake_mode, pdl.wake_mode),
+                  gateway_status = EXCLUDED.gateway_status,
+                  gateway_body   = COALESCE(EXCLUDED.gateway_body, pdl.gateway_body),
+                  instance       = COALESCE(EXCLUDED.instance, pdl.instance),
+                  hermes_run_id  = COALESCE(EXCLUDED.hermes_run_id, pdl.hermes_run_id),
+                  status         = CASE
+                                     WHEN pdl.status IN ('acked', 'plan_written') THEN pdl.status
+                                     ELSE EXCLUDED.status
+                                   END
             RETURNING id
             """,
             row["event_type"],
@@ -3533,6 +4673,7 @@ async def _log_plan_delivery(pool: asyncpg.Pool, result: dict) -> int | None:
             row["wake_mode"],
             row["gateway_status"],
             row["gateway_body"],
+            explicit_status,
             trigger_id,
             instance,
             hermes_run_id,
@@ -3590,15 +4731,36 @@ async def _deliver_and_log(
         )
         return
 
+    pre_result = prepare_delivery_result(event_type, label, instance=instance)
+    delivery_id = await _log_plan_delivery(pool, pre_result)
+    if delivery_id is None:
+        log.error("Skipping %s/%s dispatch: failed to pre-create plan_delivery_log row", event_type, label)
+        return
+    if pre_result.get("status") == "delivery_failed":
+        await _mark_expected_trigger_delivered(
+            pool,
+            expected_trigger_id=expected_trigger_id,
+            delivery_log_id=delivery_id,
+            result=pre_result,
+            catchup=catchup,
+        )
+        return
+
     loop = asyncio.get_event_loop()
-    # Threaded executor + kwargs: use a lambda so `instance` propagates
-    # through to send_to_iris cleanly (run_in_executor doesn't accept
-    # kwargs directly).
+    # Threaded executor + kwargs: use a lambda so `instance` and the pre-created
+    # trigger_id propagate to send_to_iris cleanly (run_in_executor doesn't
+    # accept kwargs directly).
     result = await loop.run_in_executor(
         None,
-        lambda: send_to_iris(event_type, label, context, instance=instance),
+        lambda: send_to_iris(
+            event_type,
+            label,
+            context,
+            instance=instance,
+            trigger_id=pre_result["trigger_id"],
+        ),
     )
-    delivery_id = await _log_plan_delivery(pool, result)
+    delivery_id = await _log_plan_delivery(pool, result) or delivery_id
     await _mark_expected_trigger_delivered(
         pool,
         expected_trigger_id=expected_trigger_id,
@@ -3621,9 +4783,9 @@ async def _resolve_delivery_log(pool: asyncpg.Pool) -> None:
     is the join key. Keep them in sync.
     """
     async with pool.acquire() as conn:
-        # Contract v1.4 primary path: exact UUID correlation. This is the
-        # only reliable join when local/opus may both receive routine
-        # triggers inside the old 2h fallback window.
+        # Contract v1.4 primary path: exact UUID correlation. This remains the
+        # only reliable join across legacy audit labels and Hermes run IDs
+        # inside the old 2h fallback window.
         await conn.execute(
             """
             UPDATE plan_delivery_log pdl
@@ -3729,8 +4891,9 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
             log.info("Planning milestone fired: %s (%s)%s", key, label, " [CATCH-UP]" if is_catchup else "")
 
             # Gather context and send to Iris (blocking — runs in executor).
-            # Contract v1.5 routes normal solar/fixed-boundary transitions to
-            # local Gemma; cloud/opus is explicit override only.
+            # Hermes routes normal solar/fixed-boundary transitions through
+            # the single audited planner gateway; legacy local/opus labels are
+            # audit metadata only.
             loop = asyncio.get_event_loop()
             context = await loop.run_in_executor(None, gather_context)
             severity = classify_severity(event_type, SeverityContext())

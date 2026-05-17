@@ -993,8 +993,10 @@
             "showPoints": "never",
             "pointSize": 5,
             "lineInterpolation": "smooth",
-            "spanNulls": true
-          }
+            "spanNulls": true,
+            "axisLabel": "\u00b0F"
+          },
+          "unit": "fahrenheit"
         },
         "overrides": [
           {

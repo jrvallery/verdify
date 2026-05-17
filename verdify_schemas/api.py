@@ -130,6 +130,148 @@ class PublicHomeMetrics(BaseModel):
     data_health_warnings: list[PublicDataHealthCheck] = Field(default_factory=list)
 
 
+class PublicBandTraceLatest(BaseModel):
+    """Latest sample from the canonical band trace surface."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ts: AwareDatetime
+    greenhouse_id: str
+    temp_avg: float | None = None
+    vpd_avg: float | None = None
+    temp_avg_smooth_15m: float | None = None
+    vpd_avg_smooth_30m: float | None = None
+    crop_temp_low: float | None = None
+    crop_temp_high: float | None = None
+    crop_vpd_low: float | None = None
+    crop_vpd_high: float | None = None
+    house_vpd_low: float | None = None
+    house_vpd_high: float | None = None
+    fw_temp_low: float | None = None
+    fw_temp_high: float | None = None
+    fw_vpd_low: float | None = None
+    fw_vpd_high: float | None = None
+    rb_temp_low: float | None = None
+    rb_temp_high: float | None = None
+    rb_vpd_low: float | None = None
+    rb_vpd_high: float | None = None
+    crop_both_in_band: bool | None = None
+    fw_both_in_band: bool | None = None
+    readback_matches_fw_band: bool | None = None
+    trace_quality_flag: str
+
+
+class PublicBandTraceSummary(BaseModel):
+    """Recent compliance summary derived from canonical band trace rows."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    hours: int = Field(..., ge=1)
+    sample_count: int = Field(..., ge=0)
+    crop_temp_compliance_pct: float | None = Field(default=None, ge=0, le=100)
+    crop_vpd_compliance_pct: float | None = Field(default=None, ge=0, le=100)
+    crop_both_compliance_pct: float | None = Field(default=None, ge=0, le=100)
+    fw_temp_compliance_pct: float | None = Field(default=None, ge=0, le=100)
+    fw_vpd_compliance_pct: float | None = Field(default=None, ge=0, le=100)
+    fw_both_compliance_pct: float | None = Field(default=None, ge=0, le=100)
+    readback_match_pct: float | None = Field(default=None, ge=0, le=100)
+    ok_trace_pct: float | None = Field(default=None, ge=0, le=100)
+
+
+class PublicBandTraceResponse(BaseModel):
+    """GET /api/v1/public/band-trace."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    generated_at: AwareDatetime
+    greenhouse_id: str
+    latest: PublicBandTraceLatest | None = None
+    summary: PublicBandTraceSummary
+
+
+class PublicGpuPowerPoint(BaseModel):
+    """One bucketed GPU power sample for public inference-fleet charts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ts: AwareDatetime
+    host: str
+    vm_name: str | None = None
+    gpu: str
+    watts: float
+
+
+class PublicGpuPowerLatest(BaseModel):
+    """Latest mirrored GPU telemetry for one host/GPU."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ts: AwareDatetime
+    host: str
+    vm_name: str | None = None
+    purpose: str | None = None
+    gpu: str
+    device: str | None = None
+    model_name: str | None = None
+    watts: float
+    gpu_util_pct: float | None = None
+    temperature_c: float | None = None
+    memory_used_mb: float | None = None
+    memory_free_mb: float | None = None
+    age_s: int | None = Field(default=None, ge=0)
+
+
+class PublicInfraCpuPoint(BaseModel):
+    """One bucketed CPU/memory sample for public infrastructure charts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ts: AwareDatetime
+    host: str
+    vm_name: str | None = None
+    cpu_util_pct: float | None = None
+    memory_used_pct: float | None = None
+
+
+class PublicInfraCpuLatest(BaseModel):
+    """Latest mirrored CPU/memory telemetry for one host."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ts: AwareDatetime
+    host: str
+    vm_name: str | None = None
+    purpose: str | None = None
+    cpu_util_pct: float | None = None
+    load1: float | None = None
+    cores: int | None = Field(default=None, ge=0)
+    memory_used_pct: float | None = None
+    age_s: int | None = Field(default=None, ge=0)
+
+
+class PublicGpuPowerResponse(BaseModel):
+    """GET /api/v1/public/gpu-power."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    generated_at: AwareDatetime
+    greenhouse_id: str
+    source: str
+    hours: int = Field(..., ge=1, le=168)
+    step_minutes: int = Field(..., ge=1, le=60)
+    latest_total_watts: float | None = None
+    latest_gpu_count: int = Field(..., ge=0)
+    latest_avg_gpu_util_pct: float | None = Field(default=None, ge=0, le=100)
+    peak_total_watts: float | None = None
+    avg_total_watts: float | None = None
+    latest_avg_cpu_util_pct: float | None = Field(default=None, ge=0, le=100)
+    peak_avg_cpu_util_pct: float | None = Field(default=None, ge=0, le=100)
+    latest: list[PublicGpuPowerLatest] = Field(default_factory=list, max_length=32)
+    series: list[PublicGpuPowerPoint] = Field(default_factory=list, max_length=12000)
+    cpu_latest: list[PublicInfraCpuLatest] = Field(default_factory=list, max_length=32)
+    cpu_series: list[PublicInfraCpuPoint] = Field(default_factory=list, max_length=12000)
+
+
 class ZoneListItem(BaseModel):
     """GET /api/v1/zones — one row per zone."""
 

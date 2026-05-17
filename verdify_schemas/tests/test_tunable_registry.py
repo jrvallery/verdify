@@ -6,7 +6,9 @@ The test set that closes the sprint-15 / sprint-15.1 drift-class bug:
   ESPHome object_id. Direct aioesphomeapi pushes are now the setpoint path.
 - Every REGISTRY entry with a non-None cfg_readback_object_id maps bidirectionally
   with `ingestor/entity_map.py::CFG_READBACK_MAP`.
-- Every REGISTRY entry maps bidirectionally with `ingestor/entity_map.py::SETPOINT_MAP`.
+- Every dispatcher-routed REGISTRY entry maps bidirectionally with
+  `ingestor/entity_map.py::SETPOINT_MAP`; readback-only entries have
+  `esp_object_id=None`.
 
 Runs in <50ms — pure text parsing of tunables.yaml, no ESPHome build needed.
 Any drift → CI fails → operator fixes before merge.
@@ -20,7 +22,7 @@ import sys
 
 import pytest
 
-from verdify_schemas.tunable_registry import REGISTRY, registry_value_error
+from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, REGISTRY, TIER1_REG, registry_value_error
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -37,6 +39,12 @@ def tunables_yaml() -> str:
     return path.read_text()
 
 
+@pytest.fixture(scope="module")
+def greenhouse_yaml() -> str:
+    path = REPO_ROOT / "firmware" / "greenhouse.yaml"
+    return path.read_text()
+
+
 # ─── Drift Guard #1 — firmware clamps match registry ─────────────────────
 
 _SETPOINT_LITERAL_RE = re.compile(
@@ -49,6 +57,10 @@ _NUMBER_BLOCK_RE = re.compile(
 _NUMBER_NAME_RE = re.compile(r'\n\s*name:\s*"(?P<name>[^"]+)"')
 _MIN_RE = re.compile(r"\n\s*min_value:\s*(?P<value>-?\d+(?:\.\d+)?)")
 _MAX_RE = re.compile(r"\n\s*max_value:\s*(?P<value>-?\d+(?:\.\d+)?)")
+_BOOT_RANGE_RE = (
+    r"id\({global_id}\)\s*<\s*(?P<lo>-?\d+(?:\.\d+)?)\s*\|\|\s*"
+    r"id\({global_id}\)\s*>\s*(?P<hi>-?\d+(?:\.\d+)?)"
+)
 
 
 def _esphome_object_id(name: str) -> str:
@@ -117,10 +129,39 @@ class TestDriftGuard:
             f"{literal_fields}. Add globals/tunables/readbacks and assign from id(...)."
         )
 
+    def test_boot_sanity_clamps_match_registry_for_core_policy_bounds(self, greenhouse_yaml: str) -> None:
+        """Root boot-sanity guards must not silently narrow planner-policy bounds.
+
+        The main number-entity drift guard checks `greenhouse/tunables.yaml`, but
+        `greenhouse.yaml` also has boot-time corruption guards. If those guards
+        are narrower than the registry, a valid planner value can survive MCP and
+        dispatcher validation but be reset after reboot.
+        """
+        cases = {
+            "mister_engage_kpa": "mister_engage_kpa",
+            "mister_all_kpa": "mister_all_kpa",
+            "fog_escalation_kpa": "fog_escalation_kpa",
+            "stage2_heat_delta_f": "d_heat_stage_2",
+            "stage2_cool_delta_f": "d_cool_stage_2",
+        }
+        mismatched: list[str] = []
+        for global_id, param in cases.items():
+            m = re.search(_BOOT_RANGE_RE.format(global_id=re.escape(global_id)), greenhouse_yaml)
+            assert m, f"boot sanity clamp not found for id({global_id})"
+            spec = REGISTRY[param]
+            lo = float(m.group("lo"))
+            hi = float(m.group("hi"))
+            if abs(lo - float(spec.fw_clamp_lo)) > 1e-6 or abs(hi - float(spec.fw_clamp_hi)) > 1e-6:
+                mismatched.append(
+                    f"{param}: registry=({spec.fw_clamp_lo}, {spec.fw_clamp_hi}) greenhouse.yaml=({lo}, {hi})"
+                )
+        assert not mismatched, "boot sanity clamp drift detected:\n  " + "\n  ".join(mismatched)
+
     def test_registry_matches_entity_map_setpoint(self) -> None:
-        """Every REGISTRY entry's esp_object_id must be in entity_map.SETPOINT_MAP
-        (so dispatcher can route it) and every SETPOINT_MAP route must have a
-        registry row.
+        """Every dispatcher-routed REGISTRY entry's esp_object_id must be in
+        entity_map.SETPOINT_MAP and every SETPOINT_MAP route must have a
+        registry row. Readback-only firmware inputs are registry entries too,
+        but have no dispatcher route.
         """
         # Resolve ingestor module; same idiom as test_tunables.py
         for p in reversed(
@@ -137,6 +178,8 @@ class TestDriftGuard:
         em_object_ids = set(SETPOINT_MAP)
         missing = []
         for name, d in REGISTRY.items():
+            if d.esp_object_id is None:
+                continue
             if d.esp_object_id not in em_object_ids:
                 missing.append(f"{name}: esp_object_id='{d.esp_object_id}' not in SETPOINT_MAP")
         assert not missing, (
@@ -209,14 +252,30 @@ class TestDriftGuard:
         )
 
     def test_mcp_set_tunable_uses_planner_pushable_registry(self) -> None:
-        """MCP set_tunable must expose all registry planner-pushable params,
-        not just the daily Tier 1 prompt subset.
-        """
+        """MCP set_tunable must use the canonical planner-policy gate."""
         mcp_path = REPO_ROOT / "mcp" / "server.py"
         text = mcp_path.read_text()
         assert "PLANNER_PUSHABLE_REG" in text
         assert "parameter not in PLANNER_PUSHABLE_REG" in text
         assert "parameter not in TIER1_TUNABLES" not in text
+
+    def test_planner_pushable_is_only_planner_policy(self) -> None:
+        planner_policy = {n for n, d in REGISTRY.items() if d.control_class == "planner_policy"}
+        assert PLANNER_PUSHABLE_REG == planner_policy
+        assert all(REGISTRY[name].control_class == "planner_policy" for name in PLANNER_PUSHABLE_REG)
+        assert set(TIER1_REG) <= set(PLANNER_PUSHABLE_REG)
+        for param in (
+            "gl_main_lux_threshold",
+            "gl_main_lux_hysteresis",
+            "gl_grow_lux_threshold",
+            "gl_grow_lux_hysteresis",
+        ):
+            assert param in PLANNER_PUSHABLE_REG
+            assert REGISTRY[param].tier == 2
+        assert REGISTRY["temp_low"].control_class == "crop_band"
+        assert REGISTRY["safety_min"].control_class == "controller_safety"
+        assert REGISTRY["fallback_window_s"].control_class == "readback_context"
+        assert REGISTRY["mister_on_s"].control_class == "retired"
 
     def test_registry_value_error_reports_bounds_and_nearest_safe(self) -> None:
         err = registry_value_error("mister_all_kpa", 2.8)

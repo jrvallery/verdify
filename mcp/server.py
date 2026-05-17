@@ -63,20 +63,33 @@ if _env_path.exists():
             _db_pass = line.split("=", 1)[1].strip().strip('"').strip("'")
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
 # Legacy planner.py removed — planning runs via iris_planner.py → Hermes /v1/runs
-BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+BAND_OWNED_PARAMS = {
+    "temp_low",
+    "temp_high",
+    "vpd_low",
+    "vpd_high",
+    "gl_dli_target",
+    "gl_sunrise_hour",
+    "gl_sunset_hour",
+    "sw_gl_auto_mode",
+}
+_OPENAI_KEY_FILES = (
+    Path("/etc/verdify/hermes-iris.env"),
+    Path("/mnt/jason/agents/shared/credentials/openai_api_key.txt"),
+)
 PLAN_REQUIRED_PARAMS = frozenset(
     {
         "vpd_hysteresis",
         "vpd_watch_dwell_s",
         "mister_engage_kpa",
         "mister_all_kpa",
+        "mister_engage_delay_s",
+        "mister_all_delay_s",
         "mister_pulse_on_s",
         "mister_pulse_gap_s",
         "mister_vpd_weight",
         "mister_water_budget_gal",
-        "mist_vent_close_lead_s",
         "mist_max_closed_vent_s",
-        "mist_vent_reopen_delay_s",
         "mist_thermal_relief_s",
         "enthalpy_open",
         "enthalpy_close",
@@ -85,11 +98,24 @@ PLAN_REQUIRED_PARAMS = frozenset(
         "min_fog_on_s",
         "min_fog_off_s",
         "fog_escalation_kpa",
+        "d_heat_stage_2",
         "d_cool_stage_2",
+        "temp_hysteresis",
+        "heat_hysteresis",
         "bias_heat",
         "bias_cool",
         "min_heat_on_s",
         "min_heat_off_s",
+        "sw_summer_vent_enabled",
+        "vent_prefer_temp_delta_f",
+        "vent_prefer_dp_delta_f",
+        "outdoor_staleness_max_s",
+        "sw_fog_closes_vent",
+        "sw_mister_closes_vent",
+        "sw_dwell_gate_enabled",
+        "dwell_gate_ms",
+        "sw_fsm_controller_enabled",
+        "mist_backoff_s",
     }
 )
 TIER1_TUNABLES = frozenset(
@@ -102,9 +128,7 @@ TIER1_TUNABLES = frozenset(
         "mister_pulse_gap_s",
         "mister_vpd_weight",
         "mister_water_budget_gal",
-        "mist_vent_close_lead_s",
         "mist_max_closed_vent_s",
-        "mist_vent_reopen_delay_s",
         "mist_thermal_relief_s",
         "enthalpy_open",
         "enthalpy_close",
@@ -127,7 +151,6 @@ TIER1_TUNABLES = frozenset(
         "vent_prefer_temp_delta_f",
         "vent_prefer_dp_delta_f",
         "outdoor_staleness_max_s",
-        "summer_vent_min_runtime_s",
         "sw_fog_closes_vent",
         "sw_mister_closes_vent",
         "sw_dwell_gate_enabled",
@@ -160,8 +183,9 @@ mcp = FastMCP(
     manage setpoints, run the AI planner, and review performance.
     The greenhouse has temp/VPD bands, misters, fog, fans, heaters, and a vent.
     The planner sets registry-approved tunables that shape how the controller responds.
-    Crop-band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
-    read-only context in routine plans; use direct tunable pushes only for explicit overrides.""",
+    Band params (temp_low, temp_high, vpd_low, vpd_high) are dispatcher-owned
+    read-only context in routine plans. Temp comes from crop policy; house VPD is
+    derived from crop + zone policy. Use direct tunable pushes only for explicit overrides.""",
     # Bind explicitly so MCP_HTTP_HOST/PORT env vars actually take effect.
     # FastMCP only auto-reads FASTMCP_-prefixed env vars, so the
     # os.environ.setdefault block in __main__ was dead code. Reading the env
@@ -178,7 +202,7 @@ async def _db() -> asyncpg.Connection:
 
 
 async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> str | None:
-    """Persist a send_to_iris result from MCP-triggered manual planning."""
+    """Persist or refresh a send_to_iris result from MCP-triggered manual planning."""
     row = {
         "event_type": result["event_type"],
         "event_label": result.get("event_label"),
@@ -191,38 +215,31 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
         "hermes_run_id": result.get("hermes_run_id"),
     }
     explicit_status = result.get("status")
-    if explicit_status is None and result.get("delivered") is False:
+    if explicit_status is None and result.get("delivered") is False and result.get("gateway_status") is not None:
         explicit_status = "delivery_failed"
     if explicit_status is not None:
         row["status"] = explicit_status
     PlanDeliveryLogRow.model_validate(row)
 
-    if explicit_status is not None:
-        await conn.execute(
-            """
-            INSERT INTO plan_delivery_log
-              (event_type, event_label, session_key, wake_mode, gateway_status,
-               gateway_body, trigger_id, instance, status, hermes_run_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10)
-            """,
-            row["event_type"],
-            row["event_label"],
-            row["session_key"],
-            row["wake_mode"],
-            row["gateway_status"],
-            row["gateway_body"],
-            row["trigger_id"],
-            row["instance"],
-            explicit_status,
-            row["hermes_run_id"],
-        )
-        return explicit_status
     await conn.execute(
         """
-        INSERT INTO plan_delivery_log
+        INSERT INTO plan_delivery_log AS pdl
           (event_type, event_label, session_key, wake_mode, gateway_status,
-           gateway_body, trigger_id, instance, hermes_run_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9)
+           gateway_body, trigger_id, instance, status, hermes_run_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, COALESCE($9, 'pending'), $10)
+        ON CONFLICT (trigger_id) DO UPDATE
+          SET event_type     = EXCLUDED.event_type,
+              event_label    = EXCLUDED.event_label,
+              session_key    = COALESCE(EXCLUDED.session_key, pdl.session_key),
+              wake_mode      = COALESCE(EXCLUDED.wake_mode, pdl.wake_mode),
+              gateway_status = EXCLUDED.gateway_status,
+              gateway_body   = COALESCE(EXCLUDED.gateway_body, pdl.gateway_body),
+              instance       = COALESCE(EXCLUDED.instance, pdl.instance),
+              hermes_run_id  = COALESCE(EXCLUDED.hermes_run_id, pdl.hermes_run_id),
+              status         = CASE
+                                 WHEN pdl.status IN ('acked', 'plan_written') THEN pdl.status
+                                 ELSE EXCLUDED.status
+                               END
         """,
         row["event_type"],
         row["event_label"],
@@ -232,6 +249,7 @@ async def _insert_plan_delivery_log(conn: asyncpg.Connection, result: dict) -> s
         row["gateway_body"],
         row["trigger_id"],
         row["instance"],
+        explicit_status,
         row["hermes_run_id"],
     )
     return explicit_status
@@ -278,8 +296,9 @@ async def climate() -> str:
 @mcp.tool()
 async def scorecard(target_date: str = "") -> str:
     """Get the planner scorecard — 25 KPI metrics for a given day.
-    Includes: planner_score, compliance_pct (both in band), temp_compliance_pct,
-    vpd_compliance_pct, stress hours (heat/cold/vpd_high/vpd_low), utility usage
+    Includes: planner_score, compliance_pct (both in firmware-enforced band),
+    temp_compliance_pct, vpd_compliance_pct, stress hours
+    (heat/cold/vpd_high/vpd_low), utility usage
     (kwh, therms, water_gal, mister_water_gal), costs (electric/gas/water/total),
     dew point safety, and 7-day averages. Pass date as YYYY-MM-DD or omit for today.
 
@@ -368,7 +387,7 @@ async def forecast(hours: int = 72) -> str:
 
 @mcp.tool()
 async def get_setpoints() -> str:
-    """Get all current active setpoints (band values + planner tunables)."""
+    """Get all current active setpoints (firmware band values + planner tunables)."""
     conn = await _db()
     try:
         rows = await conn.fetch(
@@ -445,10 +464,10 @@ async def set_tunable(
     if parameter in FORCED_ON_SWITCH_PARAMS and value < 0.5:
         return json.dumps(
             {
-                "error": "controller_v2_locked_on",
+                "error": "controller_locked_on",
                 "parameter": parameter,
                 "value": value,
-                "hint": "Controller v2 is the live controller path; fallback to the legacy cascade now requires an operator/firmware rollback.",
+                "hint": "The unified band-first controller is locked ON; rollback requires an explicit firmware/config rollback outside the planner surface.",
             }
         )
 
@@ -463,10 +482,9 @@ async def set_tunable(
     # plan_id format `iris-oneshot-<YYYYMMDD-HHMM>` lets the next set_plan
     # call (which deactivates older plans) distinguish iris tactical pushes
     # from automatic SUNRISE/SUNSET plans and preserve them across boundaries.
-    # Contract v1.4 §2.C — stamp audit metadata into setpoint_plan.reason
-    # text so the trigger and instance survive on the row even though
-    # setpoint_plan has no dedicated columns yet. Searchable via
-    # `WHERE reason LIKE '%trigger=<uuid>%'`.
+    # Contract v1.5 — stamp audit metadata into dedicated setpoint_plan
+    # columns for dispatcher propagation; keep the suffix in reason for
+    # operator-readable compatibility with older queries.
     audit_suffix_parts = []
     if normalized_trigger_id:
         audit_suffix_parts.append(f"trigger={normalized_trigger_id}")
@@ -518,16 +536,22 @@ async def set_tunable(
 
             wrote_at = await conn.fetchval(
                 """
-                INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason)
-                VALUES (now(), $1, $2, $3, 'iris', $4)
+                INSERT INTO setpoint_plan
+                  (ts, parameter, value, plan_id, source, reason, trigger_id, planner_instance)
+                VALUES (now(), $1, $2, $3, 'iris', $4, $5::uuid, $6)
                 ON CONFLICT (ts, parameter, plan_id) DO UPDATE
-                  SET value = EXCLUDED.value, reason = EXCLUDED.reason
+                  SET value = EXCLUDED.value,
+                      reason = EXCLUDED.reason,
+                      trigger_id = EXCLUDED.trigger_id,
+                      planner_instance = EXCLUDED.planner_instance
                 RETURNING ts
                 """,
                 parameter,
                 value,
                 plan_id,
                 reason_with_audit,
+                normalized_trigger_id,
+                planner_instance,
             )
             if normalized_trigger_id:
                 await conn.execute(
@@ -576,15 +600,16 @@ async def plan_run(mode: str = "normal") -> str:
 
     sys.path.insert(0, "/srv/verdify/ingestor")
     try:
-        from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, send_to_iris
+        from iris_planner import CONTEXT_GATHER_FAILED_SENTINEL, gather_context, prepare_delivery_result, send_to_iris
 
         mode_clean = (mode or "normal").strip().lower()
         context = gather_context()
+        label = f"Ad-hoc planning cycle via MCP plan_run(mode={mode_clean})"
         if context == CONTEXT_GATHER_FAILED_SENTINEL:
             result = {
                 "delivered": False,
                 "event_type": "MANUAL",
-                "event_label": f"Ad-hoc planning cycle via MCP plan_run(mode={mode_clean})",
+                "event_label": label,
                 "session_key": None,
                 "wake_mode": None,
                 "gateway_status": None,
@@ -594,14 +619,27 @@ async def plan_run(mode: str = "normal") -> str:
                 "instance": "local",
             }
         else:
-            label = f"Ad-hoc planning cycle via MCP plan_run(mode={mode_clean})"
             if mode_clean in {"ack", "ack_only", "ack-only", "smoke", "validation"}:
+                label = f"validation ack-only: {label}"
                 context = (
                     "VALIDATION MODE: acknowledge-only smoke. Do not call set_plan or set_tunable. "
                     "Call acknowledge_trigger with the audit trigger_id and planner_instance, "
                     "then stop.\n\n"
                 ) + context
-            result = send_to_iris("MANUAL", label, context=context, instance="local")
+
+            pre_result = prepare_delivery_result("MANUAL", label, instance="local")
+            conn = await _db()
+            try:
+                await _insert_plan_delivery_log(conn, pre_result)
+            finally:
+                await conn.close()
+            result = send_to_iris(
+                "MANUAL",
+                label,
+                context=context,
+                instance="local",
+                trigger_id=pre_result["trigger_id"],
+            )
 
         conn = await _db()
         try:
@@ -682,7 +720,7 @@ async def query(sql: str) -> str:
     sql_upper = sql_stripped.upper()
     if not (sql_upper.startswith("SELECT") or sql_upper.startswith("WITH")):
         return json.dumps({"error": "Only SELECT/WITH queries are allowed"})
-    # Keep this as a simple one-statement escape hatch. The DB transaction is
+    # Keep this as a simple one-statement diagnostic path. The DB transaction is
     # read-only below, but rejecting multi-statement text avoids surprising
     # behavior and keeps tool output bounded.
     if ";" in sql_stripped.rstrip(";"):
@@ -775,7 +813,7 @@ async def set_plan(
     if not writable_params:
         return json.dumps(
             {
-                "error": "Plan contains only crop-band params; these are dispatcher-owned read-only context",
+                "error": "Plan contains only dispatcher-owned policy params; these are read-only context",
                 "band_owned_params": sorted(BAND_OWNED_PARAMS),
             }
         )
@@ -787,9 +825,26 @@ async def set_plan(
     if missing_required:
         return json.dumps(
             {
-                "error": "Plan transitions must include all 24 tactical Tier 1 params",
+                "error": f"Plan transitions must include all {len(PLAN_REQUIRED_PARAMS)} tactical Tier 1 params",
                 "missing_required_params": missing_required,
                 "required_params": sorted(PLAN_REQUIRED_PARAMS),
+                "band_owned_params": sorted(BAND_OWNED_PARAMS),
+            }
+        )
+    non_policy_params = sorted(
+        {
+            param
+            for wp in plan.transitions
+            for param in wp.params
+            if param not in BAND_OWNED_PARAMS and param not in PLANNER_PUSHABLE_REG
+        }
+    )
+    if non_policy_params:
+        return json.dumps(
+            {
+                "error": "Plan contains non-policy tunables; MCP only persists planner-policy params",
+                "non_policy_params": non_policy_params,
+                "allowed_params": sorted(PLANNER_PUSHABLE_REG),
                 "band_owned_params": sorted(BAND_OWNED_PARAMS),
             }
         )
@@ -824,6 +879,43 @@ async def set_plan(
                 structured_payload = sp
             elif structured_warning is None:
                 structured_warning = sw
+
+    params_seen = sorted({param for wp in plan.transitions for param in wp.params if param not in BAND_OWNED_PARAMS})
+    conditions_summary: str | None = None
+    if structured_payload:
+        try:
+            structured = json.loads(structured_payload)
+            conditions = structured.get("conditions") or {}
+            stress_windows = structured.get("stress_windows") or []
+            parts: list[str] = []
+            if conditions.get("notes"):
+                parts.append(str(conditions["notes"]))
+            weather_bits = []
+            for key, label in (
+                ("outdoor_temp_peak_f", "outdoor peak"),
+                ("outdoor_rh_min_pct", "RH min"),
+                ("solar_peak_w_m2", "solar peak"),
+                ("cloud_cover_avg_pct", "cloud cover"),
+            ):
+                if conditions.get(key) is not None:
+                    weather_bits.append(f"{label}: {conditions[key]}")
+            if weather_bits:
+                parts.append(", ".join(weather_bits))
+            if stress_windows:
+                labels = []
+                for window in stress_windows[:4]:
+                    labels.append(
+                        "{kind} {start}-{end} {severity}".format(
+                            kind=window.get("kind", "stress"),
+                            start=window.get("start", "?"),
+                            end=window.get("end", "?"),
+                            severity=window.get("severity", "?"),
+                        )
+                    )
+                parts.append("stress windows: " + "; ".join(labels))
+            conditions_summary = " | ".join(parts)[:2000] if parts else None
+        except (TypeError, ValueError):
+            conditions_summary = None
 
     conn = await _db()
     try:
@@ -927,10 +1019,10 @@ async def set_plan(
                      AND plan_id NOT LIKE 'iris-oneshot-%'"""
             )
 
-            # Write new waypoints. Crop-band params are read-only planner
-            # context, owned by crop profiles + dispatcher; dropping them
-            # here prevents future clamp storms from semantically valid but
-            # owner-misaligned plans.
+            # Write new waypoints. Crop-band and lighting-policy params are
+            # read-only planner context, owned by DB policy functions +
+            # dispatcher; dropping them here prevents future clamp storms from
+            # semantically valid but owner-misaligned plans.
             rows_written = 0
             band_params_dropped = 0
             forced_on_params = 0
@@ -943,13 +1035,17 @@ async def set_plan(
                         value = 1.0
                         forced_on_params += 1
                     await conn.execute(
-                        """INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason, created_at, is_active, greenhouse_id)
-                           VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery')""",
+                        """INSERT INTO setpoint_plan
+                             (ts, parameter, value, plan_id, source, reason, created_at,
+                              is_active, greenhouse_id, trigger_id, planner_instance)
+                           VALUES ($1, $2, $3, $4, 'iris', $5, now(), true, 'vallery', $6::uuid, $7)""",
                         wp.ts,
                         param,
                         float(value),
                         plan.plan_id,
                         wp.reason or "",
+                        normalized_trigger_id,
+                        planner_instance,
                     )
                     rows_written += 1
 
@@ -962,8 +1058,10 @@ async def set_plan(
             journal_created_at = await conn.fetchval(
                 """INSERT INTO plan_journal
                      (plan_id, created_at, hypothesis, experiment, expected_outcome,
-                      hypothesis_structured, greenhouse_id, planner_instance, trigger_id)
-                   VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid)
+                      hypothesis_structured, greenhouse_id, planner_instance, trigger_id,
+                      conditions_summary, params_changed)
+                   VALUES ($1, now(), $2, $3, $4, $5::jsonb, 'vallery', $6, $7::uuid,
+                           $8, $9::text[])
                    RETURNING created_at""",
                 plan.plan_id,
                 plan.hypothesis,
@@ -972,6 +1070,8 @@ async def set_plan(
                 structured_payload,
                 planner_instance,
                 normalized_trigger_id,
+                conditions_summary,
+                params_seen,
             )
             if normalized_trigger_id:
                 await conn.execute(
@@ -1153,6 +1253,16 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
         async with conn.transaction():
             anchor_row = await conn.fetchrow("SELECT fn_plan_anchor_score($1) AS anchor", ev.plan_id)
             anchor_score = anchor_row["anchor"] if anchor_row else None
+            guardrail_row = await conn.fetchrow(
+                """
+                SELECT guardrail_events, held_guardrail_events,
+                       dispatched_guardrail_events, vpd_high_guardrail_events,
+                       guardrail_penalty
+                  FROM v_plan_guardrail_scorecard
+                 WHERE plan_id = $1
+                """,
+                ev.plan_id,
+            )
 
             await conn.execute(
                 """UPDATE plan_journal SET
@@ -1234,6 +1344,7 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
                 "plan_id": ev.plan_id,
                 "outcome_score": ev.outcome_score,
                 "anchor_score": anchor_score,
+                "guardrail_scorecard": dict(guardrail_row) if guardrail_row else None,
                 "deviation_warning": warning,
                 "lesson_row_id": lesson_row_id,
             }
@@ -1894,9 +2005,40 @@ _OPENAI_EMBED_MODEL = "text-embedding-3-large"
 _OPENAI_EMBED_DIM = 3072
 
 
+def _openai_api_key() -> str | None:
+    key = os.environ.get("OPENAI_API_KEY")
+    if key:
+        return key
+
+    for path in _OPENAI_KEY_FILES:
+        try:
+            if not path.exists():
+                continue
+            text = path.read_text().strip()
+        except OSError:
+            continue
+
+        if path.name.endswith(".env"):
+            for raw_line in text.splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line.removeprefix("export ").strip()
+                if not line.startswith("OPENAI_API_KEY="):
+                    continue
+                candidate = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if candidate:
+                    return candidate
+        elif text:
+            return text
+
+    return None
+
+
 async def _embed_query(text: str) -> list[float] | None:
     """Embed a query string for vector retrieval. None on failure."""
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = _openai_api_key()
     if not api_key:
         return None
     try:
@@ -1973,32 +2115,39 @@ async def lessons_search(query: str, top_k: int = 10, min_confidence: str = "low
 
 
 @mcp.tool()
-async def knowledge_search(query: str, top_k: int = 8, source_types: str = "site_doc,playbook") -> str:
-    """Semantic search across docs, planner playbook, and historical plans.
+async def knowledge_search(
+    query: str,
+    top_k: int = 8,
+    source_types: str = "lesson,plan,site_doc,playbook,observation",
+) -> str:
+    """Semantic search across docs, playbook, historical plans, lessons, and observations.
 
     Use this when you need reference-level knowledge: "what does the playbook
     say about vent oscillation?", "summarize the controller mode hierarchy",
     "have I seen a 1100 W/m² solar day before, and what did I try?". The
     source_types argument lets you scope the search:
 
-      site_doc — operator-facing docs in docs/**/*.md
+      site_doc — public website Markdown plus operator-facing docs in docs/**/*.md
       playbook — the planner playbook + skills mirror (chunked by heading)
       plan     — past plan_journal hypotheses + actual_outcome rows
       lesson   — planner_lessons rows (same corpus as lessons_search)
+      observation — historical crop observations, health notes, and stress tags
 
     Args:
         query: free-text query
         top_k: max results (default 8, cap 25)
-        source_types: comma-separated subset of the four sources
+        source_types: comma-separated subset of the five sources
 
     Returns: JSON array of {source_type, source_id, content, metadata, distance}.
     """
     top_k = max(1, min(int(top_k), 25))
     types = [s.strip() for s in source_types.split(",") if s.strip()]
-    valid = {"lesson", "plan", "site_doc", "playbook"}
+    valid = {"lesson", "plan", "site_doc", "playbook", "observation"}
     types = [t for t in types if t in valid]
     if not types:
-        return json.dumps({"error": "source_types must include at least one of: lesson, plan, site_doc, playbook"})
+        return json.dumps(
+            {"error": "source_types must include at least one of: lesson, plan, site_doc, playbook, observation"}
+        )
 
     embedding = await _embed_query(query)
     if embedding is None:
@@ -2009,7 +2158,15 @@ async def knowledge_search(query: str, top_k: int = 8, source_types: str = "site
         rows = await conn.fetch(
             """
             SELECT source_type, source_id, chunk_idx, content, metadata, distance
-              FROM fn_search_embeddings($1::vector, $2, $3::text[])
+              FROM fn_search_embeddings($1::vector, $2, $3::text[]) h
+             WHERE h.source_type <> 'lesson'
+                OR EXISTS (
+                     SELECT 1
+                       FROM planner_lessons pl
+                      WHERE pl.id::text = h.source_id
+                        AND pl.is_active = true
+                        AND pl.superseded_by IS NULL
+                   )
             """,
             _vector_literal(embedding),
             top_k,

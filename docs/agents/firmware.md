@@ -27,12 +27,12 @@ ESP32 controller code, build pipeline, replay validation, OTA, sensor health.
 
 ## Gates
 
-**Replay is a permanent gate for firmware changes.** Any structural change to `greenhouse_logic.h` must pass `firmware/test/test_greenhouse_logic.cpp` *and* replay against 8 months of real telemetry (see `CLAUDE.md` at repo root — `make firmware-check`). See `docs/BCDR-AND-OPERATIONS.md` and the prior `docs/BACKLOG-SAAS-ALIGNED.md` sprint notes for context on why.
+**Replay is a permanent gate for firmware changes.** Any structural change to `greenhouse_logic.h` must pass `firmware/test/test_greenhouse_logic.cpp` *and* replay against 8 months of real telemetry. Use `make test-firmware`, `make firmware-invariants`, and `make firmware-replay-worktree` while the candidate is still uncommitted; use `make firmware-replay OLD=<ref> NEW=<ref>` once both sides are committed refs. See `CLAUDE.md` at repo root for the deploy protocol and OTA freeze rules.
 
 ## Ask coordinator before
 
 - Adding an override flag that isn't already in `firmware/lib/greenhouse_types.h`
-- Changing the 7-mode state machine's transition logic (physics invariant territory)
+- Changing the band-first state machine's transition logic (physics invariant territory)
 - Bumping firmware version in a way that requires ingestor / planner code changes
 - Touching `controls.yaml` in ways that rename or remove entities (entity_map.py depends on these)
 

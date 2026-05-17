@@ -16,7 +16,7 @@ Focus areas 1-5 from the broad-launch backlog now have a concrete split between 
 
 ### Completed in the launch window
 
-- [x] **Planner reliability - expected trigger ledger.** Added `planner_trigger_ledger` so expected SUNRISE/SUNSET/MIDNIGHT/transition triggers exist before OpenClaw delivery. Missed required cycles are now visible even when no `plan_delivery_log` row is created.
+- [x] **Planner reliability - expected trigger ledger.** Added `planner_trigger_ledger` so expected SUNRISE/SUNSET/MIDNIGHT/transition triggers exist before Hermes delivery. Missed required cycles are now visible even when no `plan_delivery_log` row is created.
 - [x] **Planner reliability - SLA lifecycle.** Required triggers now have explicit due times and public health counts for missed expected triggers, overdue delivered triggers, required failures, recent expected triggers, and latest required trigger outcomes.
 - [x] **Planner reliability - active/future tunable guard.** Alert monitor now validates active/future planner rows against the tunable registry and blocks `sw_fsm_controller_enabled=0` from silently reviving the legacy controller path.
 - [x] **Planner reliability - public health surface.** Public API exposes `/api/v1/public/planner-health`, and evidence snapshots include `planner_health` beside `data_health_status`.
@@ -26,7 +26,7 @@ Focus areas 1-5 from the broad-launch backlog now have a concrete split between 
 
 ### Still pending
 
-- [ ] **Planner quality - Gemma-sized context pack.** Build a smaller, versioned context pack with current state, 24h history, 7d score trend, active/future plan, forecast, lessons, open alerts, setpoint confirmation, and context-completeness flags.
+- [ ] **Planner quality - Hermes context pack.** Build a versioned context pack with current state, 24h history, 7d score trend, active/future plan, forecast, lessons, open alerts, setpoint confirmation, and context-completeness flags.
 - [ ] **Planner quality - distilled site + lessons memory.** Generate stable planner memory from safety architecture, known limits, validated lessons, physical constraints, and launch claims rather than pasting raw site pages.
 - [ ] **Planner quality - post-plan self-critique.** Each full plan should record assumptions, expected stress windows, intentional tunable changes, unchanged tunables, and falsification evidence.
 - [ ] **Planner quality - scorecard feedback loop.** Feed "why did we fail?" stress-window analysis into the next required plan.
@@ -54,7 +54,7 @@ Focus areas 1-5 from the broad-launch backlog now have a concrete split between 
 
 | ID | Status | Owner | Task | Acceptance | Dependencies |
 |---|---|---|---|---|---|
-| L1.1 | done | web + firmware + ingestor + genai | Architecture SVG | Shareable diagram shows ESP32 -> ingestor/Home Assistant -> TimescaleDB -> OpenClaw/Iris local Gemma4 + cloud peer -> plan_journal -> dispatcher -> ESP32; labels evidence loop and safety split without brittle table/view/dashboard counts | Agent factual review |
+| L1.1 | done | web + firmware + ingestor + genai | Architecture SVG | Shareable diagram shows ESP32 -> ingestor/Home Assistant -> TimescaleDB -> Hermes/Iris GPT-5.5 -> plan_journal -> dispatcher -> ESP32; labels evidence loop and safety split without brittle table/view/dashboard counts | Agent factual review |
 | L1.2 | done | web + firmware + Jason | Bill of materials | Sensor/probe/ESP32/relay/mister/heater list exists with enough detail for homelab readers | Privacy scrub |
 | L1.3 | done | web + saas/coordinator | Cost callout | Public page gives one clear operating-cost/API-cost summary without corrupted dollar signs | Current cost query |
 | L1.4 | done | web + coordinator | Outage story | Evidence page owns April 22-25 zero-plan/VPD-stress run as a transparent incident, not an unexplained archive gap | Data pull from plan archive |

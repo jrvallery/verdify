@@ -26,6 +26,7 @@ export const sharedPageComponents: SharedLayout = {
             "Planning Archive": "/data/plans",
             Intelligence: "/reference/intelligence",
             FAQ: "/reference/faq",
+            GitHub: "https://github.com/jrvallery/verdify",
             Contact: "/start/contact",
         },
     }),

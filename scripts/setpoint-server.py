@@ -26,6 +26,7 @@ import logging
 import os
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -48,8 +49,8 @@ LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 8200
 
 LIGHTS = {
-    "main": {"ha_entity": "light.greenhouse_main", "equipment": "grow_light_main"},
-    "grow": {"ha_entity": "light.greenhouse_grow", "equipment": "grow_light_grow"},
+    "main": {"ha_entity": "switch.greenhouse_main", "equipment": "grow_light_main"},
+    "grow": {"ha_entity": "switch.greenhouse_grow", "equipment": "grow_light_grow"},
 }
 
 FIRMWARE_SETPOINT_PARAMS = {
@@ -70,7 +71,22 @@ FIRMWARE_SETPOINT_PARAMS = {
     "fog_time_window_end",
     "fog_time_window_start",
     "gl_dli_target",
+    "gl_grow_dli_target",
+    "gl_grow_lux_hysteresis",
+    "gl_grow_lux_threshold",
+    "gl_grow_min_off_s",
+    "gl_grow_min_on_s",
+    "gl_grow_sunrise_hour",
+    "gl_grow_sunset_hour",
+    "gl_lux_hysteresis",
     "gl_lux_threshold",
+    "gl_main_dli_target",
+    "gl_main_lux_hysteresis",
+    "gl_main_lux_threshold",
+    "gl_main_min_off_s",
+    "gl_main_min_on_s",
+    "gl_main_sunrise_hour",
+    "gl_main_sunset_hour",
     "gl_sunrise_hour",
     "gl_sunset_hour",
     "irrig_center_duration_min",
@@ -129,6 +145,8 @@ FIRMWARE_SETPOINT_PARAMS = {
     "sw_fog_closes_vent",
     "sw_fsm_controller_enabled",
     "sw_gl_auto_mode",
+    "sw_gl_grow_auto_mode",
+    "sw_gl_main_auto_mode",
     "sw_irrigation_center_enabled",
     "sw_irrigation_enabled",
     "sw_irrigation_wall_enabled",
@@ -153,6 +171,19 @@ FIRMWARE_SETPOINT_PARAMS = {
 }
 
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+BAND_OWNED_PARAMS = frozenset(
+    {
+        "temp_low",
+        "temp_high",
+        "vpd_low",
+        "vpd_high",
+        "vpd_target_south",
+        "vpd_target_west",
+        "vpd_target_east",
+        "vpd_target_center",
+    }
+)
+LIGHTING_POLICY_PARAMS = frozenset({"gl_dli_target", "gl_sunrise_hour", "gl_sunset_hour", "sw_gl_auto_mode"})
 
 logging.basicConfig(
     level=logging.INFO,
@@ -164,6 +195,7 @@ log = logging.getLogger(__name__)
 # Global state
 _db_pool = None
 _ha_token = None
+_main_loop: asyncio.AbstractEventLoop | None = None
 _light_state = {"main": None, "grow": None}  # True=on, False=off, None=unknown
 
 
@@ -177,7 +209,8 @@ def ha_call(service: str, entity_id: str) -> bool:
     global _ha_token
     if _ha_token is None:
         _ha_token = load_token()
-    url = f"{HA_URL}/api/services/light/{service}"
+    domain = entity_id.split(".", 1)[0]
+    url = f"{HA_URL}/api/services/{domain}/{service}"
     body = json.dumps({"entity_id": entity_id}).encode()
     req = urllib.request.Request(
         url,
@@ -193,6 +226,16 @@ def ha_call(service: str, entity_id: str) -> bool:
     except Exception as e:
         log.error("HA call failed: %s %s → %s", service, entity_id, e)
         return False
+
+
+def ha_confirm_state(entity_id: str, expected: str, timeout_s: float = 8.0) -> bool:
+    """Poll HA state after a service call; HTTP 200 alone does not prove Lutron moved."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if ha_get_state(entity_id) == expected:
+            return True
+        time.sleep(0.25)
+    return False
 
 
 def ha_get_state(entity_id: str) -> str | None:
@@ -233,6 +276,20 @@ async def record_state_change(equipment: str, is_on: bool) -> None:
         log.info("State recorded: %s → %s", equipment, "ON" if is_on else "OFF")
     except Exception as e:
         log.error("DB write failed: %s", e)
+
+
+def record_state_change_sync(equipment: str, is_on: bool) -> bool:
+    """Record state changes from the HTTP server thread on the main asyncio loop."""
+    if _main_loop is None:
+        log.error("DB write skipped: main loop is not ready")
+        return False
+    try:
+        future = asyncio.run_coroutine_threadsafe(record_state_change(equipment, is_on), _main_loop)
+        future.result(timeout=5)
+        return True
+    except Exception as e:
+        log.error("DB write failed: %s", e)
+        return False
 
 
 def get_db_url() -> str:
@@ -288,16 +345,114 @@ def get_setpoint_text_sync() -> str:
             k, v = line.split("=", 1)
             params[k.strip()] = v.strip()
 
-    # Step 2: Overlay active plan values (v_active_plan resolves supersession by created_at DESC)
+    # Step 2: Overlay active plan values (v_active_plan resolves supersession
+    # by created_at DESC). Dispatcher-owned band/lighting params stay on the
+    # latest dispatcher push or DB policy overlay; active plan rows are not
+    # authoritative for crop/house bands or photoperiod.
+    plan_params: set[str] = set()
     result = subprocess.run(
-        db_cmd + ["SELECT parameter, value FROM v_active_plan"], capture_output=True, text=True, timeout=5
+        db_cmd
+        + [
+            "SELECT parameter, value FROM v_active_plan "
+            "WHERE parameter NOT IN ("
+            "'temp_low','temp_high','vpd_low','vpd_high',"
+            "'vpd_target_south','vpd_target_west','vpd_target_east','vpd_target_center',"
+            "'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode'"
+            ")"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
     for line in result.stdout.strip().split("\n"):
         if "=" in line:
             k, v = line.split("=", 1)
+            plan_params.add(k.strip())
             params[k.strip()] = v.strip()
 
-    # Step 2b: Operator recording quiet mode. The dispatcher maintains this
+    # Step 2a: Overlay crop/house band policy. This mirrors the ingestor
+    # dispatcher so the legacy ESP32 pull path cannot serve stale temp/VPD or
+    # zone VPD targets after policy functions change.
+    result = subprocess.run(
+        db_cmd
+        + [
+            "WITH crop AS (SELECT * FROM fn_band_setpoints(now())), "
+            "house AS (SELECT * FROM fn_house_vpd_control_band(now())), "
+            "zone AS (SELECT * FROM fn_zone_vpd_targets(now())) "
+            "SELECT parameter, value FROM (VALUES "
+            "('temp_low', (SELECT round(temp_low::numeric, 1)::text FROM crop)), "
+            "('temp_high', (SELECT round(temp_high::numeric, 1)::text FROM crop)), "
+            "('vpd_low', (SELECT round(house_vpd_low::numeric, 2)::text FROM house)), "
+            "('vpd_high', (SELECT round(house_vpd_high::numeric, 2)::text FROM house)), "
+            "('vpd_target_south', (SELECT round(vpd_target_south::numeric, 2)::text FROM zone)), "
+            "('vpd_target_west', (SELECT round(vpd_target_west::numeric, 2)::text FROM zone)), "
+            "('vpd_target_east', (SELECT round(vpd_target_east::numeric, 2)::text FROM zone)), "
+            "('vpd_target_center', (SELECT round(vpd_target_center::numeric, 2)::text FROM zone))"
+            ") AS v(parameter, value) WHERE value IS NOT NULL"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    for line in result.stdout.strip().split("\n"):
+        if "=" in line:
+            k, v = line.split("=", 1)
+            if k.strip() in BAND_OWNED_PARAMS:
+                params[k.strip()] = v.strip()
+
+    # Step 2b: Overlay crop-driven lighting policy. This mirrors the ingestor
+    # dispatcher so the legacy ESP32 pull path cannot drift from direct pushes.
+    result = subprocess.run(
+        db_cmd
+        + [
+            "SELECT parameter, value FROM fn_lighting_policy(now(), 'vallery') p "
+            "CROSS JOIN LATERAL (VALUES "
+            "('gl_dli_target', round(p.target_dli::numeric, 1)::text), "
+            "('gl_sunrise_hour', p.sunrise_hour::text), "
+            "('gl_sunset_hour', p.cutoff_hour::text), "
+            "('sw_gl_auto_mode', '1')"
+            ") AS v(parameter, value)"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    for line in result.stdout.strip().split("\n"):
+        if "=" in line:
+            k, v = line.split("=", 1)
+            if k.strip() in LIGHTING_POLICY_PARAMS:
+                params[k.strip()] = v.strip()
+
+    # Step 2b.1: Seed the new per-circuit lighting state-machine params from
+    # crop policy + Tempest threshold evidence, but let active planner rows
+    # override them. This keeps the fallback pull endpoint aligned with the
+    # dispatcher without taking per-circuit control away from Iris.
+    result = subprocess.run(
+        db_cmd
+        + [
+            "SELECT parameter, value FROM fn_lighting_circuit_policy(now(), 'vallery') p "
+            "CROSS JOIN LATERAL (VALUES "
+            "('gl_' || p.light_key || '_dli_target', round(p.dli_target::numeric, 1)::text), "
+            "('gl_' || p.light_key || '_sunrise_hour', p.start_hour::text), "
+            "('gl_' || p.light_key || '_sunset_hour', p.cutoff_hour::text), "
+            "('gl_' || p.light_key || '_lux_threshold', round(p.lux_on_threshold::numeric, 0)::text), "
+            "('gl_' || p.light_key || '_lux_hysteresis', round(p.lux_hysteresis::numeric, 0)::text), "
+            "('gl_' || p.light_key || '_min_on_s', p.min_on_s::text), "
+            "('gl_' || p.light_key || '_min_off_s', p.min_off_s::text), "
+            "('sw_gl_' || p.light_key || '_auto_mode', CASE WHEN p.auto_enabled THEN '1' ELSE '0' END)"
+            ") AS v(parameter, value)"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    for line in result.stdout.strip().split("\n"):
+        if "=" in line:
+            k, v = line.split("=", 1)
+            if k.strip() not in plan_params:
+                params[k.strip()] = v.strip()
+
+    # Step 2c: Operator recording quiet mode. The dispatcher maintains this
     # overlay during normal cycles; the ESP32 pull endpoint must honor it too
     # so an active plan cannot undo quiet mode between dispatcher runs.
     result = subprocess.run(
@@ -420,21 +575,49 @@ class LutronHandler(BaseHTTPRequestHandler):
         service = f"turn_{action}"
         success = ha_call(service, cfg["ha_entity"])
 
-        if success:
-            is_on = action == "on"
-            _light_state[name] = is_on
-            # Record state change async
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(record_state_change(cfg["equipment"], is_on))
-            loop.close()
-            self._respond(200, {"light": name, "action": action, "success": True})
-            log.info("Light %s → %s", name, action.upper())
-        else:
+        if not success:
             self._respond(502, {"light": name, "action": action, "success": False, "error": "HA call failed"})
+            return
+
+        expected = "on" if action == "on" else "off"
+        confirmed = ha_confirm_state(cfg["ha_entity"], expected)
+        if not confirmed:
+            actual = ha_get_state(cfg["ha_entity"])
+            self._respond(
+                504,
+                {
+                    "light": name,
+                    "action": action,
+                    "success": False,
+                    "entity": cfg["ha_entity"],
+                    "expected": expected,
+                    "actual": actual,
+                    "error": "HA state did not confirm requested Lutron state",
+                },
+            )
+            log.error("Light %s %s not confirmed: expected=%s actual=%s", name, action.upper(), expected, actual)
+            return
+
+        is_on = action == "on"
+        _light_state[name] = is_on
+        db_recorded = record_state_change_sync(cfg["equipment"], is_on)
+        self._respond(
+            200,
+            {
+                "light": name,
+                "action": action,
+                "success": True,
+                "entity": cfg["ha_entity"],
+                "confirmed_state": expected,
+                "db_recorded": db_recorded,
+            },
+        )
+        log.info("Light %s → %s confirmed via %s", name, action.upper(), cfg["ha_entity"])
 
 
 async def main():
-    global _db_pool
+    global _db_pool, _main_loop
+    _main_loop = asyncio.get_running_loop()
 
     log.info("Starting Lutron proxy on %s:%d", LISTEN_HOST, LISTEN_PORT)
 

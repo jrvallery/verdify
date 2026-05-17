@@ -162,6 +162,10 @@ STATE_MAP: dict[str, str] = {
     # `seal_enter` etc. Populated by controls.yaml from
     # ctl_state.last_mode_reason on every cycle.
     "mode_reason": "mode_reason",
+    "gl_main_state": "gl_main_state",
+    "gl_main_reason": "gl_main_reason",
+    "gl_grow_state": "gl_grow_state",
+    "gl_grow_reason": "gl_grow_reason",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -242,11 +246,27 @@ SETPOINT_MAP: dict[str, str] = {
     "gl_lux_hysteresis": "gl_lux_hysteresis",
     "gl_start_hour": "gl_sunrise_hour",
     "gl_cutoff_hour": "gl_sunset_hour",
+    "gl_main_dli_target": "gl_main_dli_target",
+    "gl_main_lux_threshold": "gl_main_lux_threshold",
+    "gl_main_lux_hysteresis": "gl_main_lux_hysteresis",
+    "gl_main_sunrise_hour": "gl_main_sunrise_hour",
+    "gl_main_sunset_hour": "gl_main_sunset_hour",
+    "gl_main_min_on_s": "gl_main_min_on_s",
+    "gl_main_min_off_s": "gl_main_min_off_s",
+    "gl_grow_dli_target": "gl_grow_dli_target",
+    "gl_grow_lux_threshold": "gl_grow_lux_threshold",
+    "gl_grow_lux_hysteresis": "gl_grow_lux_hysteresis",
+    "gl_grow_sunrise_hour": "gl_grow_sunrise_hour",
+    "gl_grow_sunset_hour": "gl_grow_sunset_hour",
+    "gl_grow_min_on_s": "gl_grow_min_on_s",
+    "gl_grow_min_off_s": "gl_grow_min_off_s",
     # Switches (boolean, tracked as 0.0/1.0)
     "economiser_enabled": "sw_economiser_enabled",
     "fog_closes_vent": "sw_fog_closes_vent",
     "mister_closes_vent": "sw_mister_closes_vent",  # sprint-15.1 fix 7: closes sprint-21 follow-up routing gap
     "gl_auto_mode": "sw_gl_auto_mode",
+    "gl_main_auto_mode": "sw_gl_main_auto_mode",
+    "gl_grow_auto_mode": "sw_gl_grow_auto_mode",
     "irrigation_enabled": "sw_irrigation_enabled",
     "irrigation_wall_enabled": "sw_irrigation_wall_enabled",
     "irrigation_center_enabled": "sw_irrigation_center_enabled",
@@ -286,7 +306,7 @@ SETPOINT_MAP: dict[str, str] = {
     # Phase-2 dwell gate (plan firmware stabilization).
     "dwell_gate__ms_": "dwell_gate_ms",
     "dwell_gate_enabled": "sw_dwell_gate_enabled",
-    # Controller v2: band-first FSM.
+    # Band-first controller.
     "fsm_controller_enabled": "sw_fsm_controller_enabled",
     "mist_backoff__s_": "mist_backoff_s",
 }
@@ -314,7 +334,7 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     # (vent_latch_timer_s). See migration 082.
     "relief_cycle_count": "relief_cycle_count",  # SensorInfo, 0-max_relief_cycles
     "vent_latch_timer_s": "vent_latch_timer_s",  # SensorInfo, 0-1800 s
-    # Controller v2 diagnostics (migration 094): expose the timers that drive
+    # Band-first controller diagnostics (migration 094): expose the timers that drive
     # SEALED_MIST entry/backoff plus the hot/dry vent moisture-assist flag.
     "sealed_timer_s": "sealed_timer_s",
     "vpd_watch_timer_s": "vpd_watch_timer_s",
@@ -419,6 +439,7 @@ CFG_READBACK_MAP: dict[str, str] = {
     "vpd_target_center__kpa_": "vpd_target_center",
     "mister_center_penalty": "mister_center_penalty",
     # Mister vent coordination
+    "fog_closes_vent": "sw_fog_closes_vent",
     "sw_mister_closes_vent": "sw_mister_closes_vent",
     "mister_closes_vent": "sw_mister_closes_vent",
     # Sprint-15: summer thermal-driven vent readbacks.
@@ -464,6 +485,22 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___dehum_aggressive__kpa_": "dehum_aggressive_kpa",
     "cfg___vent_latch_timeout__ms_": "vent_latch_timeout_ms",
     "cfg___gl_lux_hysteresis": "gl_lux_hysteresis",
+    "cfg_gl_main_dli_target": "gl_main_dli_target",
+    "cfg_gl_main_lux_threshold": "gl_main_lux_threshold",
+    "cfg_gl_main_lux_hysteresis": "gl_main_lux_hysteresis",
+    "cfg_gl_main_sunrise_hour": "gl_main_sunrise_hour",
+    "cfg_gl_main_sunset_hour": "gl_main_sunset_hour",
+    "cfg_gl_main_min_on_s": "gl_main_min_on_s",
+    "cfg_gl_main_min_off_s": "gl_main_min_off_s",
+    "cfg_gl_main_auto_mode": "sw_gl_main_auto_mode",
+    "cfg_gl_grow_dli_target": "gl_grow_dli_target",
+    "cfg_gl_grow_lux_threshold": "gl_grow_lux_threshold",
+    "cfg_gl_grow_lux_hysteresis": "gl_grow_lux_hysteresis",
+    "cfg_gl_grow_sunrise_hour": "gl_grow_sunrise_hour",
+    "cfg_gl_grow_sunset_hour": "gl_grow_sunset_hour",
+    "cfg_gl_grow_min_on_s": "gl_grow_min_on_s",
+    "cfg_gl_grow_min_off_s": "gl_grow_min_off_s",
+    "cfg_gl_grow_auto_mode": "sw_gl_grow_auto_mode",
 }
 
 # ──────────────────────────────────────────────────────────────

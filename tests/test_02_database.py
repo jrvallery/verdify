@@ -61,14 +61,29 @@ class TestSchemaIntegrity:
         "v_forecast_plan_outcome_mart",
         "v_grower_economics_story",
         "v_greenhouse_id_default_audit",
+        "v_band_trace_recent",
+        "v_band_trace_latest",
+        "v_lighting_status_now",
+        "v_lighting_circuit_status_now",
+        "v_lighting_daily",
     ]
 
     REQUIRED_FUNCTIONS = [
         "fn_planner_scorecard",
         "fn_stress_summary",
         "fn_band_setpoints",
+        "fn_band_timeline",
+        "fn_house_vpd_control_band",
+        "fn_band_trace",
+        "fn_band_setpoint_provenance",
         "fn_compliance_pct",
         "fn_solar_altitude",
+        "fn_setpoint_at",
+        "fn_timeline_setpoint_value",
+        "fn_lighting_policy",
+        "fn_lighting_circuit_policy",
+        "fn_lighting_timeline",
+        "fn_lighting_lux_threshold_recommendation",
     ]
 
     def test_tables_exist(self):
@@ -171,6 +186,298 @@ class TestViewsCompute:
         except RuntimeError:
             # Function might have required args — try with defaults
             db_query("SELECT 1")  # Just verify DB is up
+
+    def test_house_vpd_control_band_returns(self):
+        row = db_query_rows(
+            """
+            SELECT crop_vpd_low,
+                   crop_vpd_high,
+                   house_vpd_low,
+                   house_vpd_high,
+                   house_vpd_high - house_vpd_low AS width
+              FROM fn_house_vpd_control_band(now())
+            """
+        )
+        assert row, "fn_house_vpd_control_band returned no rows"
+        crop_low, crop_high, house_low, house_high, width = [float(v) for v in row[0].split("|")]
+        assert 0.1 <= crop_low < crop_high <= 5.0
+        assert 0.1 <= house_low < house_high <= 5.0
+        assert width >= 0.55 - 1e-6
+
+    def test_lighting_policy_tracks_highest_active_crop_dli(self):
+        rows = db_query_rows(
+            """
+            WITH policy AS (
+                SELECT * FROM fn_lighting_policy(now(), 'vallery')
+            ),
+            crops_max AS (
+                SELECT max(target_dli) AS target_dli
+                FROM crops
+                WHERE is_active IS TRUE
+                  AND COALESCE(greenhouse_id, 'vallery') = 'vallery'
+            )
+            SELECT policy.target_dli,
+                   COALESCE(crops_max.target_dli, 14.0) AS crop_target_dli,
+                   policy.target_light_hours,
+                   policy.sunrise_hour,
+                   policy.cutoff_hour,
+                   policy.max_crop_name
+            FROM policy CROSS JOIN crops_max
+            """
+        )
+        assert rows, "fn_lighting_policy returned no rows"
+        target_dli, crop_target_dli, hours, sunrise, cutoff, max_crop = rows[0].split("|")
+        assert float(target_dli) >= float(crop_target_dli)
+        assert 10 <= int(hours) <= 18
+        assert 0 <= int(sunrise) <= 23
+        assert int(sunrise) < int(cutoff) <= 23
+        assert max_crop
+
+    def test_lighting_status_exposes_both_circuits_and_expected_state(self):
+        rows = db_query_rows(
+            """
+            SELECT target_dli IS NOT NULL AS has_target,
+                   grow_light_main_on IS NOT NULL AS has_main_state,
+                   grow_light_grow_on IS NOT NULL AS has_grow_state,
+                   expected_lights_on IS NOT NULL AS has_expected_state,
+                   source_chain
+            FROM v_lighting_status_now
+            """
+        )
+        assert rows, "v_lighting_status_now returned no rows"
+        has_target, has_main, has_grow, has_expected, source_chain = rows[0].split("|")
+        assert (has_target, has_main, has_grow, has_expected) == ("t", "t", "t", "t")
+        assert "fn_lighting_policy()" in source_chain
+
+    def test_lighting_lux_threshold_recommendation_uses_tempest_history(self):
+        rows = db_query_rows(
+            """
+            SELECT sample_count,
+                   recommended_gl_lux_threshold,
+                   recommended_gl_lux_hysteresis,
+                   current_gl_lux_threshold,
+                   current_gl_lux_hysteresis,
+                   source_chain
+            FROM fn_lighting_lux_threshold_recommendation(now(), 'vallery')
+            """
+        )
+        assert rows, "fn_lighting_lux_threshold_recommendation returned no rows"
+        samples, threshold, hysteresis, current_threshold, current_hysteresis, source_chain = rows[0].split("|")
+        assert int(samples) > 100
+        assert 5000 <= float(threshold) <= 40000
+        assert 1500 <= float(hysteresis) <= 10000
+        assert 5000 <= float(current_threshold) <= 100000
+        assert 1500 <= float(current_hysteresis) <= 25000
+        assert "Tempest outdoor_lux" in source_chain
+        assert "per-circuit gl_main_*/gl_grow_* lux tunables" in source_chain
+
+    def test_lighting_circuit_policy_exposes_two_state_machines(self):
+        rows = db_query_rows(
+            """
+            SELECT light_key,
+                   equipment,
+                   dli_target,
+                   lux_on_threshold,
+                   lux_off_threshold,
+                   min_on_s,
+                   min_off_s,
+                   auto_enabled,
+                   source_chain
+            FROM fn_lighting_circuit_policy(now(), 'vallery')
+            ORDER BY light_key
+            """
+        )
+        assert len(rows) == 2
+        keys = []
+        for row in rows:
+            key, equipment, dli, lux_on, lux_off, min_on, min_off, auto, source_chain = row.split("|")
+            keys.append(key)
+            assert equipment in {"grow_light_main", "grow_light_grow"}
+            assert float(dli) >= 1
+            assert float(lux_on) < float(lux_off)
+            assert int(min_on) >= 0
+            assert int(min_off) >= 0
+            assert auto in {"t", "f"}
+            assert "ESP32 per-circuit lighting state machines" in source_chain
+        assert keys == ["grow", "main"]
+
+    def test_band_trace_latest_computes(self):
+        rows = db_query_rows(
+            """
+            SELECT greenhouse_id,
+                   temp_avg IS NOT NULL AS has_temp,
+                   vpd_avg IS NOT NULL AS has_vpd,
+                   crop_temp_low IS NOT NULL AS has_crop_temp,
+                   crop_vpd_low IS NOT NULL AS has_crop_vpd,
+                   fw_temp_low IS NOT NULL AS has_fw_temp,
+                   fw_vpd_low IS NOT NULL AS has_fw_vpd,
+                   rb_temp_low IS NOT NULL AS has_rb_temp,
+                   rb_vpd_low IS NOT NULL AS has_rb_vpd,
+                   trace_quality_flag
+              FROM fn_band_trace(now() - interval '2 hours', now(), 'vallery')
+             ORDER BY ts DESC
+             LIMIT 1
+            """
+        )
+        assert rows, "v_band_trace_latest returned no rows"
+        parts = rows[0].split("|")
+        assert parts[0] == "vallery"
+        assert parts[1:9] == ["t"] * 8
+        assert parts[9] in {"ok", "missing_crop_band", "missing_fw_band", "missing_readback", "readback_drift"}
+
+    def test_band_trace_boolean_contract(self):
+        mismatch = db_query(
+            """
+            SELECT count(*)::int
+              FROM fn_band_trace(now() - interval '6 hours', now(), 'vallery')
+             WHERE fw_both_in_band IS DISTINCT FROM (fw_temp_in_band AND fw_vpd_in_band)
+                OR crop_both_in_band IS DISTINCT FROM (crop_temp_in_band AND crop_vpd_in_band)
+            """
+        )
+        assert int(mismatch) == 0, "band trace both-axis flags drifted from axis flags"
+
+    def test_band_timeline_stitches_actual_to_forecast(self):
+        rows = db_query_rows(
+            """
+            SELECT count(*) FILTER (WHERE timeline_phase = 'actual')::int AS actual_rows,
+                   count(*) FILTER (WHERE timeline_phase = 'forecast')::int AS forecast_rows,
+                   bool_and(
+                       firmware_temp_low IS NOT NULL
+                       AND firmware_temp_high IS NOT NULL
+                       AND firmware_vpd_low IS NOT NULL
+                       AND firmware_vpd_high IS NOT NULL
+                   ) AS has_stitched_band,
+                   bool_or(
+                       timeline_phase = 'forecast'
+                       AND actual_temp_low IS NULL
+                       AND actual_temp_high IS NULL
+                       AND actual_vpd_low IS NULL
+                       AND actual_vpd_high IS NULL
+                   ) AS future_does_not_reuse_actual_rows,
+                   bool_or(
+                       timeline_phase = 'forecast'
+                       AND firmware_temp_low = projected_temp_low
+                       AND firmware_temp_high = projected_temp_high
+                       AND firmware_vpd_low = projected_vpd_low
+                       AND firmware_vpd_high = projected_vpd_high
+                   ) AS future_uses_projected_band
+              FROM fn_band_timeline(
+                  now() - interval '1 hour',
+                  now() + interval '24 hours',
+                  interval '1 hour',
+                  'vallery'
+              )
+            """
+        )
+        assert rows, "fn_band_timeline returned no rows"
+        actual_rows, forecast_rows, has_band, no_future_actual, future_projected = rows[0].split("|")
+        assert int(actual_rows) >= 1
+        assert int(forecast_rows) >= 1
+        assert has_band == "t"
+        assert no_future_actual == "t"
+        assert future_projected == "t"
+
+    def test_band_timeline_derives_firmware_thresholds(self):
+        mismatch = db_query(
+            """
+            SELECT count(*)::int
+              FROM fn_band_timeline(
+                  now() - interval '1 hour',
+                  now() + interval '24 hours',
+                  interval '1 hour',
+                  'vallery'
+              )
+             WHERE abs(temp_width_f - greatest(2.0, firmware_temp_high - firmware_temp_low)) > 0.001
+                OR abs(vpd_width_kpa - greatest(0.2, firmware_vpd_high - firmware_vpd_low)) > 0.001
+                OR abs(temp_heat_target_f - CASE
+                    WHEN sw_fsm_controller_enabled
+                        THEN (firmware_temp_low + firmware_temp_high) * 0.5
+                    ELSE firmware_temp_low + temp_width_f * 0.25 + bias_heat_f
+                END) > 0.001
+                OR abs(temp_heat_on_below_f - (temp_heat_target_f + heat_hysteresis_f)) > 0.001
+                OR abs(temp_cooling_entry_margin_f - CASE
+                    WHEN sw_fsm_controller_enabled AND outdoor_cold_for_vent THEN temp_cool_stage2_delta_f
+                    ELSE 0.0
+                END) > 0.001
+                OR abs(temp_cooling_exit_hysteresis_f - CASE
+                    WHEN sw_fsm_controller_enabled AND outdoor_cold_for_vent
+                        THEN greatest(temp_hysteresis_f, 3.0)
+                    ELSE temp_hysteresis_f
+                END) > 0.001
+                OR abs(temp_cool_on_above_f - CASE
+                    WHEN sw_fsm_controller_enabled THEN greatest(
+                        firmware_temp_low + 1.0,
+                        firmware_temp_high + temp_cooling_entry_margin_f - solar_cooling_lead_f
+                    )
+                    ELSE firmware_temp_high - temp_width_f * 0.25 + bias_cool_f
+                END) > 0.001
+                OR abs(temp_cool_hold_until_f - CASE
+                    WHEN sw_fsm_controller_enabled THEN least(
+                        firmware_temp_high - temp_cooling_exit_hysteresis_f,
+                        temp_cool_on_above_f - temp_cooling_exit_hysteresis_f
+                    )
+                    ELSE temp_cool_on_above_f - temp_hysteresis_f
+                END) > 0.001
+                OR abs(temp_cool_stage2_on_above_f - CASE
+                    WHEN sw_fsm_controller_enabled
+                        THEN firmware_temp_high + temp_cool_stage2_delta_f
+                    ELSE temp_cool_on_above_f + temp_cool_stage2_delta_f
+                END) > 0.001
+                OR abs(vpd_hysteresis_effective_kpa - CASE
+                    WHEN sw_fsm_controller_enabled
+                        THEN least(greatest(0.05, vpd_hysteresis_kpa), greatest(0.05, vpd_width_kpa * 0.33))
+                    ELSE least(greatest(0.05, vpd_hysteresis_kpa), firmware_vpd_high * 0.5)
+                END) > 0.001
+                OR abs(vpd_humidify_on_above_kpa - firmware_vpd_high) > 0.001
+                OR abs(vpd_humidify_resolved_below_kpa - (firmware_vpd_high - vpd_hysteresis_effective_kpa)) > 0.001
+                OR abs(vpd_dehum_on_below_kpa - CASE
+                    WHEN sw_fsm_controller_enabled AND outdoor_cold_for_vent
+                        THEN firmware_vpd_low - vpd_hysteresis_effective_kpa
+                    ELSE firmware_vpd_low
+                END) > 0.001
+                OR abs(vpd_dehum_resolved_above_kpa - (firmware_vpd_low + vpd_hysteresis_effective_kpa)) > 0.001
+                OR abs(vpd_vent_fog_on_above_kpa - (vpd_high_eff_kpa + fog_escalation_kpa)) > 0.001
+                OR abs(vpd_sealed_fog_on_above_kpa - (firmware_vpd_high + fog_escalation_kpa)) > 0.001
+            """
+        )
+        assert int(mismatch) == 0, "dashboard firmware threshold derivation drifted from contract"
+
+    def test_band_setpoint_provenance_links_crop_dispatcher_firmware_readback(self):
+        rows = db_query_rows(
+            """
+            SELECT parameter,
+                   crop_target_value IS NOT NULL AS has_crop,
+                   dispatcher_value IS NOT NULL AS has_dispatcher,
+                   firmware_setpoint_value IS NOT NULL AS has_fw,
+                   cfg_readback_value IS NOT NULL AS has_readback,
+                   automation_source,
+                   source_chain,
+                   displayed_on_operator_graph
+              FROM fn_band_setpoint_provenance(now(), 'vallery')
+             ORDER BY parameter
+            """
+        )
+        assert len(rows) == 4
+        params = {row.split("|")[0] for row in rows}
+        assert params == {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+        for row in rows:
+            (
+                parameter,
+                has_crop,
+                has_dispatcher,
+                has_fw,
+                has_readback,
+                automation_source,
+                source_chain,
+                displayed,
+            ) = row.split("|")
+            assert (has_crop, has_dispatcher, has_fw, has_readback, displayed) == ("t", "t", "t", "t", "t")
+            if parameter.startswith("temp_"):
+                assert "fn_band_setpoints" in automation_source
+                assert "crop profiles -> fn_band_setpoints()" in source_chain
+            else:
+                assert "fn_house_vpd_control_band" in automation_source
+                assert "crop profiles + zone VPD targets" in source_chain
 
     def test_compliance_returns(self):
         rows = db_query_rows("SELECT * FROM fn_compliance_pct('24 hours'::interval)")

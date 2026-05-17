@@ -236,9 +236,14 @@ const groups: SiteNavGroup[] = [
                 slug: "reference/planning-loop",
             },
             {
-                label: "OpenClaw",
-                href: "/reference/openclaw",
-                slug: "reference/openclaw",
+                label: "AI Tunables",
+                href: "/reference/ai-tunables",
+                slug: "reference/ai-tunables",
+            },
+            {
+                label: "Context Window",
+                href: "/reference/context-window",
+                slug: "reference/context-window",
             },
             {
                 label: "Inference",
@@ -246,9 +251,9 @@ const groups: SiteNavGroup[] = [
                 slug: "reference/inference",
             },
             {
-                label: "Context Window",
-                href: "/reference/context-window",
-                slug: "reference/context-window",
+                label: "Agent Fleet",
+                href: "/reference/openclaw",
+                slug: "reference/openclaw",
             },
             {
                 label: "Architecture",
@@ -269,6 +274,10 @@ const groups: SiteNavGroup[] = [
                 label: "Known Limits",
                 href: "/reference/known-limits",
                 slug: "reference/known-limits",
+            },
+            {
+                label: "GitHub",
+                href: "https://github.com/jrvallery/verdify",
             },
             { label: "FAQ", href: "/reference/faq", slug: "reference/faq" },
         ],

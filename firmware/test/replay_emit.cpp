@@ -161,8 +161,11 @@ int main(int argc, char** argv) {
             get("sp_sw_fsm_controller_enabled"),
             sp.sw_fsm_controller_enabled
         );
+        // Production ESPHome forces the unified band-first controller ON before
+        // every control tick. Keep replay aligned by default; set
+        // REPLAY_EMIT_FORCE_FSM=0 only for explicit historical forensics.
         const char* force_fsm = std::getenv("REPLAY_EMIT_FORCE_FSM");
-        if (force_fsm && *force_fsm && *force_fsm != '0') {
+        if (!force_fsm || !*force_fsm || *force_fsm != '0') {
             sp.sw_fsm_controller_enabled = true;
         }
         // Phase-2 preview hook: DWELL_ENABLED=1 env var flips the dwell-gate
@@ -202,7 +205,7 @@ int main(int argc, char** argv) {
                           | (of.fog_gate_temp << 2) | (of.fog_gate_window << 3)
                           | (of.relief_cycle_breaker << 4) | (of.seal_blocked_temp << 5)
                           | (of.vpd_dry_override << 6) | (of.summer_vent_active << 7)
-                          | (of.fog_heat_assist << 8);
+                          | (of.fog_heat_assist << 8) | (of.vent_mist_assist << 9);
 
         std::printf("%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\n",
                     ts.c_str(),

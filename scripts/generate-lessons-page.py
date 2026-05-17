@@ -619,7 +619,7 @@ def generate_page() -> str:
     parts.append("")
     parts.append(
         "Those lessons constrain the bounded control surface listed in "
-        "[AI-Writable Tunables](/reference/planning-loop/#ai-writable-tunables)."
+        "[AI Tunables Traceability](/reference/ai-tunables/)."
     )
     parts.append("")
     parts.append(

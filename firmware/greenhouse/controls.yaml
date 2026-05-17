@@ -6,8 +6,9 @@
 # set of relay outputs. No override layers — the mode table IS the truth.
 #
 # Vent and fans are always consistent: sealed modes have vent closed + fans off,
-# open modes have vent open + fans on. Open-vent misting is structurally
-# impossible. Heater/vent oscillation is structurally impossible.
+# open modes have vent open + fans on. Open-vent moisture is allowed only for
+# the explicit VENTILATE assist path. Heater/vent oscillation is structurally
+# impossible.
 ################################################################################
 
 interval:
@@ -73,7 +74,7 @@ interval:
           auto can_on  = [&](RelayMeta &r){ return now_ms - r.last_off_ms >= r.min_off_ms; };
           auto can_off = [&](RelayMeta &r){ return now_ms - r.last_on_ms  >= r.min_on_ms; };
 
-          auto set_relay = [&](RelayMeta &r,bool want,bool force_on){
+          auto set_relay = [&](RelayMeta &r,bool want,bool force_on,bool force_off=false){
             update_runtime(r);
             if(want){
               if(!r.sw->state && (force_on || can_on(r))){
@@ -82,7 +83,7 @@ interval:
                 r.on_stamp_ms= now_ms;
               }
             }else{
-              if(r.sw->state && can_off(r)){
+              if(r.sw->state && (force_off || can_off(r))){
                 r.sw->turn_off();
                 r.last_off_ms = now_ms;
                 update_runtime(r);
@@ -396,13 +397,19 @@ interval:
               // Phase-2 dwell gate.
               .sw_dwell_gate_enabled = id(sw_dwell_gate_enabled),
               .dwell_gate_ms = (uint32_t)id(dwell_gate_ms),
-              // Controller v2: band-first FSM. Default OFF; can be flipped
-              // without OTA after replay/shadow validation.
+              // Unified band-first controller compatibility field. The
+              // ESPHome control loop forces this ON so planner, dispatcher,
+              // and ESP32 share one live control path.
               .sw_fsm_controller_enabled = id(sw_fsm_controller_enabled),
               .mist_backoff_ms = (uint32_t)id(mist_backoff_s) * 1000UL
           };
 
           validate_setpoints(setpts);
+          setpts.sw_fsm_controller_enabled = true;
+          if (!id(sw_fsm_controller_enabled)) {
+              id(sw_fsm_controller_enabled) = true;
+              id(sw_fsm_controller_enabled_switch).publish_state(true);
+          }
           Mode mode = determine_mode(sensor_in, setpts, ctl_state, dt_ms);
           RelayOutputs relay_out = resolve_equipment(mode, sensor_in, setpts, ctl_state, leadIs1);
 
@@ -441,8 +448,13 @@ interval:
           const bool vent_is_open = id(vent_rly)->state;
           const bool heat_vent_interlock_active =
               mode != SAFETY_HEAT && (willHeat1 || willHeat2) && (vent_is_open || willVent);
+          const bool heat_fan_interlock_active =
+              mode != SAFETY_HEAT && (willHeat1 || willHeat2) && (fan_physically_on || fan_wanted);
+          const bool heat_air_exchange_interlock_active =
+              heat_vent_interlock_active || heat_fan_interlock_active;
           static bool heat_vent_interlock_prev = false;
-          if (heat_vent_interlock_active) {
+          static bool heat_fan_interlock_prev = false;
+          if (heat_air_exchange_interlock_active) {
               willHeat1 = false;
               willHeat2 = false;
           }
@@ -454,23 +466,48 @@ interval:
               }
               heat_vent_interlock_prev = heat_vent_interlock_active;
           }
+          if (heat_fan_interlock_active != heat_fan_interlock_prev) {
+              if (heat_fan_interlock_active) {
+                  ESP_LOGI("interlock","Heat/fan: suppressing non-safety heat until fan dwell clears");
+              } else {
+                  ESP_LOGI("interlock","Heat/fan: fan dwell clear, releasing heat hold");
+              }
+              heat_fan_interlock_prev = heat_fan_interlock_active;
+          }
+
+          const bool heat1_available = willHeat1 && (id(heat1_rly)->state || can_on(R[0]));
+          const bool heat_stage_interlock_active = willHeat2 && !heat1_available;
+          static bool heat_stage_interlock_prev = false;
+          if (heat_stage_interlock_active) {
+              willHeat2 = false;
+          }
+          if (heat_stage_interlock_active != heat_stage_interlock_prev) {
+              if (heat_stage_interlock_active) {
+                  ESP_LOGI("interlock","Heat stage: suppressing heat2 until heat1 is available");
+              } else {
+                  ESP_LOGI("interlock","Heat stage: heat1 available, releasing heat2 hold");
+              }
+              heat_stage_interlock_prev = heat_stage_interlock_active;
+          }
 
           // Fog + misters follow their existing vent-policy tunables. Pre-sprint-15.1,
           // 74% of fog-on-time and 12% of mister-on-time had vent still open
           // (set_relay respects per-relay min_on timers but has no cross-relay
           // ordering). Reading `vent_rly->state` gives the ACTUAL physical state,
           // so even if firmware has already set willVent=false this cycle, we
-          // can suppress moisture until the actuator reports closed when the
-          // corresponding tunable asks for closed-vent moisture.
+          // can suppress normal moisture until the actuator reports closed when
+          // the corresponding tunable asks for closed-vent moisture.
           //
           // Operator toggles:
           //   - sw_fog_closes_vent (`fog_closes_vent`, default true) gates fog
           //   - sw_mister_closes_vent (`mister_closes_vent`, default false)
-          //     gates misters. Pre-15.1 the mister switch had no dispatcher
-          //     route (sprint-21 follow-up) — fix 7 closes that gap so
-          //     operators have per-device granularity.
+          //     gates normal mister pulses. The explicit VENTILATE assist path
+          //     bypasses both so dry-hot cooling can add moisture without
+          //     pretending the house is sealed.
           const bool open_vent_fog_assist =
               (mode == VENTILATE) && ctl_state.vent_mist_assist_active && relay_out.fog;
+          const bool open_vent_mister_assist =
+              (mode == VENTILATE) && ctl_state.vent_mist_assist_active;
           if (id(fog_closes_vent) && vent_is_open && !open_vent_fog_assist) {
               willFog = false;
           }
@@ -484,15 +521,23 @@ interval:
           if(willVent && !id(vent_rly)->state)    id(cnt_vent_today) += 1;
 
           /**************** 11 — APPLY RELAY OUTPUTS ******************************/
-          set_relay(R[0], willHeat1, false);
-          set_relay(R[1], willHeat2, false);
+          const bool force_heat_off = heat_air_exchange_interlock_active;
+          const bool heat1_will_be_on_after_apply =
+              (willHeat1 && (id(heat1_rly)->state || can_on(R[0])))
+              || (id(heat1_rly)->state && !force_heat_off && !can_off(R[0]));
+          const bool force_heat2_off =
+              force_heat_off
+              || (id(heat2_rly)->state && !willHeat2 && !heat1_will_be_on_after_apply);
+          set_relay(R[0], willHeat1, false, force_heat_off);
+          set_relay(R[1], willHeat2, false, force_heat2_off);
           set_relay(R[5], willVent, fan_requires_vent);
           set_relay(R[2], willFan1, false);
           set_relay(R[3], willFan2, false);
           set_relay(R[4], willFog, false);
 
           /**************** 12 — MISTER STATE MACHINE *****************************/
-          // Only runs in SEALED_MIST mode. Zone-targeted pulse rotation.
+          // Runs only for SEALED_MIST or explicit VENTILATE assist. Zone stress
+          // chooses the pulse target; it does not create a standalone mister mode.
           // Stages: S1 (single zone) → S2 (all zones rotating) → FOG (escalation)
           {
             const uint32_t MISTER_ENGAGE_DELAY_MS = uint32_t(id(mister_engage_delay_s)) * 1000UL;
@@ -506,14 +551,14 @@ interval:
             float west_temp  = id(west_wall_temperature).state;
             float east_temp  = id(east_wall_temperature).state;
 
-            // Sprint-15.1 fix 5: vent-close interlock for misters. Same
-            // physics as fog (block 11a) — atomizers ejecting moisture
-            // while vent is open leaks most of the humidity. Pre-15.1,
-            // 12% of mister-on-time had vent open (Study 4). Operator
-            // controls via `sw_mister_closes_vent` (separate from fog so
-            // per-device granularity). `vent_is_open` is in scope from
-            // block 11a above.
-            const bool mister_vent_ok = !id(mister_closes_vent) || !vent_is_open;
+            // Sprint-15.1 fix 5: vent-close interlock for normal mister
+            // pulses. Atomizers ejecting moisture while vent is open leaks
+            // most of the humidity, so `sw_mister_closes_vent` still blocks
+            // ordinary SEALED_MIST pulses until the physical vent closes.
+            // VENTILATE assist is an explicit exception: temp has priority,
+            // fans/vent must remain open, and the planner/firmware are asking
+            // for bounded evaporative support rather than sealed humidifying.
+            const bool mister_vent_ok = open_vent_mister_assist || !id(mister_closes_vent) || !vent_is_open;
             bool humidity_demand = ((mode == SEALED_MIST) || ctl_state.vent_mist_assist_active) && mister_vent_ok;
 
             // If misters WERE firing but vent just opened, kill the zone
@@ -539,7 +584,7 @@ interval:
             }
             was_sealed = humidity_demand;
 
-            // Misters run for sealed humidification and v2 vent mist assist.
+            // Misters run for sealed humidification and band-first controller vent mist assist.
             // Fog remains the heavy escalation and is still gated by the vent
             // close interlock above when fog_closes_vent is enabled.
             bool occupancy_blocks = id(occupancy_inhibit_enabled) && id(greenhouse_occupied);
@@ -549,7 +594,7 @@ interval:
             if(!isnan(west_vpd) && id(vpd_target_west) > 0 && west_vpd > id(vpd_target_west)) any_zone_stressed = true;
             if(!isnan(east_vpd) && id(vpd_target_east) > 0 && east_vpd > id(vpd_target_east)) any_zone_stressed = true;
             if(id(vpd_target_center) > 0 && avg_vpd > id(vpd_target_center)) any_zone_stressed = true;
-            bool zone_mister_demand = (humidity_demand || any_zone_stressed) && mister_vent_ok;
+            bool zone_mister_demand = humidity_demand && mister_vent_ok;
             // FW-9: VPD emergency override — allow misting even if budget exhausted
             float vpd_max_zone = fmax(south_vpd, fmax(west_vpd, east_vpd));
             bool vpd_emergency = !isnan(vpd_max_zone) && (vpd_max_zone > id(safety_vpd_max_kpa));
@@ -575,12 +620,11 @@ interval:
             }
 
             if(!mister_blocked){
-              // Track humidity duration for mister engage delay
-              // Per-zone stress counts toward engage delay even if global state is HUM_IDLE
-              if((humidity_demand || any_zone_stressed) && id(mister_state) == 0){
+              // Track humidity duration for mister engage delay.
+              if(humidity_demand && id(mister_state) == 0){
                 id(humid_s1_duration_ms) += dt_ms;
                 id(humid_idle_holdoff_ms) = 0;
-              } else if(!humidity_demand && !any_zone_stressed){
+              } else if(!humidity_demand){
                 // Hold-off: only reset engage timer after 60s continuous idle
                 id(humid_idle_holdoff_ms) += dt_ms;
                 if(id(humid_idle_holdoff_ms) > 60000UL){
@@ -715,11 +759,12 @@ interval:
                 return select_most_stressed_zone();
               };
 
-              // --- S1 ENGAGE: misters start when any zone is stressed OR global threshold exceeded ---
+              // --- S1 ENGAGE: misters start only under humidity demand; zone/global
+              // stress decide whether a pulse is warranted and which zone gets it.
               bool global_stressed = (avg_vpd > id(mister_engage_kpa));
 
               if(id(mister_state) == 0
-                 && (humidity_demand || any_zone_stressed)
+                 && humidity_demand
                  && id(humid_s1_duration_ms) >= MISTER_ENGAGE_DELAY_MS
                  && (any_zone_stressed || global_stressed)){
 
@@ -961,92 +1006,84 @@ interval:
             }
           }
 
-          /*** B6 — Shadow-aware grow light automation (every 60s) ***/
-          //
-          // Two-window model based on 83 clear days of data:
-          //   Morning fill:     7 AM → ~10:30 AM (house blocks eastern sun)
-          //   Afternoon extend: ~4 PM → 7 PM    (trees block western sun)
-          //
-          // Tuned parameters (from Iris data analysis):
-          //   gl_lux_threshold: 3,000 lux (captures house→sun transition)
-          //   gl_lux_hysteresis: 1,500 lux (prevents cycling in 9:30-10:30 window)
-          //   gl_dli_target: 14 mol/m²/d (safety cutoff, rarely fires)
-          //
-          // Self-triggering protection: After turning lights ON, ignore lux
-          // readings for 120s to prevent the grow lights' own output from
-          // tripping the "natural light sufficient" threshold.
-          //
+          /*** B6 — Per-circuit lighting state machines (every 60s) ***/
           {
-            static uint32_t gl_on_since_ms = 0;  // when lights were last turned ON
-            uint32_t now_ms = millis();
+            static LightingState gl_main_state = initial_lighting_state();
+            static LightingState gl_grow_state = initial_lighting_state();
 
-            if(id(gl_auto_enabled) && (now_ms - id(gl_last_check_ms)) >= 60000){
+            if((now_ms - id(gl_last_check_ms)) >= 60000){
               id(gl_last_check_ms) = now_ms;
 
               auto time = id(sntp_time).now();
-              if(time.is_valid()){
-                int hour = time.hour;
-                // Use outdoor lux (Tempest) for light decisions — indoor LDR is unreliable
-                float cur_lux = id(tempest_lux);
-                if(isnan(cur_lux)) cur_lux = id(greenhouse_light_lux).state;  // fallback to indoor
-                if(isnan(cur_lux)) cur_lux = 0;
-                float dli_now = id(dli_accumulator);
-                float dli_tgt = id(gl_dli_target);
-                float thresh = id(gl_lux_threshold);
-                float hyst = id(gl_lux_hysteresis);
-                bool is_on = id(grow_light_main).state;
-
-                bool in_window = (hour >= id(gl_sunrise_hour) && hour < id(gl_sunset_hour));
-                bool dli_met = (dli_now >= dli_tgt);
-
-                // Self-triggering guard: if lights just turned on, don't check lux yet
-                bool recently_turned_on = is_on && gl_on_since_ms > 0
-                    && (now_ms - gl_on_since_ms) < 120000;
-
-                // Occupancy: lights ON when someone is in the greenhouse
-                bool occupied = id(greenhouse_occupied);
-
-                // Shadow-aware two-window decision
-                bool want_on = false;
-
-                if(!in_window){
-                  // Outside operating hours — off regardless
-                  want_on = false;
-                } else if(occupied){
-                  // Someone is in the greenhouse — lights on, period
-                  want_on = true;
-                } else if(dli_met){
-                  // DLI target reached — done for the day
-                  want_on = false;
-                } else if(recently_turned_on){
-                  // Just turned on — keep on, don't let our own light fool us
-                  want_on = true;
-                } else if(!is_on && cur_lux < thresh){
-                  want_on = true;
-                } else if(is_on && cur_lux < (thresh + hyst)){
-                  want_on = true;
-                } else {
-                  want_on = false;
-                }
-
-                // Apply state change
-                if(want_on && !is_on){
-                  id(grow_light_main).turn_on();
-                  id(grow_light_grow).turn_on();
-                  gl_on_since_ms = now_ms;
-                  ESP_LOGI("grow_light","ON: lux=%.0f < %.0f | DLI=%.2f/%.1f | h=%d",
-                           cur_lux, thresh, dli_now, dli_tgt, hour);
-                } else if(!want_on && is_on){
+              if(!time.is_valid()){
+                if(id(grow_light_main).state){
                   id(grow_light_main).turn_off();
-                  id(grow_light_grow).turn_off();
-                  gl_on_since_ms = 0;
-                  const char* reason = !in_window ? "window closed" :
-                                       dli_met ? "DLI met" :
-                                       !occupied ? "sun sufficient" : "occupancy cleared";
-                  ESP_LOGI("grow_light","OFF: %s | lux=%.0f > %.0f | DLI=%.2f/%.1f | h=%d",
-                           reason, cur_lux, thresh + hyst, dli_now, dli_tgt, hour);
+                  ESP_LOGW("grow_light","main OFF: time_invalid");
                 }
-              }
+                if(id(grow_light_grow).state){
+                  id(grow_light_grow).turn_off();
+                  ESP_LOGW("grow_light","grow OFF: time_invalid");
+                }
+                id(gl_main_state_text).publish_state("OFF");
+                id(gl_main_reason).publish_state("time_invalid");
+                id(gl_grow_state_text).publish_state("OFF");
+                id(gl_grow_reason).publish_state("time_invalid");
+              } else {
+                float cur_lux = id(tempest_lux);
+                if(isnan(cur_lux)) cur_lux = id(greenhouse_light_lux).state;
+                if(isnan(cur_lux)) cur_lux = 0.0f;
+
+                LightingInputs light_in = {
+                  .natural_lux = cur_lux,
+                  .dli_today = id(dli_accumulator),
+                  .local_hour = time.hour,
+                  .occupied = id(greenhouse_occupied)
+                };
+                LightingSetpoints main_sp = {
+                  .dli_target = id(gl_main_dli_target),
+                  .lux_on_threshold = id(gl_main_lux_threshold),
+                  .lux_hysteresis = id(gl_main_lux_hysteresis),
+                  .start_hour = id(gl_main_sunrise_hour),
+                  .cutoff_hour = id(gl_main_sunset_hour),
+                  .min_on_ms = (uint32_t)id(gl_main_min_on_s) * 1000UL,
+                  .min_off_ms = (uint32_t)id(gl_main_min_off_s) * 1000UL,
+                  .auto_enabled = id(gl_auto_enabled) && id(gl_main_auto_enabled)
+                };
+                LightingSetpoints grow_sp = {
+                  .dli_target = id(gl_grow_dli_target),
+                  .lux_on_threshold = id(gl_grow_lux_threshold),
+                  .lux_hysteresis = id(gl_grow_lux_hysteresis),
+                  .start_hour = id(gl_grow_sunrise_hour),
+                  .cutoff_hour = id(gl_grow_sunset_hour),
+                  .min_on_ms = (uint32_t)id(gl_grow_min_on_s) * 1000UL,
+                  .min_off_ms = (uint32_t)id(gl_grow_min_off_s) * 1000UL,
+                  .auto_enabled = id(gl_auto_enabled) && id(gl_grow_auto_enabled)
+                };
+
+                LightingDecision main_dec = evaluate_lighting(
+                  light_in, main_sp, gl_main_state, id(grow_light_main).state, now_ms);
+                LightingDecision grow_dec = evaluate_lighting(
+                  light_in, grow_sp, gl_grow_state, id(grow_light_grow).state, now_ms);
+
+                auto apply_light = [&](const char* label, esphome::switch_::Switch* sw, LightingDecision dec){
+                  if(dec.want_on && !sw->state){
+                    sw->turn_on();
+                    ESP_LOGI("grow_light","%s ON: %s | lux=%.0f | DLI=%.2f | h=%d",
+                             label, dec.reason, cur_lux, id(dli_accumulator), time.hour);
+                  } else if(!dec.want_on && sw->state){
+                    sw->turn_off();
+                    ESP_LOGI("grow_light","%s OFF: %s | lux=%.0f | DLI=%.2f | h=%d",
+                             label, dec.reason, cur_lux, id(dli_accumulator), time.hour);
+                  }
+                };
+                apply_light("main", id(grow_light_main), main_dec);
+                apply_light("grow", id(grow_light_grow), grow_dec);
+
+                id(gl_main_state_text).publish_state(main_dec.want_on ? "ON" : "OFF");
+                id(gl_main_reason).publish_state(main_dec.reason);
+                id(gl_grow_state_text).publish_state(grow_dec.want_on ? "ON" : "OFF");
+                id(gl_grow_reason).publish_state(grow_dec.reason);
+                }
             }
           }
 

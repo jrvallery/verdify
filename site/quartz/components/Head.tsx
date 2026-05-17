@@ -210,6 +210,15 @@ export default (() => {
                         __html: JSON.stringify(structuredData),
                     }}
                 />
+                <script
+                    async
+                    src="https://www.googletagmanager.com/gtag/js?id=G-74QKK65Q20"
+                />
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-74QKK65Q20',{send_page_view:false});gtag('event','page_view',{page_title:document.title,page_location:location.href});document.addEventListener('nav',function(){gtag('event','page_view',{page_title:document.title,page_location:location.href});});`,
+                    }}
+                />
 
                 {css.map((resource) =>
                     CSSResourceToStyleElement(resource, true),

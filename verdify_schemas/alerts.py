@@ -14,7 +14,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, m
 
 from .tunables import TunableParameter
 
-AlertSeverity = Literal["info", "warning", "high", "critical"]
+AlertSeverity = Literal["info", "warning", "critical"]
 AlertCategory = Literal["sensor", "equipment", "climate", "water", "system"]
 AlertDisposition = Literal["open", "acknowledged", "resolved", "suppressed"]
 AlertType = Literal[
@@ -33,6 +33,7 @@ AlertType = Literal[
     "planner_band_ownership_drift",
     "planner_evaluation_missed",
     "planner_gateway_delivery_failed",
+    "planner_plan_horizon_missing",
     "planner_required_plan_missed",
     "planner_stale",
     "planner_tunable_range_drift",
@@ -43,6 +44,8 @@ AlertType = Literal[
     "soil_sensor_offline",
     "temp_safety",
     "tunable_zero_variance",
+    "vent_moisture_capacity_limit",
+    "vent_vpd_moisture_gap",
     "vpd_extreme",
     "vpd_stress",
 ]
@@ -63,6 +66,7 @@ ALERT_TYPES: tuple[str, ...] = (
     "planner_band_ownership_drift",
     "planner_evaluation_missed",
     "planner_gateway_delivery_failed",
+    "planner_plan_horizon_missing",
     "planner_required_plan_missed",
     "planner_stale",
     "planner_tunable_range_drift",
@@ -73,6 +77,8 @@ ALERT_TYPES: tuple[str, ...] = (
     "soil_sensor_offline",
     "temp_safety",
     "tunable_zero_variance",
+    "vent_moisture_capacity_limit",
+    "vent_vpd_moisture_gap",
     "vpd_extreme",
     "vpd_stress",
 )
@@ -92,7 +98,10 @@ class RelayStuckDetails(_DetailsBase):
     threshold_hours: float = Field(..., ge=0)
     state_source: str
     temp_avg: float | None = None
+    vpd_avg: float | None = None
     sp_temp_high: float | None = None
+    sp_vpd_low: float | None = None
+    sp_vpd_high: float | None = None
     greenhouse_mode: str | None = None
     context_ts: AwareDatetime | None = None
 
@@ -104,6 +113,38 @@ class VpdStressDetails(_DetailsBase):
     recent_high_fraction: float = Field(..., ge=0)
     avg_vpd_15m: float | None = None
     avg_vpd_high_15m: float | None = None
+
+
+class VentVpdMoistureGapDetails(_DetailsBase):
+    recent_minutes: int = Field(..., ge=1)
+    samples: int = Field(..., ge=0)
+    vent_samples: int = Field(..., ge=0)
+    high_no_moisture_samples: int = Field(..., ge=0)
+    high_no_moisture_fraction: float = Field(..., ge=0)
+    moisture_fraction: float = Field(..., ge=0)
+    avg_vpd: float | None = None
+    avg_vpd_high: float | None = None
+    avg_temp: float | None = None
+    avg_temp_high: float | None = None
+    avg_outdoor_temp_f: float | None = None
+    avg_outdoor_rh_pct: float | None = None
+
+
+class VentMoistureCapacityLimitDetails(_DetailsBase):
+    recent_minutes: int = Field(..., ge=1)
+    samples: int = Field(..., ge=0)
+    vent_samples: int = Field(..., ge=0)
+    moisture_samples: int = Field(..., ge=0)
+    capacity_limited_samples: int = Field(..., ge=0)
+    capacity_limited_fraction: float = Field(..., ge=0)
+    moisture_fraction: float = Field(..., ge=0)
+    avg_temp_excess_f: float | None = None
+    max_temp_excess_f: float | None = None
+    avg_vpd_excess_kpa: float | None = None
+    max_vpd_excess_kpa: float | None = None
+    avg_outdoor_temp_f: float | None = None
+    avg_outdoor_rh_pct: float | None = None
+    avg_solar_w_m2: float | None = None
 
 
 class TempSafetyDetails(_DetailsBase):
@@ -145,6 +186,15 @@ class PlanDeliveryFailureDetails(_DetailsBase):
 
 class PlannerGatewayDeliveryFailedDetails(_DetailsBase):
     failures: list[PlanDeliveryFailureDetails]
+
+
+class PlannerPlanHorizonMissingDetails(_DetailsBase):
+    active_plan_id: str | None = None
+    active_plan_created_at: AwareDatetime | None = None
+    latest_waypoint_ts: AwareDatetime | None = None
+    future_waypoints: int = Field(..., ge=0)
+    next_required_event_type: str | None = None
+    next_required_due_at: AwareDatetime | None = None
 
 
 class RequiredPlanMissDetails(PlanDeliveryFailureDetails):
@@ -229,6 +279,10 @@ class HeapPressureDetails(_DetailsBase):
     equipment_ts: AwareDatetime | None = None
     last_true_ts: AwareDatetime | None = None
     heap_free_kb: float | None = None
+    heap_min_free_kb: float | None = None
+    heap_largest_free_block_kb: float | None = None
+    heap_low_watermark_warning: bool = False
+    heap_fragmentation_warning: bool = False
     heap_diag_ts: AwareDatetime | None = None
     healthy_heap_samples_after_event: int = Field(..., ge=0)
 
@@ -275,6 +329,8 @@ class PlanContextFailedDetails(_DetailsBase):
 class BandFnNullDetails(_DetailsBase):
     band_row_null: bool
     zone_row_null: bool
+    house_row_null: bool = False
+    lighting_row_null: bool = False
 
 
 class _AlertBase(BaseModel):
@@ -303,6 +359,16 @@ class RelayStuckAlert(_AlertBase):
 class VpdStressAlert(_AlertBase):
     alert_type: Literal["vpd_stress"]
     details: VpdStressDetails
+
+
+class VentVpdMoistureGapAlert(_AlertBase):
+    alert_type: Literal["vent_vpd_moisture_gap"]
+    details: VentVpdMoistureGapDetails
+
+
+class VentMoistureCapacityLimitAlert(_AlertBase):
+    alert_type: Literal["vent_moisture_capacity_limit"]
+    details: VentMoistureCapacityLimitDetails
 
 
 class TempSafetyAlert(_AlertBase):
@@ -338,6 +404,11 @@ class PlannerEvaluationMissedAlert(_AlertBase):
 class PlannerGatewayDeliveryFailedAlert(_AlertBase):
     alert_type: Literal["planner_gateway_delivery_failed"]
     details: PlannerGatewayDeliveryFailedDetails
+
+
+class PlannerPlanHorizonMissingAlert(_AlertBase):
+    alert_type: Literal["planner_plan_horizon_missing"]
+    details: PlannerPlanHorizonMissingDetails
 
 
 class PlannerRequiredPlanMissedAlert(_AlertBase):
@@ -441,6 +512,7 @@ AlertEnvelopeUnion = Annotated[
     | PlannerBandOwnershipDriftAlert
     | PlannerEvaluationMissedAlert
     | PlannerGatewayDeliveryFailedAlert
+    | PlannerPlanHorizonMissingAlert
     | PlannerRequiredPlanMissedAlert
     | PlannerStaleAlert
     | PlannerTunableRangeDriftAlert
@@ -451,6 +523,8 @@ AlertEnvelopeUnion = Annotated[
     | SoilSensorOfflineAlert
     | TempSafetyAlert
     | TunableZeroVarianceAlert
+    | VentMoistureCapacityLimitAlert
+    | VentVpdMoistureGapAlert
     | VpdExtremeAlert
     | VpdStressAlert,
     Field(discriminator="alert_type"),

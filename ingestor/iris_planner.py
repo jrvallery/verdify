@@ -102,6 +102,24 @@ _STANDING_DIRECTIVES = """
    that omit them. Use
    `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)`
    for full plans.
+
+9. **Retrieval is mandatory for real planning.** For any non-validation cycle
+   that may write `set_plan` or `set_tunable`, first use the assembled context,
+   then call `knowledge_search` with `source_types="lesson,plan,site_doc,playbook,observation"`
+   using today's forecast/stress headline. Use the retrieved historical plans,
+   observations, site docs, and lessons as evidence; do not rely only on the
+   static top-10 lessons shown in the context pack.
+
+10. **Close the feedback loop.** Before writing a full plan, grade the previous
+    completed plan with `plan_evaluate` when enough outcome data exists. Be
+    self-critical: compare your score to the deterministic anchor returned by
+    `plan_evaluate`, explain mismatches in the next plan, and turn durable
+    lessons into `lessons_manage` updates.
+
+11. **No stale carryover in full plans.** Every `set_plan` transition must carry
+    every tactical Tier 1 key listed below, including staging, hysteresis, delay,
+    switch, and dwell-gate params. Omitted keys are rejected because otherwise
+    old active rows silently carry forward.
 """
 
 # ── Planner knowledge ──────────────────────────────────────────────
@@ -114,10 +132,11 @@ _STANDING_DIRECTIVES = """
 #                        tunables table, stress-type definitions, data quality
 #                        rules, and the structured-hypothesis format (G7).
 #
-#   _PLANNER_EXTENDED  — reference material: stress interpretation long-form,
-#                        controller modes, mist stages, vent oscillation
-#                        pattern, condensation safety, physical reference,
-#                        utility rates, validated lessons.
+#   _PLANNER_EXTENDED  — reference material sent to the single Hermes profile:
+#                        stress interpretation long-form, controller modes,
+#                        mist stages, vent oscillation pattern, condensation
+#                        safety, physical reference, utility rates, validated
+#                        lessons.
 #
 # Contract: docs/iris-planner-contract.md §2.B, §2.G.
 
@@ -134,23 +153,28 @@ The skills/ copy is an agent-host mirror kept in sync by deploy.)
 
 **Planning cycle:** READ (scorecard + climate + forecast) → DIAGNOSE (which compliance axis
 is the bottleneck, which stress type dominates) → DECIDE (apply lessons, then forecast) →
-ACT (set_tunable for immediate, set_plan for 72h waypoints) → REPORT (Slack brief).
+   ACT (set_tunable for immediate, set_plan for 72h waypoints) → REPORT (Slack brief).
+   Full plans are hindsight-informed: evaluate prior outcomes, retrieve similar
+   historical plans/observations/site context, then write the next posture.
 
 ### Recent firmware behavior (read once, then assume)
 
-The control logic you're tuning was changed in late April 2026. These are
-**shipped** and the running firmware (`2026.4.26.x`) reflects them — do not
-reason about pre-change behavior.
+The control logic you're tuning was changed in late April and May 2026. These
+behaviors are **shipped** in the unified band-first controller — do not reason
+about pre-change behavior.
 
 - **PR-A (2026-04-25): VENTILATE fog trigger lowered** to `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today). Concurrent vent+fog is now intentional during hot-dry stress; fog no longer waits for the safety ceiling. `fog_escalation_kpa` (default 0.5) is the primary knob — lower = more aggressive fog inside VENTILATE.
 - **PR #35 (2026-04-22): THERMAL_RELIEF preempts the dwell gate.** When you flip `sw_dwell_gate_enabled` ON, the gate holds non-safety modes for `dwell_gate_ms` (default 5 min) but does NOT bind THERMAL_RELIEF — its 90s heat-flush still fires. SAFETY_COOL, SAFETY_HEAT, SENSOR_FAULT also preempt.
 - **Phase 1c (2026-04-22): cfg_* readbacks** are now flowing. Every Tier 1 tunable you push has a firmware-side echo into `setpoint_snapshot` so push-corruption is detectable. `setpoint_confirmation_monitor` alerts if the ESP32 doesn't confirm within 5 min.
 - **Phase 2 dwell gate is shipped but currently OFF** in production (`sw_dwell_gate_enabled=0`). Replay validates the gate eliminates ~70% of mode-class transitions in stress windows. Flip ON when whipsaw is the dominant pattern in the current hour's transition log.
+- **2026-05-12: DEHUM_VENT dry-overshoot escape.** If vent/fan dehumidification drives VPD above `vpd_high`, firmware exits DEHUM immediately even when dwell gating is enabled. If cooling is also needed it stays in VENTILATE with vent-mist assist; otherwise it seals for bounded mist recovery.
+- **2026-05-12: hard relay invariants.** Non-safety heat is suppressed while vent/fan air exchange is physically active, and heat2 cannot run without heat1. Treat heat2 runtime without heat1 as a fault, not a tuning strategy.
+- **2026-05-14: sticky band-coupled moisture guardrail.** During live, near-edge, or recently unrecovered VPD-high stress in `VENTILATE` with healthy dew margin, dispatcher caps overly conservative `mister_engage_kpa`, `mister_all_kpa`, `mister_*_delay_s`, `mister_pulse_gap_s`, `min_fog_off_s`, and `fog_escalation_kpa` near the active house `vpd_high`. Hot/dry venting can clamp fog escalation to 0.15 kPa and fog-off dwell to 45s. Do not unwind moisture aggression until observed VPD has stayed below the high band, not merely because forecast solar has declined.
 
 ### Decision Precedence
 
 1. **Safety** — never zero safety rails, respect condensation/disease gates
-2. **Band compliance** — keep temp AND VPD inside the crop band. PRIMARY objective.
+2. **Band compliance** — keep temp AND VPD inside the firmware-enforced band. PRIMARY objective.
    Every tuning decision should first ask: "does this keep us in band?"
 3. **Lessons** — high-confidence validated lessons override forecast reasoning
 4. **Forecast/conditions** — weather drives tactical posture
@@ -159,7 +183,7 @@ reason about pre-change behavior.
 
 ### KPI: Planner Score (0-100)
 
-- **80% Compliance** — % of day with temp AND VPD **both** inside crop band. Target: >90%.
+- **80% Compliance** — % of day with temp AND VPD **both** inside the firmware-enforced band. Target: >90%.
 - **20% Cost efficiency** — daily utility spend. <$5/day = full marks, $15+ = zero.
 - Call `scorecard()` to check current and historical scores (25 metrics).
 
@@ -178,14 +202,16 @@ Use the breakdown to understand resource shifts:
 - Cost > $5/day = review whether stress reduction justifies the spend.
 
 **Three compliance metrics** (all in `scorecard()` output):
-- `compliance_pct` — % of readings where **both** temp AND VPD are in band. This drives the score.
-- `temp_compliance_pct` — % of readings where temp alone is in band.
-- `vpd_compliance_pct` — % of readings where VPD alone is in band.
+- `compliance_pct` — % of readings where **both** temp AND VPD are in the firmware-enforced band. This drives the score.
+- `temp_compliance_pct` — % of readings where temp alone is in the firmware-enforced band.
+- `vpd_compliance_pct` — % of readings where VPD alone is in the firmware-enforced band.
 
 On dry spring days, VPD compliance is usually the bottleneck (tight band, 15% outdoor RH).
 Temp compliance can be 85%+ while VPD is 25%. Use these to diagnose where to focus:
 - Low temp compliance → adjust bias_cool/bias_heat, check vent oscillation
 - Low VPD compliance → adjust misting aggressiveness, fog_escalation_kpa, sealed-vent timing
+- Large zone spread (>4°F temp or >0.5 kPa VPD) means average compliance is insufficient. Preserve a wider house VPD deadband, use zone outliers in `conditions_summary`, and bias `mister_vpd_weight` or zone-facing tactics.
+- If VPD alternates below and above band in short windows, do not narrow the band. Prefer wider `vpd_hysteresis`, longer `vpd_watch_dwell_s`, longer `mister_pulse_gap_s`, or less fog/mister aggression depending on which side overshot.
 
 **Stress hours** = time outside band, tracked as 4 independent states:
 - `heat_stress`: temp > temp_high — cooling capacity exceeded or delayed
@@ -202,19 +228,24 @@ clamps stale active-plan rows before DB or ESP32 side effects. Every Tier 1 knob
 is readback-verified via a `cfg_*` sensor — alert_monitor catches silent
 drops within one planner cycle.
 
-The full registry (103 live tunables + clamps + push owners + readback
-status) is defined in `verdify_schemas/tunable_registry.py`. For Tier 2
-escape-hatch params (irrigation schedules, economiser site constants,
-per-zone VPD targets, sw_* toggles you rarely touch, safety rails —
-operator-owned) see `docs/tunable-cascade.md` or read the registry.
-**If you need a tier-2 param, state the reason and push it; the registry
-and firmware clamp are the source of truth.**
+The full registry (122 schema tunables, including dispatcher-routed and
+readback-only firmware inputs, clamps, push owners, and readback status) is
+defined in `verdify_schemas/tunable_registry.py`. The runtime context bundle
+also includes a generated TUNABLE TRACEABILITY BRIEF from
+`scripts/generate-ai-tunables-page.py`; use it before changing any tunable and
+do not use values it labels reserved/no-op. Non-policy rows (irrigation
+schedules, economiser site constants, per-zone VPD targets, operator switches,
+safety rails, crop bands, and readback-only inputs) are context only. MCP
+rejects planner writes to them until a future replay-backed promotion moves
+them into the planner-policy class. For the human-readable cascade narrative,
+see `docs/tunable-cascade.md`; for live evidence, use the generated traceability
+brief and `/reference/ai-tunables/`.
 
-**Crop band (read-only context; crop profiles + dispatcher own these):**
-- `temp_low` °F — lower band edge; HEAT_S1 target. Do not emit in plans.
-- `temp_high` °F — upper band edge; VENTILATE trigger. Do not emit in plans.
-- `vpd_low` kPa — DEHUM_VENT trigger. Do not emit in plans.
-- `vpd_high` kPa — SEALED_MIST trigger. Do not emit in plans.
+**Band params (read-only context; crop profiles + dispatcher own these):**
+- `temp_low` °F — firmware-enforced lower edge from crop policy; HEAT_S1 target. Do not emit in plans.
+- `temp_high` °F — firmware-enforced upper edge from crop policy; VENTILATE trigger. Do not emit in plans.
+- `vpd_low` kPa — firmware-enforced house lower edge derived from crop + zone policy; DEHUM_VENT trigger. Do not emit in plans.
+- `vpd_high` kPa — firmware-enforced house upper edge derived from crop + zone policy; SEALED_MIST trigger. Do not emit in plans.
 
 If a plan includes `temp_low`, `temp_high`, `vpd_low`, or `vpd_high`, MCP drops
 them before persistence. Old plans containing them create dispatcher clamps.
@@ -234,10 +265,10 @@ Use tactical knobs below to shift behavior instead.
 - `d_cool_stage_2` °F, [2-15], def 3 — fan2 engages at Thigh + this
 
 **Mister engagement:**
-- `mister_engage_kpa` kPa, [0.5-2.5], def 1.6 — SEALED_MIST S1 entry
-- `mister_all_kpa` kPa, [1.0-2.5], def 1.9 — S2 escalation (all zones)
-- `mister_engage_delay_s` s, [30-900], def 45 — dwell before S1
-- `mister_all_delay_s` s, [60-900], def 300 — dwell before S2
+- `mister_engage_kpa` kPa, [0.5-2.5], def 1.6 — physical S1 mister permissive once humidity/zone demand exists; SEALED_MIST entry itself comes from `vpd_high`/`vpd_watch_dwell_s`. During VPD-high or near-edge `VENTILATE` stress, keep near `vpd_high + 0.05` unless dew margin is tight.
+- `mister_all_kpa` kPa, [1.0-2.5], def 1.9 — physical all-zone rotation escalation threshold. During VPD-high or near-edge `VENTILATE` stress, keep near `max(1.0, vpd_high + 0.25)`; values far above the band disable useful escalation.
+- `mister_engage_delay_s` s, [30-900], def 45 — dwell before first physical mister pulse. During VPD-high or near-edge `VENTILATE` stress, use 30-45s unless dew margin is tight.
+- `mister_all_delay_s` s, [60-900], def 300 — dwell before all-zone rotation and firmware mist-stage S2. During VPD-high or near-edge `VENTILATE` stress, use 60-90s unless dew margin is tight.
 
 **Mister pulse + budget:**
 - `mister_pulse_on_s` s, [30-90], def 60 — mister burst duration
@@ -247,14 +278,12 @@ Use tactical knobs below to shift behavior instead.
 
 **VPD state-machine + sealed-vent coordination (hot-dry-day oscillation):**
 - `vpd_watch_dwell_s` s, [15-120], def 60 — dwell in VPD_WATCH before sealing
-- `mist_vent_close_lead_s` s, [0-60], def 15 — vent closes before misters start
 - `mist_max_closed_vent_s` s, [120-900], def 600 — max sealed time → THERMAL_RELIEF
-- `mist_vent_reopen_delay_s` s, [0-120], def 45 — vent held closed after misting
 - `mist_thermal_relief_s` s, [30-300], def 90 — THERMAL_RELIEF vent-open duration
-- `mist_backoff_s` s, [60-3600], def 600 — v2 lockout after a sealed mist attempt times out; prevents immediate reseal loops
+- `mist_backoff_s` s, [60-3600], def 600 — lockout after a sealed mist attempt times out; prevents immediate reseal loops
 
 **Fog (AquaFog XE 2000 — Fog is 7x misters; firmware-gated by RH/temp/time window):**
-- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.4 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa` (≈1.45 kPa today), no longer at the safety ceiling. Concurrent vent-fog is intended for hot-dry stress; firmware still enforces the RH/temp/time window.
+- `fog_escalation_kpa` kPa Δ, [0.1-1.0], def 0.4 — VPD above `vpd_high_eff` to trigger fog inside VENTILATE; lower = more fog. Post-PR-A (2026-04-25), fog escalates at `vpd_high_eff + fog_escalation_kpa`, no longer at the safety ceiling. During VPD-high or near-edge `VENTILATE` stress, keep this around 0.20-0.30 when dew margin is healthy; concurrent vent-fog is intended for hot-dry stress and firmware still enforces the RH/temp/time window.
 - `min_fog_on_s` s, [15-300], def 60 — min fog on-time per cycle
 - `min_fog_off_s` s, [15-300], def 60 — min gap between fog cycles
 
@@ -272,22 +301,26 @@ Use tactical knobs below to shift behavior instead.
 - `sw_summer_vent_enabled` — master switch; default ON
 - `vent_prefer_temp_delta_f` °F, [2-15], def 5 — outdoor must be ≥ N°F cooler than indoor
 - `vent_prefer_dp_delta_f` °F, [2-15], def 5 — outdoor dewpoint ≥ N°F below indoor DP
+- `outdoor_staleness_max_s` s, [120-1800], def 600 — gate disables when outdoor Tempest data is older than this
 
-**Phase-2 dwell gate (whipsaw reduction; firmware shipped, currently OFF in production):**
-- `sw_dwell_gate_enabled` — master switch; firmware is shipped (default OFF). PR #35 (2026-04-22) made THERMAL_RELIEF exempt from the gate so the 90s heat-flush behavior is preserved when you flip the switch. Safe to enable on hot-dry days when whipsaw shows in the recent transition log; revert if relief_cycle_count climbs.
-- `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for non-safety mode transitions. Does NOT bind THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, or SENSOR_FAULT — those preempt the gate.
+**Vent/moisture interlocks:**
+- `sw_fog_closes_vent` — when ON, suppresses fog while the vent is physically open except vent-mist assist
+- `sw_mister_closes_vent` — when ON, suppresses normal physical mister pulses while the vent is open; explicit VENTILATE vent-mist assist bypasses it
 
-**Controller v2 gate:**
-- `sw_fsm_controller_enabled` — controller v2 is the live band-first FSM and is locked ON by the dispatcher/MCP guardrail. Do not request OFF; fallback to the legacy cascade now requires an operator/firmware rollback.
+**Phase-2 dwell gate (whipsaw reduction):**
+- `sw_dwell_gate_enabled` — master switch; firmware default OFF, planner may enable for oscillation control. THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, SENSOR_FAULT, dehum→humidify overshoot, and sealed-mist temp preemption bypass the gate.
+- `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for ordinary non-safety mode transitions only. Revert if it hides real stress or increases relief cycling.
 
-### Tier 2 escape hatch
+**Controller gate:**
+- `sw_fsm_controller_enabled` — compatibility/readback field for the unified band-first controller. ESPHome control loop, dispatcher, and MCP guardrails force it ON. Do not request OFF; rollback requires an explicit firmware/config rollback outside the planner surface.
 
-If diagnosis calls for a tier-2 param (per-zone VPD rebalance, irrigation
-schedule change, safety rail adjust, occupancy inhibit, fog window shift,
-economiser site pressure, fan-lead rotation, etc.) name it in your
-reasoning and push via `set_tunable`/`set_plan` — the registry will
-validate and the dispatcher will route. Do not push params absent from
-the registry; they will be rejected.
+### Non-Policy Tunables
+
+Per-zone VPD rebalance, irrigation schedule changes, safety rail adjustments,
+occupancy inhibit, fog window shifts, economiser site pressure, fan-lead
+rotation, crop bands, readbacks, and retired aliases are not planner write
+targets. Treat them as explanatory context. If one must become planner-writable,
+request a platform/firmware contract promotion backed by replay evidence.
 
 ### Data Quality
 
@@ -336,11 +369,10 @@ plan, anchored to forecast evidence and with a measurable expected_effect.
 """
 
 _PLANNER_EXTENDED = """
-## Extended Reference (opus only)
+## Extended Reference
 
-The following sections are reference material the full-context instance
-gets on top of CORE. The local gemma instance sees only CORE; it consults
-`docs/planner/greenhouse-playbook.md` for detail when it needs it.
+The following sections are reference material sent to the single Hermes/GPT-5.5
+planner profile on top of CORE.
 
 ### Interpreting Stress Types
 
@@ -354,7 +386,7 @@ gets on top of CORE. The local gemma instance sees only CORE; it consults
 - **vpd_low_stress** means over-humidification. Increase `mister_pulse_gap_s` or widen
   `fog_escalation_kpa`.
 
-### Controller Modes (7 mutually exclusive)
+### Controller Modes (8 mutually exclusive)
 
 The ESP32 runs a mode-based controller. Modes are priority-ordered:
 
@@ -369,19 +401,22 @@ The ESP32 runs a mode-based controller. Modes are priority-ordered:
 | DEHUM_VENT | 7 | Vent + fans | VPD below band |
 | IDLE | 8 | Heaters if temp low | Everything in band |
 
-**Key design:** VPD and temperature are structurally separated. When VPD needs misting,
-the greenhouse seals (no cooling). When temp needs cooling, the greenhouse vents (no misting).
-The controller never mists with the vent open.
+**Key design:** VPD and temperature are structurally separated, with one explicit
+exception. When VPD alone needs misting, the greenhouse seals. When temperature
+needs cooling, the greenhouse vents. In hot/dry VENTILATE, the controller may
+enable `vent_mist_assist_active`; this allows bounded mister/fog assist while
+the vent stays open instead of pretending the house is sealed.
 
 **Mist stages within SEALED_MIST:**
 - MIST_WATCH → MIST_S1 (south misters, 6 heads, 0.23 kPa/pulse)
 - → MIST_S2 (all zones, +west 3 heads 0.15 kPa/pulse) after `mist_s2_delay`
 - → MIST_FOG (AquaFog, 7x mister effectiveness) when VPD > band + `fog_escalation_kpa`
 
-**Vent oscillation pattern (hot dry days):**
-VENTILATE (thermal) → VPD climbs → VPD_WATCH (dwell) → SEALED_MIST (vent closes,
-misters pulse, VPD drops) → after `mist_max_closed_vent_s`: THERMAL_RELIEF (brief
-vent flush) → cycle repeats. You control the cycle timing with tunables.
+**Hot-dry pattern:**
+VENTILATE (thermal) can now carry `vent_mist_assist_active` when VPD remains
+above band. If thermal pressure falls and VPD remains high, firmware can enter
+SEALED_MIST for stronger humidification. If temperature rises during a sealed
+cycle, VENTILATE preempts immediately and may keep vent-mist assist active.
 
 ### Condensation & Disease Safety
 
@@ -420,7 +455,7 @@ Gas heating is 3.9x cheaper per BTU than electric.
 6. **Fog is 7x misters:** When VPD is stubborn, lower fog_escalation_kpa, don't increase mist frequency.
 7. **South misters most effective:** 6 heads, 0.23 kPa/pulse. West is secondary (3 heads, 0.15 kPa).
 8. **Water budget 500 gal:** Must never be the bottleneck.
-9. **Vent during misting:** Never happens — SEALED_MIST structurally closes vent. Validated.
+9. **Vent during misting:** Allowed only for the explicit VENTILATE assist path (`vent_mist_assist_active`). Normal SEALED_MIST closes the vent.
 10. **Dew point:** Keep margin >5F. bias warmer on cold clear nights (radiative cooling risk).
 """
 
@@ -471,7 +506,7 @@ today's forecast, and set the daytime posture.
 6. **Check alerts** — call `alerts`. Acknowledge or resolve any that are stale.
 7. **Write today's plan** — use `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)` with 5-8 waypoints
    anchored to solar milestones (dawn, morning ramp, peak stress, decline, evening).
-   Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
+   Each transition includes all tactical Tier 1 params. Do not include crop-band params
    (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
    dwell, and hysteresis knobs to shift behavior. Include a hypothesis and experiment.
    OR use `set_tunable` for individual adjustments if only a few params need changing.
@@ -511,7 +546,7 @@ and set the overnight posture.
 5. **Check alerts** — call `alerts`. Resolve any from today.
 6. **Write overnight plan** — use `set_plan(plan_id=..., hypothesis=..., transitions=..., trigger_id=..., planner_instance=...)` with 3-5 waypoints
    anchored to evening/overnight milestones (evening_settle, midnight_posture, pre_dawn).
-   Each transition includes all 24 tactical Tier 1 params. Do not include crop-band params
+   Each transition includes all tactical Tier 1 params. Do not include crop-band params
    (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); use bias, mist, fog,
    dwell, and hysteresis knobs to shift behavior. Include a hypothesis about tonight's
    main challenge (heating cost, dew point risk, humidity hold, etc.).
@@ -820,11 +855,54 @@ def gather_context() -> str:
 # ── Gateway delivery (Hermes) ────────────────────────────────────
 
 
+def prepare_delivery_result(
+    event_type: str,
+    label: str,
+    instance: PlannerInstance = "local",
+    trigger_id: str | None = None,
+) -> dict:
+    """Build the auditable delivery row before POSTing to Hermes.
+
+    Callers pre-insert this as status='pending' so MCP writes can validate the
+    trigger_id immediately when Hermes starts using tools.
+    """
+    from config import HERMES_SESSION_PREFIX  # noqa: E402
+
+    trigger_id = trigger_id or str(uuid.uuid4())
+    session_id = f"{HERMES_SESSION_PREFIX}:trigger:{trigger_id}"
+
+    import re as _re_session
+
+    result = {
+        "delivered": False,
+        "event_type": event_type,
+        "event_label": label,
+        "session_key": session_id,
+        "wake_mode": None,
+        "gateway_status": None,
+        "gateway_body": None,
+        "trigger_id": trigger_id,
+        "instance": instance,
+        "hermes_run_id": None,
+    }
+    if not _re_session.fullmatch(r"[A-Za-z0-9:_\-.]+", session_id):
+        log.error("send_to_iris: rejecting malformed session_id before POST: %r", session_id)
+        result.update(
+            {
+                "gateway_status": 0,
+                "gateway_body": f"client-side reject: malformed session_id {session_id!r}",
+                "status": "delivery_failed",
+            }
+        )
+    return result
+
+
 def send_to_iris(
     event_type: str,
     label: str,
     context: str | None = None,
     instance: PlannerInstance = "local",
+    trigger_id: str | None = None,
 ) -> dict:
     """Send a planning event to Iris via the Hermes API server (POST /v1/runs).
 
@@ -841,49 +919,31 @@ def send_to_iris(
       4xx/5xx — gateway-level rejection
       None — request never attempted (caller short-circuit)
     """
-    from config import HERMES_API_KEY, HERMES_SESSION_PREFIX, HERMES_URL  # noqa: E402
+    from config import HERMES_API_KEY, HERMES_URL  # noqa: E402
 
-    trigger_id = str(uuid.uuid4())
-
-    session_id = f"{HERMES_SESSION_PREFIX}:trigger:{trigger_id}"
-
-    import re as _re_session
-
-    if not _re_session.fullmatch(r"[A-Za-z0-9:_\-.]+", session_id):
-        log.error("send_to_iris: rejecting malformed session_id before POST: %r", session_id)
-        return {
-            "delivered": False,
-            "event_type": event_type,
-            "event_label": label,
-            "session_key": session_id,
-            "wake_mode": None,
-            "gateway_status": 0,
-            "gateway_body": f"client-side reject: malformed session_id {session_id!r}",
-            "trigger_id": trigger_id,
-            "instance": instance,
-            "hermes_run_id": None,
-        }
-
-    result = {
-        "delivered": False,
-        "event_type": event_type,
-        "event_label": label,
-        "session_key": session_id,
-        "wake_mode": None,
-        "gateway_status": None,
-        "gateway_body": None,
-        "trigger_id": trigger_id,
-        "instance": instance,
-        "hermes_run_id": None,
-    }
+    result = prepare_delivery_result(event_type, label, instance=instance, trigger_id=trigger_id)
+    if result.get("status") == "delivery_failed":
+        return result
+    trigger_id = result["trigger_id"]
+    session_id = result["session_key"]
 
     if context is None:
         context = gather_context()
+    if context == CONTEXT_GATHER_FAILED_SENTINEL:
+        result.update(
+            {
+                "gateway_status": None,
+                "gateway_body": "context_gather_failed",
+                "status": "delivery_failed",
+            }
+        )
+        return result
 
     builder = _PROMPT_BUILDERS.get(event_type)
     if not builder:
         log.error("Unknown event type: %s", event_type)
         result["gateway_body"] = f"unknown event_type: {event_type}"
+        result["status"] = "delivery_failed"
         return result
 
     message = builder(context, label, instance)

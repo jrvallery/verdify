@@ -1,42 +1,56 @@
-# Planner Core Parameters — Mandatory Emission List
+# Planner Core Parameters
 
-## Required Parameters (MUST emit in every plan)
+## Canonical Contract
 
-These 10 parameters MUST have a waypoint in EVERY scheduled plan, even if the value is unchanged from the previous plan. This ensures:
-1. **Chart continuity** — homepage and dashboard setpoint lines extend through the full forecast window
-2. **Clean supersession** — the DB trigger deactivates older plans' waypoints when a new plan writes the same parameter. If you skip a param, the old plan's value stays "active" indefinitely.
-3. **Audit trail** — every plan explicitly documents what ALL key setpoints are, not just what changed
+The canonical routine-plan surface is `mcp/server.py::PLAN_REQUIRED_PARAMS`,
+derived from the `control_class="planner_policy"` Tier 1 rows in
+`verdify_schemas/tunable_registry.py`.
 
-| # | Parameter | Unit | Typical Range | Why Mandatory |
-|---|-----------|------|---------------|---------------|
-| 1 | `temp_high` | °F | 78-85 | Homepage "Target Max" line. Controls COOL_S1 trigger. |
-| 2 | `temp_low` | °F | 55-62 | Homepage "Target Min" line. Controls HEAT_S1 trigger. |
-| 3 | `vpd_high` | kPa | 1.4-2.2 | Homepage "VPD Target" line. HUMID_S1 = vpd_high + hysteresis. |
-| 4 | `vpd_hysteresis` | kPa | 0.2-0.5 | Determines mister engage point (vpd_high + this). |
-| 5 | `d_cool_stage_2` | °F | 2-5 | COOL_S2 threshold = temp_high + this. Controls dual-fan staging. |
-| 6 | `mister_engage_kpa` | kPa | 1.2-1.8 | Primary misting threshold. Critical for VPD control. |
-| 7 | `mister_all_kpa` | kPa | 1.4-2.2 | HUMID_S2 all-zone threshold. |
-| 8 | `mister_pulse_on_s` | s | 30-90 | Mister pulse duration. Changes between day/night. |
-| 9 | `mister_pulse_gap_s` | s | 20-60 | Gap between mister pulses. Key tuning parameter. |
-| 10 | `mister_vpd_weight` | - | 1.0-3.0 | Zone rotation VPD weighting. |
+Full `set_plan` transitions must include every required Tier 1 planner-policy
+parameter. This prevents stale active rows from old plans carrying forward under
+the same horizon. Crop-band rows are not part of this contract.
 
-## How to Emit
+## Ownership
 
-Even when keeping the same value:
-```sql
-INSERT INTO setpoint_plan (ts, parameter, value, plan_id, source, reason) VALUES
-  ('2026-03-30 06:00:00-06', 'temp_low', 58, 'iris-20260330-0600', 'iris', 'Holding steady'),
-  ('2026-03-30 06:00:00-06', 'temp_high', 82, 'iris-20260330-0600', 'iris', 'Holding steady'),
-  ...;
-```
+- Crop bands: `temp_low`, `temp_high`, `vpd_low`, and `vpd_high` are
+  dispatcher-owned from crop profiles. The planner must not write them.
+- Planner policy: tactical controls such as hysteresis, staging, mist timing,
+  fog thresholds, vent gates, dwell gates, and bias values are writable through
+  MCP after registry validation.
+- Controller gate: `sw_fsm_controller_enabled` must be emitted as `1`; MCP,
+  dispatcher, outbound-listener, and ESPHome guardrails reject or correct OFF.
+- Reserved/no-op rows are context only and must stay out of plans until firmware
+  consumes them.
 
-## What Happens If You Skip
+## Key Semantics
 
-- The parameter's active waypoint stays from an OLDER plan
-- v_active_plan returns a stale plan_id for that param
-- Charts show the old plan's line, not the current plan
-- The ESP32 Controller Health dashboard's oscillation heatmap lights up
+- `mister_engage_kpa` gates physical S1 mister pulses once `SEALED_MIST` or
+  explicit `VENTILATE` assist creates humidity demand. SEALED_MIST entry itself comes from `vpd_high` plus
+  `vpd_watch_dwell_s`.
+- `mister_all_kpa` controls physical all-zone mister rotation.
+- During live VPD-high or near-edge `VENTILATE` stress with healthy dew margin,
+  moisture thresholds must stay coupled to the active band: engage near
+  `vpd_high + 0.05`, all-zone near `max(1.0, vpd_high + 0.25)`, fog escalation
+  near `0.20` or `0.15` in hot/dry venting, short mist delays/gaps, and
+  shorter `min_fog_off_s`. Dispatcher clamps conservative planner values that
+  would let dry-air `VENTILATE` hold temperature while leaving VPD above band.
+  Do not unwind this posture until observed VPD has stayed below the high band;
+  forecasted solar decline alone is not recovery evidence.
+- `d_heat_stage_2` and `d_cool_stage_2` are bounded by registry and firmware
+  clamps at `2..15` degrees F.
+- `DEHUM_VENT` exits immediately if it overshoots dry-side VPD above
+  `vpd_high`; do not use dwell gates to hold dehumidification through dry
+  stress.
+- Heat2 is invalid without heat1, and non-safety heat is suppressed during
+  physical vent/fan air exchange.
+- The dispatcher keeps the house VPD control band at least 0.55 kPa wide to
+  prevent mixed-zone crop targets from creating chatter.
+- `sw_fog_closes_vent` and `sw_mister_closes_vent` are planner-policy
+  interlocks for normal moisture cycles; explicit VENTILATE vent-mist assist
+  bypasses them because temperature remains the primary control objective.
 
-## Context Section
+## Drift Guards
 
-`gather-plan-context.sh` section 20b shows CURRENT ACTIVE SETPOINTS for all 12 core parameters. Copy any you're not changing.
+Use `scripts/audit-tunable-traceability.py` before deployment. It verifies the
+schema, registry, MCP required set, planner policy, and cfg readback coverage
+agree for the active tunables surface.

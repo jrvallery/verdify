@@ -1,0 +1,821 @@
+#!/usr/bin/env /srv/greenhouse/.venv/bin/python3
+"""Generate the public AI tunables traceability page and planner brief.
+
+The output deliberately combines three evidence classes:
+- static route evidence from the registry, schema, MCP, ingestor maps, and
+  firmware source text;
+- live landing evidence from setpoint_plan, setpoint_changes, setpoint_snapshot,
+  and setpoint_clamps;
+- outcome evidence from structured plan rationales and plan scorecards.
+
+This is not a causal simulator. A confirmed readback proves that a tunable
+landed on the ESP32; greenhouse effectiveness still has to be read through the
+plan scorecard, equipment state, and domain-specific evidence.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import asyncio
+import math
+import re
+import sys
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import asyncpg
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CONTENT_ROOT = Path("/srv/verdify/verdify-site/content")
+OUTPUT_PATH = CONTENT_ROOT / "reference" / "ai-tunables.md"
+RAW_OUTPUT_PATH = Path("/srv/verdify/state/site-generated/raw-ai-tunables.md")
+
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "ingestor"))
+
+from config import DB_DSN  # noqa: E402
+from verdify_schemas.tunable_registry import (  # noqa: E402
+    PLANNER_PUSHABLE_REG,
+    REGISTRY,
+    TUNABLE_CONTRACT_CLASSES_REG,
+    TunableDef,
+)
+from verdify_schemas.tunables import ALL_TUNABLES  # noqa: E402
+
+RESERVED_NO_EFFECT = {
+    "fan_burst_min",
+    "fog_burst_min",
+    "mist_vent_close_lead_s",
+    "mist_vent_reopen_delay_s",
+    "mister_all_off_s",
+    "mister_all_on_s",
+    "mister_max_runtime_min",
+    "mister_off_s",
+    "mister_on_s",
+    "summer_vent_min_runtime_s",
+    "vent_bypass_min",
+}
+
+FIRMWARE_FILES = [
+    REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml",
+    REPO_ROOT / "firmware" / "greenhouse" / "tunables.yaml",
+    REPO_ROOT / "firmware" / "greenhouse" / "globals.yaml",
+    REPO_ROOT / "firmware" / "greenhouse" / "sensors.yaml",
+    REPO_ROOT / "firmware" / "lib" / "greenhouse_logic.h",
+    REPO_ROOT / "firmware" / "lib" / "greenhouse_types.h",
+]
+
+
+@dataclass
+class Evidence:
+    active_value: float | None = None
+    active_plan_id: str | None = None
+    active_ts: datetime | None = None
+    future_rows: int = 0
+    future_values: int = 0
+    last_plan_ts: datetime | None = None
+    last_plan_id: str | None = None
+    last_plan_value: float | None = None
+    plan_writes_7d: int = 0
+    plan_writes_30d: int = 0
+    last_dispatch_ts: datetime | None = None
+    last_dispatch_value: float | None = None
+    last_dispatch_source: str | None = None
+    last_dispatch_trigger_id: str | None = None
+    dispatch_7d: int = 0
+    dispatch_30d: int = 0
+    confirmed_7d: int = 0
+    unconfirmed_7d: int = 0
+    distinct_values_7d: int = 0
+    last_readback_ts: datetime | None = None
+    last_readback_value: float | None = None
+    readbacks_7d: int = 0
+    clamps_30d: int = 0
+    latest_clamp_ts: datetime | None = None
+    latest_clamp_reason: str | None = None
+    latest_rationale_plan: str | None = None
+    latest_rationale_ts: datetime | None = None
+    latest_rationale_expected: str | None = None
+    latest_rationale_value: float | None = None
+    latest_rationale_validated_at: datetime | None = None
+    latest_rationale_score: float | None = None
+
+
+def _assigned_set(path: Path, name: str) -> set[str]:
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            continue
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
+            value = value.args[0]
+        return set(ast.literal_eval(value))
+    raise RuntimeError(f"{name} assignment not found in {path}")
+
+
+def _fmt_value(value: float | None) -> str:
+    if value is None:
+        return "-"
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if not math.isfinite(f):
+        return "live"
+    if abs(f - round(f)) < 1e-9:
+        return str(int(round(f)))
+    return f"{f:.3f}".rstrip("0").rstrip(".")
+
+
+def _fmt_dt(ts: datetime | None) -> str:
+    if ts is None:
+        return "-"
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    return ts.astimezone(UTC).strftime("%Y-%m-%d %H:%MZ")
+
+
+def _age(ts: datetime | None) -> str:
+    if ts is None:
+        return "-"
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    seconds = max(0, int((datetime.now(UTC) - ts.astimezone(UTC)).total_seconds()))
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"
+
+
+def _md(text: str | None) -> str:
+    text = (text or "").strip()
+    if not text:
+        return "-"
+    text = text.replace("|", "\\|")
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def _frontmatter() -> str:
+    data = {
+        "title": "AI Tunables Traceability",
+        "description": (
+            "Registry-backed audit of every Verdify tunable: what it controls, "
+            "how it routes from Iris to firmware, when it last landed, and how "
+            "the planner should use it."
+        ),
+        "tags": ["intelligence", "planning", "tunables", "control"],
+        "date": datetime.now().date().isoformat(),
+        "type": "reference",
+        "cssclasses": ["hide-folder-listing"],
+    }
+    return "---\n" + yaml.safe_dump(data, sort_keys=False).strip() + "\n---\n"
+
+
+def _category(name: str, spec: TunableDef) -> str:
+    if name in {"fallback_window_s", "outdoor_temp_f", "outdoor_dewpoint_f"}:
+        return "Readback-only firmware inputs"
+    if name.startswith("temp_") or name in {"d_heat_stage_2", "d_cool_stage_2", "heat_hysteresis"}:
+        return "Temperature band and staging"
+    if name.startswith("vpd_") and "target" not in name:
+        return "VPD band"
+    if name.startswith("safety_"):
+        return "Safety rails"
+    if name.startswith("mister_") or name.startswith("mist_") or name == "sw_mister_closes_vent":
+        return "Misting and sealed-humidification"
+    if name in {
+        "min_heat_on_s",
+        "min_heat_off_s",
+        "min_fan_on_s",
+        "min_fan_off_s",
+        "min_vent_on_s",
+        "min_vent_off_s",
+        "lead_rotate_s",
+    }:
+        return "Relay dwell and rotation"
+    if name.startswith("fog_") or name.startswith("min_fog_") or name == "sw_fog_closes_vent":
+        return "Fog gates"
+    if name.startswith("irrig_") or name.startswith("sw_irrigation"):
+        return "Irrigation"
+    if name.startswith("gl_") or name == "sw_gl_auto_mode":
+        return "Grow lights"
+    if "enthalpy" in name or name.startswith("econ_") or name == "sw_economiser_enabled" or name == "site_pressure_hpa":
+        return "Economiser"
+    if "summer_vent" in name or name.startswith("vent_prefer_") or name.startswith("outdoor_staleness"):
+        return "Summer vent gate"
+    if name.startswith("sw_") or name in {"dwell_gate_ms", "mist_backoff_s"}:
+        return "Controller gates"
+    if "target" in name or name in {"east_adjacency_factor", "mister_center_penalty"}:
+        return "Zone scoring"
+    return spec.push_owner.replace("_", " ").title()
+
+
+def _why_it_matters(name: str, category: str) -> str:
+    if name in RESERVED_NO_EFFECT:
+        return "It matters mostly as a drift risk: the value can be exposed or read back, but current firmware does not use it for control."
+    if category == "Temperature band and staging":
+        return "Temperature setpoints drive heater staging, ventilation, fan staging, and heat-stress avoidance."
+    if category == "VPD band":
+        return "VPD control protects transpiration balance; this is usually the limiting axis on hot dry days."
+    if category == "Safety rails":
+        return "These are hard guardrails. They protect the greenhouse when normal planning or sensors are wrong."
+    if category == "Misting and sealed-humidification":
+        return "Misting trades water and heat retention against VPD stress. Bad settings either waste water or leave plants dry."
+    if category == "Relay dwell and rotation":
+        return "Dwell limits protect relays and reduce churn while still letting safety paths preempt."
+    if category == "Fog gates":
+        return "Fog is high-power humidity assist. These gates decide when that heavy tool is allowed."
+    if category == "Irrigation":
+        return "Irrigation settings feed crop water availability and fertigation timing, not the 5-second climate mode."
+    if category == "Grow lights":
+        return "Grow-light settings trade supplemental DLI against electrical cost and light-cycle stability."
+    if category == "Economiser":
+        return "Economiser settings decide when outside air is useful enough to ventilate without worsening heat or humidity."
+    if category == "Summer vent gate":
+        return "This gate prevents firmware from sealing the greenhouse when outside air is cooler and drier enough to cool safely."
+    if category == "Controller gates":
+        return "These switches and dwell values choose the controller posture and mode-transition stability."
+    if category == "Readback-only firmware inputs":
+        return (
+            "The planner cannot set this value, but it explains why the firmware accepted or rejected a control path."
+        )
+    return "It is part of the bounded greenhouse control surface and must stay traceable across schema, DB, dispatcher, firmware, and site docs."
+
+
+def _planner_guidance(name: str, spec: TunableDef, plan_required: set[str]) -> str:
+    control_class = spec.control_class
+    if name == "sw_fsm_controller_enabled":
+        return "Always include this as `1`. It is a compatibility/readback field for the unified band-first controller, and MCP/dispatcher/ESPHome guardrails reject or correct OFF."
+    if name == "mister_engage_kpa":
+        return "Planner-policy tunable. During VPD-high or near-edge `VENTILATE` stress with healthy dew margin, keep near active `vpd_high + 0.05`; dispatcher clamps overly conservative values."
+    if name == "mister_all_kpa":
+        return "Planner-policy tunable. During VPD-high or near-edge `VENTILATE` stress with healthy dew margin, keep near `max(1.0, vpd_high + 0.25)` so all-zone mist assist can engage."
+    if name == "fog_escalation_kpa":
+        return "Planner-policy tunable. During VPD-high or near-edge `VENTILATE` stress with healthy dew margin, use about `0.20`, or `0.15` in hot/dry venting; higher values delay fog too far above the active band."
+    if name in {"mister_engage_delay_s", "mister_all_delay_s", "mister_pulse_gap_s", "min_fog_off_s"}:
+        return "Planner-policy tunable. During VPD-high or near-edge `VENTILATE` stress with healthy dew margin, use shorter delays/gaps so ventilation can cool while misting protects VPD."
+    if name in RESERVED_NO_EFFECT:
+        return "Do not plan with this value until firmware consumes it. Treat existing readbacks as exposure evidence only."
+    if name in plan_required:
+        return "Include this in every routine `set_plan` waypoint. Change it only with a forecast-backed hypothesis and validate the next scorecard."
+    if control_class == "planner_policy":
+        return "Planner-policy tunable. Use only when forecast or previous-plan evidence points directly to this control path."
+    if control_class == "crop_band":
+        return "Do not push from Iris. Crop profiles and dispatcher own this value; use planner-policy bias/staging knobs instead."
+    if control_class == "readback_context":
+        return "Read-only context. Use it to explain firmware decisions; never emit it in set_plan or set_tunable."
+    if control_class == "retired":
+        return "Retired/no-op surface. Keep it out of plans and remove only through a compatibility migration."
+    return "Controller/operator configuration. Keep stable from the planner; promote to planner_policy only after replay evidence proves value."
+
+
+def _implementation_summary(name: str, spec: TunableDef, plan_required: set[str]) -> str:
+    if spec.esp_object_id is None:
+        route = "readback-only; no SETPOINT_MAP route"
+    else:
+        route = f"ESPHome `{spec.esp_object_id}` via SETPOINT_MAP"
+    readback = spec.cfg_readback_object_id or "no cfg readback"
+    mcp = (
+        "routine set_plan required"
+        if name in plan_required
+        else ("set_tunable allowed" if name in PLANNER_PUSHABLE_REG else "MCP rejects planner writes")
+    )
+    return f"{mcp}; {route}; readback `{readback}`."
+
+
+def _static_firmware_hits() -> dict[str, dict[str, int]]:
+    texts = {path.name: path.read_text(errors="ignore") for path in FIRMWARE_FILES if path.exists()}
+    hits: dict[str, dict[str, int]] = {}
+    for name, spec in REGISTRY.items():
+        tokens = {name}
+        if spec.esp_object_id:
+            tokens.add(spec.esp_object_id)
+        if spec.cfg_readback_object_id:
+            tokens.add(spec.cfg_readback_object_id)
+        if name.startswith("sw_"):
+            tokens.add(name[3:])
+        tokens.add(name.replace("_s", ""))
+        file_hits: dict[str, int] = {}
+        for fname, text in texts.items():
+            count = 0
+            for token in tokens:
+                if token:
+                    count += len(re.findall(re.escape(token), text))
+            if count:
+                file_hits[fname] = count
+        hits[name] = file_hits
+    return hits
+
+
+async def _load_evidence(params: list[str]) -> dict[str, Evidence]:
+    conn = await asyncpg.connect(DB_DSN)
+    try:
+        evidence = {param: Evidence() for param in params}
+
+        for row in await conn.fetch(
+            """
+            SELECT parameter, value, plan_id, ts
+            FROM v_active_plan
+            WHERE parameter = ANY($1::text[])
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.active_value = row["value"]
+            ev.active_plan_id = row["plan_id"]
+            ev.active_ts = row["ts"]
+
+        for row in await conn.fetch(
+            """
+            SELECT parameter,
+                   COUNT(*) FILTER (WHERE ts > now() AND is_active)::int AS future_rows,
+                   COUNT(DISTINCT round(value::numeric, 4)) FILTER (WHERE ts > now() AND is_active)::int AS future_values,
+                   COUNT(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS plan_writes_7d,
+                   COUNT(*) FILTER (WHERE created_at > now() - interval '30 days')::int AS plan_writes_30d
+              FROM setpoint_plan
+             WHERE parameter = ANY($1::text[])
+             GROUP BY parameter
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.future_rows = row["future_rows"] or 0
+            ev.future_values = row["future_values"] or 0
+            ev.plan_writes_7d = row["plan_writes_7d"] or 0
+            ev.plan_writes_30d = row["plan_writes_30d"] or 0
+
+        for row in await conn.fetch(
+            """
+            SELECT DISTINCT ON (parameter) parameter, ts, value, plan_id
+              FROM setpoint_plan
+             WHERE parameter = ANY($1::text[])
+             ORDER BY parameter, created_at DESC, ts DESC
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.last_plan_ts = row["ts"]
+            ev.last_plan_id = row["plan_id"]
+            ev.last_plan_value = row["value"]
+
+        for row in await conn.fetch(
+            """
+            SELECT parameter,
+                   COUNT(*) FILTER (WHERE ts > now() - interval '7 days')::int AS dispatch_7d,
+                   COUNT(*) FILTER (WHERE ts > now() - interval '30 days')::int AS dispatch_30d,
+                   COUNT(*) FILTER (WHERE ts > now() - interval '7 days' AND confirmed_at IS NOT NULL)::int AS confirmed_7d,
+                   COUNT(*) FILTER (WHERE ts > now() - interval '7 days' AND confirmed_at IS NULL)::int AS unconfirmed_7d,
+                   COUNT(DISTINCT round(value::numeric, 4)) FILTER (WHERE ts > now() - interval '7 days')::int AS distinct_values_7d
+              FROM setpoint_changes
+             WHERE parameter = ANY($1::text[])
+             GROUP BY parameter
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.dispatch_7d = row["dispatch_7d"] or 0
+            ev.dispatch_30d = row["dispatch_30d"] or 0
+            ev.confirmed_7d = row["confirmed_7d"] or 0
+            ev.unconfirmed_7d = row["unconfirmed_7d"] or 0
+            ev.distinct_values_7d = row["distinct_values_7d"] or 0
+
+        for row in await conn.fetch(
+            """
+            SELECT DISTINCT ON (parameter)
+                   parameter, ts, value, source, trigger_id::text AS trigger_id, planner_instance
+              FROM setpoint_changes
+             WHERE parameter = ANY($1::text[])
+             ORDER BY parameter, ts DESC
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.last_dispatch_ts = row["ts"]
+            ev.last_dispatch_value = row["value"]
+            ev.last_dispatch_source = row["source"]
+            ev.last_dispatch_trigger_id = row["trigger_id"]
+
+        for row in await conn.fetch(
+            """
+            SELECT parameter,
+                   COUNT(*) FILTER (WHERE ts > now() - interval '7 days')::int AS readbacks_7d
+              FROM setpoint_snapshot
+             WHERE parameter = ANY($1::text[])
+             GROUP BY parameter
+            """,
+            params,
+        ):
+            evidence[row["parameter"]].readbacks_7d = row["readbacks_7d"] or 0
+
+        for row in await conn.fetch(
+            """
+            SELECT DISTINCT ON (parameter) parameter, ts, value
+              FROM setpoint_snapshot
+             WHERE parameter = ANY($1::text[])
+             ORDER BY parameter, ts DESC
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.last_readback_ts = row["ts"]
+            ev.last_readback_value = row["value"]
+
+        for row in await conn.fetch(
+            """
+            SELECT parameter,
+                   COUNT(*) FILTER (WHERE ts > now() - interval '30 days')::int AS clamps_30d,
+                   MAX(ts) AS latest_clamp_ts
+              FROM setpoint_clamps
+             WHERE parameter = ANY($1::text[])
+             GROUP BY parameter
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.clamps_30d = row["clamps_30d"] or 0
+            ev.latest_clamp_ts = row["latest_clamp_ts"]
+
+        for row in await conn.fetch(
+            """
+            SELECT DISTINCT ON (parameter) parameter, reason
+              FROM setpoint_clamps
+             WHERE parameter = ANY($1::text[])
+             ORDER BY parameter, ts DESC
+            """,
+            params,
+        ):
+            evidence[row["parameter"]].latest_clamp_reason = row["reason"]
+
+        for row in await conn.fetch(
+            """
+            SELECT DISTINCT ON (param)
+                   param AS parameter,
+                   plan_id,
+                   created_at,
+                   validated_at,
+                   COALESCE(anchor_score::numeric, outcome_score::numeric) AS score,
+                   (r->>'new_value')::double precision AS new_value,
+                   r->>'expected_effect' AS expected_effect
+              FROM plan_journal pj
+              CROSS JOIN LATERAL jsonb_array_elements(COALESCE(pj.hypothesis_structured->'rationale', '[]'::jsonb)) r
+              CROSS JOIN LATERAL (SELECT r->>'parameter' AS param) p
+             WHERE param = ANY($1::text[])
+             ORDER BY param, created_at DESC
+            """,
+            params,
+        ):
+            ev = evidence[row["parameter"]]
+            ev.latest_rationale_plan = row["plan_id"]
+            ev.latest_rationale_ts = row["created_at"]
+            ev.latest_rationale_expected = row["expected_effect"]
+            ev.latest_rationale_value = row["new_value"]
+            ev.latest_rationale_validated_at = row["validated_at"]
+            ev.latest_rationale_score = float(row["score"]) if row["score"] is not None else None
+
+        return evidence
+    finally:
+        await conn.close()
+
+
+async def _load_summary() -> dict[str, Any]:
+    conn = await asyncpg.connect(DB_DSN)
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM alert_log WHERE disposition = 'open')::int AS open_alerts,
+              (SELECT COUNT(*) FROM setpoint_plan WHERE is_active AND ts > now())::int AS future_rows,
+              (SELECT COUNT(DISTINCT parameter) FROM setpoint_plan WHERE is_active AND ts > now())::int AS future_params,
+              (SELECT COUNT(*) FROM setpoint_plan
+                WHERE is_active AND parameter = ANY($1::text[]))::int AS reserved_active_rows,
+              (SELECT COUNT(*) FROM setpoint_changes
+                WHERE ts > now() - interval '30 minutes' AND source='plan')::int AS plan_dispatch_30m,
+              (SELECT COUNT(*) FROM setpoint_changes
+                WHERE ts > now() - interval '30 minutes' AND source='plan' AND trigger_id IS NOT NULL)::int
+                AS plan_dispatch_triggered_30m,
+              (SELECT jsonb_object_agg(source_type, count)
+                 FROM (SELECT source_type, COUNT(*)::int AS count FROM verdify_embeddings GROUP BY source_type) e)
+                AS embedding_counts,
+              (SELECT round(AVG(vpd_delta)::numeric, 3)
+                 FROM v_mister_effectiveness WHERE on_ts > now() - interval '14 days') AS mister_avg_vpd_delta_14d,
+              (SELECT COUNT(*)::int
+                 FROM v_mister_effectiveness WHERE on_ts > now() - interval '14 days') AS mister_cycles_14d,
+              (SELECT jsonb_object_agg(override_type, count)
+                 FROM (
+                   SELECT override_type, COUNT(*)::int AS count
+                     FROM override_events
+                    WHERE ts > now() - interval '7 days'
+                    GROUP BY override_type
+                 ) o) AS overrides_7d
+            """,
+            sorted(RESERVED_NO_EFFECT),
+        )
+        return dict(row or {})
+    finally:
+        await conn.close()
+
+
+def _effectiveness_status(name: str, spec: TunableDef, ev: Evidence) -> str:
+    if name in RESERVED_NO_EFFECT:
+        return "Not effectful in current firmware; removed from planner writes."
+    if spec.esp_object_id is None:
+        return "Readback/control input only; effectiveness is freshness and firmware consumption, not planner landing."
+    if ev.dispatch_7d and ev.confirmed_7d == ev.dispatch_7d:
+        return "Route confirmed: every 7d dispatcher write has a matching firmware readback."
+    if ev.dispatch_7d and ev.confirmed_7d:
+        return f"Mostly confirmed: {ev.confirmed_7d}/{ev.dispatch_7d} 7d writes have readbacks."
+    if ev.dispatch_30d and ev.last_readback_ts:
+        return "Route exists but not recently exercised by the dispatcher."
+    if ev.last_readback_ts:
+        return "Firmware publishes the value; no recent planner/dispatcher use."
+    return "No recent live landing evidence; static route must be reviewed before relying on this."
+
+
+def _render_summary(summary: dict[str, Any], plan_required: set[str]) -> list[str]:
+    embedding_counts = summary.get("embedding_counts") or {}
+    class_counts = {
+        control_class: sum(1 for value in TUNABLE_CONTRACT_CLASSES_REG.values() if value == control_class)
+        for control_class in ("planner_policy", "crop_band", "controller_safety", "readback_context", "retired")
+    }
+    overrides = summary.get("overrides_7d") or {}
+    plan_dispatch = summary.get("plan_dispatch_30m") or 0
+    plan_dispatch_triggered = summary.get("plan_dispatch_triggered_30m") or 0
+    mister_cycles = summary.get("mister_cycles_14d") or 0
+    mister_delta = summary.get("mister_avg_vpd_delta_14d")
+    mister_delta_text = "-" if mister_delta is None else f"{float(mister_delta):.3f} kPa"
+    return [
+        "## Current Audit Snapshot",
+        "",
+        '<div class="metric-grid">',
+        f'  <div class="metric-card"><strong>{len(ALL_TUNABLES)}</strong><span>Schema tunables</span><p>Every name accepted by PlanTransition, SetpointChange, or setpoint_snapshot.</p></div>',
+        f'  <div class="metric-card"><strong>{len(REGISTRY)}</strong><span>Registry rows</span><p>Includes dispatcher-routed and readback-only firmware inputs.</p></div>',
+        f'  <div class="metric-card"><strong>{len(plan_required)}</strong><span>Routine plan knobs</span><p>Required in every routine set_plan waypoint.</p></div>',
+        f'  <div class="metric-card"><strong>{len(PLANNER_PUSHABLE_REG)}</strong><span>Planner-policy knobs</span><p>The only tunables the planner may write. Operator, crop-band, readback, and retired rows are context only.</p></div>',
+        f'  <div class="metric-card"><strong>{summary.get("open_alerts", "-")}</strong><span>Open alerts</span><p>Live safety state at generation time.</p></div>',
+        f'  <div class="metric-card"><strong>{summary.get("future_params", "-")}</strong><span>Future active params</span><p>{summary.get("future_rows", "-")} future active plan rows.</p></div>',
+        f'  <div class="metric-card"><strong>{summary.get("reserved_active_rows", "-")}</strong><span>Reserved active rows</span><p>Should remain zero for no-op/deprecated params.</p></div>',
+        f'  <div class="metric-card"><strong>{plan_dispatch_triggered}/{plan_dispatch}</strong><span>30m trigger audit</span><p>Plan dispatcher writes carrying trigger IDs.</p></div>',
+        f'  <div class="metric-card"><strong>{mister_delta_text}</strong><span>Mister VPD delta</span><p>{mister_cycles} measured mister cycles in the last 14 days.</p></div>',
+        "</div>",
+        "",
+        f"Contract class counts: `{class_counts}`.",
+        "",
+        f"Embedding corpus counts: `{embedding_counts}`.",
+        "",
+        f"Firmware override events in the last 7 days: `{overrides}`.",
+        "",
+        "Effectiveness labels below mean three different things:",
+        "",
+        "- **Route confirmed** means the planner/dispatcher write landed and firmware read it back.",
+        "- **Operational effect** means firmware has a code path that consumes the value.",
+        "- **Greenhouse outcome** means a later scorecard or structured rationale supports or falsifies the plan. This page reports the latest available evidence but does not pretend a single tunable has isolated causal proof unless the system measured that directly.",
+        "",
+        "Current controller invariants:",
+        "",
+        "- `DEHUM_VENT` exits immediately if dehumidifying with vent/fans pushes VPD above `vpd_high`; cooling then uses VENTILATE with vent-mist assist, otherwise sealed mist recovery is allowed.",
+        "- Non-safety heat is suppressed while vent/fan air exchange is physically active.",
+        "- `heat2` is never valid without `heat1`; any observed heat2-without-heat1 interval is a fault to investigate, not a planner tactic.",
+        "- The dispatcher preserves a minimum 0.55 kPa house VPD deadband so mixed-zone crop targets do not create controller chatter.",
+        "- During live, near-edge, or recently unrecovered `VENTILATE` VPD-high stress with healthy dew margin, the dispatcher clamps conservative moisture thresholds near the active `vpd_high` band: `mister_engage_kpa <= vpd_high + 0.05`, `mister_all_kpa <= max(1.0, vpd_high + 0.25)`, `fog_escalation_kpa <= 0.20` or `0.15` in hot/dry venting, shorter mist delays/gaps, and shorter `min_fog_off_s`.",
+        "",
+    ]
+
+
+def _render_contract_table(evidence: dict[str, Evidence], plan_required: set[str]) -> list[str]:
+    rows = [
+        "## Routine Plan Contract",
+        "",
+        "Routine `set_plan` calls must include these values at every transition. The page below gives the full per-tunable detail; this table is the compact operational contract.",
+        "",
+        "| Parameter | Active | Future rows | Last dispatch | 7d confirmed | Planner instruction |",
+        "|---|---:|---:|---|---:|---|",
+    ]
+    for name in sorted(plan_required):
+        spec = REGISTRY[name]
+        ev = evidence[name]
+        confirmed = f"{ev.confirmed_7d}/{ev.dispatch_7d}" if ev.dispatch_7d else "-"
+        rows.append(
+            "| "
+            f"`{name}` | {_fmt_value(ev.active_value)} | {ev.future_rows} | {_fmt_dt(ev.last_dispatch_ts)} | "
+            f"{confirmed} | {_md(_planner_guidance(name, spec, plan_required))} |"
+        )
+    rows.append("")
+    return rows
+
+
+def _render_tunable_detail(
+    name: str,
+    spec: TunableDef,
+    ev: Evidence,
+    plan_required: set[str],
+    firmware_hits: dict[str, dict[str, int]],
+) -> list[str]:
+    category = _category(name, spec)
+    owner = spec.push_owner.replace("_", " ")
+    control_class = spec.control_class
+    bounds = "switch 0/1" if spec.kind == "switch" else f"{_fmt_value(spec.min)} to {_fmt_value(spec.max)}"
+    hits = firmware_hits.get(name, {})
+    hit_text = ", ".join(f"{fname}:{count}" for fname, count in sorted(hits.items())) or "no token hit"
+    readback_age = _age(ev.last_readback_ts)
+    route_status = _effectiveness_status(name, spec, ev)
+    score_text = "-"
+    if ev.latest_rationale_plan:
+        score = "-" if ev.latest_rationale_score is None else f"{ev.latest_rationale_score:g}"
+        valid = (
+            "pending"
+            if ev.latest_rationale_validated_at is None
+            else f"validated {_fmt_dt(ev.latest_rationale_validated_at)}"
+        )
+        score_text = f"`{ev.latest_rationale_plan}` ({valid}, score {score})"
+
+    summary_status = "routine" if name in plan_required else control_class.replace("_", " ")
+    if name in RESERVED_NO_EFFECT:
+        summary_status = "reserved/no-op"
+
+    lines = [
+        f"<details{' open' if name in plan_required else ''}>",
+        f"<summary><code>{name}</code> - {summary_status}</summary>",
+        "",
+        f"- **Purpose:** {_md(spec.notes or _why_it_matters(name, category))}",
+        f"- **Why it matters:** {_md(_why_it_matters(name, category))}",
+        f"- **Implementation:** {_md(_implementation_summary(name, spec, plan_required))}",
+        f"- **Registry:** class `{control_class}`, kind `{spec.kind}`, owner `{owner}`, tier `{spec.tier}`, default `{_fmt_value(spec.default)}`, bounds `{bounds}`.",
+        f"- **Firmware evidence:** `{hit_text}`.",
+        f"- **Last used:** active `{_fmt_value(ev.active_value)}` from `{ev.active_plan_id or '-'}`; latest plan `{ev.last_plan_id or '-'}` at `{_fmt_dt(ev.last_plan_ts)}`; latest dispatch `{_fmt_value(ev.last_dispatch_value)}` at `{_fmt_dt(ev.last_dispatch_ts)}` from `{ev.last_dispatch_source or '-'}`.",
+        f"- **Readback:** latest `{_fmt_value(ev.last_readback_value)}` at `{_fmt_dt(ev.last_readback_ts)}` ({readback_age} old); 7d readbacks `{ev.readbacks_7d}`.",
+        f"- **Landing evidence:** 7d dispatcher writes `{ev.dispatch_7d}`, confirmed `{ev.confirmed_7d}`, unconfirmed `{ev.unconfirmed_7d}`, distinct 7d values `{ev.distinct_values_7d}`, 30d clamps `{ev.clamps_30d}`.",
+        f"- **Effectiveness:** {_md(route_status)}",
+        f"- **Latest plan rationale:** {score_text}; expected effect: {_md(ev.latest_rationale_expected)}.",
+        f"- **Planner use:** {_md(_planner_guidance(name, spec, plan_required))}",
+        "",
+        "</details>",
+        "",
+    ]
+    return lines
+
+
+def _render_full_page(
+    evidence: dict[str, Evidence],
+    summary: dict[str, Any],
+    plan_required: set[str],
+    firmware_hits: dict[str, dict[str, int]],
+) -> str:
+    lines: list[str] = [
+        _frontmatter().rstrip(),
+        "",
+        "[//]: # (auto-generated by scripts/generate-ai-tunables-page.py; sources: tunable_registry, MCP sets, entity_map, firmware source, setpoint_plan, setpoint_changes, setpoint_snapshot, plan_journal)",
+        "",
+        "# AI Tunables Traceability",
+        "",
+        "This page is the operating contract for the bounded control surface Iris can reason about. It answers four questions for every tunable: what the value does, why it matters to greenhouse control, how the value routes through the stack, and what live evidence says about recent use.",
+        "",
+        "End-to-end path for planner-owned values:",
+        "",
+        "`Iris -> MCP set_plan or set_tunable -> setpoint_plan -> v_active_plan -> ingestor dispatcher -> ESPHome number/switch -> firmware global/Setpoints -> cfg_* readback -> setpoint_snapshot and setpoint_changes confirmation`.",
+        "",
+        "The ESP32 still owns 5-second relay control. Iris owns bounded setpoint hypotheses, not direct actuator commands.",
+        "",
+    ]
+    lines.extend(_render_summary(summary, plan_required))
+    lines.extend(_render_contract_table(evidence, plan_required))
+    lines.extend(
+        [
+            "## Findings That Matter",
+            "",
+            "- `mister_engage_kpa` is effectful, but it is not the state-machine entry trigger. Firmware enters humidification from `vpd_high` plus `vpd_watch_dwell_s`; `mister_engage_kpa` gates physical S1 mister pulses once `SEALED_MIST` or explicit `VENTILATE` assist creates humidity demand. Zone stress can choose the pulse target or satisfy the S1 stress check, but it cannot create a standalone mister mode.",
+            "- `mister_all_kpa` controls physical all-zone mister rotation. The header mist-stage delay also uses `mister_all_delay_s`; fog escalation uses `fog_escalation_kpa`.",
+            "- The planner tunes moisture intensity, not the crop band. In `VENTILATE`, dry outside air can keep temperature in band while pushing VPD high, so moisture thresholds must stay coupled to the active `vpd_high` unless dew-risk evidence justifies suppression.",
+            "- Reserved/no-op values are intentionally not planner-pushable: "
+            + ", ".join(f"`{p}`" for p in sorted(RESERVED_NO_EFFECT))
+            + ".",
+            "- Readback-only values are now registry-covered but not planner-pushable: `fallback_window_s`, `outdoor_temp_f`, `outdoor_dewpoint_f`.",
+            "",
+            "## Per-Tunable Detail",
+            "",
+        ]
+    )
+
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for name, spec in REGISTRY.items():
+        grouped[_category(name, spec)].append(name)
+
+    for category in sorted(grouped):
+        lines.extend([f"### {category}", ""])
+        for name in sorted(grouped[category]):
+            lines.extend(_render_tunable_detail(name, REGISTRY[name], evidence[name], plan_required, firmware_hits))
+
+    lines.extend(
+        [
+            "---",
+            "",
+            "*Regenerate with `scripts/generate-ai-tunables-page.py`; publish through `scripts/publish-site-content.sh` so the static context and public site stay aligned.*",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_planner_context(evidence: dict[str, Evidence], plan_required: set[str], summary: dict[str, Any]) -> str:
+    lines = [
+        "--- TUNABLE TRACEABILITY BRIEF (generated; use before set_plan/set_tunable) ---",
+        f"schema_tunables={len(ALL_TUNABLES)} registry_rows={len(REGISTRY)} routine_plan_required={len(plan_required)} planner_policy={len(PLANNER_PUSHABLE_REG)}",
+        "contract_classes="
+        + ", ".join(
+            f"{control_class}:{sum(1 for value in TUNABLE_CONTRACT_CLASSES_REG.values() if value == control_class)}"
+            for control_class in ("planner_policy", "crop_band", "controller_safety", "readback_context", "retired")
+        ),
+        f"future_active_rows={summary.get('future_rows', '-')} future_active_params={summary.get('future_params', '-')} reserved_active_rows={summary.get('reserved_active_rows', '-')}",
+        "Do not use reserved/no-op params: " + ", ".join(sorted(RESERVED_NO_EFFECT)),
+        "mister_engage_kpa note: SEALED_MIST entry is vpd_high + vpd_watch_dwell_s; mister_engage_kpa gates physical S1 pulses once SEALED_MIST or explicit VENTILATE assist creates humidity demand.",
+        "VPD-high guardrail: during live, near-edge, or recently unrecovered VENTILATE stress with healthy dew margin, keep moisture thresholds band-coupled (engage ~= vpd_high+0.05, all-zone ~= max(1.0,vpd_high+0.25), fog_escalation ~= 0.20 or 0.15 in hot/dry venting, shorter min_fog_off_s); dispatcher clamps conservative overrides until observed recovery.",
+        "",
+        "param|active|future_rows|last_dispatch|7d_confirmed|last_rationale|planner_use",
+    ]
+    for name in sorted(plan_required):
+        ev = evidence[name]
+        spec = REGISTRY[name]
+        confirmed = f"{ev.confirmed_7d}/{ev.dispatch_7d}" if ev.dispatch_7d else "-"
+        rationale = ev.latest_rationale_plan or "-"
+        lines.append(
+            "|".join(
+                [
+                    name,
+                    _fmt_value(ev.active_value),
+                    str(ev.future_rows),
+                    _fmt_dt(ev.last_dispatch_ts),
+                    confirmed,
+                    rationale,
+                    _planner_guidance(name, spec, plan_required),
+                ]
+            )
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+async def _build() -> tuple[str, str]:
+    plan_required = _assigned_set(REPO_ROOT / "mcp" / "server.py", "PLAN_REQUIRED_PARAMS")
+    missing_registry = sorted(set(ALL_TUNABLES) - set(REGISTRY))
+    if missing_registry:
+        raise RuntimeError(f"ALL_TUNABLES missing from REGISTRY: {missing_registry}")
+    params = sorted(REGISTRY)
+    evidence = await _load_evidence(params)
+    summary = await _load_summary()
+    firmware_hits = _static_firmware_hits()
+    page = _render_full_page(evidence, summary, plan_required, firmware_hits)
+    planner_context = _render_planner_context(evidence, plan_required, summary)
+    return page, planner_context
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--planner-context", action="store_true", help="print compact planner-context brief only")
+    parser.add_argument("--stdout", action="store_true", help="print generated page instead of writing it")
+    parser.add_argument(
+        "--check", action="store_true", help="validate that the generated page exists and has core sections"
+    )
+    args = parser.parse_args()
+
+    page, planner_context = asyncio.run(_build())
+    if args.planner_context:
+        print(planner_context)
+        return 0
+    if args.stdout:
+        print(page)
+        return 0
+
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RAW_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if args.check:
+        existing = OUTPUT_PATH.read_text(encoding="utf-8") if OUTPUT_PATH.exists() else ""
+        required = [
+            "auto-generated by scripts/generate-ai-tunables-page.py",
+            "## Current Audit Snapshot",
+            "## Routine Plan Contract",
+            "## Per-Tunable Detail",
+            "`mister_engage_kpa` is effectful",
+            "<summary><code>fallback_window_s</code>",
+        ]
+        missing = [marker for marker in required if marker not in existing]
+        if missing:
+            print(f"{OUTPUT_PATH} is missing generated markers/sections: {missing}", file=sys.stderr)
+            return 1
+        return 0
+
+    OUTPUT_PATH.write_text(page, encoding="utf-8")
+    RAW_OUTPUT_PATH.write_text(page, encoding="utf-8")
+    print(f"Wrote {OUTPUT_PATH}")
+    print(f"Wrote {RAW_OUTPUT_PATH}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

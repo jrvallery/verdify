@@ -85,7 +85,7 @@ All automatic — no new state to manage beyond `state.override_summer_vent` boo
 | `vent_prefer_temp_delta_f` | num | 5.0 | 2-15 | Outdoor must be at least N°F cooler than indoor to trigger gate. Below 2 = noise; above 15 = vent rarely fires. |
 | `vent_prefer_dp_delta_f` | num | 5.0 | 2-15 | Outdoor dewpoint must be at least N°F below indoor dewpoint. Guards against venting into humid outdoor. |
 | `outdoor_staleness_max_s` | num | 300 | 60-1800 | Max age of outdoor reading before gate disables. 5 min default (Tempest updates every 3 min typical). |
-| `summer_vent_min_runtime_s` | num | 180 | 60-600 | Minimum VENTILATE dwell after gate fires — prevents rapid-fire mode flap if outdoor temp oscillates near the threshold. Existing `min_vent_on_s` may cover this; confirm during impl. |
+| `summer_vent_min_runtime_s` | num | 180 | 60-600 | Reserved/no-op in current firmware. It is exposed and read back, but the gate does not consume it yet. Existing `min_vent_on_s` is the active dwell today. |
 
 ## Sensor inputs needed
 

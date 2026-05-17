@@ -62,31 +62,40 @@ build_ref "$NEW_REF" "$NEW_BIN"
 echo "[3/4] Running both against $CSV..." >&2
 OLD_OUT="$BUILD_DIR/trace.old.tsv"
 NEW_OUT="$BUILD_DIR/trace.new.tsv"
-"$OLD_BIN" "$CSV_ABS" > "$OLD_OUT"
-"$NEW_BIN" "$CSV_ABS" > "$NEW_OUT"
+REPLAY_EMIT_FORCE_FSM=${REPLAY_EMIT_FORCE_FSM:-1} "$OLD_BIN" "$CSV_ABS" > "$OLD_OUT"
+REPLAY_EMIT_FORCE_FSM=${REPLAY_EMIT_FORCE_FSM:-1} "$NEW_BIN" "$CSV_ABS" > "$NEW_OUT"
 
 echo "[4/4] Diffing..." >&2
 DIFF_OUT="/tmp/replay_diff.tsv"
+DIAG_COUNT="$BUILD_DIR/diagnostic_only.count"
 
-# Column-aware diff: compare mode + relay bitmask (columns 2-8) between files
-# ignoring rows where everything matches.
+# Column-aware diff: hard-fail only on actuator decisions: mode, relays, and
+# mist stage. Diagnostic labels/bits are reported separately so new observability
+# flags do not fail the freeze gate when actuator behavior is unchanged.
 paste <(tail -n +2 "$OLD_OUT") <(tail -n +2 "$NEW_OUT") | \
-    awk -F'\t' '{
+    awk -F'\t' -v diag_count="$DIAG_COUNT" '{
         # OLD: cols 1-11; NEW: cols 12-22
-        # Compare ts match (sanity), then mode(2) through override_bits(11)
-        old_key = $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8 FS $9 FS $10 FS $11
-        new_key = $13 FS $14 FS $15 FS $16 FS $17 FS $18 FS $19 FS $20 FS $21 FS $22
-        if (old_key != new_key) {
-            print $1 "\tOLD\t" old_key
-            print $12 "\tNEW\t" new_key
+        old_decision = $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8 FS $9
+        new_decision = $13 FS $14 FS $15 FS $16 FS $17 FS $18 FS $19 FS $20
+        old_diag = $10 FS $11
+        new_diag = $21 FS $22
+        if (old_decision != new_decision) {
+            print $1 "\tOLD\t" old_decision
+            print $12 "\tNEW\t" new_decision
             diff_rows++
+        } else if (old_diag != new_diag) {
+            diag_rows++
         }
     }
-    END { printf "%d divergent rows\n", diff_rows+0 > "/dev/stderr" }' > "$DIFF_OUT"
+    END {
+        printf "%d divergent rows\n", diff_rows+0 > "/dev/stderr"
+        printf "%d\n", diag_rows+0 > diag_count
+    }' > "$DIFF_OUT"
 
 TOTAL_ROWS=$(($(wc -l < "$OLD_OUT") - 1))
 DIVERGENT_LINES=$(wc -l < "$DIFF_OUT")
 DIVERGENT_ROWS=$((DIVERGENT_LINES / 2))  # each divergence emits 2 lines (OLD + NEW)
+DIAGNOSTIC_ONLY_ROWS=$(cat "$DIAG_COUNT")
 
 echo
 echo "═══ Replay diff summary ═══"
@@ -94,6 +103,7 @@ echo "  OLD ref: $OLD_REF"
 echo "  NEW ref: $NEW_REF"
 echo "  CSV:     $CSV ($TOTAL_ROWS rows)"
 echo "  Divergent rows: $DIVERGENT_ROWS"
+echo "  Diagnostic-only rows: $DIAGNOSTIC_ONLY_ROWS (ignored: mode/relay/mist unchanged)"
 echo "  Full diff:      $DIFF_OUT"
 
 if [ "$DIVERGENT_ROWS" -eq 0 ]; then

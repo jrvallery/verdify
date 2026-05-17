@@ -35,21 +35,24 @@ The active controller is an 8-state band-first FSM:
 - `DEHUM_VENT`: open-vent dehumidification when VPD is too low.
 - `IDLE`: no active climate relay request.
 
-The v2 path can also run a bounded vent mist assist: if the greenhouse is hot
+The band-first controller path can also run a bounded vent mist assist: if the greenhouse is hot
 enough to ventilate but VPD remains too high, the controller may pulse misters
-while the vent remains open. This is explicit in the v2 relay resolver and is
+while the vent remains open. This is explicit in the band-first control state and ESPHome mister loop and is
 not the older "open-vent misting is impossible" invariant.
 
-During high solar load, v2 can enter `VENTILATE` before the upper temperature
+During high solar load, band-first controller can enter `VENTILATE` before the upper temperature
 edge is crossed. The hard-coded feed-forward is deliberately small: Tempest
 solar radiation at or above 500 W/m2 from 10:00-17:00 local lowers the cooling
 entry point by 1°F, never below `temp_low + 1°F`, and is disabled when outdoor
 air is cold enough to trigger the cold-vent guard or VPD is already high.
 
-Night and shoulder-period dehumidification is edge-based: v2 enters
-`DEHUM_VENT` as soon as VPD falls below `vpd_low` and exits only after
-recovering above `vpd_low + hysteresis`. When outdoor air is cold enough to
-trigger the cold-vent guard, entry remains conservative at `vpd_low -
+Night and shoulder-period dehumidification is edge-based: band-first controller enters
+`DEHUM_VENT` as soon as VPD falls below `vpd_low` and normally exits after
+recovering above `vpd_low + hysteresis`. If dehumidifying drives VPD above
+`vpd_high`, that dry overshoot exits immediately even when the dwell gate is
+enabled. Cooling demand then uses `VENTILATE` with vent mist assist; otherwise
+the controller may seal for bounded mist recovery. When outdoor air is cold
+enough to trigger the cold-vent guard, entry remains conservative at `vpd_low -
 hysteresis`.
 
 ## Setpoint Contract
@@ -81,6 +84,8 @@ Relay output is constrained by several independent layers:
 - Safety states preempt normal dwell gates.
 - Occupancy blocks moisture-producing relays.
 - Readbacks confirm setpoint delivery and alert on drift.
+- Non-safety heat is suppressed while vent/fan air exchange is physically
+  active, and heat2 is invalid unless heat1 is available or physically held on.
 
 ## Observability
 

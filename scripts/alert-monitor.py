@@ -43,6 +43,7 @@ SLACK_CHANNEL = "C0ANVVAPLD6"  # #greenhouse
 SLACK_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/slack_bot_token.txt"
 DRY_RUN = "--dry-run" in sys.argv
 DIGEST_MODE = "--digest" in sys.argv
+AIR_EXCHANGE_RELAY_STUCK_MODES = frozenset({"VENTILATE", "DEHUM_VENT", "THERMAL_RELIEF", "SAFETY_COOL"})
 
 SEVERITY_EMOJI = {
     "critical": "\U0001f534",  # 🔴
@@ -128,17 +129,83 @@ async def check_conditions(conn) -> list[dict]:
         )
 
     # 2. Relay stuck
+    relay_context = await conn.fetchrow("""
+        SELECT temp_avg, vpd_avg, sp_temp_high, sp_vpd_low, sp_vpd_high,
+               heat1, heat2, vent, fan1, fan2, greenhouse_mode, ts
+          FROM v_greenhouse_state
+         WHERE ts >= now() - interval '10 minutes'
+         ORDER BY ts DESC
+         LIMIT 1
+    """)
     rows = await conn.fetch("SELECT equipment, hours_on, threshold_hours FROM v_relay_stuck WHERE is_stuck = true")
     for r in rows:
+        equipment = r["equipment"]
+        details = {
+            "hours_on": float(r["hours_on"]),
+            "threshold": float(r["threshold_hours"]),
+            "state_source": "commanded_equipment_state",
+        }
+        message = f"Relay `{equipment}` stuck ON for {r['hours_on']:.1f}h (threshold: {r['threshold_hours']}h)"
+        if relay_context:
+            greenhouse_mode = (relay_context["greenhouse_mode"] or "").upper()
+            details.update(
+                {
+                    "temp_avg": float(relay_context["temp_avg"]) if relay_context["temp_avg"] is not None else None,
+                    "vpd_avg": float(relay_context["vpd_avg"]) if relay_context["vpd_avg"] is not None else None,
+                    "sp_temp_high": float(relay_context["sp_temp_high"])
+                    if relay_context["sp_temp_high"] is not None
+                    else None,
+                    "sp_vpd_low": float(relay_context["sp_vpd_low"])
+                    if relay_context["sp_vpd_low"] is not None
+                    else None,
+                    "sp_vpd_high": float(relay_context["sp_vpd_high"])
+                    if relay_context["sp_vpd_high"] is not None
+                    else None,
+                    "greenhouse_mode": relay_context["greenhouse_mode"],
+                    "context_ts": relay_context["ts"].isoformat() if relay_context["ts"] else None,
+                }
+            )
+            if equipment in ("heat1", "heat2"):
+                heat_commanded = bool(relay_context[equipment])
+                temp_avg = relay_context["temp_avg"]
+                sp_temp_high = relay_context["sp_temp_high"]
+                if (
+                    heat_commanded
+                    and temp_avg is not None
+                    and sp_temp_high is not None
+                    and float(temp_avg) <= float(sp_temp_high) + 0.5
+                ):
+                    continue
+                message = (
+                    f"Heater `{equipment}` commanded ON for {r['hours_on']:.1f}h "
+                    f"while temp is not below the active band"
+                )
+            elif equipment in ("vent", "fan1", "fan2"):
+                temp_avg = relay_context["temp_avg"]
+                vpd_avg = relay_context["vpd_avg"]
+                sp_temp_high = relay_context["sp_temp_high"]
+                sp_vpd_low = relay_context["sp_vpd_low"]
+                relay_commanded = bool(relay_context[equipment])
+                temp_demands_air_exchange = (
+                    temp_avg is not None and sp_temp_high is not None and float(temp_avg) > float(sp_temp_high)
+                )
+                vpd_demands_dehum = (
+                    vpd_avg is not None and sp_vpd_low is not None and float(vpd_avg) < float(sp_vpd_low)
+                )
+                if relay_commanded and (
+                    greenhouse_mode in AIR_EXCHANGE_RELAY_STUCK_MODES or temp_demands_air_exchange or vpd_demands_dehum
+                ):
+                    continue
+                message = f"Relay `{equipment}` commanded ON for {r['hours_on']:.1f}h without current mode demand"
         alerts.append(
             {
                 "alert_type": "relay_stuck",
                 "severity": "warning",
                 "category": "equipment",
-                "sensor_id": f"equipment.{r['equipment']}",
+                "sensor_id": f"equipment.{equipment}",
                 "zone": None,
-                "message": f"Relay `{r['equipment']}` stuck ON for {r['hours_on']:.1f}h (threshold: {r['threshold_hours']}h)",
-                "details": {"hours_on": float(r["hours_on"]), "threshold": float(r["threshold_hours"])},
+                "message": message,
+                "details": details,
                 "metric_value": float(r["hours_on"]),
                 "threshold_value": float(r["threshold_hours"]),
             }

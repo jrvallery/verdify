@@ -1200,6 +1200,189 @@ number:
           id(gl_sunset_hour) = (int)x;
           id(num_gl_sunset_hour).publish_state(x);
 
+  # ─── Per-circuit lighting state-machine tunables ───
+  - platform: template
+    id: num_gl_main_dli_target
+    name: "GL Main DLI Target"
+    min_value: 1
+    max_value: 50
+    step: 1
+    lambda: "return id(gl_main_dli_target);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_dli_target) = x;
+          id(num_gl_main_dli_target).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_lux_threshold
+    name: "GL Main Lux Threshold"
+    min_value: 100
+    max_value: 100000
+    step: 500
+    lambda: "return id(gl_main_lux_threshold);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_lux_threshold) = x;
+          id(num_gl_main_lux_threshold).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_lux_hysteresis
+    name: "GL Main Lux Hysteresis"
+    min_value: 0
+    max_value: 25000
+    step: 250
+    lambda: "return id(gl_main_lux_hysteresis);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_lux_hysteresis) = x;
+          id(num_gl_main_lux_hysteresis).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_sunrise_hour
+    name: "GL Main Sunrise Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(gl_main_sunrise_hour);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_sunrise_hour) = (int)x;
+          id(num_gl_main_sunrise_hour).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_sunset_hour
+    name: "GL Main Sunset Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(gl_main_sunset_hour);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_sunset_hour) = (int)x;
+          id(num_gl_main_sunset_hour).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_min_on_s
+    name: "GL Main Min On S"
+    min_value: 0
+    max_value: 3600
+    step: 30
+    lambda: "return id(gl_main_min_on_s);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_min_on_s) = (int)x;
+          id(num_gl_main_min_on_s).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_min_off_s
+    name: "GL Main Min Off S"
+    min_value: 0
+    max_value: 3600
+    step: 30
+    lambda: "return id(gl_main_min_off_s);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_min_off_s) = (int)x;
+          id(num_gl_main_min_off_s).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_dli_target
+    name: "GL Grow DLI Target"
+    min_value: 1
+    max_value: 50
+    step: 1
+    lambda: "return id(gl_grow_dli_target);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_dli_target) = x;
+          id(num_gl_grow_dli_target).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_lux_threshold
+    name: "GL Grow Lux Threshold"
+    min_value: 100
+    max_value: 100000
+    step: 500
+    lambda: "return id(gl_grow_lux_threshold);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_lux_threshold) = x;
+          id(num_gl_grow_lux_threshold).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_lux_hysteresis
+    name: "GL Grow Lux Hysteresis"
+    min_value: 0
+    max_value: 25000
+    step: 250
+    lambda: "return id(gl_grow_lux_hysteresis);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_lux_hysteresis) = x;
+          id(num_gl_grow_lux_hysteresis).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_sunrise_hour
+    name: "GL Grow Sunrise Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(gl_grow_sunrise_hour);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_sunrise_hour) = (int)x;
+          id(num_gl_grow_sunrise_hour).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_sunset_hour
+    name: "GL Grow Sunset Hour"
+    min_value: 0
+    max_value: 23
+    step: 1
+    lambda: "return id(gl_grow_sunset_hour);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_sunset_hour) = (int)x;
+          id(num_gl_grow_sunset_hour).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_min_on_s
+    name: "GL Grow Min On S"
+    min_value: 0
+    max_value: 3600
+    step: 30
+    lambda: "return id(gl_grow_min_on_s);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_min_on_s) = (int)x;
+          id(num_gl_grow_min_on_s).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_min_off_s
+    name: "GL Grow Min Off S"
+    min_value: 0
+    max_value: 3600
+    step: 30
+    lambda: "return id(gl_grow_min_off_s);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_min_off_s) = (int)x;
+          id(num_gl_grow_min_off_s).publish_state(x);
+
 # ─────────────────────────────── BOOL SWITCHES ────────────────────────────────
 # These template switches expose boolean configuration flags to Home Assistant.
 # Users can toggle these switches in the UI, which updates the corresponding
@@ -1223,6 +1406,42 @@ switch:
           id(gl_auto_enabled) = false;
           id(sw_gl_auto).publish_state(false);
           ESP_LOGI("grow_light","Auto mode DISABLED");
+
+  - platform: template
+    id: sw_gl_main_auto
+    name: "GL Main Auto Mode"
+    icon: mdi:lightbulb-auto
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: "return id(gl_main_auto_enabled);"
+    turn_on_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_auto_enabled) = true;
+          id(sw_gl_main_auto).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_auto_enabled) = false;
+          id(sw_gl_main_auto).publish_state(false);
+
+  - platform: template
+    id: sw_gl_grow_auto
+    name: "GL Grow Auto Mode"
+    icon: mdi:lightbulb-auto
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: "return id(gl_grow_auto_enabled);"
+    turn_on_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_auto_enabled) = true;
+          id(sw_gl_grow_auto).publish_state(true);
+    turn_off_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_auto_enabled) = false;
+          id(sw_gl_grow_auto).publish_state(false);
 
   # Close vent during fog pulses to prevent dry air infiltration
   - platform: template
@@ -1387,7 +1606,7 @@ switch:
     id: sw_fsm_controller_enabled_switch
     name: "FSM Controller Enabled"
     icon: "mdi:state-machine"
-    restore_mode: RESTORE_DEFAULT_OFF
+    restore_mode: RESTORE_DEFAULT_ON
     lambda: 'return id(sw_fsm_controller_enabled);'
     turn_on_action:
       - lambda: |
@@ -1395,8 +1614,9 @@ switch:
           id(sw_fsm_controller_enabled_switch).publish_state(true);
     turn_off_action:
       - lambda: |
-          id(sw_fsm_controller_enabled) = false;
-          id(sw_fsm_controller_enabled_switch).publish_state(false);
+          id(sw_fsm_controller_enabled) = true;
+          id(sw_fsm_controller_enabled_switch).publish_state(true);
+          ESP_LOGW("tunables", "FSM Controller Enabled is locked ON by the unified controller contract");
 
 # ─── IRRIGATION MANUAL TRIGGER BUTTONS ────────────────────────────────────────
 button:

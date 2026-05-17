@@ -270,7 +270,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Direct VPD comparison for the three main growing zones.",
+      "description": "Indoor VPD against the green firmware compliance band, with only the dehumidify/fan entry and fog entry thresholds rendered. Crop/planner provenance, dispatcher math, cfg readbacks, and padding details remain in the band traceability SQL contract.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -381,13 +381,13 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Band High"
+              "options": "Compliant High"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
@@ -397,17 +397,17 @@
               },
               {
                 "id": "custom.fillBelowTo",
-                "value": "Band Low"
+                "value": "Compliant Low"
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 10
+                "value": 20
               },
               {
                 "id": "custom.hideFrom",
                 "value": {
                   "legend": true,
-                  "tooltip": false,
+                  "tooltip": true,
                   "viz": false
                 }
               }
@@ -416,13 +416,13 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Band Low"
+              "options": "Compliant Low"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#2E7D32",
                   "mode": "fixed"
                 }
               },
@@ -434,9 +434,193 @@
                 "id": "custom.hideFrom",
                 "value": {
                   "legend": true,
-                  "tooltip": false,
+                  "tooltip": true,
                   "viz": false
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#00ACC1",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": -1000,
+                      "to": 1000,
+                      "result": {
+                        "text": ""
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -553,11 +737,123 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH timeline AS (\n    SELECT generate_series($__timeFrom(), $__timeTo(), interval '30 minutes') AS ts\n)\nSELECT t.ts AS time,\n    (fn_band_setpoints(t.ts)).vpd_low::float AS \"Band Low\",\n    (fn_band_setpoints(t.ts)).vpd_high::float AS \"Band High\"\nFROM timeline t ORDER BY t.ts",
+          "rawSql": "SELECT ts AS time,\n    firmware_vpd_low::float AS \"Compliant Low\",\n    firmware_vpd_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.8 ELSE NULL END AS \"Mister South\" FROM equipment_state WHERE equipment='mister_south' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "E",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.9 ELSE NULL END AS \"Mister West\" FROM equipment_state WHERE equipment='mister_west' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "F",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.0 ELSE NULL END AS \"Mister Center\" FROM equipment_state WHERE equipment='mister_center' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "G",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "P44368ADAD746BC27"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "H",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
-      "title": "Zone VPD Comparison",
+      "title": "VPD Compliance Band",
       "type": "timeseries"
     },
     {

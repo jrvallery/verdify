@@ -13,7 +13,7 @@ text_sensor:
     entity_category: diagnostic
     update_interval: 60s
     lambda: |-
-      if (!id(sntp_time).now().is_valid())   // SNTP not yet synced
+      if (!id(sntp_time).now().is_valid())   // controller time not yet synced
         return {};
       uint32_t up = (uint32_t) id(uptime_seconds).state;
       time_t boot_ts = id(sntp_time).now().timestamp - up;
@@ -86,6 +86,30 @@ text_sensor:
     name: "Mode Reason"
     entity_category: diagnostic
     update_interval: 5s
+
+  - platform: template
+    id: gl_main_state_text
+    name: "GL Main State"
+    entity_category: diagnostic
+    update_interval: never
+
+  - platform: template
+    id: gl_main_reason
+    name: "GL Main Reason"
+    entity_category: diagnostic
+    update_interval: never
+
+  - platform: template
+    id: gl_grow_state_text
+    name: "GL Grow State"
+    entity_category: diagnostic
+    update_interval: never
+
+  - platform: template
+    id: gl_grow_reason
+    name: "GL Grow Reason"
+    entity_category: diagnostic
+    update_interval: never
 
   - platform: template
     id: ts_lead_fan
@@ -332,7 +356,7 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
 
   # --- Grow lights (HA native service calls, no on-device HTTP client) ---
-  # HA owns the Lutron bridge; firmware requests light changes over the
+  # HA owns the Lutron bridge; firmware requests Lutron switch changes over the
   # existing ESPHome API connection instead of carrying REST/TLS buffers.
   - platform: template
     id: grow_light_main
@@ -342,15 +366,15 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - homeassistant.service:
-          service: light.turn_on
+          service: switch.turn_on
           data:
-            entity_id: light.greenhouse_main
+            entity_id: switch.greenhouse_main
       - lambda: 'ESP_LOGI("lights", "Main lights ON via HA service");'
     turn_off_action:
       - homeassistant.service:
-          service: light.turn_off
+          service: switch.turn_off
           data:
-            entity_id: light.greenhouse_main
+            entity_id: switch.greenhouse_main
       - lambda: 'ESP_LOGI("lights", "Main lights OFF via HA service");'
 
   - platform: template
@@ -361,15 +385,15 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - homeassistant.service:
-          service: light.turn_on
+          service: switch.turn_on
           data:
-            entity_id: light.greenhouse_grow
+            entity_id: switch.greenhouse_grow
       - lambda: 'ESP_LOGI("lights", "Grow lights ON via HA service");'
     turn_off_action:
       - homeassistant.service:
-          service: light.turn_off
+          service: switch.turn_off
           data:
-            entity_id: light.greenhouse_grow
+            entity_id: switch.greenhouse_grow
       - lambda: 'ESP_LOGI("lights", "Grow lights OFF via HA service");'
 
 ###############################################################################

@@ -27,6 +27,7 @@ from verdify_schemas.alerts import (
     PlannerBandOwnershipDriftAlert,
     PlannerEvaluationMissedAlert,
     PlannerGatewayDeliveryFailedAlert,
+    PlannerPlanHorizonMissingAlert,
     PlannerRequiredPlanMissedAlert,
     PlannerStaleAlert,
     PlannerTunableRangeDriftAlert,
@@ -37,6 +38,8 @@ from verdify_schemas.alerts import (
     SoilSensorOfflineAlert,
     TempSafetyAlert,
     TunableZeroVarianceAlert,
+    VentMoistureCapacityLimitAlert,
+    VentVpdMoistureGapAlert,
     VpdExtremeAlert,
     VpdStressAlert,
 )
@@ -46,7 +49,7 @@ NOW = "2026-05-01T12:00:00+00:00"
 CASES = {
     "band_fn_null": (
         BandFnNullAlert,
-        {"band_row_null": True, "zone_row_null": False},
+        {"band_row_null": True, "zone_row_null": False, "house_row_null": True},
     ),
     "esp32_push_failed": (
         ESP32PushFailedAlert,
@@ -80,6 +83,10 @@ CASES = {
             "equipment_ts": NOW,
             "last_true_ts": NOW,
             "heap_free_kb": 12.5,
+            "heap_min_free_kb": 3.0,
+            "heap_largest_free_block_kb": 18.0,
+            "heap_low_watermark_warning": True,
+            "heap_fragmentation_warning": True,
             "heap_diag_ts": NOW,
             "critical_logs_30m": 1,
             "healthy_heap_samples_after_event": 0,
@@ -94,6 +101,10 @@ CASES = {
             "equipment_ts": NOW,
             "last_true_ts": NOW,
             "heap_free_kb": 28.5,
+            "heap_min_free_kb": 3.0,
+            "heap_largest_free_block_kb": 29.0,
+            "heap_low_watermark_warning": True,
+            "heap_fragmentation_warning": False,
             "heap_diag_ts": NOW,
             "warning_logs_30m": 1,
             "healthy_heap_samples_after_event": 2,
@@ -146,6 +157,17 @@ CASES = {
             ]
         },
     ),
+    "planner_plan_horizon_missing": (
+        PlannerPlanHorizonMissingAlert,
+        {
+            "active_plan_id": "iris-20260510-2058",
+            "active_plan_created_at": NOW,
+            "latest_waypoint_ts": NOW,
+            "future_waypoints": 0,
+            "next_required_event_type": "SUNRISE",
+            "next_required_due_at": NOW,
+        },
+    ),
     "planner_required_plan_missed": (
         PlannerRequiredPlanMissedAlert,
         {
@@ -182,7 +204,7 @@ CASES = {
                     "source": "iris",
                     "ts": NOW,
                     "reason": "legacy fallback",
-                    "error": "controller_v2_locked_on",
+                    "error": "controller_locked_on",
                 }
             ]
         },
@@ -228,6 +250,42 @@ CASES = {
     "tunable_zero_variance": (
         TunableZeroVarianceAlert,
         {"parameter": "vpd_target_west", "sample_count": 33_000, "pinned_value": 1.2},
+    ),
+    "vent_moisture_capacity_limit": (
+        VentMoistureCapacityLimitAlert,
+        {
+            "recent_minutes": 30,
+            "samples": 30,
+            "vent_samples": 30,
+            "moisture_samples": 24,
+            "capacity_limited_samples": 21,
+            "capacity_limited_fraction": 0.70,
+            "moisture_fraction": 0.80,
+            "avg_temp_excess_f": 3.2,
+            "max_temp_excess_f": 6.1,
+            "avg_vpd_excess_kpa": 0.18,
+            "max_vpd_excess_kpa": 0.42,
+            "avg_outdoor_temp_f": 87.2,
+            "avg_outdoor_rh_pct": 17.1,
+            "avg_solar_w_m2": 760.0,
+        },
+    ),
+    "vent_vpd_moisture_gap": (
+        VentVpdMoistureGapAlert,
+        {
+            "recent_minutes": 15,
+            "samples": 15,
+            "vent_samples": 15,
+            "high_no_moisture_samples": 10,
+            "high_no_moisture_fraction": 0.67,
+            "moisture_fraction": 0.20,
+            "avg_vpd": 1.35,
+            "avg_vpd_high": 1.07,
+            "avg_temp": 76.2,
+            "avg_temp_high": 72.9,
+            "avg_outdoor_temp_f": 86.5,
+            "avg_outdoor_rh_pct": 18.0,
+        },
     ),
     "vpd_extreme": (
         VpdExtremeAlert,

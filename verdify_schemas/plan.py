@@ -223,7 +223,16 @@ class PlanJournalRow(BaseModel):
 
 
 PlanDeliveryEventType = Literal[
-    "SUNRISE", "SUNSET", "MIDNIGHT", "TRANSITION", "FORECAST", "DEVIATION", "HEARTBEAT", "MANUAL"
+    "SUNRISE",
+    "SUNSET",
+    "SOLAR_MAX",
+    "MIDNIGHT",
+    "TRANSITION",
+    "FORECAST",
+    "DEVIATION",
+    "FORECAST_DEVIATION",
+    "HEARTBEAT",
+    "MANUAL",
 ]
 # v1.4 (contract §2.G): opus | local are the post-rollout instance values.
 # "iris-planner" is the backfill label for pre-v1.4 rows.
@@ -235,8 +244,8 @@ PlanDeliveryStatus = Literal["pending", "acked", "plan_written", "timed_out", "d
 class PlanDeliveryLogRow(BaseModel):
     """plan_delivery_log table row — one entry per send_to_iris call.
 
-    Ingestor writes this from planning_heartbeat immediately after each
-    delivery. The 30-min verification pass updates resulting_plan_id +
+    Ingestor writes this from planning_heartbeat before posting to Hermes, then
+    refreshes it after /v1/runs accepts. The verification pass updates resulting_plan_id +
     plan_written_at when a plan materializes. Makes delivery→plan
     correlation query-able instead of requiring journal log scavenging.
     See migration 092.

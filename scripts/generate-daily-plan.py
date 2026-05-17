@@ -73,8 +73,17 @@ def _sql_literal(value: object) -> str:
 
 
 def public_text(value: object) -> str:
-    """Avoid Quartz/Markdown dollar-sign math parsing on public pages."""
-    return re.sub(r"\$(\d)", r"USD \1", str(value or ""))
+    """Scrub implementation names and avoid Quartz dollar-sign math parsing."""
+    text = str(value or "")
+    text = re.sub(r"iris-hermes-validation", "iris-validation", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bHermes\b", "planning gateway", text)
+    text = re.sub(r"\bhermes\b", "planner-gateway", text)
+    text = re.sub(r"\bOpenClaw/Iris\b", "planner", text)
+    text = re.sub(r"\bOpenClaw\b", "planner gateway", text)
+    text = re.sub(r"\blocal Gemma context overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
+    text = re.sub(r"\blocal Gemma overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
+    text = re.sub(r"\blocal Gemma\b", "planner", text, flags=re.IGNORECASE)
+    return re.sub(r"\$(\d)", r"USD \1", text)
 
 
 def get_daily_summary(d: date) -> dict:
@@ -516,7 +525,7 @@ def _waypoint_rows(
         if not meta:
             continue
         time_str = t[11:16] if len(t) > 11 else t
-        note = notes_by_time.get(t, "")
+        note = public_text(notes_by_time.get(t, ""))
         note = note.replace("|", "—")[:80]
         rows.append(
             f'  <div class="data-row"><strong>{escape(time_str)}</strong>'

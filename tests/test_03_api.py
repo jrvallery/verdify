@@ -4,7 +4,10 @@ Tests the FastAPI application at api.verdify.ai via localhost.
 """
 
 import json
+import math
 import subprocess
+
+from conftest import db_query_rows
 
 
 def api_get(path: str, host: str = "api.verdify.ai") -> tuple[int, str]:
@@ -79,6 +82,38 @@ class TestAPIHealth:
         assert data["overall_status"] in ("ok", "warn", "fail")
         assert isinstance(data["checks"], list)
 
+    def test_public_band_trace_endpoint(self):
+        status, body = api_get("/api/v1/public/band-trace?hours=6")
+        assert status == 200, f"Public band trace returned {status}: {body}"
+        data = json.loads(body)
+        assert data["greenhouse_id"] == "vallery"
+        assert data["summary"]["sample_count"] > 0
+        assert data["latest"]["trace_quality_flag"] in {
+            "ok",
+            "missing_crop_band",
+            "missing_fw_band",
+            "missing_readback",
+            "readback_drift",
+        }
+        for key in ("crop_vpd_high", "fw_vpd_high", "rb_vpd_high"):
+            assert key in data["latest"], f"band trace latest missing {key}"
+
+    def test_public_gpu_power_endpoint(self):
+        status, body = api_get("/api/v1/public/gpu-power?hours=1&step_minutes=5")
+        assert status == 200, f"Public GPU power returned {status}: {body}"
+        data = json.loads(body)
+        assert data["greenhouse_id"] == "vallery"
+        assert data["hours"] == 1
+        assert data["step_minutes"] == 5
+        assert isinstance(data["latest"], list)
+        assert isinstance(data["series"], list)
+        assert isinstance(data["cpu_latest"], list)
+        assert isinstance(data["cpu_series"], list)
+
+    def test_public_gpu_power_rejects_unbounded_requests(self):
+        status, body = api_get("/api/v1/public/gpu-power?hours=168&step_minutes=1")
+        assert status == 400, f"Unbounded GPU power request returned {status}: {body}"
+
     def test_public_contact_honeypot_noop_accepts_request(self):
         status, body = api_post_json(
             "/api/v1/public/contact",
@@ -151,6 +186,21 @@ class TestAPISetpoints:
             assert 50 <= data["temp_high"] <= 100, f"temp_high={data['temp_high']} out of range"
         if "vpd_high" in data and isinstance(data["vpd_high"], float):
             assert 0.3 <= data["vpd_high"] <= 3.0, f"vpd_high={data['vpd_high']} out of range"
+
+    def test_setpoints_vpd_matches_house_control_band(self):
+        status, body = api_get("/setpoints")
+        assert status == 200, f"Setpoints returned {status}"
+        data = self._parse_setpoints(body)
+        row = db_query_rows(
+            """
+            SELECT round(house_vpd_low::numeric, 2)::text,
+                   round(house_vpd_high::numeric, 2)::text
+              FROM fn_house_vpd_control_band(now())
+            """
+        )[0]
+        expected_low, expected_high = [float(v) for v in row.split("|")]
+        assert math.isclose(data["vpd_low"], expected_low, abs_tol=0.01)
+        assert math.isclose(data["vpd_high"], expected_high, abs_tol=0.01)
 
 
 class TestAPICrops:

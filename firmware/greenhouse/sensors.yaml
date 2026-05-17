@@ -2088,6 +2088,192 @@ sensor:
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(gl_lux_hysteresis);
 
+  - platform: template
+    id: cfg_gl_main_dli_target
+    name: "Cfg GL Main DLI Target"
+    unit_of_measurement: "mol/m²/day"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_main_dli_target);
+
+  - platform: template
+    id: cfg_gl_main_lux_threshold
+    name: "Cfg GL Main Lux Threshold"
+    unit_of_measurement: "lx"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_main_lux_threshold);
+
+  - platform: template
+    id: cfg_gl_main_lux_hysteresis
+    name: "Cfg GL Main Lux Hysteresis"
+    unit_of_measurement: "lx"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_main_lux_hysteresis);
+
+  - platform: template
+    id: cfg_gl_main_sunrise_hour
+    name: "Cfg GL Main Sunrise Hour"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_main_sunrise_hour);
+
+  - platform: template
+    id: cfg_gl_main_sunset_hour
+    name: "Cfg GL Main Sunset Hour"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_main_sunset_hour);
+
+  - platform: template
+    id: cfg_gl_main_min_on_s
+    name: "Cfg GL Main Min On S"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_main_min_on_s);
+
+  - platform: template
+    id: cfg_gl_main_min_off_s
+    name: "Cfg GL Main Min Off S"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_main_min_off_s);
+
+  - platform: template
+    id: cfg_gl_main_auto_mode
+    name: "Cfg GL Main Auto Mode"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_main_auto_enabled) ? 1.0f : 0.0f;
+
+  - platform: template
+    id: cfg_gl_grow_dli_target
+    name: "Cfg GL Grow DLI Target"
+    unit_of_measurement: "mol/m²/day"
+    state_class: measurement
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_grow_dli_target);
+
+  - platform: template
+    id: cfg_gl_grow_lux_threshold
+    name: "Cfg GL Grow Lux Threshold"
+    unit_of_measurement: "lx"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_grow_lux_threshold);
+
+  - platform: template
+    id: cfg_gl_grow_lux_hysteresis
+    name: "Cfg GL Grow Lux Hysteresis"
+    unit_of_measurement: "lx"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_grow_lux_hysteresis);
+
+  - platform: template
+    id: cfg_gl_grow_sunrise_hour
+    name: "Cfg GL Grow Sunrise Hour"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_grow_sunrise_hour);
+
+  - platform: template
+    id: cfg_gl_grow_sunset_hour
+    name: "Cfg GL Grow Sunset Hour"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_grow_sunset_hour);
+
+  - platform: template
+    id: cfg_gl_grow_min_on_s
+    name: "Cfg GL Grow Min On S"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_grow_min_on_s);
+
+  - platform: template
+    id: cfg_gl_grow_min_off_s
+    name: "Cfg GL Grow Min Off S"
+    unit_of_measurement: "s"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_grow_min_off_s);
+
+  - platform: template
+    id: cfg_gl_grow_auto_mode
+    name: "Cfg GL Grow Auto Mode"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(gl_grow_auto_enabled) ? 1.0f : 0.0f;
+
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template
     id: mister_vpd_delta

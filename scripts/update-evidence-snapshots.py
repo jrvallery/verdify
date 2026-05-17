@@ -7,7 +7,6 @@ import argparse
 import html
 import json
 import re
-import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -252,8 +251,8 @@ def main() -> int:
     changed: list[Path] = []
     for path, kind, block in updates:
         if not path.exists():
-            print(f"missing target page: {path}", file=sys.stderr)
-            return 2
+            print(f"skipping missing target page: {path}")
+            continue
         if args.dry_run:
             replace_generated_block(path.read_text(encoding="utf-8"), kind, block)
             continue

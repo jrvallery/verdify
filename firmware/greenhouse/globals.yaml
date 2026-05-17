@@ -187,7 +187,7 @@ globals:
     restore_value: no
     initial_value: '0'
 
-  # ─── SNTP failure detection (A3) ───
+  # ─── Controller time failure detection (A3) ───
   - id: sntp_failed
     type: bool
     restore_value: no
@@ -244,6 +244,87 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
+
+  # ─── Per-circuit lighting automation (planner-managed) ───
+  - id: gl_main_dli_target
+    type: float
+    restore_value: no
+    initial_value: '14.0'
+
+  - id: gl_main_sunrise_hour
+    type: int
+    restore_value: no
+    initial_value: '7'
+
+  - id: gl_main_sunset_hour
+    type: int
+    restore_value: no
+    initial_value: '19'
+
+  - id: gl_main_lux_threshold
+    type: float
+    restore_value: no
+    initial_value: '3000.0'
+
+  - id: gl_main_lux_hysteresis
+    type: float
+    restore_value: no
+    initial_value: '1500.0'
+
+  - id: gl_main_min_on_s
+    type: int
+    restore_value: no
+    initial_value: '120'
+
+  - id: gl_main_min_off_s
+    type: int
+    restore_value: no
+    initial_value: '60'
+
+  - id: gl_main_auto_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+
+  - id: gl_grow_dli_target
+    type: float
+    restore_value: no
+    initial_value: '14.0'
+
+  - id: gl_grow_sunrise_hour
+    type: int
+    restore_value: no
+    initial_value: '7'
+
+  - id: gl_grow_sunset_hour
+    type: int
+    restore_value: no
+    initial_value: '19'
+
+  - id: gl_grow_lux_threshold
+    type: float
+    restore_value: no
+    initial_value: '3000.0'
+
+  - id: gl_grow_lux_hysteresis
+    type: float
+    restore_value: no
+    initial_value: '1500.0'
+
+  - id: gl_grow_min_on_s
+    type: int
+    restore_value: no
+    initial_value: '120'
+
+  - id: gl_grow_min_off_s
+    type: int
+    restore_value: no
+    initial_value: '60'
+
+  - id: gl_grow_auto_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'true'
 
   # ─── Daily ON-cycle counters (reset at midnight) ───
   - id: cnt_fan1_today
@@ -894,15 +975,14 @@ globals:
     restore_value: no
     initial_value: '300000'   # 5 min
 
-  # ─── Controller v2: band-first FSM ───────────────────────────────
-  # Default OFF so legacy firmware remains the rollback path. When ON,
-  # determine_mode() routes through determine_mode_v2(): temp-band first,
-  # VPD-band second, failed sealed misting enters backoff instead of
-  # forcing VENTILATE.
+  # ─── Unified band-first controller ───────────────────────────────────────
+  # Compatibility/readback field for planner and dispatcher contracts.
+  # The ESPHome control loop forces it ON so there is one live controller path:
+  # temp-band first, VPD-band second, failed sealed misting enters backoff.
   - id: sw_fsm_controller_enabled
     type: bool
     restore_value: no
-    initial_value: 'false'
+    initial_value: 'true'
 
   - id: mist_backoff_s
     type: int

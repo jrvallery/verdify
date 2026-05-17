@@ -101,6 +101,20 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "gl_lux_hysteresis",
         "gl_sunrise_hour",
         "gl_sunset_hour",
+        "gl_main_dli_target",
+        "gl_main_lux_threshold",
+        "gl_main_lux_hysteresis",
+        "gl_main_sunrise_hour",
+        "gl_main_sunset_hour",
+        "gl_main_min_on_s",
+        "gl_main_min_off_s",
+        "gl_grow_dli_target",
+        "gl_grow_lux_threshold",
+        "gl_grow_lux_hysteresis",
+        "gl_grow_sunrise_hour",
+        "gl_grow_sunset_hour",
+        "gl_grow_min_on_s",
+        "gl_grow_min_off_s",
         # Mister pulse model
         "mister_pulse_on_s",
         "mister_pulse_gap_s",
@@ -135,7 +149,7 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "summer_vent_min_runtime_s",
         # Phase-2 dwell gate (plan firmware stabilization).
         "dwell_gate_ms",
-        # Controller v2: band-first FSM.
+        # Band-first controller.
         "mist_backoff_s",
     }
 )
@@ -147,6 +161,8 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         "sw_economiser_enabled",
         "sw_fog_closes_vent",
         "sw_gl_auto_mode",
+        "sw_gl_main_auto_mode",
+        "sw_gl_grow_auto_mode",
         "sw_irrigation_enabled",
         "sw_irrigation_wall_enabled",
         "sw_irrigation_center_enabled",
@@ -155,15 +171,13 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         # Sprint-15: summer vent master enable. ON by default (firmware
         # behavior today is wrong in summer; explicit opt-out is safer).
         "sw_summer_vent_enabled",
-        # Sprint-15.1 fix 7: sprint-21 routing gap closed. Gates the
-        # vent-close interlock for misters in controls.yaml block 12.
-        # Default is whatever the firmware global initializes to
-        # (tunables.yaml sw_mister_closes_vent); operator can push
-        # per-greenhouse via dispatcher.
+        # Gates the normal vent-close interlock for misters in controls.yaml
+        # block 12. The explicit VENTILATE vent-mist assist path bypasses this
+        # interlock so hot/dry cooling can add bounded moisture with vent open.
         "sw_mister_closes_vent",
         # Phase-2 dwell gate master switch.
         "sw_dwell_gate_enabled",
-        # Controller v2 master switch.
+        # Band-first controller master switch.
         "sw_fsm_controller_enabled",
     }
 )

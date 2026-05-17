@@ -51,13 +51,16 @@ from entity_map import (
 from esp32_push import push_to_esp32
 from pydantic import ValidationError
 from tasks import (
+    BAND_DRIVEN_PARAMS,
     alert_monitor,
     daily_summary_live,
     forecast_action_engine,
     forecast_deviation_check,
     forecast_sync,
+    gpu_power_sync,
     grow_light_daily,
     ha_sensor_sync,
+    infra_cpu_sync,
     matview_refresh,
     midnight_watch,
     planning_heartbeat,
@@ -361,6 +364,9 @@ async def write_setpoint_changes(pool: asyncpg.Pool, ts: datetime) -> None:
     state.pending_setpoints.clear()
     validated: list[tuple[datetime, str, float, str, datetime, str]] = []
     for param, val in changes:
+        if param in BAND_DRIVEN_PARAMS:
+            log.debug("setpoint_changes ignored dispatcher-owned ESP32 echo: %s=%s", param, val)
+            continue
         try:
             SetpointChange(ts=ts, parameter=param, value=val, source="esp32", greenhouse_id=GREENHOUSE_ID)
         except ValidationError as e:
@@ -713,7 +719,7 @@ def _accept_setpoint(param: str, value: float) -> bool:
 def _accept_outbound_setpoint(param: str, value: float) -> bool:
     """Return True if a DB-origin setpoint is inside registry bounds."""
     if param in FORCED_ON_SWITCH_PARAMS and value < 0.5:
-        log.warning("Rejecting outbound fallback request %s=%.3f; controller v2 is locked ON", param, value)
+        log.warning("Rejecting outbound OFF request %s=%.3f; unified band-first controller is locked ON", param, value)
         return False
     spec = get_tunable(param)
     if spec is None or spec.kind != "numeric":
@@ -753,8 +759,11 @@ def _record_cfg_readback(obj_id: str, value: Any) -> bool:
             )
             return True
 
+    prev = shared.cfg_readback.get(cfg_param)
     state.cfg_readback[cfg_param] = val
     shared.cfg_readback[cfg_param] = val
+    if prev is not None and not math.isclose(prev, val, rel_tol=0.01, abs_tol=0.001):
+        shared.force_setpoint_push.set()
     if cfg_param in FORCED_ON_SWITCH_PARAMS and val < 0.5:
         eid = SWITCH_TO_ENTITY.get(cfg_param)
         if eid:
@@ -1216,6 +1225,11 @@ async def task_loop(pool: asyncpg.Pool) -> None:
         # dedup by date). Sprint 24.7 ops stopgap — retires when Sprint 25
         # alert_monitor rule 7 rewrite ships.
         ("midnight_watch", 60, midnight_watch),
+        # Public inference-infra proof data. Kept after greenhouse-critical
+        # tasks and sampled at 5m cadence so exporter stalls cannot starve
+        # dispatch, alerts, or planner heartbeat.
+        ("gpu_power_sync", 300, gpu_power_sync),
+        ("infra_cpu_sync", 300, infra_cpu_sync),
     ]
     last_run: dict[str, float] = {name: 0.0 for name, _, _ in TASKS}
 

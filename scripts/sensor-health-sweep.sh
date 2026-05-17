@@ -182,20 +182,29 @@ else
 fi
 
 # ── 5. OVERRIDE EVENTS (OBS-1e audit trail) ────────────────────────
-# A sudden spike in override_events in the deploy window suggests the
-# new firmware changed control semantics. Baseline 0-5/hour is normal.
+# A sudden spike in unexpected override_events in the deploy window suggests
+# the new firmware changed control semantics. vent_mist_assist and summer_vent
+# are expected during hot/dry VENTILATE windows and may be frequent.
 section "Override events ('$SINCE' window)"
 
 OV_COUNT=$($DB "SELECT count(*) FROM override_events WHERE ts >= now() - interval '$SINCE'" 2>/dev/null | tr -d ' ')
+OV_EXPECTED=$($DB "SELECT count(*) FROM override_events WHERE ts >= now() - interval '$SINCE' AND override_type IN ('vent_mist_assist', 'summer_vent')" 2>/dev/null | tr -d ' ')
+OV_UNEXPECTED=$($DB "SELECT count(*) FROM override_events WHERE ts >= now() - interval '$SINCE' AND override_type NOT IN ('vent_mist_assist', 'summer_vent')" 2>/dev/null | tr -d ' ')
 OV_TYPES=$($DB "SELECT override_type, count(*) FROM override_events WHERE ts >= now() - interval '$SINCE' GROUP BY 1 ORDER BY 2 DESC" 2>/dev/null)
+OV_COUNT=${OV_COUNT:-0}
+OV_EXPECTED=${OV_EXPECTED:-0}
+OV_UNEXPECTED=${OV_UNEXPECTED:-0}
 
 if [[ "$OV_COUNT" -eq 0 ]]; then
     pass "0 override events in window (OK for short windows)"
-elif [[ "$OV_COUNT" -lt 20 ]]; then
-    pass "$OV_COUNT override events in window (expected)"
+elif [[ "$OV_UNEXPECTED" -eq 0 ]]; then
+    pass "$OV_COUNT override events in window; all are vent_mist_assist/summer_vent expected during hot/dry VENTILATE windows"
+    [[ -n "$OV_TYPES" ]] && echo "    $OV_TYPES" | sed 's/|/ = /'
+elif [[ "$OV_UNEXPECTED" -lt 20 ]]; then
+    pass "$OV_COUNT override events in window ($OV_EXPECTED vent/summer assist, $OV_UNEXPECTED other expected)"
     [[ -n "$OV_TYPES" ]] && echo "    $OV_TYPES" | sed 's/|/ = /'
 else
-    warn "$OV_COUNT override events in window — check if firmware changed control semantics"
+    warn "$OV_COUNT override events in window ($OV_EXPECTED vent/summer assist, $OV_UNEXPECTED other) — check if firmware changed control semantics"
     [[ -n "$OV_TYPES" ]] && echo "    $OV_TYPES" | sed 's/|/ = /'
 fi
 

@@ -30,11 +30,11 @@ Deploy path remains `main → /mnt/iris/verdify → systemd restart`, followed b
 - [ ] **I-L2.7 Daily lifecycle artifact data.** Export one representative lifecycle bundle: forecast rows, plan JSON/tunables, telemetry window, scorecard row, and lessons generated from the outcome.
 - [ ] **I-L2.8 Crop-steering roadmap data gaps.** Track missing substrate, pH/EC/DO, DLI correction, and shade-cloth automation signals as explicit data-readiness gaps rather than implied capabilities.
 
-**Planner trigger coverage + local-first delivery** (2026-05-03 trace; coordinator-requested).
+**Planner trigger coverage + Hermes delivery** (2026-05-03 trace, superseded by 2026-05-11 Hermes cutover; coordinator-requested).
 
 Target state: every material planning reason has an auditable trigger row, every
-trigger routes to the local Gemma4-backed `iris-planner` OpenClaw session by
-default, and every trigger resolves to exactly one of `plan_written`, `acked`,
+trigger routes to Hermes `hermes-iris` with a recorded `hermes_run_id`, and every
+trigger resolves to exactly one of `plan_written`, `acked`,
 `delivery_failed`, or `timed_out`.
 
 - [ ] **I-P0.1 Canonical trigger matrix.** Replace implicit milestone handling with a single trigger matrix covering:
@@ -43,9 +43,9 @@ default, and every trigger resolves to exactly one of `plan_written`, `acked`,
   - forecast deviations: any observed-vs-forecast breach emitted by `forecast_deviation_check`
   - forecast refreshes: new forecast fetches after startup baseline
   - manual/ad-hoc runs from MCP
-  Each entry defines due time, catch-up behavior, expected planner action (`set_plan` vs `set_tunable` vs `acknowledge_trigger`), SLA, and local Gemma4 routing.
+  Each entry defines due time, catch-up behavior, expected planner action (`set_plan` vs `set_tunable` vs `acknowledge_trigger`), SLA, and Hermes routing.
 - [ ] **I-P0.2 No missed-sunrise blind spot.** Persist expected trigger times separately from "fired" state. If ingestor starts after the current 2h catch-up window, either deliver a late catch-up trigger with an explicit label or raise `planner_required_trigger_missed`; do not wait for `planner_stale`.
-- [x] **I-P0.3 Local-first OpenClaw routing.** Production routing now defaults to the existing `iris-planner` OpenClaw agent backed by local Gemma4 on cortext. `ENABLE_LOCAL_PLANNER` no longer controls hidden cloud fallback; cloud/opus is an explicit caller override and is visible in `plan_delivery_log`.
+- [x] **I-P0.3 Hermes routing.** Production routing now defaults to Hermes `hermes-iris` with OpenAI GPT-5.5 high-reasoning. Legacy `local`/`opus` values are audit labels only and no longer select a different gateway.
 - [ ] **I-P0.4 Per-trigger SLA lifecycle.** Implement the v1.4 SLA rule that marks old `pending` rows `timed_out` and alerts with `trigger_id`, event type, instance, delivered time, elapsed seconds, and gateway status. This replaces reliance on flat `planner_stale`.
 - [x] **I-P0.5 Correct delivery correlation.** Removed the unsafe 2h fallback for rows that have UUIDs. Exact `trigger_id` match is authoritative; fallback now runs only when both sides are legacy/null. MCP `set_plan` and `set_tunable` now reject planner-owned writes that omit `trigger_id`, verify the referenced delivery row, and mark the row `plan_written` immediately on success.
 - [ ] **I-P0.6 Deviation trigger completeness.** Ensure `forecast_deviation_check` logs and delivers every forecast deviation class the planner needs: temp, RH/VPD, solar irradiance, wind, precipitation/cloud-cover regime shift, and prolonged missed forecast. Dedupe repeated same-axis noise, but do not collapse distinct deviations into silence.

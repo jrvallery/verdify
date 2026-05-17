@@ -1,13 +1,14 @@
 #!/usr/bin/env /srv/greenhouse/.venv/bin/python3
 """
-populate-site-content.py — Materialize docs/*.md + planner playbook + skills
-into the site_content + playbook_content tables.
+populate-site-content.py — Materialize website/docs Markdown plus planner
+playbook and skills into the site_content + playbook_content tables.
 
 Phase 3 of the Iris loop overhaul: until now the site_content table existed
 but was empty, and the planner playbook lived only on disk (so embed-corpora.py
 had nothing to chunk). This script:
 
   - Walks docs/**/*.md (excluding agent-internal/meta docs) → site_content
+  - Walks /mnt/iris/verdify-vault/website/**/*.md → site_content
   - Walks docs/planner/*.md and the agent-host skills mirror → playbook_content
   - Chunks long files by markdown headings, then ~512-token blocks
   - Idempotent: content_hash skips unchanged rows
@@ -29,6 +30,7 @@ from pathlib import Path
 import asyncpg
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+WEBSITE_ROOT = Path("/mnt/iris/verdify-vault/website")
 sys.path.insert(0, str(REPO_ROOT / "ingestor"))
 from config import DB_DSN  # noqa: E402
 
@@ -50,7 +52,8 @@ SITE_DOC_EXCLUDE_PATTERNS = (
 )
 
 SITE_DOC_ROOTS = [
-    REPO_ROOT / "docs",
+    (REPO_ROOT / "docs", REPO_ROOT),
+    (WEBSITE_ROOT, WEBSITE_ROOT.parent),
 ]
 PLAYBOOK_ROOTS = [
     REPO_ROOT / "docs" / "planner",
@@ -74,6 +77,11 @@ def _hash(text: str) -> str:
 def _is_excluded(path: Path) -> bool:
     name = path.name.lower()
     return any(pat.lower() in name for pat in SITE_DOC_EXCLUDE_PATTERNS)
+
+
+def _site_doc_relative_path(md_path: Path, rel_root: Path) -> str:
+    """Stable source_id for site_content/embeddings."""
+    return md_path.relative_to(rel_root).as_posix()
 
 
 def _chunk_markdown(body: str) -> list[tuple[str | None, str]]:
@@ -190,16 +198,16 @@ async def run(dry_run: bool) -> None:
         playbook_written = 0
 
         # Site docs
-        for root in SITE_DOC_ROOTS:
+        for root, rel_root in SITE_DOC_ROOTS:
             if not root.is_dir():
                 continue
             for md_path in sorted(root.rglob("*.md")):
                 if _is_excluded(md_path):
                     continue
-                # Don't ingest the playbook into site_content — it has its own table
-                if md_path.parent.name == "planner":
+                # Don't ingest the repo playbook into site_content — it has its own table.
+                if root == REPO_ROOT / "docs" and md_path.parent.name == "planner":
                     continue
-                rel = md_path.relative_to(REPO_ROOT).as_posix()
+                rel = _site_doc_relative_path(md_path, rel_root)
                 content = md_path.read_text(encoding="utf-8")
                 if not content.strip():
                     continue

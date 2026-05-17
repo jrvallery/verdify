@@ -23,9 +23,10 @@ Every planner/operator tunable must have this chain:
 | Control model | `Setpoints` in `firmware/lib/greenhouse_types.h` receives the global value, not a literal |
 | Readback | `firmware/greenhouse/sensors.yaml` cfg sensor and `CFG_READBACK_MAP` let alerting confirm the value landed |
 
-MCP `set_tunable` now gates on `PLANNER_PUSHABLE_REG`, not just Tier 1. Tier 1
-is the daily prompt subset; Tier 2 is still pushable when Iris gives a specific
-reason. Safety rails with `planner_pushable=False` remain operator/fallback only.
+MCP `set_tunable` now gates on `PLANNER_PUSHABLE_REG`, which is intentionally
+equal to the canonical planner-policy surface. Non-policy rows are visible
+context only; they are not planner write targets. Safety rails and operator/fallback
+values remain outside planner control.
 
 ## Ownership Classes
 
@@ -56,6 +57,44 @@ Drift guards now fail if `Setpoints setpts = {...}` contains numeric policy
 literals, if a dispatcher route lacks a registry row, or if MCP stops using
 `PLANNER_PUSHABLE_REG` for `set_tunable`.
 
+## 2026-05-11 Traceability Audit Update
+
+The current tactical planner surface is limited to tunables with a demonstrated
+control-loop effect and a readback route. These exposed globals are intentionally
+not planner-pushable until firmware implements their semantics:
+
+`sw_mister_closes_vent` now means "block normal mister pulses while the vent is
+physically open." The explicit `VENTILATE` vent-mist assist path bypasses that
+interlock so hot/dry cooling can add bounded moisture without closing the vent.
+
+| Canonical param | Current status |
+|---|---|
+| `mist_vent_close_lead_s` | ESPHome number + cfg readback exists, but firmware does not consume it |
+| `mist_vent_reopen_delay_s` | ESPHome number + cfg readback exists, but firmware does not consume it |
+| `summer_vent_min_runtime_s` | `Setpoints` field exists and is clamped/read back, but the summer-vent gate does not use it |
+| `mister_on_s`, `mister_off_s`, `mister_all_on_s`, `mister_all_off_s`, `mister_max_runtime_min` | Deprecated legacy duty-cycle values; current pulse controller uses `mister_pulse_*`, `mister_all_kpa`, and `mister_water_budget_gal` |
+
+## 2026-05-12 Control Invariants
+
+The live controller must now satisfy these cross-layer invariants:
+
+- `DEHUM_VENT` cannot remain active after VPD crosses above `vpd_high`. The
+  firmware exits dehumidification immediately, seeding humidification readiness
+  so VENTILATE can use vent-mist assist or SEALED_MIST can recover dry stress.
+- Non-safety heat cannot overlap physical vent/fan air exchange. Relay min-on
+  timers may hold fans/vent briefly, but heat is suppressed until that air
+  exchange clears.
+- `heat2` cannot run unless `heat1` is available or physically held on. The
+  executor and replay invariant suite both treat heat2-without-heat1 as a
+  staging fault.
+- The dispatcher keeps the firmware house VPD band at least 0.55 kPa wide by
+  relaxing the low edge when crop/zone targets would otherwise create chatter.
+- During live VPD-high or near-edge `VENTILATE` stress with healthy dew-point
+  margin, dispatcher clamps planner moisture thresholds back near the active
+  `vpd_high` band. Firmware is expected to cool through `VENTILATE` while
+  moisture assist carries the VPD correction; planner policy should tune
+  intensity, not delay correction until far above the active band.
+
 ## Removed HTTP Poller
 
 The earlier HTTP `/setpoints` poller is intentionally absent from v1.0. It
@@ -71,7 +110,7 @@ These are still intentional constants or future tuning candidates:
 |---|---|---|
 | Sensor plausibility and stale sentinels | temp/RH/VPD plausible ranges, stale outdoor age sentinel | Keep firmware-owned unless field data shows false trips |
 | Physics and unit conversions | Magnus constants, F/C conversion, ADC/lux scaling, PPFD/DLI conversion | Keep as documented calibration constants |
-| Controller shape constants | v2 band interior fraction `0.25`, VPD hysteresis cap fraction `0.33`, cold outdoor margin `10°F`, minimum band widths | Promote to planner tunables only after replay shows the current defaults are the limiting factor |
+| Controller shape constants | band interior fraction `0.25`, VPD hysteresis cap fraction `0.33`, cold outdoor margin `10°F`, minimum band widths | Promote to planner tunables only after replay shows the current defaults are the limiting factor |
 | Irrigation weather skip constants | `0.6 kPa` VPD, `35°F` outdoor temp | Candidate for a future irrigation tuning PR |
 | Mister local timing heuristics | idle holdoff/fairness windows | Candidate if post-deploy telemetry shows zone starvation or cycling |
 

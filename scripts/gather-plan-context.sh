@@ -14,6 +14,8 @@ fi
 DB="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
 HA_TOKEN=$(cat /mnt/jason/agents/shared/credentials/ha_token.txt 2>/dev/null || echo "")
 HA_URL="http://192.168.30.107:8123"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="${PYTHON:-/srv/greenhouse/.venv/bin/python}"
 
 echo "=== GREENHOUSE PLANNING CONTEXT ==="
 echo "Greenhouse: $GREENHOUSE_ID"
@@ -96,6 +98,41 @@ FROM (SELECT unnest(ARRAY['north','south','east','west']) AS z,
                     round(vpd_east::numeric,2), round(vpd_west::numeric,2)]) AS v
       FROM climate ORDER BY ts DESC LIMIT 1) ranked;" 2>/dev/null
 echo "NOTE: North reads driest overnight (equipment zone). Daytime misting priority: south first (6 heads, 0.23 kPa/pulse), west second (3 heads, 0.15 kPa/pulse)."
+echo ""
+echo "--- ZONE SPREAD / LOCALIZED STRESS ---"
+$DB -c "
+WITH recent AS (
+  SELECT ts,
+    (SELECT max(v) - min(v)
+       FROM unnest(ARRAY[temp_north, temp_south, temp_east, temp_west]) AS vals(v)
+      WHERE v IS NOT NULL) AS temp_spread_f,
+    (SELECT max(v) - min(v)
+       FROM unnest(ARRAY[vpd_north, vpd_south, vpd_east, vpd_west]) AS vals(v)
+      WHERE v IS NOT NULL) AS vpd_spread_kpa
+  FROM climate
+  WHERE ts > now() - interval '3 hours'
+),
+latest AS (
+  SELECT * FROM recent ORDER BY ts DESC LIMIT 1
+),
+agg AS (
+  SELECT avg(temp_spread_f) AS avg_temp_spread_f,
+         max(temp_spread_f) AS max_temp_spread_f,
+         avg(vpd_spread_kpa) AS avg_vpd_spread_kpa,
+         max(vpd_spread_kpa) AS max_vpd_spread_kpa
+  FROM recent
+)
+SELECT json_build_object(
+  'latest_temp_spread_f', round(latest.temp_spread_f::numeric, 1),
+  'latest_vpd_spread_kpa', round(latest.vpd_spread_kpa::numeric, 2),
+  'avg_3h_temp_spread_f', round(agg.avg_temp_spread_f::numeric, 1),
+  'max_3h_temp_spread_f', round(agg.max_temp_spread_f::numeric, 1),
+  'avg_3h_vpd_spread_kpa', round(agg.avg_vpd_spread_kpa::numeric, 2),
+  'max_3h_vpd_spread_kpa', round(agg.max_vpd_spread_kpa::numeric, 2),
+  'planner_rule',
+  'If temp spread > 4F or VPD spread > 0.5 kPa, average compliance is insufficient; use zone outliers in conditions_summary and preserve wider VPD deadband.'
+) FROM latest CROSS JOIN agg;
+" 2>/dev/null || echo "{}"
 echo ""
 
 # ── 3. GREENHOUSE STATE + SWITCHES (from HA or DB) ──────────────
@@ -223,6 +260,54 @@ SELECT to_char(date_trunc('day', ts)::date, 'MM-DD') as day, round(max(dli_today
 FROM climate WHERE ts > now() - interval '7 days' GROUP BY 1 ORDER BY 1;
 "
 echo ""
+echo "LIGHTING POLICY (read-only; dispatcher pushes these to ESP32):"
+$DB -c "
+SELECT target_dli,
+       target_light_hours,
+       sunrise_hour,
+       natural_sunset_hour,
+       cutoff_hour,
+       max_crop_name,
+       source_chain
+FROM fn_lighting_policy(now(), '${GREENHOUSE_ID}');
+" 2>/dev/null || echo "(lighting policy unavailable)"
+echo "Do not set gl_dli_target, gl_sunrise_hour, gl_sunset_hour, or sw_gl_auto_mode in your plan."
+echo "Lighting automation is enforced by two ESP32 per-circuit state machines after dispatcher push."
+echo ""
+echo "PER-CIRCUIT LIGHTING POLICY (planner-managed tunables; crop policy seeds defaults):"
+$DB -c "
+SELECT light_key,
+       equipment,
+       dli_target,
+       start_hour,
+       cutoff_hour,
+       lux_on_threshold,
+       lux_hysteresis,
+       lux_off_threshold,
+       min_on_s,
+       min_off_s,
+       auto_enabled
+FROM fn_lighting_circuit_policy(now(), '${GREENHOUSE_ID}')
+ORDER BY light_key;
+" 2>/dev/null || echo "(per-circuit lighting policy unavailable)"
+echo "You may set gl_main_* and gl_grow_* tunables independently when observations support diverging the two circuits."
+echo ""
+echo "TEMPEST LUX THRESHOLD RECOMMENDATION (planner guidance for per-circuit tunables):"
+$DB -c "
+SELECT sample_count,
+       overcast_sample_count,
+       clear_sample_count,
+       round(overcast_p80_lux::numeric, 0) AS overcast_p80_lux,
+       round(clear_p20_lux::numeric, 0) AS clear_p20_lux,
+       recommended_gl_lux_threshold,
+       recommended_gl_lux_hysteresis,
+       current_gl_lux_threshold,
+       current_gl_lux_hysteresis
+FROM fn_lighting_lux_threshold_recommendation(now(), '${GREENHOUSE_ID}');
+" 2>/dev/null || echo "(lux threshold recommendation unavailable)"
+echo "current_gl_lux_threshold/current_gl_lux_hysteresis are the current planner/default per-circuit policy values; ESP32 cfg readbacks are excluded from this source-of-truth view."
+echo "Use Tempest outdoor illuminance as the lighting trigger. Set gl_main_lux_threshold/gl_main_lux_hysteresis and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence unless you have a stronger observation."
+echo ""
 echo "DLI CORRECTION (estimated actual plant DLI):"
 SENSOR_DLI=$($DB -c "SELECT round(COALESCE(max(dli_today), 0)::numeric, 1) FROM climate WHERE ts >= date_trunc('day', now() AT TIME ZONE 'America/Denver');" 2>/dev/null)
 GL_HOURS=$($DB -c "SELECT round(COALESCE(runtime_grow_light_min, 0)::numeric / 60, 1) FROM daily_summary ORDER BY date DESC LIMIT 1;" 2>/dev/null)
@@ -232,8 +317,7 @@ python3 -c "s=${SENSOR_DLI};g=${GL_HOURS};print(f'sensor_dli={s} | estimated_act
 echo "SENSOR LIMITATION: The lux sensor reads 25-40% of actual plant-available light."
 echo "Sensor DLI of 5-7 mol corresponds to actual plant DLI of 17-27 mol."
 echo "Do NOT react to low sensor DLI as if plants are light-starved."
-echo "Grow light automation (gl_auto_mode) works by accident -- the 3000 lux threshold"
-echo "correlates with tree shadow clearing, not actual light adequacy."
+echo "The lux threshold is the overcast/shade detector; crop DLI sets the photoperiod target."
 echo ""
 
 # ── 13. DISEASE RISK ──────────────────────────────────────────────
@@ -266,14 +350,17 @@ GOVERNING_PLAN=$($DB -c "
 " 2>/dev/null | tr -d ' ')
 GOVERNING_VALIDATED=$($DB -c "SELECT CASE WHEN validated_at IS NOT NULL THEN 'yes' ELSE 'no' END FROM plan_journal WHERE plan_id = '${GOVERNING_PLAN}';" 2>/dev/null | tr -d ' ')
 
-# Evaluation backlog: SUNRISE-like plans older than 26h that still have no
-# validated_at. Forces Iris to clear the backlog before writing a new plan.
+# Evaluation backlog: every completed Iris plan that still has no validation.
+# The old hour-window filter caught SUNRISE plans but missed SUNSET/manual
+# updates, which made the feedback loop selective and biased.
 EVAL_BACKLOG=$($DB -c "
-  SELECT COUNT(*) FROM plan_journal
-   WHERE plan_id LIKE 'iris-%'
-     AND created_at < now() - interval '26 hours'
-     AND validated_at IS NULL
-     AND EXTRACT(hour FROM created_at AT TIME ZONE 'America/Denver') BETWEEN 5 AND 9;
+  SELECT COUNT(*)
+    FROM plan_journal pj
+    LEFT JOIN v_plan_execution_intervals pei USING (plan_id)
+   WHERE pj.plan_id LIKE 'iris-%'
+     AND pj.plan_id NOT LIKE 'iris-reactive%'
+     AND pj.validated_at IS NULL
+     AND COALESCE(pei.interval_end, pj.created_at + interval '24 hours') < now() - interval '2 hours';
 " 2>/dev/null | tr -d ' ')
 
 # ── 15. PLANS THAT GOVERNED THE LAST 24 HOURS ─────────────────────
@@ -283,7 +370,21 @@ EVAL_BACKLOG=$($DB -c "
 # deviation in mind.
 echo "--- PLANS THAT GOVERNED THE LAST 24 HOURS (causal attribution; Phase 1) ---"
 if [ -n "${EVAL_BACKLOG}" ] && [ "${EVAL_BACKLOG}" -gt 0 ]; then
-  echo "EVALUATION BACKLOG: ${EVAL_BACKLOG} SUNRISE plans older than 26h still unevaluated — CALL plan_evaluate ON EACH BEFORE WRITING A NEW PLAN."
+  echo "EVALUATION BACKLOG: ${EVAL_BACKLOG} completed Iris plans still unevaluated — CALL plan_evaluate ON EACH BEFORE WRITING A NEW PLAN."
+  $DB -c "
+  SELECT pj.plan_id,
+         to_char(pj.created_at AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS planned_at,
+         to_char(COALESCE(pei.interval_end, pj.created_at + interval '24 hours') AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS ended_at,
+         pj.anchor_score
+    FROM plan_journal pj
+    LEFT JOIN v_plan_execution_intervals pei USING (plan_id)
+   WHERE pj.plan_id LIKE 'iris-%'
+     AND pj.plan_id NOT LIKE 'iris-reactive%'
+     AND pj.validated_at IS NULL
+     AND COALESCE(pei.interval_end, pj.created_at + interval '24 hours') < now() - interval '2 hours'
+   ORDER BY COALESCE(pei.interval_end, pj.created_at + interval '24 hours')
+   LIMIT 10;
+  " 2>/dev/null
 fi
 $DB -c "
 SELECT pj.plan_id,
@@ -453,22 +554,22 @@ echo ""
 # The top-10-by-confidence list above is a static ordering. For a forward-
 # looking plan, call lessons_search() with the forecast headline as the
 # query so you see lessons that match TODAY's conditions, not just the most-
-# validated ones. Same goes for knowledge_search() if you need playbook /
-# site-doc reference content during planning.
+# validated ones. knowledge_search() searches the unified embedding store
+# across site docs, playbook, historical plans, lessons, and crop observations.
 echo "--- RELEVANT LESSONS FOR TODAY'S FORECAST (semantic retrieval; Phase 3) ---"
 echo "Beyond the top-10 above, call lessons_search(query, top_k) with a forecast-derived"
 echo "query for the conditions you're actually planning around. Examples:"
 echo "  lessons_search(\"hot dry day with 1100 W/m^2 solar peak, RH below 15%\", top_k=8)"
 echo "  lessons_search(\"cool overcast morning then dry afternoon ramp\", top_k=8)"
-echo "Use knowledge_search(query, source_types) when you need reference content from the"
-echo "planner playbook or operator docs. Examples:"
-echo "  knowledge_search(\"vent oscillation pattern hot dry day\", source_types=\"playbook\")"
-echo "  knowledge_search(\"VPD-low recovery overnight\", source_types=\"site_doc,playbook\")"
+echo "Before any real set_plan/set_tunable call, use knowledge_search over the full corpus:"
+echo "  knowledge_search(\"hot dry high solar day misting plan outcome\", source_types=\"lesson,plan,site_doc,playbook,observation\")"
+echo "  knowledge_search(\"VPD-low recovery overnight prior observations\", source_types=\"lesson,plan,site_doc,playbook,observation\")"
 echo ""
 
 # ── 20a-2. FORECAST CALIBRATION (Codex P1: forecast-bias-corrected priors) ─
-# Open-Meteo consistently overshoots solar by ~+48 W/m^2 and VPD by ~+0.20 kPa
-# at 0-24h leads. Iris should discount those biases when planning, especially
+# Open-Meteo can materially overshoot solar and VPD at 0-24h leads. Iris should
+# use the live rolling bias rows below instead of hard-coded intuition,
+# especially
 # for dry-day pre-staging. Without this, the May VPD-low overshoot pattern
 # repeats — Iris plans for the forecast (bright + dry) and the day arrives
 # cooler/wetter, so the aggressive misting becomes over-humidification.
@@ -487,6 +588,38 @@ SELECT param,
 echo "Rule: positive bias = forecast OVERSHOOTS reality. Discount accordingly."
 echo "Solar bias historically +47 W/m^2 (~5-15%% of peak). Do not pre-stage aggressive"
 echo "misting until live morning VPD confirms the predicted dry ramp."
+echo "Bias-corrected next-24h planning priors (corrected = raw forecast - recent bias):"
+$DB -c "
+WITH bias AS (
+  SELECT param, avg(bias)::float AS bias
+    FROM v_forecast_accuracy_lead_buckets
+   WHERE date >= CURRENT_DATE - 7
+     AND lead_bucket IN ('00-06h', '0-6h', '06-24h', '6-24h')
+     AND param IN ('temp_f', 'vpd_kpa', 'solar_w_m2')
+   GROUP BY param
+), latest_forecast AS (
+  SELECT DISTINCT ON (ts) ts, temp_f, vpd_kpa, solar_w_m2
+    FROM weather_forecast
+   WHERE ts > now()
+     AND ts <= now() + interval '24 hours'
+   ORDER BY ts, fetched_at DESC
+), sampled AS (
+  SELECT *
+    FROM latest_forecast
+   WHERE extract(hour FROM ts AT TIME ZONE 'America/Denver') IN (6, 9, 12, 15, 18, 21)
+)
+SELECT to_char(ts AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS mdt,
+       round(temp_f::numeric, 1) AS raw_temp_f,
+       round((temp_f - COALESCE((SELECT bias FROM bias WHERE param = 'temp_f'), 0))::numeric, 1) AS corrected_temp_f,
+       round(vpd_kpa::numeric, 2) AS raw_vpd_kpa,
+       round((vpd_kpa - COALESCE((SELECT bias FROM bias WHERE param = 'vpd_kpa'), 0))::numeric, 2) AS corrected_vpd_kpa,
+       round(solar_w_m2::numeric, 0) AS raw_solar_w_m2,
+       round(GREATEST(0, solar_w_m2 - COALESCE((SELECT bias FROM bias WHERE param = 'solar_w_m2'), 0))::numeric, 0) AS corrected_solar_w_m2
+  FROM sampled
+ ORDER BY ts
+ LIMIT 8;
+" 2>/dev/null || echo "(forecast calibration unavailable)"
+echo "Use corrected_vpd_kpa as the planning prior; keep raw_vpd_kpa as weather context."
 echo ""
 
 # ── 20b. CURRENT ACTIVE SETPOINTS (for mandatory waypoint emission) ─
@@ -494,28 +627,64 @@ echo "--- CURRENT ACTIVE SETPOINTS ---"
 $DB -c "
 SELECT parameter, value
 FROM (SELECT DISTINCT ON (parameter) parameter, value FROM setpoint_changes ORDER BY parameter, ts DESC) sub
-WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis','mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s','gl_dli_target','gl_sunrise_hour','gl_sunset_hour')
+WHERE parameter IN (
+  'temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis',
+  'mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s',
+  'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode',
+  'gl_main_dli_target','gl_main_sunrise_hour','gl_main_sunset_hour',
+  'gl_main_lux_threshold','gl_main_lux_hysteresis','gl_main_min_on_s','gl_main_min_off_s','sw_gl_main_auto_mode',
+  'gl_grow_dli_target','gl_grow_sunrise_hour','gl_grow_sunset_hour',
+  'gl_grow_lux_threshold','gl_grow_lux_hysteresis','gl_grow_min_on_s','gl_grow_min_off_s','sw_gl_grow_auto_mode'
+)
 ORDER BY parameter;
 " 2>/dev/null
 echo "Band-driven values above reflect current diurnal crop profiles and shift throughout the day."
 echo "Nighttime values are typically lower (temp_high ~62-65°F, vpd_high ~0.6-0.8 kPa). These are normal, not corruption."
-echo "Do not set band-driven params in your plan — use bias_heat/bias_cool to shift them."
+echo "Do not set band-driven or lighting-policy params in your plan — use bias_heat/bias_cool to shift climate bands."
+echo "Per-circuit gl_main_* and gl_grow_* lighting params are planner-managed; use them when light evidence warrants a circuit-specific target or threshold."
 echo ""
+
+echo "--- BAND SETPOINT PROVENANCE (crop -> dispatcher/API -> firmware -> cfg readback) ---"
+echo "parameter|crop_target|dispatcher_or_api|firmware_push|cfg_readback|automation_source"
+$DB -c "
+SELECT parameter,
+       round(crop_target_value::numeric, 2) AS crop_target,
+       round(dispatcher_value::numeric, 2) AS dispatcher_or_api,
+       round(firmware_setpoint_value::numeric, 2) AS firmware_push,
+       round(cfg_readback_value::numeric, 2) AS cfg_readback,
+       automation_source
+  FROM fn_band_setpoint_provenance(now(), '${GREENHOUSE_ID}')
+ ORDER BY parameter;
+" 2>/dev/null || echo "(band provenance unavailable)"
+echo "Use this as a read-only source trace: crop profiles define the target, dispatcher/API derive the value, firmware pushes it, cfg_* readbacks prove acceptance."
+echo ""
+
 echo "Firmware invariants (always active, not planner-controlled):"
 echo "  fog_time_window: 07:00-17:00 (fog blocked outside this window)"
 echo "  fog_rh_ceiling: 90% (fog blocked when RH exceeds)"
 echo "  fog_min_temp: 55°F (fog blocked when temp below)"
 echo "  economiser: always enabled (planner tunes enthalpy thresholds)"
-echo "  fog_closes_vent: always (built into state machine)"
+echo "  fog_closes_vent: planner-policy switch; default ON suppresses fog while vent is physically open except vent-mist assist"
+echo "  mister_closes_vent: planner-policy switch; suppresses normal misters while vent is open, but explicit VENTILATE vent-mist assist bypasses it"
+echo ""
+
+# ── 20c. GENERATED TUNABLE TRACEABILITY BRIEF ─────────────────────
+echo "--- TUNABLE TRACEABILITY BRIEF ---"
+if [ -x "$PYTHON_BIN" ] && [ -f "$SCRIPT_ROOT/generate-ai-tunables-page.py" ]; then
+  timeout 45 "$PYTHON_BIN" "$SCRIPT_ROOT/generate-ai-tunables-page.py" --planner-context 2>/dev/null \
+    || echo "(tunable traceability generator failed; fall back to registry bounds and do not use reserved/no-op params)"
+else
+  echo "(tunable traceability generator unavailable; fall back to registry bounds and do not use reserved/no-op params)"
+fi
 echo ""
 
 # ── 21. PLANNING GUIDANCE ──────────────────────────────────────────
 echo "--- PLANNING GUIDANCE ---"
 echo "VPD RAMP PATTERN: Historical data shows VPD increases ~60% between 9 AM and 1 PM on clear days."
-echo "The mister_engage_kpa threshold (currently from plan) determines when misting starts."
-echo "On days with forecast outdoor RH < 25% and clear skies, consider lowering mister_engage_kpa"
-echo "to 1.3 in the morning plan (6 AM waypoint) and raising it back to 1.6 in the evening plan"
-echo "(6 PM waypoint). This pre-conditions humidity before the steep VPD ramp."
+echo "SEALED_MIST entry is driven by vpd_high plus vpd_watch_dwell_s; mister_engage_kpa gates physical S1 mister pulses after humidity/zone demand exists."
+echo "On days with forecast outdoor RH < 25% and clear skies, consider a coordinated morning humidity posture:"
+echo "lower mister_engage_kpa for earlier physical pulses, tighten mister_pulse_gap_s, and adjust vpd_watch_dwell_s only with a clear no-short-cycle hypothesis."
+echo "Raise mist thresholds back toward the evening posture once the dry ramp has passed."
 echo ""
 
 # ── 22. FORECAST ALERTS (proactive warnings for next 24-48h) ─────
@@ -747,6 +916,87 @@ ORDER BY n_clamped DESC LIMIT 10;
 echo "If a param clamps repeatedly at the same requested value: the push source is out of the"
 echo "dispatcher's valid range. If YOU pushed that value, it reached setpoint_clamps but NOT the"
 echo "ESP32 — reconsider the value or reference the Tunable Dictionary for the actual range."
+echo ""
+
+# ── 30b-2. GUARDRAIL-AWARE TRANSITION AUDIT ─────────────────────
+# This is the plan -> dispatcher -> ESP32 landing check. It distinguishes
+# normal matches from safety holds where the dispatcher intentionally kept the
+# already-applied value and therefore did not emit a setpoint_changes row.
+echo "--- GUARDRAIL-AWARE TRANSITION AUDIT (last 36h) ---"
+$DB -c "
+SELECT plan_id,
+       status,
+       count(*) AS n,
+       round(avg(push_latency_s)::numeric, 0) AS avg_push_s,
+       round(avg(confirm_latency_s)::numeric, 0) AS avg_confirm_s
+  FROM fn_plan_transition_audit(NULL, '36 hours'::interval, '10 minutes'::interval)
+ GROUP BY plan_id, status
+ ORDER BY max(plan_created_at) DESC, plan_id, status;
+" 2>/dev/null || echo "(fn_plan_transition_audit unavailable; migration 120 may not be applied)"
+echo "Any status other than matched/already_at_value/guardrailed/held_by_guardrail requires investigation before trusting the plan."
+echo "Recent held/missed/mismatch details:"
+$DB -c "
+SELECT to_char(transition_ts AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI') AS transition_mdt,
+       plan_id,
+       parameter,
+       round(planned_value::numeric, 3) AS planned,
+       round(applied_value::numeric, 3) AS applied,
+       status,
+       COALESCE(guardrail_reason, '') AS guardrail_reason,
+       CASE WHEN matching_push_ts IS NULL THEN ''
+            ELSE to_char(matching_push_ts AT TIME ZONE 'America/Denver', 'MM-DD HH24:MI')
+        END AS restored_mdt
+  FROM fn_plan_transition_audit(NULL, '36 hours'::interval, '10 minutes'::interval)
+ WHERE status NOT IN ('matched', 'already_at_value')
+ ORDER BY transition_ts DESC, parameter
+ LIMIT 20;
+" 2>/dev/null || true
+echo ""
+
+# ── 30b-3. HOT/DRY VENTILATE CONTROL UTILIZATION ─────────────────
+echo "--- HOT/DRY VENTILATE UTILIZATION (last 24h, firmware band basis) ---"
+$DB -c "
+WITH samples AS (
+  SELECT c.ts,
+         c.temp_avg,
+         c.vpd_avg,
+         fn_setpoint_at('temp_high', c.ts) AS sp_temp_high,
+         fn_setpoint_at('vpd_high', c.ts) AS sp_vpd_high,
+         fn_equip_at('fan1', c.ts) AS fan1,
+         fn_equip_at('fan2', c.ts) AS fan2,
+         fn_equip_at('fog', c.ts) AS fog,
+         (fn_equip_at('mister_south', c.ts) OR fn_equip_at('mister_west', c.ts) OR fn_equip_at('mister_center', c.ts)) AS misting,
+         (
+           SELECT ss.value
+             FROM system_state ss
+            WHERE ss.entity = 'greenhouse_state'
+              AND ss.ts <= c.ts
+            ORDER BY ss.ts DESC
+            LIMIT 1
+         ) AS greenhouse_mode
+    FROM climate c
+   WHERE c.ts > now() - interval '24 hours'
+     AND c.temp_avg IS NOT NULL
+     AND c.vpd_avg IS NOT NULL
+     AND (extract(minute FROM c.ts)::int % 5) = 0
+), classified AS (
+  SELECT *,
+         (temp_avg > sp_temp_high AND vpd_avg > sp_vpd_high) AS both_high,
+         (greenhouse_mode = 'VENTILATE') AS ventilating
+    FROM samples
+   WHERE sp_temp_high IS NOT NULL
+     AND sp_vpd_high IS NOT NULL
+)
+SELECT count(*) FILTER (WHERE both_high AND ventilating) AS hot_dry_vent_samples,
+       round(avg(temp_avg - sp_temp_high) FILTER (WHERE both_high AND ventilating)::numeric, 2) AS avg_temp_excess_f,
+       round(avg(vpd_avg - sp_vpd_high) FILTER (WHERE both_high AND ventilating)::numeric, 3) AS avg_vpd_excess_kpa,
+       round((100.0 * avg(CASE WHEN fan1 THEN 1 ELSE 0 END) FILTER (WHERE both_high AND ventilating))::numeric, 1) AS fan1_pct,
+       round((100.0 * avg(CASE WHEN fan2 THEN 1 ELSE 0 END) FILTER (WHERE both_high AND ventilating))::numeric, 1) AS fan2_pct,
+       round((100.0 * avg(CASE WHEN fog THEN 1 ELSE 0 END) FILTER (WHERE both_high AND ventilating))::numeric, 1) AS fog_pct,
+       round((100.0 * avg(CASE WHEN misting THEN 1 ELSE 0 END) FILTER (WHERE both_high AND ventilating))::numeric, 1) AS mister_pct
+  FROM classified;
+" 2>/dev/null || echo "(hot/dry utilization unavailable)"
+echo "If hot_dry_vent_samples is high but fan2/fog/mister pct is low, prefer plans that keep moisture thresholds band-coupled and escalate cooling assist earlier; do not solve this by widening the compliance band. Sampled at 5-minute cadence over 24h for prompt speed."
 echo ""
 
 # ── 31. CONTEXT COMPLETENESS SUMMARY (G10) ─────────────────────

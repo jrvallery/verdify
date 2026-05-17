@@ -1,8 +1,9 @@
 #!/usr/bin/env /srv/greenhouse/.venv/bin/python3
 """
 embed-corpora.py — Generate OpenAI text-embedding-3-large embeddings for the
-four Iris knowledge corpora (lesson / plan / site_doc / playbook) and store
-in verdify_embeddings (migration 112).
+Iris knowledge corpora (lesson / plan / site_doc / playbook / observation) and
+store in verdify_embeddings (migration 112). The site_doc corpus is populated
+from public website Markdown plus operator-facing docs by populate-site-content.py.
 
 Phase 3 of the Iris loop overhaul. Idempotent: each row carries a content_hash
 so unchanged rows skip the embedding call. Designed to run as a daily systemd
@@ -41,7 +42,7 @@ EMBED_MODEL = "text-embedding-3-large"  # 3072-dim
 EMBED_DIM = 3072
 BATCH_SIZE = 64  # OpenAI accepts up to 2048; smaller keeps latency low
 
-VALID_SOURCES = ("lesson", "plan", "site_doc", "playbook")
+VALID_SOURCES = ("lesson", "plan", "site_doc", "playbook", "observation")
 
 
 def _hash(text: str) -> str:
@@ -59,7 +60,10 @@ async def _collect_lessons(conn: asyncpg.Connection):
         SELECT id, category, condition, lesson, confidence, times_validated,
                is_active, last_validated
           FROM planner_lessons
-         WHERE lesson IS NOT NULL AND lesson != ''
+         WHERE is_active = true
+           AND superseded_by IS NULL
+           AND lesson IS NOT NULL
+           AND lesson != ''
         """
     )
     for r in rows:
@@ -124,22 +128,121 @@ async def _collect_playbook(conn: asyncpg.Connection):
         yield ("playbook", r["source_path"], r["chunk_idx"], text, meta)
 
 
+async def _collect_observations(conn: asyncpg.Connection):
+    rows = await conn.fetch(
+        """
+        SELECT o.id, o.ts, o.obs_type, o.zone, o.position, o.severity,
+               o.species, o.count, o.affected_pct, o.source, o.notes,
+               o.health_score, o.plant_height_cm, o.leaf_count,
+               o.canopy_cover_pct, o.flowering_count, o.fruit_count,
+               o.root_condition, o.mortality_count, o.stress_tags,
+               c.name AS crop_name, c.variety AS crop_variety, c.stage AS crop_stage,
+               z.slug AS zone_slug, p.label AS position_label
+          FROM observations o
+          LEFT JOIN crops c ON c.id = o.crop_id
+          LEFT JOIN zones z ON z.id = o.zone_id
+          LEFT JOIN positions p ON p.id = o.position_id
+         WHERE coalesce(o.notes, '') != ''
+            OR o.health_score IS NOT NULL
+            OR o.severity IS NOT NULL
+            OR o.stress_tags IS NOT NULL
+         ORDER BY o.ts DESC
+        """
+    )
+    for r in rows:
+        location = r["position_label"] or r["position"] or r["zone_slug"] or r["zone"] or "unknown position"
+        crop = " ".join(
+            part
+            for part in (
+                r["crop_name"],
+                f"({r['crop_variety']})" if r["crop_variety"] else None,
+                f"stage={r['crop_stage']}" if r["crop_stage"] else None,
+            )
+            if part
+        )
+        metrics = []
+        for key in (
+            "health_score",
+            "severity",
+            "affected_pct",
+            "plant_height_cm",
+            "leaf_count",
+            "canopy_cover_pct",
+            "flowering_count",
+            "fruit_count",
+            "mortality_count",
+        ):
+            if r[key] is not None:
+                metrics.append(f"{key}={r[key]}")
+        if r["root_condition"]:
+            metrics.append(f"root_condition={r['root_condition']}")
+        if r["stress_tags"]:
+            metrics.append("stress_tags=" + ",".join(r["stress_tags"]))
+        text = "\n".join(
+            part
+            for part in (
+                f"[observation|{r['obs_type']}|{location}|{r['ts'].isoformat()}]",
+                f"crop={crop}" if crop else None,
+                "metrics=" + "; ".join(metrics) if metrics else None,
+                r["notes"],
+            )
+            if part
+        )
+        meta = {
+            "ts": r["ts"].isoformat() if r["ts"] else None,
+            "obs_type": r["obs_type"],
+            "zone": r["zone_slug"] or r["zone"],
+            "position": r["position_label"] or r["position"],
+            "source": r["source"],
+            "crop_name": r["crop_name"],
+            "crop_stage": r["crop_stage"],
+            "health_score": r["health_score"],
+            "severity": r["severity"],
+            "stress_tags": list(r["stress_tags"]) if r["stress_tags"] else [],
+        }
+        yield ("observation", str(r["id"]), 0, text, meta)
+
+
+def _split_oversized_block(text: str, max_bytes: int) -> list[str]:
+    """Hard-split a paragraph/table row that is larger than the embedding limit."""
+    out: list[str] = []
+    buf: list[str] = []
+    buf_bytes = 0
+    for ch in text:
+        cb = len(ch.encode("utf-8"))
+        if buf and buf_bytes + cb > max_bytes:
+            chunk = "".join(buf).strip()
+            if chunk:
+                out.append(chunk)
+            buf = [ch]
+            buf_bytes = cb
+        else:
+            buf.append(ch)
+            buf_bytes += cb
+    chunk = "".join(buf).strip()
+    if chunk:
+        out.append(chunk)
+    return out
+
+
 def _chunk_text(text: str, max_bytes: int = 2048) -> list[str]:
-    """Naive byte-bounded chunker — splits on paragraph boundaries when possible."""
+    """Byte-bounded chunker: prefer paragraphs, hard-split oversized blocks."""
     if len(text.encode("utf-8")) <= max_bytes:
         return [text]
     out: list[str] = []
     buf: list[str] = []
     buf_bytes = 0
     for para in text.split("\n\n"):
-        pb = len(para.encode("utf-8"))
-        if buf and buf_bytes + pb > max_bytes:
-            out.append("\n\n".join(buf).strip())
-            buf = [para]
-            buf_bytes = pb
-        else:
-            buf.append(para)
-            buf_bytes += pb + 2
+        para_chunks = _split_oversized_block(para, max_bytes) if len(para.encode("utf-8")) > max_bytes else [para]
+        for chunk in para_chunks:
+            cb = len(chunk.encode("utf-8"))
+            if buf and buf_bytes + cb + 2 > max_bytes:
+                out.append("\n\n".join(buf).strip())
+                buf = [chunk]
+                buf_bytes = cb
+            else:
+                buf.append(chunk)
+                buf_bytes += cb + 2
     if buf:
         out.append("\n\n".join(buf).strip())
     return out
@@ -227,6 +330,7 @@ async def run(sources: tuple[str, ...], force: bool, dry_run: bool) -> None:
             "plan": _collect_plans,
             "site_doc": _collect_site_docs,
             "playbook": _collect_playbook,
+            "observation": _collect_observations,
         }
 
         # Gather all rows that need (re)embedding

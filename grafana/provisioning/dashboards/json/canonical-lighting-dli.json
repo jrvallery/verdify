@@ -138,7 +138,7 @@
         "colorMode": "value",
         "graphMode": "area"
       },
-      "description": "Accumulated Daily Light Integral from indoor lux sensor"
+      "description": "DLI accumulation from greenhouse light sensing; target comes from the crop-driven lighting policy."
     },
     {
       "id": 4,
@@ -332,7 +332,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Grow Light Runtime (24h)",
+      "title": "Lutron Circuit Runtime (24h)",
       "description": "Hours of grow light operation per day from daily_summary",
       "datasource": {
         "uid": "verdify-tsdb",
@@ -350,9 +350,18 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(date::timestamptz), runtime_grow_light_min / 60.0 AS \"Grow Light Hours\"\nFROM daily_summary\nWHERE $__timeFilter((date::timestamptz + interval '12 hours')) AND runtime_grow_light_min > 0\nORDER BY date",
+          "rawSql": "SELECT ts AS time, main_light_hours AS \"Main Light Hours\"\nFROM v_lighting_daily\nWHERE $__timeFilter(ts) AND main_light_hours > 0\nORDER BY ts",
           "format": "time_series",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT ts AS time, grow_light_circuit_hours AS \"Grow Light Hours\"\nFROM v_lighting_daily\nWHERE $__timeFilter(ts) AND grow_light_circuit_hours > 0\nORDER BY ts",
+          "format": "time_series",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -762,7 +771,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', ts) AS time, 14.0 AS \"Target DLI\" FROM climate WHERE ts > now() - interval '90 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT ts AS time, target_dli AS \"Target DLI\" FROM v_lighting_daily WHERE ts > now() - interval '90 days' ORDER BY ts",
           "refId": "C",
           "sql": {
             "columns": [
@@ -1213,8 +1222,8 @@
     {
       "id": 15,
       "type": "state-timeline",
-      "title": "Light Decision Context",
-      "description": "Factors affecting grow light decisions: light state, occupancy, sun position",
+      "title": "Lutron Circuit State",
+      "description": "Factors affecting per-circuit light decisions: Lutron state, occupancy, and sun position.",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1232,9 +1241,18 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Grow Light\"\nFROM equipment_state WHERE equipment = 'grow_light_main' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Grow Light Main\"\nFROM equipment_state WHERE equipment = 'grow_light_main' AND $__timeFilter(ts) ORDER BY ts",
           "format": "time_series",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "uid": "verdify-tsdb",
+            "type": "grafana-postgresql-datasource"
+          },
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Grow Light Grow\"\nFROM equipment_state WHERE equipment = 'grow_light_grow' AND $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "refId": "D"
         },
         {
           "datasource": {
@@ -1321,7 +1339,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Grow Light"
+              "options": "Grow Light Main"
             },
             "properties": [
               {

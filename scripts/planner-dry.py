@@ -51,7 +51,7 @@ assert "Structured hypothesis" in p._PLANNER_CORE, (
     "structured-hypothesis guidance (G7) missing from _PLANNER_CORE — must ship to both instances"
 )
 assert "Tunable Dictionary — Tactical Tier 1" in p._PLANNER_CORE, "Tier 1 dictionary header missing from _PLANNER_CORE"
-assert "docs/tunable-cascade.md" in p._PLANNER_CORE, "escape-hatch reference to full cascade doc missing"
+assert "docs/tunable-cascade.md" in p._PLANNER_CORE, "non-policy reference to full cascade doc missing"
 # Drift guard: every Tier 1 planner-pushable name must appear literally in CORE.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from verdify_schemas.tunable_registry import REGISTRY  # noqa: E402

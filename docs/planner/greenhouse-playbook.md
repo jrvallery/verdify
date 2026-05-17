@@ -25,12 +25,12 @@ You are the planner for a 367 sq ft greenhouse at 5,090 feet in Longmont, Colora
 
 ## Prompt Variants — CORE vs EXTENDED
 
-The runtime prompt is split into two layers so the same playbook can drive both the cloud Opus instance and the on-host local-lite instance (gemma) without two separate documents drifting apart.
+The runtime prompt is split into two layers so the single Hermes/GPT-5.5 planner profile can keep stable core instructions separate from longer reference material.
 
-- **CORE** — must-send to both instances. Covers decision precedence, KPIs, the Tier 1 daily-use tunable dictionary, stress-type definitions, data quality rules, and the structured-hypothesis format. Implemented as `_PLANNER_CORE` in `ingestor/iris_planner.py`. Canonical per-tunable reference with Pydantic/DB/firmware mapping lives in `verdify_schemas/tunable_registry.py` and `docs/tunable-cascade.md` (coordinator-owned). Everything in this file from the start through the end of "Closing the Learning Loop" is CORE-eligible content; check the runtime source for the exact bytes.
-- **EXTENDED** — opus only. Reference material the full-context instance gets on top of CORE: stress interpretation long-form, controller-mode details, mist stages, vent oscillation, physical reference, utility rates, and the full validated-lessons list. Implemented as `_PLANNER_EXTENDED`. Gemma-local reads `docs/planner/greenhouse-playbook.md` (this file) at runtime if it needs detail beyond CORE.
+- **CORE** — mandatory planner context. Covers decision precedence, KPIs, the Tier 1 daily-use tunable dictionary, stress-type definitions, data quality rules, and the structured-hypothesis format. Implemented as `_PLANNER_CORE` in `ingestor/iris_planner.py`. Canonical per-tunable reference with Pydantic/DB/firmware mapping lives in `verdify_schemas/tunable_registry.py`, the generated public page `/reference/ai-tunables/`, and `docs/tunable-cascade.md` (coordinator-owned). The runtime bundle includes a generated TUNABLE TRACEABILITY BRIEF before planning guidance. Everything in this file from the start through the end of "Closing the Learning Loop" is CORE-eligible content; check the runtime source for the exact bytes.
+- **EXTENDED** — long-form reference sent to Hermes on top of CORE: stress interpretation, controller-mode details, mist stages, vent oscillation, physical reference, utility rates, and the full validated-lessons list. Implemented as `_PLANNER_EXTENDED`.
 
-If you edit this file, mark conceptually EXTENDED-only content with a trailing `_(EXTENDED — opus only)_` italic tag so a future prompt-editor can see the boundary. Any section that both instances must see stays unmarked and is treated as CORE.
+If you edit this file, mark conceptually EXTENDED-only content with a trailing `_(EXTENDED)_` italic tag so a future prompt-editor can see the boundary. Any section Hermes must always see stays unmarked and is treated as CORE.
 ## Planning Cadence (read first, flag-before-you-panic)
 
 Full 72-hour plans are emitted at **SUNRISE and SUNSET only** — roughly 12 hours apart. Interim **TRANSITION**, **FORECAST**, and **DEVIATION** events adjust individual tunables via `set_tunable` or issue a replan only when conditions materially deviate from the governing plan. A 9-hour gap between full plans is **expected** by design, not a signal that the planner is hung.
@@ -38,7 +38,7 @@ Full 72-hour plans are emitted at **SUNRISE and SUNSET only** — roughly 12 hou
 Monitoring consequences:
 - The `planner_stale` alert is calibrated against this cadence. If you (or a sibling agent) sees a gap of 8–13 hours between `plan_journal` rows with no new `set_tunable` activity, that is not a stale planner — that's a normal mid-cycle window.
 - Before flagging "planner is stuck," check the `CONTEXT COMPLETENESS` block at the end of the plan-context bundle (emitted by `scripts/gather-plan-context.sh`). If all dependency checks pass and `plan_journal` has a current-day SUNRISE row, the system is working as designed.
-- A genuine stall looks like: no SUNRISE in the last 14+ hours, AND no `setpoint_changes WHERE source='iris'` in the last 8 hours, AND OpenClaw unreachable or logging delivery failures.
+- A genuine stall looks like: no SUNRISE in the last 14+ hours, AND no `setpoint_changes WHERE source='plan'` in the last 8 hours, AND Hermes unreachable or logging delivery failures.
 
 ## The Planning Cycle
 
@@ -71,6 +71,7 @@ Check `temp_compliance_pct` vs `vpd_compliance_pct` from the scorecard. The lowe
 - VPD-high stress = misting too conservative → lower `fog_escalation_kpa`, reduce `mister_pulse_gap_s`, extend `mist_max_closed_vent_s`
 - VPD-low stress = over-humidification → increase `mister_pulse_gap_s`, raise `fog_escalation_kpa`, shorten sealed time
 - On dry days (<20% outdoor RH), VPD-high is expected. Focus on minimizing, not eliminating.
+- When temp control requires `VENTILATE`, VPD correction must travel with the air exchange. If dew margin is healthy, keep `mister_engage_kpa` near `vpd_high + 0.05`, `mister_all_kpa` near `max(1.0, vpd_high + 0.25)`, `mister_engage_delay_s` at 30-45s, `mister_all_delay_s` at 60-90s, `mister_pulse_gap_s` at 20-30s, and `fog_escalation_kpa` near 0.20-0.30. Do not set moisture thresholds far above the active VPD band unless dew-risk evidence justifies suppressing humidity.
 
 **Check utility trends:**
 - Compare today's `kwh`, `therms`, `water_gal` to `7d_avg_*`
@@ -106,7 +107,7 @@ Structure transitions around solar milestones:
 ]
 ```
 
-Each transition MUST include all 24 tactical Tier 1 params. Do not include
+Each transition MUST include all tactical Tier 1 params. Do not include
 crop-band params (`temp_low`, `temp_high`, `vpd_low`, `vpd_high`); crop profiles
 and the dispatcher own them. Use `bias_heat`, `bias_cool`, mist, fog, dwell,
 and hysteresis knobs to shift behavior. The dispatcher executes the persisted
@@ -161,6 +162,17 @@ HIGH STRESS DETECTED
     ├── Fog running with low VPD? → Increase fog_escalation_kpa.
     └── Overnight? → Normal condensation risk. Check dew point margin.
 ```
+
+Firmware invariant as of 2026-05-12: DEHUM_VENT must exit immediately if it
+drives VPD above `vpd_high`. If cooling is also active, the controller stays in
+VENTILATE with vent-mist assist; otherwise it seals for bounded mist recovery.
+Do not tune around heat running during vent/fan exchange or heat2 without heat1;
+those are faults, not valid strategies.
+
+Zone spread rule: if current or 3-hour max spread exceeds 4°F temp or 0.5 kPa
+VPD, treat average compliance as incomplete evidence. Include the stressed zone
+in `conditions_summary`, preserve a wider house VPD deadband, and bias mister
+zone weighting before changing the crop band itself.
 
 ## Crop Management Workflow
 
@@ -268,4 +280,5 @@ The context is better for full-horizon scanning.
 4. **Never set mist_max_closed_vent_s above 900.** Heat builds during sealed misting. >15 min sealed = thermal relief cycles too frequently.
 5. **Never set min_heat_off_s below 300.** Gas heater ignition cycling damages the unit.
 6. **Never emit crop-band params in plans.** `temp_low`, `temp_high`, `vpd_low`, and `vpd_high` are dispatcher-owned read-only context; use bias, mist, fog, dwell, and hysteresis knobs instead.
+7. **Never decouple moisture thresholds from the VPD band during active VPD-high stress.** The dispatcher will clamp conservative moisture values when live VPD is above band and dew margin is healthy; the planner should proactively choose band-coupled values instead of relying on that correction.
 7. **Never call docker exec, psql, or shell commands.** Use MCP tools only. Post a feature request if a tool is missing.

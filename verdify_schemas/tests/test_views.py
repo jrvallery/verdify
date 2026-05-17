@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from verdify_schemas.views import (
+    BandTraceRow,
     ClampActivity24h,
     DailyOscillation,
     DailyOscillationSummary,
@@ -117,6 +118,19 @@ class TestActivityViewsBasic:
         assert c.parameter == "temp_low"
 
 
+class TestBandTraceBasic:
+    def test_valid_minimal(self):
+        row = BandTraceRow(
+            ts="2026-05-15T12:00:00-06:00",
+            greenhouse_id="vallery",
+            trace_quality_flag="ok",
+            fw_both_in_band=True,
+            fw_temp_in_band=True,
+            fw_vpd_in_band=True,
+        )
+        assert row.greenhouse_id == "vallery"
+
+
 # ── Live-DB drift guards (integration tests) ──
 # If the DB view drops / renames a column we depend on, these fail.
 
@@ -168,3 +182,11 @@ class TestLiveProjection:
         rows = _psql_json("SELECT * FROM v_clamp_activity_24h")
         for r in rows:
             ClampActivity24h.model_validate(r)
+
+    def test_band_trace_live_rows(self):
+        rows = _psql_json(
+            "SELECT * FROM fn_band_trace(now() - interval '2 hours', now(), 'vallery') ORDER BY ts DESC LIMIT 3"
+        )
+        assert rows, "fn_band_trace returned no recent rows"
+        for r in rows:
+            BandTraceRow.model_validate(r)

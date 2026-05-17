@@ -83,7 +83,7 @@ esphome:
           if(id(fog_escalation_kpa) < 0.1 || id(fog_escalation_kpa) > 1.0){ id(fog_escalation_kpa) = 0.4; fixes++; }
           if(id(mister_pulse_on_s) < 15){ id(mister_pulse_on_s) = 60; fixes++; }
           if(id(mister_pulse_gap_s) < 5){ id(mister_pulse_gap_s) = 45; fixes++; }
-          if(id(mister_engage_kpa) < 0.5 || id(mister_engage_kpa) > 3){ id(mister_engage_kpa) = 1.6; fixes++; }
+          if(id(mister_engage_kpa) < 0.5 || id(mister_engage_kpa) > 2.5){ id(mister_engage_kpa) = 1.6; fixes++; }
           if(id(min_fog_on_s) < 10){ id(min_fog_on_s) = 60; fixes++; }
           if(id(min_fog_off_s) < 10){ id(min_fog_off_s) = 60; fixes++; }
           if(id(fog_rh_ceiling_pct) < 50 || id(fog_rh_ceiling_pct) > 100){ id(fog_rh_ceiling_pct) = 90; fixes++; }
@@ -95,8 +95,9 @@ esphome:
           if(id(mist_vent_close_lead_s) < 0 || id(mist_vent_close_lead_s) > 60){ id(mist_vent_close_lead_s) = 15; fixes++; }
           if(id(mist_vent_reopen_delay_s) < 0 || id(mist_vent_reopen_delay_s) > 120){ id(mist_vent_reopen_delay_s) = 45; fixes++; }
           if(id(enthalpy_open_kjkg) < -5 || id(enthalpy_open_kjkg) > 0){ id(enthalpy_open_kjkg) = -2; fixes++; }
-          if(id(enthalpy_close_kjkg) < 0 || id(enthalpy_close_kjkg) > 5){ id(enthalpy_close_kjkg) = 1; fixes++; }
-          if(id(stage2_cool_delta_f) < 2 || id(stage2_cool_delta_f) > 5){ id(stage2_cool_delta_f) = 3; fixes++; }
+          if(id(enthalpy_close_kjkg) < -5 || id(enthalpy_close_kjkg) > 20){ id(enthalpy_close_kjkg) = 1; fixes++; }
+          if(id(stage2_heat_delta_f) < 2 || id(stage2_heat_delta_f) > 15){ id(stage2_heat_delta_f) = 5; fixes++; }
+          if(id(stage2_cool_delta_f) < 2 || id(stage2_cool_delta_f) > 15){ id(stage2_cool_delta_f) = 3; fixes++; }
           if(id(mister_water_budget_gal) < 100 || id(mister_water_budget_gal) > 600){ id(mister_water_budget_gal) = 500; fixes++; }
           if(id(bias_heat_f) < -10 || id(bias_heat_f) > 10){ id(bias_heat_f) = 0; fixes++; }
           if(id(bias_cool_f) < -10 || id(bias_cool_f) > 10){ id(bias_cool_f) = 0; fixes++; }
@@ -212,32 +213,29 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
-# ────────────────────────────── TIME / SNTP ───────────────────────────────
+# ───────────────────────── TIME / CONTROLLER CLOCK ─────────────────────────
 time:
-  - platform: sntp
+  - platform: homeassistant
     id: sntp_time
-    servers:
-      - 192.168.10.1
-      - pool.ntp.org
     timezone: America/Denver
     on_time:
-      # 30‑minute heartbeat — A3: track consecutive misses for SNTP failure detection
+      # 30-minute heartbeat — A3: track consecutive misses for controller time.
       - seconds: 0
         minutes: /30
         then:
           - lambda: |-
               if(id(sntp_time).now().is_valid()){
                 if(id(sntp_failed)){
-                  ESP_LOGI("sntp","SNTP recovered");
+                  ESP_LOGI("time","controller time recovered");
                 }
                 id(sntp_heartbeat_misses) = 0;
                 id(sntp_failed) = false;
               }else{
                 id(sntp_heartbeat_misses) = id(sntp_heartbeat_misses) + 1;
-                ESP_LOGW("sntp","SNTP invalid — miss count: %d", id(sntp_heartbeat_misses));
+                ESP_LOGW("time","controller time invalid — miss count: %d", id(sntp_heartbeat_misses));
                 if(id(sntp_heartbeat_misses) >= 2){
                   id(sntp_failed) = true;
-                  ESP_LOGE("sntp","SNTP FAILED — 2 consecutive misses (1 hour)");
+                  ESP_LOGE("time","controller time FAILED — 2 consecutive misses (1 hour)");
                 }
               }
       # reset counters once per day at local midnight
@@ -282,10 +280,10 @@ binary_sensor:
               ESP_LOGW("api","HA API disconnected — local control continues");
             }
 
-  # A3: SNTP failure detection (2 consecutive 30-min heartbeat misses)
+  # A3: controller time failure detection (2 consecutive 30-min heartbeat misses)
   - platform: template
     id: bs_sntp_failed
-    name: "SNTP Status"
+    name: "Controller Time Status"
     entity_category: diagnostic
     device_class: problem
     lambda: "return id(sntp_failed);"

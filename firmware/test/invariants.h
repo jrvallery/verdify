@@ -1,6 +1,6 @@
 #pragma once
 /*
- * invariants.h — 15 firmware behavioral invariants enforced against replay
+ * invariants.h — 16 firmware behavioral invariants enforced against replay
  * traces. Each invariant is a pure function over a stream of per-minute
  * TraceRow records. First breach fails the replay run.
  *
@@ -71,7 +71,7 @@ struct TraceRow {
     // State (observed from telemetry)
     std::string greenhouse_state;  // "SEALED_MIST_S1"/"VENTILATE"/...
     std::string mode_reason;       // sprint-15.1 diagnostic
-    bool vent_mist_assist_active;   // v2 humidification assist while ventilating
+    bool vent_mist_assist_active;   // band-first controller humidification assist while ventilating
 
     // Equipment (0/1)
     int eq_fog, eq_vent, eq_fan1, eq_fan2, eq_heat1, eq_heat2;
@@ -127,9 +127,9 @@ inline bool check_1_fog_vent_exclusive(const TraceRow& r, ReportFn report = defa
 // #2: mister_* only fires in SEALED_MIST (or safety cool for mist-fog edge)
 inline bool check_2_mister_only_sealed(const TraceRow& r, ReportFn report = default_report) {
     const bool any_mister = r.eq_mister_south || r.eq_mister_west || r.eq_mister_center;
-    const bool v2_vent_assist = mode_is_ventilate(r.greenhouse_state)
-                             && r.vent_mist_assist_active;
-    if (any_mister && !mode_is_sealed(r.greenhouse_state) && !v2_vent_assist) {
+    const bool vent_mist_assist_ok = mode_is_ventilate(r.greenhouse_state)
+                                  && r.vent_mist_assist_active;
+    if (any_mister && !mode_is_sealed(r.greenhouse_state) && !vent_mist_assist_ok) {
         report(2, "mister_only_in_sealed", r,
                "mister_* ON in non-SEALED_MIST mode");
         return false;
@@ -207,6 +207,17 @@ inline bool check_15_mode_equipment_consistent(const TraceRow& r, ReportFn repor
                                               || r.eq_mister_south || r.eq_mister_west || r.eq_mister_center)) {
         report(15, "idle_with_active_relay", r,
                "mode=IDLE but fan/vent/fog/mister ON");
+        return false;
+    }
+    return true;
+}
+
+// #16: heat2 is a second-stage heat output and is never valid without heat1.
+// Gas heat without the primary heat path is a staging/executor fault, not a
+// tuning posture.
+inline bool check_16_heat2_requires_heat1(const TraceRow& r, ReportFn report = default_report) {
+    if (r.eq_heat2 && !r.eq_heat1) {
+        report(16, "heat2_requires_heat1", r, "heat2 ON while heat1 OFF");
         return false;
     }
     return true;
@@ -416,7 +427,7 @@ struct Ctx13 { /* unused in CSV-only replay */ };
 inline bool check_13_dry_override_clear(Ctx13& /*c*/, const TraceRow& /*r*/) { return true; }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Public entry point — iterate all 15 invariants over a trace.
+// Public entry point — iterate all 16 invariants over a trace.
 // Returns 0 on pass, non-zero = count of violated invariants.
 // ─────────────────────────────────────────────────────────────────────────
 struct Runner {
@@ -440,6 +451,7 @@ struct Runner {
         check_13_dry_override_clear(c13, r);   // deferred
         if (!check_14_vent_cold_day_cap(c14, r, report))            { failures++; ok = false; }
         if (!check_15_mode_equipment_consistent(r, report))         { failures++; ok = false; }
+        if (!check_16_heat2_requires_heat1(r, report))              { failures++; ok = false; }
         return ok;
     }
 };

@@ -35,22 +35,22 @@ Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.m
 
 Sprint 23 MCP `HarvestCreate`/`TreatmentCreate` envelope is merged into main; genai's MCP boundary is typed.
 
-**Planner loop hardening + local-first Iris** (2026-05-03 trace; coordinator-requested).
+**Planner loop hardening + Hermes Iris** (2026-05-03 trace, superseded by 2026-05-11 Hermes cutover; coordinator-requested).
 
-Target state: the existing OpenClaw `iris-planner` agent performs greenhouse
-planning and plan evaluation against local Gemma4 on cortext. Routine and
-required planning stays local by default; any cloud peer is an explicit operator
-escalation path, not the normal planning route. The ESP32 remains the
-safety-critical controller.
+Target state: Hermes `hermes-iris` performs greenhouse planning and plan
+evaluation against OpenAI GPT-5.5 high-reasoning with the in-repo MCP allowlist.
+The historical local Gemma/OpenClaw work remains useful for trigger-ledger and
+audit semantics, but no longer describes the production gateway. The ESP32
+remains the safety-critical controller.
 
-- [x] **G-P0.1 Local Gemma4 target contract.** Planner docs, routing comments, dry-run expectations, and live OpenClaw config now treat `iris-planner` as local Gemma4 on cortext. Live `plan_delivery_log.session_key` rows use trigger-scoped `agent:iris-planner:main:trigger:<uuid>` sessions and the OpenClaw profile points at `vllm/gemma4-26b` with no fallback.
-- [ ] **G-P0.2 Prompt terminology cleanup.** Replace stale `opus/local` planner language with `local_gemma4` plus an explicit `cloud_escalation` override. Keep historical labels readable in DB queries, but make new prompts and operator docs local-first.
-- [ ] **G-P0.3 Full-context planner pack.** Rework `gather-plan-context.sh` output into a Gemma4-sized context pack with: current climate/equipment, 24h hourly history, 7d score trend, prior plan outcomes, current/future active plan, next 48-72h forecast, forecast accuracy/deviation summaries, recent setpoint confirmations, recent clamps/range rejects, open alerts, crops/positions, water/energy constraints, and context-completeness flags.
+- [x] **G-P0.1 Historical Local Gemma4 target contract.** Planner docs, routing comments, dry-run expectations, and live OpenClaw config treated `iris-planner` as local Gemma4 on cortext before the Hermes cutover. Live `plan_delivery_log.session_key` rows used trigger-scoped `agent:iris-planner:main:trigger:<uuid>` sessions and the OpenClaw profile pointed at `vllm/gemma4-26b` with no fallback.
+- [x] **G-P0.2 Prompt terminology cleanup.** New prompts and operator docs now describe the Hermes/GPT-5.5 path. Historical `opus/local` labels remain readable in DB queries as audit labels only.
+- [ ] **G-P0.3 Full-context planner pack.** Rework `gather-plan-context.sh` output into a Hermes/GPT-5.5 context pack with: current climate/equipment, 24h hourly history, 7d score trend, prior plan outcomes, current/future active plan, next 48-72h forecast, forecast accuracy/deviation summaries, recent setpoint confirmations, recent clamps/range rejects, open alerts, crops/positions, water/energy constraints, and context-completeness flags.
 - [ ] **G-P0.4 Distilled site + lessons memory.** Generate a compact planner digest from public/site context and operational docs: safety architecture, baseline-vs-Iris lessons, response-pack claims, greenhouse physical constraints, validated planner lessons, anti-patterns, and current launch story. Feed this as stable memory instead of pasting raw website pages into every prompt.
-- [x] **G-P0.5 Explicit tuning rubric.** `_PLANNER_CORE` / local Gemma directives now state the planning approach: use assembled context first, diagnose dominant stress, tune Tier 1 tactical knobs only, respect registry min/max, prefer `set_plan` for solar/fixed-boundary postures, use `set_tunable` only for immediate corrections, and reserve `acknowledge_trigger` for true no-op or validation cycles.
-- [x] **G-P0.6 MCP `plan_run` audit parity.** Manual/ad-hoc `plan_run` now creates a MANUAL trigger row, sends local-first through `send_to_iris`, returns audit fields, and resolves through the same `plan_delivery_log` correlation path.
+- [x] **G-P0.5 Explicit tuning rubric.** `_PLANNER_CORE` / Hermes directives now state the planning approach: use assembled context first, diagnose dominant stress, tune Tier 1 tactical knobs only, respect registry min/max, prefer `set_plan` for solar/fixed-boundary postures, use `set_tunable` only for immediate corrections, and reserve `acknowledge_trigger` for true no-op or validation cycles.
+- [x] **G-P0.6 MCP `plan_run` audit parity.** Manual/ad-hoc `plan_run` now creates a MANUAL trigger row, sends through `send_to_iris`, returns audit fields, and resolves through the same `plan_delivery_log` correlation path.
 - [x] **G-P0.7 Strict registry validation at MCP boundary.** `PlanTransition` / `set_plan` and `set_tunable` now reject values outside `tunable_registry` min/max before writing `setpoint_plan`. Errors include offending parameter, requested value, registry range, and nearest safe value so Iris can self-correct.
-- [x] **G-P0.8 Local planner smoke.** Live smoke sent MANUAL/FORECAST/DEVIATION/TRANSITION/SUNRISE/SUNSET validation triggers to local Gemma4, verified acknowledgements with matching `trigger_id`, rejected an out-of-range `vpd_hysteresis=0.6`, restored a valid tactical nudge through dispatcher readback, and audited active/future plan rows with zero registry violations.
+- [x] **G-P0.8 Historical local planner smoke.** Live smoke sent MANUAL/FORECAST/DEVIATION/TRANSITION/SUNRISE/SUNSET validation triggers to local Gemma4 before the Hermes cutover, verified acknowledgements with matching `trigger_id`, rejected an out-of-range `vpd_hysteresis=0.6`, restored a valid tactical nudge through dispatcher readback, and audited active/future plan rows with zero registry violations.
 - [ ] **G-P1.1 Post-plan self-critique.** After each full plan, have Iris record a short structured rationale: forecast assumptions, expected stress windows, tunables intentionally changed, tunables intentionally left alone, and what evidence would falsify the plan.
 
 ## Tracked list

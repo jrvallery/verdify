@@ -1,8 +1,8 @@
 # Verdify Site Content Map
 
-This is the working contract for `verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `/mnt/iris/verdify-worktrees/web/site`; Quartz builds into `/srv/verdify/verdify-site/public`.
+This is the working contract for `verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `site/`; Quartz builds into `/srv/verdify/verdify-site/public`.
 
-Current active source size after the 2026-05-03 launch credibility pass: 85 Markdown pages, including a lightweight redirect for the retired `/intelligence/lessons/` route.
+Current active source size after the 2026-05-16 refocus pass: 110 Markdown pages. Legacy `/greenhouse/lessons` and `/intelligence/lessons` are aliases for the generated `/reference/lessons` page.
 
 ## Editorial Principle
 
@@ -13,41 +13,43 @@ The site story is: Verdify is a public AI-assisted greenhouse control loop in Lo
 | Route | Role | Source type | Primary data/source | Graph layer | Update cadence |
 |---|---|---|---|---|---|
 | `/` | Public narrative entry point | Hand-authored | Current positioning, live overview panels | `site-home` | Manual |
-| `/about` | Project context | Hand-authored | Greenhouse/project description | None | Manual |
-| `/climate` | Climate system overview | Hand-authored | Greenhouse physics + live climate panels | `site-climate` | Manual copy, live graphs |
-| `/climate/controller` | ESP32/controller evidence | Hand-authored | Controller diagnostics, state machine, planning/write health | `site-climate-controller` | Manual copy, live graphs |
-| `/climate/cooling` | Cooling/ventilation reference | Hand-authored | Cooling physics, equipment limits, solar load | `site-climate-cooling` | Manual copy, live graphs |
-| `/climate/heating` | Heating reference | Hand-authored | Gas/electric heat, thermal envelope, cost | `site-climate-heating` | Manual copy, live graphs |
-| `/climate/humidity` | VPD/humidity reference | Hand-authored | Humidity control, mister effectiveness | `site-climate-humidity` | Manual copy, live graphs |
-| `/climate/lighting` | Lighting/DLI reference | Hand-authored | DLI, grow-light behavior, solar context | `site-climate-lighting` | Manual copy, live graphs |
-| `/climate/water` | Canonical water systems page | Hand-authored | Water use, mister demand, root-zone probes | `site-climate-water` | Manual copy, live graphs |
-| `/evidence` | Live proof overview | Hand-authored | Operations, planning quality, economics, generated archives | `site-evidence-operations`, `site-evidence-planning-quality`, `site-evidence-economics` | Manual copy, live graphs |
-| `/evidence/operations` | Live operations view | Hand-authored | System health, active plan, alerts, controller state | `site-evidence-operations` | Manual copy, live graphs |
-| `/evidence/economics` | Canonical cost proof | Hand-authored | Utility consumption and cost allocation | `site-evidence-economics` | Manual copy, live graphs |
-| `/evidence/dashboards` | Role-based dashboard browser | Hand-authored | Owner/grower/specialist analytical views | `site-evidence-dashboards` | Manual copy, live graphs |
-| `/plans` | Canonical daily plan archive | Generated index + generated day pages | `daily_summary`, `plan_journal`, setpoint context | None | Generated/backfilled |
-| `/forecast` | Forecast page | Generated | `weather_forecast`, `fn_forecast_correction`, `forecast_deviation_log` | None | Every 30 minutes |
+| `/start/about` | Project context | Hand-authored | Greenhouse/project description | None | Manual |
+| `/start/ai-greenhouse` | Primary AI greenhouse story | Hand-authored | Iris/Hermes planning loop, safety split, proof path | `site-home`, `site-intelligence` | Manual copy, live graphs |
+| `/start/climate` | Climate system overview | Hand-authored | Greenhouse physics + live climate panels | `site-climate` | Manual copy, live graphs |
+| `/start/evidence` | Live proof overview | Hand-authored | Operations, planning quality, economics, generated archives | `site-evidence-operations`, `site-evidence-planning-quality`, `site-evidence-economics` | Manual copy, live graphs |
+| `/start/resource-use` | Resource-use entry point | Hand-authored | Water, energy, lighting, and operating-cost proof | `site-climate-water`, `site-evidence-economics` | Manual copy, live graphs |
+| `/start/contact` | Contact page | Hand-authored | Public inquiry form | None | Manual |
+| `/data/operations` | Live operations view | Hand-authored | System health, active plan, alerts, controller state | `site-evidence-operations` | Manual copy, live graphs |
+| `/data/economics` | Canonical cost proof | Hand-authored | Utility consumption and cost allocation | `site-evidence-economics` | Manual copy, live graphs |
+| `/data/planning-quality` | Planner quality proof | Hand-authored | Planner score, compliance, lessons, forecast accuracy | `site-evidence-planning-quality` | Manual copy, live graphs |
+| `/data/baseline-vs-iris` | Baseline comparison | Generated | `daily_summary`, `plan_journal`, `v_planner_performance` | None | Generated |
+| `/data/plans` | Canonical daily plan archive | Generated index + generated day pages | `daily_summary`, `plan_journal`, setpoint context | None | Generated/backfilled |
+| `/data/forecast` | Forecast page | Generated | `weather_forecast`, `fn_forecast_correction`, `forecast_deviation_log` | None | Every 30 minutes |
 | `/greenhouse` | Physical greenhouse overview | Hand-authored | Structure, zones, equipment, crops | None | Manual |
 | `/greenhouse/structure` | Physical shell reference | Hand-authored | Dimensions, glazing, light transmission | `site-greenhouse-zones`, `site-climate-lighting` | Manual copy, live graphs |
 | `/greenhouse/equipment` | Equipment inventory | Partially generated | `v_equipment_relay_map`, `equipment` | `site-greenhouse-equipment` | Generated sections |
 | `/greenhouse/growing` | Crop/growing overview | Hand-authored | Crop targets and stress context | `site-greenhouse-crops` | Manual copy, live graphs |
 | `/greenhouse/hydroponics` | Hydroponic system reference | Hand-authored | NFT system sensors and chemistry | `greenhouse-hydroponics` | Manual copy, live graphs |
-| `/greenhouse/lessons` | Planner lesson library | Generated | `planner_lessons` | None | Generated |
+| `/greenhouse/lighting` | Lighting/DLI reference | Hand-authored | DLI, grow-light behavior, solar context | `site-climate-lighting` | Manual copy, live graphs |
+| `/greenhouse/soil` | Soil/substrate reference | Hand-authored | Root-zone probes and crop-steering gaps | None | Manual |
+| `/greenhouse/cameras` | Camera evidence reference | Hand-authored | Public-safe camera evidence and limits | None | Manual |
 | `/greenhouse/crops/*` | Crop profiles | Hybrid: hand-authored narrative plus generated reference blocks | `crop_catalog`, crop profile views, current positions | `site-greenhouse-crops` | Generated blocks |
 | `/greenhouse/zones/*` | Zone profiles | Hybrid: hand-authored narrative plus generated reference blocks, except `center.md` | `v_zone_full`, topology/position views | `site-greenhouse-zones`, crop panels | Generated blocks |
-| `/intelligence` | AI/planning overview | Hand-authored | Planning loop, live health panels | `site-intelligence` | Manual copy, live graphs |
-| `/intelligence/planning` | Planning loop deep dive | Hand-authored | Planner behavior, forecast accountability | `site-intelligence-planning` | Manual copy, live graphs |
-| `/intelligence/data` | Data model reference | Hand-authored | Tables/views/functions and controller health | `site-intelligence-data` | Manual copy, live graphs |
-| `/intelligence/architecture` | System architecture | Hand-authored | High-level component map | None | Manual |
-| `/intelligence/broken` | Known issues | Hand-authored | Operational limitations and gaps | None | Manual |
-| `/intelligence/lessons` | Redirect to generated lessons | Hand-authored redirect | Retired stale narrative page archived under `/mnt/iris/verdify-vault/archive/website-simplification-2026-04-28` | None | Stable redirect |
-| `/intelligence/firmware-change-protocol` | Firmware operating procedure | Hand-authored | Firmware change safety protocol | None | Manual |
+| `/reference/intelligence` | AI/planning overview | Hand-authored | Planning loop, live health panels | `site-intelligence` | Manual copy, live graphs |
+| `/reference/planning-loop` | Planning loop deep dive | Hand-authored | Planner behavior, forecast accountability | `site-intelligence-planning` | Manual copy, live graphs |
+| `/reference/ai-tunables` | AI tunable traceability reference | Generated | `tunable_registry`, MCP contracts, `entity_map`, firmware source, setpoint audit tables, plan rationales | None | Generated |
+| `/reference/lessons` | Planner lesson library | Generated | `planner_lessons` | None | Generated |
+| `/reference/data-model` | Data model reference | Hand-authored | Tables/views/functions and controller health | `site-intelligence-data` | Manual copy, live graphs |
+| `/reference/architecture` | System architecture | Hand-authored | High-level component map | None | Manual |
+| `/reference/safety` | Safety architecture | Hand-authored | ESP32/dispatcher/LLM control split | None | Manual |
+| `/reference/known-limits` | Known issues | Hand-authored | Operational limitations and gaps | None | Manual |
+| `/reference/firmware-change-protocol` | Firmware operating procedure | Hand-authored | Firmware change safety protocol | None | Manual |
 
 ## Source Rules
 
 - `/plans` is the canonical public daily-plan route. `scripts/generate-daily-plan.py --backfill` must be able to regenerate every linked day page from DB state.
 - Former `/evidence/plans` content is archived outside the active website tree at `/mnt/iris/verdify-vault/archive/website-legacy-2026-04-28/evidence/plans`. Do not restore it unless there is a deliberate redirect/history decision.
-- Former `/intelligence/lessons` narrative content is archived outside the active website tree at `/mnt/iris/verdify-vault/archive/website-simplification-2026-04-28/intelligence/lessons.md`. Use generated `/greenhouse/lessons` as the source of truth.
+- Former `/greenhouse/lessons` and `/intelligence/lessons` narrative content is archived outside the active website tree at `/mnt/iris/verdify-vault/archive/website-simplification-2026-04-28/intelligence/lessons.md`. Use generated `/reference/lessons` as the source of truth; legacy routes remain aliases.
 - Generated pages must carry an explicit source marker near the top. `make site-doctor` checks this for known generated routes.
 - `make site-doctor` also flags Unicode replacement characters; these indicate source corruption, not just browser rendering issues.
 - Hand-authored pages may embed live Grafana panels, but the prose must describe the live panel that is actually embedded. Use `scripts/site-doctor.py --semantic-report /tmp/verdify-site-semantic.md` before large copy passes.
@@ -65,7 +67,7 @@ The site story is: Verdify is a public AI-assisted greenhouse control loop in Lo
 
 - Cooling equipment proof is live on `site-climate-cooling` panel IDs `938` and `939`.
 - Soil-moisture-vs-VPD proof is live on `site-climate-water` panel ID `218`.
-- Public navigation is intentionally simplified to Home, Greenhouse, Climate, Intelligence, Evidence, About, and Plans. Generated/reference pages remain available by direct links but are hidden from the Quartz Explorer.
+- Public navigation is intentionally simplified to Home, AI Greenhouse, Climate, Evidence, Resource Use, Operations, Plans, About, and Contact. Generated/reference pages remain available by direct links but are hidden from the top-level nav unless they support a primary workflow.
 - The 2026-04-28 simplification pass rewrote `/`, `/evidence`, `/intelligence`, `/greenhouse`, `/greenhouse/growing`, and `/intelligence/broken`; fixed replacement-character corruption in active source; and added a redirect at `/intelligence/lessons/`.
 - The 2026-04-28 generated-block cleanup converted active crop, zone, and equipment auto-render blocks from Markdown tables into web components. It also fixed truncated position schemes caused by literal pipe characters in shelf notation and added `site-doctor` guards for self-aliases, raw Mermaid blocks, box-drawing ASCII diagrams, stale Grafana panel IDs, and image placement.
 - The unused live Grafana dashboard `site-evidence-compliance` was exported to `/mnt/iris/verdify/grafana/dashboards/archive/2026-04-28/site-evidence-compliance.json`, removed from provisioning, and no longer appears in Grafana search after the 2026-04-27/28 restart.

@@ -484,7 +484,7 @@ TEST(fix9_no_fog_when_not_mist_fog_stage) {
 // INVARIANT SWEEPS
 // ═══════════════════════════════════════════════════════════════
 
-TEST(no_open_vent_misting_ever) {
+TEST(sealed_mist_never_opens_vent_or_fans) {
     auto sp = default_setpoints(); int v = 0;
     for (float t = 40; t <= 100; t += 2)
         for (float vpd = 0.1f; vpd <= 3.5f; vpd += 0.1f) {
@@ -1810,10 +1810,10 @@ TEST(phase2_dwell_gate_tracks_ticks_when_off) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Controller v2: band-first FSM
+// band-first controller: band-first FSM
 // ═══════════════════════════════════════════════════════════════
 
-static Setpoints fsm_v2_setpoints() {
+static Setpoints band_first_setpoints() {
     auto sp = default_setpoints();
     sp.sw_fsm_controller_enabled = true;
     sp.temp_low = 72.0f;
@@ -1829,8 +1829,8 @@ static Setpoints fsm_v2_setpoints() {
     return sp;
 }
 
-TEST(fsm_v2_heat1_targets_temp_band_midpoint) {
-    auto sp = fsm_v2_setpoints();  // midpoint = 75°F
+TEST(band_first_heat1_targets_temp_band_midpoint) {
+    auto sp = band_first_setpoints();  // midpoint = 75°F
     sp.heat_hysteresis = 1.0f;
     auto s = initial_state();
 
@@ -1844,9 +1844,18 @@ TEST(fsm_v2_heat1_targets_temp_band_midpoint) {
     PASS();
 }
 
-TEST(fsm_v2_heat2_latches_at_temp_low_not_stage2_margin) {
-    auto sp = fsm_v2_setpoints();  // band 72-78°F, midpoint = 75°F
-    sp.dH2 = 5.0f;                 // legacy margin must not delay v2 gas heat
+TEST(band_first_controller_flag_is_explicit_test_setup) {
+    auto fallback = default_setpoints();
+    auto live = band_first_setpoints();
+
+    ASSERT_FALSE(fallback.sw_fsm_controller_enabled);
+    ASSERT_TRUE(live.sw_fsm_controller_enabled);
+    PASS();
+}
+
+TEST(band_first_heat2_latches_at_temp_low_not_stage2_margin) {
+    auto sp = band_first_setpoints();  // band 72-78°F, midpoint = 75°F
+    sp.dH2 = 5.0f;                 // legacy margin must not delay band-first controller gas heat
     auto s = initial_state();
 
     determine_mode(make_inputs(72.1f, 0.9f), sp, s, 5000);
@@ -1854,7 +1863,7 @@ TEST(fsm_v2_heat2_latches_at_temp_low_not_stage2_margin) {
 
     determine_mode(make_inputs(71.9f, 0.9f), sp, s, 5000);
     ASSERT_TRUE(s.heat2_latched);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage2");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "heat_stage2");
 
     auto out = resolve_equipment(IDLE, make_inputs(71.9f, 0.9f), sp, s, true);
     ASSERT_TRUE(out.heat1);
@@ -1862,8 +1871,8 @@ TEST(fsm_v2_heat2_latches_at_temp_low_not_stage2_margin) {
     PASS();
 }
 
-TEST(fsm_v2_heat2_clears_after_midpoint_recovery) {
-    auto sp = fsm_v2_setpoints();  // band 72-78°F, midpoint = 75°F
+TEST(band_first_heat2_clears_after_midpoint_recovery) {
+    auto sp = band_first_setpoints();  // band 72-78°F, midpoint = 75°F
     auto s = initial_state();
 
     determine_mode(make_inputs(71.5f, 0.9f), sp, s, 5000);
@@ -1874,27 +1883,27 @@ TEST(fsm_v2_heat2_clears_after_midpoint_recovery) {
 
     determine_mode(make_inputs(75.0f, 0.9f), sp, s, 5000);
     ASSERT_FALSE(s.heat2_latched);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage1");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "heat_stage1");
     PASS();
 }
 
-TEST(fsm_v2_relief_exhausted_does_not_force_cold_vent) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_relief_exhausted_does_not_force_cold_vent) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.relief_cycle_count = 3;
     s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
 
     // This mirrors the live failure: cool greenhouse, cold outdoor air, VPD
-    // still above the narrow band. V2 must not turn actuator protection into
+    // still above the narrow band. band-first controller must not turn actuator protection into
     // forced ventilation.
     Mode m = determine_mode(make_inputs(66.0f, 1.4f), sp, s, 5000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage2");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "heat_stage2");
     PASS();
 }
 
-TEST(fsm_v2_sealed_timeout_enters_backoff_not_relief) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_sealed_timeout_enters_backoff_not_relief) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.mode = SEALED_MIST;
     s.mode_prev = SEALED_MIST;
@@ -1904,37 +1913,37 @@ TEST(fsm_v2_sealed_timeout_enters_backoff_not_relief) {
 
     Mode m = determine_mode(make_inputs(74.0f, 1.5f), sp, s, 5000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_mist_backoff");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "mist_backoff");
     ASSERT_TRUE(s.mist_backoff_timer_ms > 0);
     ASSERT_TRUE(s.relief_cycle_count > 0);
     PASS();
 }
 
-TEST(fsm_v2_temp_band_preempts_humidification) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_temp_band_preempts_humidification) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
 
     Mode m = determine_mode(make_inputs(82.0f, 1.6f), sp, s, 5000);
     ASSERT_EQ(m, VENTILATE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_temp_high");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "temp_high");
     ASSERT_TRUE(s.vent_mist_assist_active);
     PASS();
 }
 
-TEST(fsm_v2_cooling_enters_at_raw_temp_high) {
-    auto sp = fsm_v2_setpoints();
-    sp.bias_cool = 2.0f;  // legacy offset must not move v2 outside the band
+TEST(band_first_cooling_enters_at_raw_temp_high) {
+    auto sp = band_first_setpoints();
+    sp.bias_cool = 2.0f;  // legacy offset must not move band-first controller outside the band
     auto s = initial_state();
 
     Mode m = determine_mode(make_inputs(sp.temp_high + 0.1f, 0.9f), sp, s, 5000);
     ASSERT_EQ(m, VENTILATE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_temp_high");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "temp_high");
     PASS();
 }
 
-TEST(fsm_v2_cold_outdoor_cooling_entry_uses_band_margin) {
-    auto sp = fsm_v2_setpoints();  // 6°F band => v2 cooling margin = 1.5°F
+TEST(band_first_cold_outdoor_cooling_entry_uses_band_margin) {
+    auto sp = band_first_setpoints();  // 6°F band => band-first controller cooling margin = 1.5°F
     sp.dC2 = 3.0f;
     auto s = initial_state();
 
@@ -1942,14 +1951,14 @@ TEST(fsm_v2_cold_outdoor_cooling_entry_uses_band_margin) {
     moderate.outdoor_temp_f = sp.temp_low - 11.0f;
     ASSERT_EQ(determine_mode(moderate, sp, s, 5000), IDLE);
 
-    auto hot = make_inputs(sp.temp_high + v2_cool_stage2_delta_f(sp) + 0.1f, 0.9f);
+    auto hot = make_inputs(sp.temp_high + band_cool_stage2_delta_f(sp) + 0.1f, 0.9f);
     hot.outdoor_temp_f = sp.temp_low - 11.0f;
     ASSERT_EQ(determine_mode(hot, sp, s, 5000), VENTILATE);
     PASS();
 }
 
-TEST(fsm_v2_solar_preventive_cooling_before_temp_high) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_solar_preventive_cooling_before_temp_high) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     auto in = make_inputs(sp.temp_high - 0.5f, 0.9f);
     in.solar_w_m2 = 700.0f;
@@ -1957,12 +1966,12 @@ TEST(fsm_v2_solar_preventive_cooling_before_temp_high) {
 
     Mode m = determine_mode(in, sp, s, 5000);
     ASSERT_EQ(m, VENTILATE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_solar_preventive_cool");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "solar_preventive_cool");
     PASS();
 }
 
-TEST(fsm_v2_solar_preventive_cooling_respects_cold_outdoor_guard) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_solar_preventive_cooling_respects_cold_outdoor_guard) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     auto in = make_inputs(sp.temp_high - 0.5f, 0.9f);
     in.solar_w_m2 = 700.0f;
@@ -1971,12 +1980,12 @@ TEST(fsm_v2_solar_preventive_cooling_respects_cold_outdoor_guard) {
 
     Mode m = determine_mode(in, sp, s, 5000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_idle");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "idle");
     PASS();
 }
 
-TEST(fsm_v2_cooling_stage2_is_band_scaled) {
-    auto sp = fsm_v2_setpoints();  // 6°F band => v2 S2 fan delta = 1.5°F
+TEST(band_first_cooling_stage2_is_band_scaled) {
+    auto sp = band_first_setpoints();  // 6°F band => band-first controller S2 fan delta = 1.5°F
     sp.dC2 = 3.0f;                 // legacy margin would wait until 81°F
     auto s = initial_state();
 
@@ -1987,25 +1996,79 @@ TEST(fsm_v2_cooling_stage2_is_band_scaled) {
     PASS();
 }
 
-TEST(fsm_v2_dehum_enters_at_vpd_low_edge_and_holds_to_hysteresis) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_dehum_enters_at_vpd_low_edge_and_holds_to_hysteresis) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
 
     Mode m1 = determine_mode(make_inputs(75.0f, sp.vpd_low - 0.01f), sp, s, 5000);
     ASSERT_EQ(m1, DEHUM_VENT);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_vpd_low");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "vpd_low");
 
     Mode m2 = determine_mode(make_inputs(75.0f, sp.vpd_low + 0.05f), sp, s, 5000);
     ASSERT_EQ(m2, DEHUM_VENT);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_dehum_continue");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "dehum_continue");
 
-    Mode m3 = determine_mode(make_inputs(75.0f, sp.vpd_low + v2_vpd_hysteresis(sp) + 0.01f), sp, s, 5000);
+    Mode m3 = determine_mode(make_inputs(75.0f, sp.vpd_low + band_vpd_hysteresis(sp) + 0.01f), sp, s, 5000);
     ASSERT_EQ(m3, IDLE);
     PASS();
 }
 
-TEST(fsm_v2_safety_cool_does_not_set_vent_mist_assist) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_dehum_overshoot_exits_without_dwell_hold) {
+    auto sp = band_first_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;
+    auto s = initial_state();
+    s.mode = DEHUM_VENT;
+    s.mode_prev = DEHUM_VENT;
+    s.last_transition_tick_ms = 10000;
+
+    Mode m = determine_mode(make_inputs(75.0f, sp.vpd_high + 0.2f), sp, s, 5000);
+
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "dehum_vpd_overshoot");
+    ASSERT_TRUE(s.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms);
+    PASS();
+}
+
+TEST(band_first_dehum_overshoot_cooling_uses_vent_mist_assist) {
+    auto sp = band_first_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;
+    auto s = initial_state();
+    s.mode = DEHUM_VENT;
+    s.mode_prev = DEHUM_VENT;
+    s.last_transition_tick_ms = 10000;
+
+    Mode m = determine_mode(make_inputs(sp.temp_high + 1.0f, sp.vpd_high + 0.2f), sp, s, 5000);
+
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(s.vent_mist_assist_active);
+    ASSERT_TRUE(s.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms);
+    PASS();
+}
+
+TEST(band_first_sealed_temp_preempt_bypasses_dwell_gate) {
+    auto sp = band_first_setpoints();
+    sp.sw_dwell_gate_enabled = true;
+    sp.dwell_gate_ms = 300000;
+    auto s = initial_state();
+    s.mode = SEALED_MIST;
+    s.mode_prev = SEALED_MIST;
+    s.last_transition_tick_ms = 10000;
+    s.sealed_timer_ms = 30000;
+    s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
+    s.mist_stage = MIST_S1;
+
+    Mode m = determine_mode(make_inputs(sp.temp_high + 1.0f, sp.vpd_high + 0.2f), sp, s, 5000);
+
+    ASSERT_EQ(m, VENTILATE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "temp_preempts_humidify");
+    ASSERT_TRUE(s.vent_mist_assist_active);
+    PASS();
+}
+
+TEST(band_first_safety_cool_does_not_set_vent_mist_assist) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
 
@@ -2015,8 +2078,8 @@ TEST(fsm_v2_safety_cool_does_not_set_vent_mist_assist) {
     PASS();
 }
 
-TEST(fsm_v2_vpd_hysteresis_is_band_width_limited) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_vpd_hysteresis_is_band_width_limited) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.mode = SEALED_MIST;
     s.mode_prev = SEALED_MIST;
@@ -2025,51 +2088,51 @@ TEST(fsm_v2_vpd_hysteresis_is_band_width_limited) {
     s.mist_stage = MIST_S1;
 
     // Legacy effective exit with hyst=0.4 and high=1.2 was ~0.7 kPa.
-    // V2 caps hysteresis to band width, so 1.0 is resolved enough.
+    // band-first controller caps hysteresis to band width, so 1.0 is resolved enough.
     Mode m = determine_mode(make_inputs(74.0f, 1.0f), sp, s, 5000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_humidify_resolved");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "humidify_resolved");
     PASS();
 }
 
-TEST(fsm_v2_retries_after_backoff_window) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_retries_after_backoff_window) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.vpd_watch_timer_ms = sp.vpd_watch_dwell_ms;
     s.mist_backoff_timer_ms = sp.mist_backoff_ms;
 
     Mode m = determine_mode(make_inputs(74.0f, 1.5f), sp, s, 5000);
     ASSERT_EQ(m, SEALED_MIST);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_humidify_enter");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "humidify_enter");
     PASS();
 }
 
-TEST(fsm_v2_cold_dehum_requires_temp_headroom) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_cold_dehum_requires_temp_headroom) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     auto in = make_inputs(sp.temp_low + 1.0f, sp.vpd_low - 0.3f);
     in.outdoor_temp_f = sp.temp_low - 20.0f;
 
     Mode m = determine_mode(in, sp, s, 60000);
     ASSERT_EQ(m, IDLE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_heat_stage1");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "heat_stage1");
     PASS();
 }
 
-TEST(fsm_v2_cold_dehum_allowed_with_temp_headroom) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_cold_dehum_allowed_with_temp_headroom) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     auto in = make_inputs(sp.temp_low + 3.0f, sp.vpd_low - 0.3f);
     in.outdoor_temp_f = sp.temp_low - 20.0f;
 
     Mode m = determine_mode(in, sp, s, 60000);
     ASSERT_EQ(m, DEHUM_VENT);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "v2_vpd_low");
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "vpd_low");
     PASS();
 }
 
-TEST(fsm_v2_heat_suppressed_at_upper_band) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_heat_suppressed_at_upper_band) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.heat2_latched = true;
 
@@ -2079,8 +2142,8 @@ TEST(fsm_v2_heat_suppressed_at_upper_band) {
     PASS();
 }
 
-TEST(fsm_v2_allows_fog_heat_assist_when_cold_dry) {
-    auto sp = fsm_v2_setpoints();
+TEST(band_first_allows_fog_heat_assist_when_cold_dry) {
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.mode = SEALED_MIST;
     s.mode_prev = SEALED_MIST;
@@ -2097,7 +2160,7 @@ TEST(fsm_v2_allows_fog_heat_assist_when_cold_dry) {
 }
 
 TEST(obs1e_fog_heat_assist_flag_fires) {
-    auto sp = fsm_v2_setpoints();
+    auto sp = band_first_setpoints();
     auto s = initial_state();
     s.mode = SEALED_MIST;
     s.mode_prev = SEALED_MIST;
@@ -2108,6 +2171,73 @@ TEST(obs1e_fog_heat_assist_flag_fires) {
     auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
 
     ASSERT_TRUE(f.fog_heat_assist);
+    PASS();
+}
+
+static LightingSetpoints lighting_setpoints() {
+    return {
+        .dli_target = 22.0f,
+        .lux_on_threshold = 40000.0f,
+        .lux_hysteresis = 8000.0f,
+        .start_hour = 6,
+        .cutoff_hour = 22,
+        .min_on_ms = 120000,
+        .min_off_ms = 60000,
+        .auto_enabled = true
+    };
+}
+
+static LightingInputs lighting_inputs(float lux, float dli, int hour = 10, bool occupied = false) {
+    return {
+        .natural_lux = lux,
+        .dli_today = dli,
+        .local_hour = hour,
+        .occupied = occupied
+    };
+}
+
+TEST(lighting_state_machine_turns_on_below_lux_band) {
+    auto sp = lighting_setpoints();
+    auto s = initial_lighting_state();
+    auto d = evaluate_lighting(lighting_inputs(30000.0f, 8.0f), sp, s, false, 120000);
+    ASSERT_TRUE(d.want_on);
+    ASSERT_TRUE(d.in_window);
+    ASSERT_TRUE(d.dli_below_target);
+    ASSERT_TRUE(d.lux_below_on_threshold);
+    ASSERT_TRUE(std::string(d.reason) == "lux_low");
+    PASS();
+}
+
+TEST(lighting_state_machine_holds_until_off_threshold) {
+    auto sp = lighting_setpoints();
+    auto s = initial_lighting_state();
+    auto d = evaluate_lighting(lighting_inputs(45000.0f, 8.0f), sp, s, true, 180000);
+    ASSERT_TRUE(d.want_on);
+    ASSERT_TRUE(d.lux_below_off_threshold);
+    ASSERT_TRUE(std::string(d.reason) == "hysteresis_hold");
+    PASS();
+}
+
+TEST(lighting_state_machine_enforces_min_on_dwell) {
+    auto sp = lighting_setpoints();
+    auto s = initial_lighting_state();
+    evaluate_lighting(lighting_inputs(30000.0f, 8.0f), sp, s, false, 120000);
+    auto d = evaluate_lighting(lighting_inputs(90000.0f, 8.0f), sp, s, true, 180000);
+    ASSERT_TRUE(d.want_on);
+    ASSERT_TRUE(std::string(d.reason) == "min_on_hold");
+    PASS();
+}
+
+TEST(lighting_state_machine_respects_per_light_window_and_dli_goal) {
+    auto sp = lighting_setpoints();
+    auto s = initial_lighting_state();
+    auto night = evaluate_lighting(lighting_inputs(1000.0f, 8.0f, 23), sp, s, false, 120000);
+    ASSERT_FALSE(night.want_on);
+    ASSERT_TRUE(std::string(night.reason) == "outside_window");
+
+    auto met = evaluate_lighting(lighting_inputs(1000.0f, 23.0f, 10), sp, s, false, 240000);
+    ASSERT_FALSE(met.want_on);
+    ASSERT_TRUE(std::string(met.reason) == "dli_met");
     PASS();
 }
 

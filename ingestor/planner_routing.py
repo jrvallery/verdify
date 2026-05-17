@@ -232,10 +232,11 @@ def pick_instance(
     override: Instance | None = None,
     config: RoutingConfig | None = None,
 ) -> Instance:
-    """Select local vs explicit opus escalation per policy.
+    """Select legacy planner-instance audit label per policy.
 
-    Override wins unconditionally. MANUAL defaults to local so operator smoke
-    tests exercise the same local Gemma-on-cortext path as scheduled planning.
+    Override wins unconditionally. Under Hermes these labels no longer select a
+    different gateway/model; they preserve continuity for dashboards and
+    historical planner rows.
     """
     if override is not None:
         return override

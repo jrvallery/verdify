@@ -15,6 +15,7 @@ Views covered:
 - v_daily_oscillation_summary → DailyOscillationSummary (single worst hour/day)
 - v_override_activity_24h     → OverrideActivity24h
 - v_clamp_activity_24h        → ClampActivity24h
+- v_band_trace_recent         → BandTraceRow
 """
 
 from __future__ import annotations
@@ -146,6 +147,53 @@ class ClampActivity24h(BaseModel):
     max_clamp_delta: Decimal | None = None
     first_seen: AwareDatetime | None = None
     last_seen: AwareDatetime | None = None
+
+
+class BandTraceRow(BaseModel):
+    """v_band_trace_recent row — crop band, pushed firmware band, cfg readback."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ts: AwareDatetime
+    greenhouse_id: str
+    temp_avg: float | None = None
+    vpd_avg: float | None = None
+    rh_avg: float | None = None
+    dew_point: float | None = None
+    temp_avg_smooth_15m: float | None = None
+    vpd_avg_smooth_30m: float | None = None
+    crop_temp_low: float | None = None
+    crop_temp_high: float | None = None
+    crop_vpd_low: float | None = None
+    crop_vpd_high: float | None = None
+    vpd_target_south: float | None = None
+    vpd_target_west: float | None = None
+    vpd_target_east: float | None = None
+    vpd_target_center: float | None = None
+    house_vpd_low: float | None = None
+    house_vpd_high: float | None = None
+    fw_temp_low: float | None = None
+    fw_temp_high: float | None = None
+    fw_vpd_low: float | None = None
+    fw_vpd_high: float | None = None
+    rb_temp_low: float | None = None
+    rb_temp_high: float | None = None
+    rb_vpd_low: float | None = None
+    rb_vpd_high: float | None = None
+    crop_temp_in_band: bool | None = None
+    crop_vpd_in_band: bool | None = None
+    crop_both_in_band: bool | None = None
+    fw_temp_in_band: bool | None = None
+    fw_vpd_in_band: bool | None = None
+    fw_both_in_band: bool | None = None
+    readback_matches_fw_temp: bool | None = None
+    readback_matches_fw_vpd: bool | None = None
+    readback_matches_fw_band: bool | None = None
+    fw_minus_crop_temp_low_f: float | None = None
+    fw_minus_crop_temp_high_f: float | None = None
+    fw_minus_crop_vpd_low_kpa: float | None = None
+    fw_minus_crop_vpd_high_kpa: float | None = None
+    trace_quality_flag: str
 
 
 # ── Sprint 23: crop history views ──────────────────────────────────────

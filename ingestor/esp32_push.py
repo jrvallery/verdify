@@ -16,9 +16,12 @@ from entity_map import SETPOINT_MAP
 
 log = logging.getLogger("esp32_push")
 
-_BATCH_PAUSE_EVERY = 8
-_BATCH_PAUSE_S = 0.15
-_MIN_COMMAND_INTERVAL_S = 0.15
+# Large reconnect reconciliations can push dozens of values immediately after
+# OTA, while ESPHome is also rebuilding API/MQTT state. Pace conservatively to
+# avoid transient heap-pressure alerts on the ESP32.
+_BATCH_PAUSE_EVERY = 2
+_BATCH_PAUSE_S = 6.0
+_MIN_COMMAND_INTERVAL_S = 2.0
 _PUSH_LOCK = asyncio.Lock()
 _LAST_COMMAND_TS = 0.0
 

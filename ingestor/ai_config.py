@@ -81,14 +81,19 @@ class AIConfig:
     def get_client(self, task: str):
         """Create an API client for the given task's provider."""
         provider = self.config["models"][task]["provider"]
+        if provider == "openai":
+            from openai import OpenAI
+
+            return OpenAI(api_key=self.api_key(provider))
         if provider == "anthropic":
             import anthropic
 
             return anthropic.Anthropic(api_key=self.api_key(provider))
-        else:
+        if provider in {"gemini", "google-ai-studio"}:
             from google import genai
 
             return genai.Client(api_key=self.api_key(provider))
+        raise ValueError(f"Unsupported AI provider for {task}: {provider}")
 
     def template_path(self, task: str, template_key: str) -> Path:
         """Get the full path to a template file."""

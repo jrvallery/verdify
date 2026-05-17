@@ -1,17 +1,17 @@
 # Verdify Operations Runbook
 
 **VM:** vm-docker-iris (192.168.30.150)
-**Last updated:** 2026-04-20 (pre-Jason-departure refresh)
+**Last updated:** 2026-05-16 (Hermes/refocus reconciliation)
 
 ---
 
 ## 2026-04-20 Updates (since 2026-03-29)
 
-Consolidated delta from the dual-Iris rollout + overnight incidents. Read these before debugging any planner/alert-related issue.
+Consolidated delta from the dual-Iris rollout + overnight incidents. The gateway section is historical; production planning now routes through Hermes/GPT-5.5. Read these before debugging any planner/alert-related issue.
 
 ### Contract v1.4 + dual-Iris plumbing
 
-- **`docs/iris-planner-contract.md`** is the wire-protocol source of truth. Dual-Iris (opus + local vLLM gemma) routing, SLA(trigger_type, instance), `acknowledge_trigger` MCP tool, `X-Trigger-Id` / `X-Planner-Instance` / `X-Heartbeat-Readonly` headers.
+- **`docs/iris-planner-contract.md`** is the historical v1.5 wire-protocol record. The current production gateway is Hermes `hermes-iris`; `plan_delivery_log.hermes_run_id`, `trigger_id`, lifecycle status, `acknowledge_trigger`, and the MCP-only allowlist are the active correlation surfaces.
 - **Migration 093 applied** (2026-04-20 08:05 MDT): `plan_delivery_log` extended with `trigger_id`, `instance`, `acked_at`, `status` columns + CHECK constraint on status values. `plan_journal` and `setpoint_changes` got `planner_instance` + `trigger_id`.
 - **Pydantic v1.4 audit fields** landed in `verdify_schemas/plan.py` and `setpoint.py` (commit `d822485`).
 - Rollout phase: schema ✅ landed. genai Sub-scope A (prompt split) ✅ committed local on `genai/sprint-3-mcp-contract` branch. Sub-scope B (MCP header stamping + acknowledge_trigger) blocked on Iris's Q5 FastMCP smoke test answer. Ingestor sprint-25 (consume new signature) blocked on genai B.
@@ -29,7 +29,7 @@ Consolidated delta from the dual-Iris rollout + overnight incidents. Read these 
 - **Day/night setpoint pairs REMOVED entirely.** Sprint-10 phase-0 added them; they silently outranked the dispatcher's crop band overnight 2026-04-19/20, plants tracked firmware's invented 62-68°F night band for 10h, temp bottomed at 53.7°F, 41 SEALED_MIST transitions.
 - **New architectural rule:** **two sources of band in the firmware, and only two:**
   1. **Safety rails** (`safety_min/max`, `vpd_min_safe`, `vpd_max_safe`) — hard backstops, fallback only.
-  2. **Dispatcher-pushed band** (`temp_low/high`, `vpd_low/high`) — drives the 7-mode controller.
+  2. **Dispatcher-pushed band** (`temp_low/high`, `vpd_low/high`) — drives the band-first controller.
 - No photoperiod switches, no day/night resolution, no `resolve_active_band()` helper. If the dispatcher goes silent, firmware falls through to permissive defaults (40-95°F / 0.35-2.8 kPa) + safety rails.
 
 ## iris-dev /loop (permanent operating mode)
@@ -164,10 +164,66 @@ Expected: 22/22 passing, HEALTHY.
 ### Grow lights don't toggle
 **Symptoms:** gl_auto_mode is ON but lights don't turn on/off.
 **Fix:**
-1. Chain: ESP32 → HTTP POST :8200 → setpoint-server → HA REST → Lutron
-2. Check setpoint-server: `curl -s http://127.0.0.1:8200/lights`
-3. Check HA: `curl -s -H "Authorization: Bearer $(cat /mnt/jason/agents/shared/credentials/ha_token.txt)" http://192.168.30.107:8123/api/states/light.greenhouse_main`
-4. Physical: check Lutron Caseta bridge power, check physical switch position
+1. Chain: ESP32 → HA service call / setpoint-server → HA REST → Lutron switch
+2. Check the traceability gate: `make lighting-audit-current`
+3. Check setpoint-server state: `curl -s http://127.0.0.1:8200/lights`
+4. Check HA state directly:
+   ```bash
+   curl -s -H "Authorization: Bearer $(cat /mnt/jason/agents/shared/credentials/ha_token.txt)" \
+     http://192.168.30.107:8123/api/states/switch.greenhouse_main
+   curl -s -H "Authorization: Bearer $(cat /mnt/jason/agents/shared/credentials/ha_token.txt)" \
+     http://192.168.30.107:8123/api/states/switch.greenhouse_grow
+   ```
+5. Check the live policy and expected/actual state:
+   ```bash
+   docker exec verdify-timescaledb psql -U verdify -d verdify -P pager=off -c \
+     "SELECT light_key, expected_on, actual_on, natural_lux, lux_on_threshold, lux_off_threshold, firmware_state, firmware_reason FROM v_lighting_circuit_status_now ORDER BY light_key;"
+   ```
+6. Physical: check Lutron Caseta bridge power, check physical switch position
+
+### Lighting automation proof gate
+**Use when:** changing lighting tunables, lighting dashboards, setpoint
+dispatch, Lutron control, or firmware lighting logic.
+
+1. Static proof, no live services required:
+   ```bash
+   make lighting-audit-static
+   ```
+2. Current production proof. This is allowed to report `BLOCKED` for
+   OTA-dependent per-circuit firmware readbacks while the live ESP32 is still on
+   the shared lighting firmware:
+   ```bash
+   make lighting-audit-current
+   ```
+3. Strict post-OTA proof. This must pass before claiming per-circuit lighting is
+   live end-to-end:
+   ```bash
+   make lighting-audit-live
+   ```
+4. Completion proof. This treats missing OTA/post-OTA evidence as `FAIL`
+   instead of `BLOCKED`, and is the command to use before closing the lighting
+   automation objective:
+   ```bash
+   make lighting-audit-complete
+   ```
+
+`make lighting-audit-live` and `make lighting-audit-complete` require all of
+the following:
+
+- Per-circuit `cfg_gl_main_*`, `cfg_gl_grow_*`, `cfg_gl_main_auto_mode`, and
+  `cfg_gl_grow_auto_mode` readbacks.
+- Confirmed per-circuit `setpoint_changes` rows.
+- Non-empty `firmware_state` and `firmware_reason` for both circuits.
+- ON and OFF `equipment_state` evidence for `grow_light_main` and
+  `grow_light_grow` after the latest firmware start.
+- Live Grafana/homepage panels bound to the same policy/timeline views.
+
+For firmware source changes before commit or OTA, also run:
+
+```bash
+make firmware-invariants
+make firmware-replay-worktree
+```
 
 ### Modbus bus failure (sensors return NaN)
 **Symptoms:** Zone temperatures NULL, soil sensors offline.

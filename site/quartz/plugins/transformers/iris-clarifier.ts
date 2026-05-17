@@ -2,7 +2,7 @@ import { Root } from "hast";
 import { QuartzTransformerPlugin } from "../types";
 
 const IRIS_RE = /\bIris\b/;
-const CLARIFIED_IRIS = "Iris (our OpenClaw AI agent)";
+const CLARIFIED_IRIS = "Iris, the AI planner";
 const SKIP_TAGS = new Set([
     "a",
     "code",
@@ -41,8 +41,7 @@ function isAlreadyClear(value: string, index: number): boolean {
     const after = value.slice(index + "Iris".length);
     return (
         /^\s*\(/.test(after) ||
-        /^,\s*(an|our|Verdify's)\s+OpenClaw\b/i.test(after) ||
-        /^ is Verdify's OpenClaw\b/i.test(after)
+        /^,\s*the\s+AI\s+planner\b/i.test(after)
     );
 }
 

@@ -2,6 +2,19 @@
 
 Per-agent backlogs live in `docs/backlog/{agent}.md`. This file is the index + "who's on what this cycle."
 
+## Verdify refocus command (2026-05-15)
+
+Jason is refocusing Verdify from a greenhouse-first public launch / SaaS trajectory toward **Verdify as a consulting brand with the Longmont greenhouse as the public lab proof asset**.
+
+Canonical refocus backlog: [`docs/backlog/refocus.md`](backlog/refocus.md).
+
+Current posture:
+
+- Track A greenhouse operations still outrank all business/site/repo work.
+- `verdify.ai` should become one integrated company + services + lab + evidence site.
+- Broad SaaS/multi-tenant work moves behind consulting validation unless needed for Track A or public-site reliability.
+- Repo, GitHub, project-board, and agent-scope splits are coordinator-owned until boundaries are decided.
+
 ## Launch command (2026-05-02)
 
 Broad launch is now a cross-agent release train. Canonical launch gates live in [`docs/launch/README.md`](launch/README.md); task tracking lives in [`docs/backlog/launch.md`](backlog/launch.md).
@@ -10,18 +23,18 @@ Current launch posture: **engineering/content gates are complete; broad launch n
 
 2026-05-03 update: Jason's prior-art review is tracked in [`docs/launch/prior-art-rollup-2026-05-03.md`](launch/prior-art-rollup-2026-05-03.md). It adds post-P0 launch assets around Related Work, Safety Architecture, Baseline vs Iris, builder packaging, counterfactual replay, and progressive autonomy. These are P1/P2 credibility assets, not Track A firmware blockers.
 
-Current launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2026-05-03-l1-credibility.md). Engineering/content assets are complete: related work, safety architecture, baseline evidence, FAQ/response pack, builder path, and object-model diagram. 2026-05-03 narrative pivot: public story now centers Iris as an OpenClaw agent with local Gemma4 inference, greenhouse memory, static site context, forecast/context retrieval, and a cloud escalation path, while the ESP32 remains the safety-critical controller. Remaining broad-launch blockers are Jason-owned: operations clip, final HN copy, identity posture, launch calendar, and comment coverage.
+Current launch sprint: [`Launch Sprint: L1 Credibility Package`](launch/sprint-2026-05-03-l1-credibility.md). Engineering/content assets are complete: related work, safety architecture, baseline evidence, FAQ/response pack, builder path, and object-model diagram. The 2026-05-03 OpenClaw/local-Gemma narrative is now historical; production planning has routed through Hermes/GPT-5.5 since 2026-05-11, with greenhouse memory, static site context, forecast/context retrieval, MCP-only tool access, and the ESP32 safety-critical controller unchanged. Remaining broad-launch blockers are Jason-owned: operations clip, final HN copy, identity posture, launch calendar, and comment coverage.
 
 2026-05-03 content-QA update: launch pages and internal launch notes now use the same public story: Iris writes bounded tactical plans at solar milestones/event triggers; the ESP32 owns 8-state deterministic relay control every 5 seconds; telemetry, scorecards, costs, failures, and lessons make claims auditable.
 
-2026-05-03 planner-loop trace update: the planner loop is live but needs a
-local-first contract cleanup. The new backlog target is one auditable
-`iris-planner` OpenClaw path backed by local Gemma4 on cortext, complete trigger
-coverage for forecast deviations, solar transitions, and fixed local-time
-boundaries, plus strict trigger-to-plan correlation and registry-range
-validation before a plan can become active. Detailed work is split across
-`docs/backlog/genai.md` (`G-P*`), `docs/backlog/ingestor.md` (`I-P*`), and
-`docs/backlog/cross-cutting.md` (`C-P*`).
+2026-05-16 planner-loop trace update: the remaining backlog target is one
+auditable Hermes/GPT-5.5 planner path, complete trigger coverage for forecast
+deviations, solar transitions, and fixed local-time boundaries, plus strict
+trigger-to-plan correlation and registry-range validation before a plan can
+become active. Detailed work is split across `docs/backlog/genai.md` (`G-P*`),
+`docs/backlog/ingestor.md` (`I-P*`), and `docs/backlog/cross-cutting.md`
+(`C-P*`). Older local-first/OpenClaw rows below are retained as historical
+shipping context.
 
 | Owner | Launch focus | Backlog |
 |---|---|---|
@@ -37,12 +50,12 @@ validation before a plan can become active. Detailed work is split across
 | Agent | Sprint | Status | Detail |
 |---|---|---|---|
 | `coordinator` | v1.5 landed | **Cross-cutting landed this cycle**: local-first planner contract v1.5, strict audited `set_plan`/`set_tunable` trigger correlation, manual `plan_run` ledger parity, and schema response fields for planner audit metadata | `docs/backlog/cross-cutting.md` |
-| `ingestor` | planner hardening in progress | Local-first routing is active, trigger-scoped local OpenClaw sessions are used, and fixed 00:00/06:00/12:00/16:00/20:00 boundary triggers now supplement sunrise/sunset, forecast, deviation, and solar-derived transition triggers. Remaining: no-missed-sunrise ledger and SLA timeout lifecycle | `docs/backlog/ingestor.md` |
-| `genai` | planner hardening in progress | Local Gemma4 prompt path is live with strict audit headers, validation-mode handling, local context-budget guidance, and MANUAL `plan_run` parity. Remaining: distilled site/lesson digest and fuller Gemma-sized context-pack versioning | `docs/backlog/genai.md` |
+| `ingestor` | planner hardening in progress | Hermes delivery is active, trigger ledger rows carry Hermes run IDs, and fixed 00:00/06:00/12:00/16:00/20:00 boundary triggers supplement sunrise/sunset, forecast, deviation, and solar-derived transition triggers. Remaining: no-missed-sunrise ledger and SLA timeout lifecycle | `docs/backlog/ingestor.md` |
+| `genai` | planner hardening in progress | Hermes/GPT-5.5 prompt path is live with strict MCP tool allowlist, validation-mode handling, full context guidance, and MANUAL `plan_run` parity. Remaining: distilled site/lesson digest and context-pack versioning | `docs/backlog/genai.md` |
 | `web` | — | Sprint-4 Grafana panels shipped via PR #16 (`9a9a05e`) this morning. No active sprint | `docs/backlog/web.md` |
 | `firmware` | phase-1+ | Phase-0 shipped as sprint-10 (`8d2656d`) + sprints 7-9 overnight (`8c64030`, `dda9057`, and the 212b1c5 fog-window fix). No active sprint queued | `docs/backlog/firmware.md` |
 | `saas` | `sprint-10` shipped | Rescope landed. Open task: apply migration 090 to prod DB; unblocked (coordinator has `docker exec psql` access) but awaits operator authorization | `docs/backlog/saas.md` |
-| `iris-dev` | local planner live | OpenClaw `iris-planner` points to `vllm/gemma4-26b` on cortext with no fallback. Live validation wrote `iris-20260504-2108` via local Gemma and correlated it to the trigger ledger after tightening MCP audit enforcement | — |
+| `iris-dev` | Hermes planner live | Hermes `hermes-iris` drives GPT-5.5 high-reasoning with no OpenClaw fallback. Active validation correlates `plan_delivery_log.hermes_run_id` to trigger rows and MCP writes after tightening audit enforcement | — |
 
 ## Recent ships (2026-04-19 → 2026-04-20)
 
@@ -82,7 +95,7 @@ In chronological order:
 
 ## Current findings to schedule
 
-- **Planner:** Local-first hardening is now the top planning backlog. Genai owns the Gemma4-sized context pack, tuning rubric, site/lesson digest, MCP `plan_run` audit parity, and registry validation at the planner boundary. Ingestor owns the trigger matrix, no-missed-sunrise behavior, per-trigger SLA lifecycle, exact trigger correlation, deviation coverage, fixed-boundary triggers, and active/future plan range guard. Coordinator owns contract v1.5, any trigger-ledger schema, and model observability.
+- **Planner:** Hermes hardening is now the top planning backlog. Genai owns the GPT-5.5 context pack, tuning rubric, site/lesson digest, MCP `plan_run` audit parity, and registry validation at the planner boundary. Ingestor owns the trigger matrix, no-missed-sunrise behavior, per-trigger SLA lifecycle, exact trigger correlation, deviation coverage, fixed-boundary triggers, and active/future plan range guard. Coordinator owns shared contracts, trigger-ledger schema, and model observability.
 - **Web:** Site simplification pass reduced the public entry path and fixed corrupted text. Remaining editorial cleanup: fold detailed Climate subpages into `/climate`, finish hiding or archiving redundant reference routes, and remove drafting scaffolds from hidden reference pages.
 - **Web:** Image cleanup removed broken/public backup assets and documented current photo fit. The manual image catalog now has a machine-readable manifest checked by `site-doctor`; crop-specific photos for basil/cucumbers/tomatoes remain a content acquisition issue, not a rendering blocker.
 - **Web:** Raw ASCII/Mermaid diagrams were removed from hand-authored public pages. Forecast, daily-plan, plans-index, crop, and zone generated outputs now use web components instead of generated Markdown tables.
@@ -102,7 +115,7 @@ Per-agent counters. Past global sprints (17–22) map into individual agents' hi
 - Contract `docs/iris-planner-contract.md` v1.5 landed
 - Pydantic planner response audit fields in `verdify_schemas/`
 - Routing + SLA config in `config/ai.yaml` now local-first
-- OpenClaw config: `iris-planner` targets local `vllm/gemma4-26b` on cortext
+- Hermes config: `hermes-iris` targets OpenAI GPT-5.5 high-reasoning through the MCP-only tool allowlist
 
 **Phase 2 (MCP + dispatch) ✅ complete for first hardening slice** (genai/coordinator):
 - `plan_run` creates MANUAL trigger ledger rows and sends through local `send_to_iris`

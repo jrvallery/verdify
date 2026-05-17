@@ -8,7 +8,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Shows how badly the current lux sensor underreports actual plant light, relative to a corrected estimate and the target DLI line.",
+      "description": "Sensor DLI, corrected estimate, and crop-driven target DLI from fn_lighting_policy().",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -211,7 +211,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('day', ts) AS time, 14.0 AS \"Target DLI\" FROM climate WHERE ts > now() - interval '90 days' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT ts AS time, target_dli AS \"Target DLI\"\nFROM v_lighting_daily\nWHERE ts > now() - interval '90 days'\nORDER BY ts",
           "refId": "C",
           "sql": {
             "columns": [
@@ -240,7 +240,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Maximum DLI reached each day \u2014 the final daily light integral",
+      "description": "Daily DLI and crop-driven target from the same lighting policy the dispatcher pushes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -309,8 +309,17 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, dli_final AS \"Daily DLI\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz) AND dli_final IS NOT NULL AND dli_final > 0\nORDER BY date",
+          "rawSql": "SELECT ts AS time, sensor_dli AS \"Daily DLI\"\nFROM v_lighting_daily\nWHERE $__timeFilter(ts) AND sensor_dli > 0\nORDER BY ts",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, target_dli AS \"Target DLI\"\nFROM v_lighting_daily\nWHERE $__timeFilter(ts)\nORDER BY ts",
+          "refId": "B"
         }
       ],
       "title": "Daily DLI Trend",
@@ -608,7 +617,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Factors affecting grow light decisions: light state, occupancy, sun position",
+      "description": "Both Lutron switch circuits, the crop-driven policy window, occupancy, and sun state.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -799,7 +808,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Grow Light\"\nFROM equipment_state WHERE equipment = 'grow_light_main' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Grow Light Main\"\nFROM equipment_state WHERE equipment = 'grow_light_main' AND $__timeFilter(ts) ORDER BY ts",
           "refId": "A"
         },
         {
@@ -808,7 +817,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Occupancy\"\nFROM system_state WHERE entity = 'occupancy' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 'ON' ELSE 'OFF' END AS \"Grow Light Grow\"\nFROM equipment_state WHERE equipment = 'grow_light_grow' AND $__timeFilter(ts) ORDER BY ts",
           "refId": "B"
         },
         {
@@ -817,11 +826,29 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), CASE WHEN solar_altitude_deg > 0 THEN 'Day' ELSE 'Night' END AS \"Sun\"\nFROM climate WHERE $__timeFilter(ts) AND solar_altitude_deg IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(c.ts), CASE\n  WHEN EXTRACT(hour FROM c.ts AT TIME ZONE 'America/Denver')::int >= p.sunrise_hour\n   AND EXTRACT(hour FROM c.ts AT TIME ZONE 'America/Denver')::int < p.cutoff_hour\n  THEN 'Window open' ELSE 'Window closed' END AS \"Policy Window\"\nFROM climate c CROSS JOIN LATERAL fn_lighting_policy(c.ts, 'vallery') p\nWHERE $__timeFilter(c.ts) ORDER BY c.ts",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), value AS \"Occupancy\"\nFROM system_state WHERE entity = 'occupancy' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT $__time(ts), CASE WHEN solar_altitude_deg > 0 THEN 'Day' ELSE 'Night' END AS \"Sun\"\nFROM climate WHERE $__timeFilter(ts) AND solar_altitude_deg IS NOT NULL ORDER BY ts",
+          "refId": "E"
         }
       ],
-      "title": "Light Decision Context",
+      "title": "Lighting Control State",
       "type": "state-timeline"
     },
     {
@@ -1001,6 +1028,372 @@
           "showLegend": true
         }
       }
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Current per-circuit lighting state-machine policy, expected state, actual Lutron state, and latest firmware reason.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "id": 16,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "format": "table",
+          "rawSql": "SELECT light_key AS \"Circuit\",\n       equipment AS \"Equipment\",\n       dli_target AS \"DLI Goal\",\n       start_hour AS \"Start\",\n       cutoff_hour AS \"Cutoff\",\n       lux_on_threshold AS \"ON Lux\",\n       lux_off_threshold AS \"OFF Lux\",\n       min_on_s AS \"Min ON s\",\n       min_off_s AS \"Min OFF s\",\n       CASE WHEN expected_on THEN 'ON' ELSE 'OFF' END AS \"Expected\",\n       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Actual\",\n       firmware_state AS \"FW State\",\n       firmware_reason AS \"FW Reason\"\nFROM v_lighting_circuit_status_now\nORDER BY light_key",
+          "refId": "A"
+        }
+      ],
+      "title": "Per-Circuit Lighting Policy Now",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "verdify-tsdb"
+      },
+      "description": "Tempest observed lux and forecast solar-derived lux against each Lutron circuit's planner-managed ON/OFF lighting band. The shaded bands are the firmware hysteresis zones: ON below the lower threshold, hold until the upper threshold.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "lux",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "lux"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Tempest/Forecast Lux"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2CC0C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Main OFF Threshold"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Main ON Threshold"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 16
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Main ON Threshold"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow OFF Threshold"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#33A2FF",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Grow ON Threshold"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow ON Threshold"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#33A2FF",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    4,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Main Expected On"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#9CCC65",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 4
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Expected On"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#80D8FF",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 4
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 10
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, natural_lux AS \"Tempest/Forecast Lux\"\nFROM fn_lighting_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nWHERE natural_lux IS NOT NULL\nORDER BY ts",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time,\n       main_lux_on_threshold AS \"Main ON Threshold\",\n       main_lux_off_threshold AS \"Main OFF Threshold\",\n       grow_lux_on_threshold AS \"Grow ON Threshold\",\n       grow_lux_off_threshold AS \"Grow OFF Threshold\"\nFROM fn_lighting_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time,\n       CASE WHEN main_expected_on > 0 THEN main_lux_on_threshold ELSE NULL END AS \"Main Expected On\",\n       CASE WHEN grow_expected_on > 0 THEN grow_lux_on_threshold ELSE NULL END AS \"Grow Expected On\"\nFROM fn_lighting_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
+          "refId": "C"
+        }
+      ],
+      "title": "Per-Circuit Lighting Forecast Bands",
+      "type": "timeseries"
     }
   ],
   "annotations": {

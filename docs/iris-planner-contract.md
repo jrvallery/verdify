@@ -6,13 +6,13 @@
 > allowlist in `hermes/iris/config.yaml`. Use `plan_delivery_log.hermes_run_id`
 > as the active gateway correlation field.
 
-**Status:** v1.5 by coordinator, 2026-05-04. Ratified direction: local-first planning. `iris-planner` is the production OpenClaw agent and is backed by local Gemma4 on cortext. Cloud planning is an explicit `cloud_escalation` path, not the default or an implicit fallback.
+**Status:** historical v1.5 by coordinator, 2026-05-04. It ratified the local-first OpenClaw/Gemma path that was superseded on 2026-05-11 by Hermes `hermes-iris` with OpenAI GPT-5.5 high-reasoning. The trigger-ledger, exact-correlation, lifecycle-status, and registry-validation rules remain active; the gateway/model details below are historical.
 
 **v1.5 change log (2026-05-04):** makes local Gemma4-on-cortext the default production planner path, defines the trigger ledger shape before more code changes, and closes the unsafe correlation rule: new planner rows correlate to triggers by exact `trigger_id` only. Legacy time-window fallback is permitted only for historical rows where both sides lack a UUID.
 
 **v1.4 change log (2026-04-19):** reconciled §2.D with pre-existing `plan_delivery_log` table from ingestor Sprint 24.6 F14 (migration 092). Contract no longer proposes a parallel `plan_delivery_log` — the existing table is **extended** with the contract-required columns (`trigger_id`, `instance`, `acked_at`, `status`). Column names in §2.D / §2.F use the existing migration's names (`delivered_at`, `event_type`, `resulting_plan_id`) rather than the v1.3 synonyms.
 
-**Applies to:** the default `iris-planner` OpenClaw agent (local Gemma4 on cortext), an explicit cloud escalation agent/session if configured, future peers, every trigger type (SUNRISE, SUNSET, MIDNIGHT, TRANSITION, FORECAST, DEVIATION, HEARTBEAT, MANUAL), and every agent that touches the planning path.
+**Applies to historically:** the default `iris-planner` OpenClaw agent (local Gemma4 on cortext), an explicit cloud escalation agent/session if configured, future peers, every trigger type (SUNRISE, SUNSET, MIDNIGHT, TRANSITION, FORECAST, DEVIATION, HEARTBEAT, MANUAL), and every agent that touched the planning path. Current production applies these ledger semantics to Hermes `hermes-iris`.
 
 ## 0. Why this exists
 

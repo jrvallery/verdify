@@ -11,7 +11,7 @@
 # while Quartz works. A successful build is then rsynced into place with delayed
 # deletes, avoiding the 404 window caused by Quartz clearing `public/`.
 
-set -uo pipefail
+set -euo pipefail
 
 LOCK=/var/lock/verdify-site-build.lock
 LOG=/srv/verdify/state/site-build.log
@@ -20,6 +20,7 @@ SITE_SOURCE=${VERDIFY_SITE_SOURCE:-/srv/verdify/site}
 SITE_RUNTIME=${VERDIFY_SITE_RUNTIME:-/srv/verdify/verdify-site}
 LIVE_PUBLIC=${VERDIFY_SITE_PUBLIC:-"$SITE_RUNTIME/public"}
 BUILD_ROOT=${VERDIFY_SITE_BUILD_ROOT:-"$SITE_RUNTIME/.builds"}
+RSYNC_IO_TIMEOUT=${VERDIFY_SITE_RSYNC_TIMEOUT:-180}
 mkdir -p "$(dirname "$LOG")"
 mkdir -p "$(dirname "$MARKER")"
 
@@ -85,7 +86,7 @@ mkdir -p "$(dirname "$MARKER")"
 
     if [ "$build_ok" = true ]; then
 
-        rsync -a --delete-delay "$staging"/ "$LIVE_PUBLIC"/
+        rsync -a --delete-delay --timeout="$RSYNC_IO_TIMEOUT" "$staging"/ "$LIVE_PUBLIC"/
 
         if [ "$nginx_changed" = true ]; then
             if docker exec verdify-site nginx -s reload > /dev/null 2>&1; then

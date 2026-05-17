@@ -41,6 +41,7 @@ GENERATED_PAGES = {
     "data/plans/index.md": "scripts/generate-plans-index.py",
     "evidence/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
     "forecast/index.md": "scripts/generate-forecast-page.py",
+    "reference/ai-tunables.md": "scripts/generate-ai-tunables-page.py",
     "plans/index.md": "scripts/generate-plans-index.py",
     "reference/lessons.md": "scripts/generate-lessons-page.py",
 }
@@ -191,6 +192,11 @@ def parse_simple_yaml(raw: str) -> dict[str, object]:
         else:
             data[key] = []
     return data
+
+
+def is_draft_page(path: Path) -> bool:
+    fm, _body = frontmatter(read_text(path))
+    return str(fm.get("draft", "")).strip().lower() == "true"
 
 
 def generated_source(rel_path: str) -> str | None:
@@ -792,7 +798,11 @@ def check_public_output(vault_root: Path, public_root: Path) -> list[Finding]:
     if not (public_root / "index.html").is_file():
         findings.append(Finding("error", "public-index-missing", f"missing built index.html in {public_root}"))
 
-    source_pages = {path.relative_to(vault_root).with_suffix(".html").as_posix() for path in vault_root.rglob("*.md")}
+    source_pages = {
+        path.relative_to(vault_root).with_suffix(".html").as_posix()
+        for path in vault_root.rglob("*.md")
+        if not is_draft_page(path)
+    }
     missing: list[str] = []
     for _attempt in range(REBUILD_RETRY_ATTEMPTS):
         missing = []

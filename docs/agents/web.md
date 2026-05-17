@@ -74,7 +74,8 @@ Treat these as generated or partially generated, not ordinary prose pages:
 | `forecast/index.md` | `scripts/generate-forecast-page.py` | `weather_forecast`, `fn_forecast_correction`, `forecast_deviation_log` |
 | `plans/YYYY-MM-DD.md` | `scripts/generate-daily-plan.py` | `daily_summary`, `plan_journal`, setpoint/scorecard context |
 | `plans/index.md` | `scripts/generate-plans-index.py` | `daily_summary`, `plan_journal` |
-| `greenhouse/lessons.md` | `scripts/generate-lessons-page.py` | `planner_lessons` |
+| `reference/ai-tunables.md` | `scripts/generate-ai-tunables-page.py` | `tunable_registry`, MCP contracts, `entity_map`, firmware source, `setpoint_plan`, `setpoint_changes`, `setpoint_snapshot`, `plan_journal` |
+| `reference/lessons.md` | `scripts/generate-lessons-page.py` | `planner_lessons` |
 | `greenhouse/zones/*.md` | `scripts/render-zone-pages.py` | `v_zone_full`, `v_position_current`, topology tables/views |
 | `greenhouse/equipment.md` | `scripts/render-equipment-page.py` | `v_equipment_relay_map`, `equipment` |
 | `greenhouse/crops/*.md` | `scripts/render-crop-profiles.py` | `crop_catalog`, `v_crop_catalog_with_profiles`, `v_position_current`, `v_crop_history` |

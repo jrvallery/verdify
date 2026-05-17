@@ -57,6 +57,8 @@ class SetpointPlanRow(BaseModel):
     created_at: AwareDatetime | None = None
     is_active: bool = True
     greenhouse_id: str = "vallery"
+    planner_instance: str | None = None
+    trigger_id: UUID | None = None
 
 
 class SetpointSnapshot(BaseModel):

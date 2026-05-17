@@ -1,6 +1,9 @@
 # VPD-Primary Control Architecture
 
-**Status:** Design approved, Phase 1 implementation in progress
+**Status:** Historical design note. Production firmware now runs the unified
+band-first controller with explicit VENTILATE mist assist and per-circuit
+lighting state machines; keep this file as background for why high-VPD stress
+drives the greenhouse, not as the live state-machine contract.
 **Date:** 2026-04-09
 **Author:** Jason Vallery + Claude Opus 4.6
 
@@ -28,8 +31,11 @@ retained, heat builds, evaporative cooling effective).
 | VPD_FOG | VPD sustained despite misting | Vent closed + fog pulse + mist | Fog pulse + mist |
 | VPD_EMERGENCY | VPD > safety_vpd_max | Everything: vent closed, fog, all misters | Same |
 
-Key change: VPD_MIST forces vent closed BEFORE engaging misters. Open-vent misting
-wastes ~70% of water to immediate evaporation into exhaust airflow at 15% outdoor RH.
+Key change: VPD_MIST forces vent closed BEFORE engaging normal misters. Open-vent
+misting wastes ~70% of water to immediate evaporation into exhaust airflow at
+15% outdoor RH. Current firmware has one explicit exception: when temperature
+requires `VENTILATE` but VPD remains high, bounded vent-mist assist may pulse
+misters while the vent stays open because temperature is the primary objective.
 
 ### Secondary axis: thermal management (4 states)
 
@@ -56,15 +62,19 @@ safety → VPD → thermal → cost
 
 ```
 Vent opens (thermal relief) → VPD climbs → VPD_WATCH (60s dwell)
-  → VPD sustained → Vent closes (mist_vent_close_lead_s)
+  → VPD sustained → SEALED_MIST closes the vent immediately
   → Misters pulse (60s on / 25s gap) → VPD drops
-  → Misters stop → mist_vent_reopen_delay_s → Vent opens
+  → Misters stop when VPD/zone demand clears; later VENTILATE/THERMAL_RELIEF opens the vent if needed
   → Cycle repeats
   
 After mist_max_closed_vent_s: mandatory thermal relief opening
 ```
 
-## Tunables (24 Tier 1 parameters)
+Note: `mist_vent_close_lead_s` and `mist_vent_reopen_delay_s` are reserved
+ESPHome globals with readbacks, but the current firmware does not consume them.
+They are not Tier 1 planner knobs until a firmware PR implements the semantics.
+
+## Tunables (current tactical subset)
 
 ### VPD response
 | # | Parameter | Range | Default |
@@ -81,12 +91,11 @@ After mist_max_closed_vent_s: mandatory thermal relief opening
 ### Vent coordination (binary)
 | # | Parameter | Range | Default |
 |---|-----------|-------|---------|
-| 9 | mist_vent_close_lead_s | 0-60s | 15 |
-| 10 | mist_max_closed_vent_s | 300-900s | 600 |
-| 11 | vent_enthalpy_open_delta | -5 to 0 kJ/kg | -2 |
-| 12 | vent_enthalpy_close_delta | 0 to +5 kJ/kg | 1 |
-| 13 | vent_min_on_s | 30-300s | 60 |
-| 14 | vent_min_off_s | 30-300s | 60 |
+| 9 | mist_max_closed_vent_s | 120-900s | 600 |
+| 10 | vent_enthalpy_open_delta | -5 to 0 kJ/kg | -2 |
+| 11 | vent_enthalpy_close_delta | 0 to +20 kJ/kg | 1 |
+| 12 | vent_min_on_s | 10-300s | 60 |
+| 13 | vent_min_off_s | 10-300s | 60 |
 
 ### Fog (graduated)
 | # | Parameter | Range | Default |

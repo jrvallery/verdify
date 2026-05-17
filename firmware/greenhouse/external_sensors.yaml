@@ -341,7 +341,7 @@ sensor:
   # ═══════════════════════════════════════════════════════════════════
   # SHELLY EM50 — values are ingested off-board
   # ESP32 HTTP polling was disabled 2026-04-27 after heap-pressure and
-  # JSON IncompleteInput logs during the live v2 bake. Shelly telemetry is
+  # JSON IncompleteInput logs during the live band-first controller bake. Shelly telemetry is
   # not part of climate control, so the host ingestor owns that poll.
   # ═══════════════════════════════════════════════════════════════════
 

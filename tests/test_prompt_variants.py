@@ -85,12 +85,12 @@ class TestSplitInvariants:
         Sprint-4's "dictionary of all 86" policy was the root cause of a
         prompt-bloat spiral (see plan: phase 1d). The registry is now the
         authoritative full list; the prompt only needs Tier 1 names
-        literal + an escape-hatch reference for Tier 2."""
+        literal + a reference to the non-policy contract."""
         from verdify_schemas.tunable_registry import REGISTRY
 
         assert "Tunable Dictionary — Tactical Tier 1" in iris_planner._PLANNER_CORE, "Tier 1 dictionary header missing"
         assert "docs/tunable-cascade.md" in iris_planner._PLANNER_CORE, (
-            "escape-hatch reference to full cascade doc missing"
+            "non-policy reference to full cascade doc missing"
         )
         # Every Tier 1 param must appear as a literal token in CORE.
         tier1 = {n for n, d in REGISTRY.items() if d.planner_pushable and d.tier == 1}
@@ -102,8 +102,8 @@ class TestSplitInvariants:
         assert "Do not emit in plans" in iris_planner._PLANNER_CORE
         assert "crop-band params" in iris_planner._sunrise_prompt("context")
         assert "crop-band params" in iris_planner._sunset_prompt("context")
-        assert "all 24 tactical Tier 1 params" in iris_planner._sunrise_prompt("context")
-        assert "all 24 tactical Tier 1 params" in iris_planner._sunset_prompt("context")
+        assert "all tactical Tier 1 params" in iris_planner._sunrise_prompt("context")
+        assert "all tactical Tier 1 params" in iris_planner._sunset_prompt("context")
         assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunrise_prompt("context")
         assert "Each transition includes ALL 24 Tier 1 params" not in iris_planner._sunset_prompt("context")
 
@@ -112,7 +112,7 @@ class TestSplitInvariants:
         core = iris_planner._PLANNER_CORE
         expected_lines = [
             "`vpd_hysteresis` kPa, [0.05-0.5], def 0.3",
-            "`mister_engage_kpa` kPa, [0.5-2.5], def 1.6",
+            "`mister_engage_kpa` kPa, [0.5-2.5], def 1.6 — physical S1 mister permissive",
             "`mister_all_kpa` kPa, [1.0-2.5], def 1.9",
             "`mister_engage_delay_s` s, [30-900], def 45",
             "`mister_all_delay_s` s, [60-900], def 300",
@@ -126,6 +126,9 @@ class TestSplitInvariants:
             "`min_heat_off_s` s, [60-600], def 180",
             "`enthalpy_open` kJ/kg Δ, [-5-0], def -2",
             "`enthalpy_close` kJ/kg Δ, [-5-20], def 1",
+            "`outdoor_staleness_max_s` s, [120-1800], def 600",
+            "`sw_fog_closes_vent`",
+            "`sw_mister_closes_vent`",
         ]
         missing = [line for line in expected_lines if line not in core]
         assert not missing, missing
@@ -147,9 +150,19 @@ class TestSplitInvariants:
     def test_mcp_drops_band_owned_plan_params(self):
         """set_plan must enforce the same ownership boundary as the prompt."""
         server = (Path(_WORKTREE) / "mcp" / "server.py").read_text()
-        assert 'BAND_OWNED_PARAMS = {"temp_low", "temp_high", "vpd_low", "vpd_high"}' in server
+        for param in (
+            "temp_low",
+            "temp_high",
+            "vpd_low",
+            "vpd_high",
+            "gl_dli_target",
+            "gl_sunrise_hour",
+            "gl_sunset_hour",
+            "sw_gl_auto_mode",
+        ):
+            assert f'"{param}"' in server
         assert "PLAN_REQUIRED_PARAMS" in server
-        assert "Plan transitions must include all 24 tactical Tier 1 params" in server
+        assert "Plan transitions must include all {len(PLAN_REQUIRED_PARAMS)} tactical Tier 1 params" in server
         assert "band_params_dropped" in server
         assert "param in BAND_OWNED_PARAMS" in server
 

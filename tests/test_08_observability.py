@@ -8,10 +8,12 @@ change" gate per the fleet DoD.
 """
 
 import ast
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from conftest import db_query
 
 sys.path.insert(0, "/srv/verdify/ingestor")
@@ -75,6 +77,18 @@ class TestSchema:
         val = db_query("SELECT count(*) FROM v_clamp_activity_24h")
         assert val is not None
 
+    def test_plan_transition_audit_function_exists(self):
+        val = db_query("SELECT to_regprocedure('fn_plan_transition_audit(text,interval,interval)')::text")
+        assert val == "fn_plan_transition_audit(text,interval,interval)"
+
+    def test_setpoint_clamps_carries_plan_transition_metadata(self):
+        val = db_query(
+            "SELECT count(*) FROM information_schema.columns "
+            "WHERE table_name='setpoint_clamps' "
+            "AND column_name IN ('status','plan_id','plan_ts','trigger_id','planner_instance')"
+        )
+        assert int(val) == 5
+
 
 class TestDispatcherWiring:
     """Dispatcher code must contain the Tier 1 audit hooks."""
@@ -90,6 +104,9 @@ class TestDispatcherWiring:
         assert "INSERT INTO setpoint_clamps" in body, (
             "setpoint_dispatcher must INSERT into setpoint_clamps when planner values are clamped (Tier 1 #2)"
         )
+        assert "_write_clamp_audit_rows" in body
+        assert "held_by_guardrail" in body
+        assert "dispatched_params" in body
 
     def test_dispatcher_retries_esp32_push(self):
         body = self._read()
@@ -111,6 +128,21 @@ class TestDispatcherWiring:
         assert "_MIN_COMMAND_INTERVAL_S" in push_helper
         assert "async with _PUSH_LOCK" in push_helper
         assert "await asyncio.sleep(_BATCH_PAUSE_S)" in push_helper
+
+    def test_reconnect_forces_dispatcher_owned_band_setpoints(self):
+        body = self._read()
+        ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        assert "if param in BAND_DRIVEN_PARAMS:" in body
+        assert "forcing %d band setpoint(s)" in body
+        assert "setpoint_changes ignored dispatcher-owned ESP32 echo" in ingestor
+        assert "BAND_DRIVEN_PARAMS" in ingestor
+
+    def test_dispatcher_repushes_active_plan_when_cfg_readback_drifts(self):
+        body = self._read()
+        assert "readback_drift" in body
+        assert "Dispatcher readback drift" in body
+        assert "and not readback_drift" in body
+        assert "shared.cfg_readback.get(param)" in body
 
     def test_realtime_listener_validates_outbound_registry_bounds(self):
         ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
@@ -201,8 +233,15 @@ class TestHeapPressureObservability:
         assert "last_critical_event_ts" in body
         assert "healthy_after_critical" in body
         assert "healthy_heap_samples_after_event" in body
+        assert "heap_event_floor" in body
+        assert "resolved_at IS NOT NULL" in body
+        assert "ts > COALESCE($1, '-infinity'::timestamptz)" in body
         assert "critical_logs_30m" in body
-        assert "SELECT heap_bytes, uptime_s, ts" in body
+        assert "SELECT heap_bytes," in body
+        assert "heap_min_free_kb" in body
+        assert "heap_largest_free_block_kb" in body
+        assert "low_watermark_warning" in body
+        assert "fragmentation_warning" in body
         assert "startup_heap_grace" in body
         assert "age_after_boot_s <= 180" in body
         assert '"alert_type": "heap_pressure_warning"' in body
@@ -214,14 +253,31 @@ class TestHeapPressureObservability:
         assert "state_source" in body
         assert "commanded_equipment_state" in body
         assert "float(temp_avg) <= float(sp_temp_high) + 0.5" in body
+        assert "AIR_EXCHANGE_RELAY_STUCK_MODES" in body
+        assert "sp_vpd_low" in body
         assert "while temp is not below the active band" in body
+        assert "without current mode demand" in body
         assert "without an OFF command" in body
 
-    def test_v2_open_vent_fog_assist_not_blocked_by_generic_interlock(self):
+    def test_firmware_executor_enforces_heat_air_exchange_and_stage_interlocks(self):
+        body = (REPO_ROOT / "firmware/greenhouse/controls.yaml").read_text()
+        invariants = (REPO_ROOT / "firmware/test/invariants.h").read_text()
+        assert "heat_air_exchange_interlock_active" in body
+        assert "heat_fan_interlock_active" in body
+        assert "heat_stage_interlock_active" in body
+        assert "force_heat_off" in body
+        assert "force_heat2_off" in body
+        assert "heat1_will_be_on_after_apply" in body
+        assert "bool force_on,bool force_off=false" in body
+        assert "check_16_heat2_requires_heat1" in invariants
+
+    def test_band_first_open_vent_fog_assist_not_blocked_by_generic_interlock(self):
         body = (REPO_ROOT / "firmware/greenhouse/controls.yaml").read_text()
         assert "open_vent_fog_assist" in body
+        assert "open_vent_mister_assist" in body
         assert "ctl_state.vent_mist_assist_active && relay_out.fog" in body
         assert "id(fog_closes_vent) && vent_is_open && !open_vent_fog_assist" in body
+        assert "open_vent_mister_assist || !id(mister_closes_vent) || !vent_is_open" in body
 
     def test_greenhouse_state_refresh_registered(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
@@ -246,9 +302,18 @@ class TestHeapPressureObservability:
         assert "last 15m" in body
         assert 'float(row["recent_high_fraction"] or 0.0) >= 0.5' in body
 
+    def test_alert_monitor_separates_vent_moisture_gap_from_capacity_limit(self):
+        body = (REPO_ROOT / "ingestor/tasks.py").read_text()
+        assert "vent_vpd_moisture_gap" in body
+        assert "vent_moisture_capacity_limit" in body
+        assert "high_no_moisture_samples" in body
+        assert "capacity_limited_samples" in body
+        assert "last 15m" in body
+        assert "last 30m" in body
 
-class TestV2ControlDiagnostics:
-    """Controller v2 timers and assist flags must be observable."""
+
+class TestBandFirstControlDiagnostics:
+    """band-first controller timers and assist flags must be observable."""
 
     def test_migration_094_applied(self):
         cols = db_query(
@@ -259,14 +324,14 @@ class TestV2ControlDiagnostics:
         )
         assert cols == "mist_backoff_timer_s,sealed_timer_s,vent_mist_assist_active,vpd_watch_timer_s"
 
-    def test_firmware_declares_v2_diagnostic_sensors(self):
+    def test_firmware_declares_band_first_diagnostic_sensors(self):
         body = (REPO_ROOT / "firmware/greenhouse/sensors.yaml").read_text()
         assert "id: ctl_sealed_timer_s" in body
         assert "id: ctl_vpd_watch_timer_s" in body
         assert "id: ctl_mist_backoff_timer_s" in body
         assert "id: ctl_vent_mist_assist_active" in body
 
-    def test_controls_publishes_v2_diagnostics_and_assist_override(self):
+    def test_controls_publishes_band_first_diagnostics_and_assist_override(self):
         body = (REPO_ROOT / "firmware/greenhouse/controls.yaml").read_text()
         assert "ctl_state.vent_mist_assist_active" in body
         assert 'add("vent_mist_assist")' in body
@@ -274,7 +339,7 @@ class TestV2ControlDiagnostics:
         assert "id(ctl_mist_backoff_timer_s).publish_state(" in body
         assert "id(ctl_vent_mist_assist_active).publish_state(" in body
 
-    def test_entity_map_and_ingestor_route_v2_diagnostics(self):
+    def test_entity_map_and_ingestor_route_band_first_diagnostics(self):
         entity_map = (REPO_ROOT / "ingestor/entity_map.py").read_text()
         ingestor = (REPO_ROOT / "ingestor/ingestor.py").read_text()
         for col in ("sealed_timer_s", "vpd_watch_timer_s", "mist_backoff_timer_s", "vent_mist_assist_active"):
@@ -312,6 +377,8 @@ class TestContractDriftGuardrails:
         assert "EXPECTED_FIRMWARE_VERSION" in config_source
         assert "EXPECTED_FIRMWARE_VERSION_FILE" in config_source
         assert "firmware_version_mismatch" in tasks_source
+        assert '"severity": "high"' not in tasks_source
+        assert 'else "high"' not in tasks_source
         assert "diag.firmware_version" in tasks_source
         assert "/srv/verdify/state/expected-firmware-version" in config_source
         assert "/srv/verdify/state/expected-firmware-version" in makefile
@@ -360,8 +427,65 @@ class TestContractDriftGuardrails:
         controls_source = (REPO_ROOT / "firmware" / "greenhouse" / "controls.yaml").read_text()
         assert "vent_blocks_moisture" not in controls_source
         assert "open_vent_fog_assist" in controls_source
+        assert "open_vent_mister_assist" in controls_source
         assert "if (id(fog_closes_vent) && vent_is_open && !open_vent_fog_assist)" in controls_source
-        assert "const bool mister_vent_ok = !id(mister_closes_vent) || !vent_is_open;" in controls_source
+        assert (
+            "const bool mister_vent_ok = open_vent_mister_assist || !id(mister_closes_vent) || !vent_is_open;"
+            in controls_source
+        )
+        assert (
+            "bool humidity_demand = ((mode == SEALED_MIST) || ctl_state.vent_mist_assist_active) && mister_vent_ok;"
+            in controls_source
+        )
+
+    def test_post_boot_readback_repair_covers_static_and_planner_paths(self):
+        ingestor_source = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
+        tasks_source = (REPO_ROOT / "ingestor" / "tasks.py").read_text()
+        assert "shared.force_setpoint_push.set()" in ingestor_source
+        assert "prev is not None and not math.isclose" in ingestor_source
+        assert "if shared.force_setpoint_push.is_set():" in tasks_source
+        assert "_last_pushed.clear()" in tasks_source
+        assert "def _readback_drift(param: str, desired: float) -> bool:" in tasks_source
+        assert 'for param in ("temp_low", "temp_high", "vpd_low", "vpd_high"):' in tasks_source
+        assert (
+            'for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):'
+            in tasks_source
+        )
+        assert "for param, val in safety_defaults.items():" in tasks_source
+        assert "for param, val in mister_defaults.items():" in tasks_source
+        assert "readback_drift = _readback_drift(param, planned_val)" in tasks_source
+        assert "Dispatcher readback drift" in tasks_source
+
+    def test_validation_monitor_distinguishes_deploy_blockers_from_climate_warnings(self):
+        monitor_source = (REPO_ROOT / "scripts" / "hermes-validation-monitor.py").read_text()
+        assert "open_critical_high_alerts" in monitor_source
+        assert "open_warning_alerts" in monitor_source
+        assert "deploy-blocking alerts" in monitor_source
+        assert 'failures.append("open_critical_high_alerts")' in monitor_source
+        assert 'failures.append("open_alerts")' not in monitor_source
+
+    def test_public_home_metrics_and_site_publish_have_traffic_backpressure_guards(self):
+        api_source = (REPO_ROOT / "api" / "main.py").read_text()
+        rebuild_source = (REPO_ROOT / "scripts" / "rebuild-site.sh").read_text()
+        assert "PUBLIC_HOME_METRICS_CACHE_TTL_S" in api_source
+        assert "_PUBLIC_HOME_METRICS_CACHE" in api_source
+        assert "time.monotonic()" in api_source
+        assert '--timeout="$RSYNC_IO_TIMEOUT"' in rebuild_source
+        assert "set -euo pipefail" in rebuild_source
+
+    def test_firmware_deploy_refuses_dirty_worktree_without_explicit_override(self):
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        preflight = (REPO_ROOT / "scripts" / "firmware-deploy-preflight.sh").read_text()
+        assert "ALLOW_DIRTY_FIRMWARE_DEPLOY" in makefile
+        assert "Dirty firmware OTA refused" in makefile
+        assert "FW_VERSION=" in makefile
+        assert ".dirty" in makefile
+        assert "firmware-promote-last-good" in makefile
+        assert "Rollback target unchanged while this build bakes" in makefile
+        assert "FIRMWARE_DEPLOY_OPERATOR_SIGNOFF=1" in preflight
+        assert "FIRMWARE_DEPLOY_OVERRIDE_REASON" in preflight
+        assert "No last-good rollback artifact" in preflight
+        assert "48-hour bake check passed for $last_good mtime" in preflight
 
 
 class TestFirmwareCheckTargets:
@@ -533,6 +657,8 @@ class TestProbeStalenessWiring:
         assert "u + 0 >= 21600" in body
         assert "sticky reset cause, not a recent reboot" in body
         assert "recent watchdog-induced reboot" in body
+        assert "vent_mist_assist and summer_vent" in body
+        assert "expected during hot/dry VENTILATE windows" in body
 
     def test_firmware_deploy_waits_for_expected_version(self):
         makefile = (REPO_ROOT / "Makefile").read_text()
@@ -809,13 +935,20 @@ class TestPlannerToDispatcherE2E:
     TEST_PARAM = "mister_vpd_weight"
     TEST_VALUE = 0.73  # Arbitrary in-registry value, unlikely to match the live planner value
     TEST_PLAN_ID = "te2-smoke-test"
+    DRIFT_PARAM = "mister_water_budget_gal"
+    DRIFT_VALUE = 321.0
+    DRIFT_READBACK = 123.0
+    DRIFT_PLAN_ID = "te2-readback-drift-test"
 
     def _cleanup(self):
         for sql in (
             f"DELETE FROM setpoint_plan WHERE plan_id = '{self.TEST_PLAN_ID}'",
+            f"DELETE FROM setpoint_plan WHERE plan_id = '{self.DRIFT_PLAN_ID}'",
             # Remove any setpoint_changes row created by the test
             f"DELETE FROM setpoint_changes WHERE parameter = '{self.TEST_PARAM}' "
             f"AND abs(value - {self.TEST_VALUE}) < 1e-6 AND ts > now() - interval '5 min'",
+            f"DELETE FROM setpoint_changes WHERE parameter = '{self.DRIFT_PARAM}' "
+            f"AND abs(value - {self.DRIFT_VALUE}) < 1e-6 AND ts > now() - interval '5 min'",
         ):
             subprocess.run(
                 [
@@ -840,15 +973,17 @@ class TestPlannerToDispatcherE2E:
         import asyncpg
         import tasks as tasks_mod
 
-        import ingestor as ing_mod
         from ingestor import State  # noqa: F401  (ensure ingestor module importable)
+
+        if os.environ.get("RUN_LIVE_DB_MUTATION_TESTS") != "1":
+            pytest.skip("live DB mutation test; enable with RUN_LIVE_DB_MUTATION_TESTS=1 in an isolated environment")
 
         # Intercept ESP32 push so the test doesn't drive real hardware
         async def _fake_push(changes):
             return len(changes)
 
-        original_push = getattr(ing_mod, "push_to_esp32", None)
-        ing_mod.push_to_esp32 = _fake_push
+        original_push = getattr(tasks_mod, "push_to_esp32", None)
+        tasks_mod.push_to_esp32 = _fake_push
 
         # Clear the dispatcher's in-memory dedup for our test param
         tasks_mod._last_pushed.pop(self.TEST_PARAM, None)
@@ -901,7 +1036,80 @@ class TestPlannerToDispatcherE2E:
             )
         finally:
             if original_push is not None:
-                ing_mod.push_to_esp32 = original_push
+                tasks_mod.push_to_esp32 = original_push
+            self._cleanup()
+
+    def test_cfg_readback_drift_forces_repush_even_when_last_pushed_matches(self):
+        import asyncio
+
+        import asyncpg
+        import tasks as tasks_mod
+
+        if os.environ.get("RUN_LIVE_DB_MUTATION_TESTS") != "1":
+            pytest.skip("live DB mutation test; enable with RUN_LIVE_DB_MUTATION_TESTS=1 in an isolated environment")
+
+        async def _fake_push(changes):
+            return len(changes)
+
+        original_push = getattr(tasks_mod, "push_to_esp32", None)
+        original_last = tasks_mod._last_pushed.get(self.DRIFT_PARAM)
+        original_readback = tasks_mod.shared.cfg_readback.get(self.DRIFT_PARAM)
+        tasks_mod.push_to_esp32 = _fake_push
+        tasks_mod._last_pushed[self.DRIFT_PARAM] = self.DRIFT_VALUE
+        tasks_mod.shared.cfg_readback[self.DRIFT_PARAM] = self.DRIFT_READBACK
+
+        env = {}
+        with open("/srv/verdify/ingestor/.env") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                env[k] = v
+        dsn = f"postgresql://{env['DB_USER']}:{env['DB_PASSWORD']}@localhost:{env['DB_PORT']}/{env['DB_NAME']}"
+
+        async def run():
+            pool = await asyncpg.create_pool(dsn, min_size=1, max_size=2)
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "INSERT INTO setpoint_plan "
+                        "(ts, parameter, value, plan_id, source, reason, is_active) "
+                        "VALUES (now(), $1, $2, $3, 'iris', 'TE-2 readback drift test', true)",
+                        self.DRIFT_PARAM,
+                        self.DRIFT_VALUE,
+                        self.DRIFT_PLAN_ID,
+                    )
+
+                await tasks_mod.setpoint_dispatcher(pool)
+
+                async with pool.acquire() as conn:
+                    return await conn.fetchrow(
+                        "SELECT value, source FROM setpoint_changes "
+                        "WHERE parameter = $1 AND abs(value - $2) < 1e-6 "
+                        "AND ts > now() - interval '1 minute' "
+                        "ORDER BY ts DESC LIMIT 1",
+                        self.DRIFT_PARAM,
+                        self.DRIFT_VALUE,
+                    )
+            finally:
+                await pool.close()
+
+        try:
+            row = asyncio.run(run())
+            assert row is not None, "cfg readback drift did not force a planner value re-push"
+            assert row["source"] == "plan"
+        finally:
+            if original_push is not None:
+                tasks_mod.push_to_esp32 = original_push
+            if original_last is None:
+                tasks_mod._last_pushed.pop(self.DRIFT_PARAM, None)
+            else:
+                tasks_mod._last_pushed[self.DRIFT_PARAM] = original_last
+            if original_readback is None:
+                tasks_mod.shared.cfg_readback.pop(self.DRIFT_PARAM, None)
+            else:
+                tasks_mod.shared.cfg_readback[self.DRIFT_PARAM] = original_readback
             self._cleanup()
 
 

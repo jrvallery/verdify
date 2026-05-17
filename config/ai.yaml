@@ -6,6 +6,9 @@
 # Keys are stored in external files (never in this config).
 # Paths can be overridden via environment variables.
 keys:
+  openai:
+    file: ${OPENAI_API_KEY_FILE:-/mnt/jason/agents/shared/credentials/openai_api_key.txt}
+    provider: openai
   gemini:
     file: ${GEMINI_API_KEY_FILE:-/mnt/jason/agents/shared/credentials/gemini_api_key.txt}
     provider: google-ai-studio
@@ -16,11 +19,11 @@ keys:
 # ── Models ───────────────────────────────────────────────────────
 models:
   planner:
-    provider: vllm
-    model: gemma4-26b
+    provider: openai
+    model: gpt-5.5
     temperature: 0.3
     max_output_tokens: 4096
-    purpose: "Legacy local Gemma4 planner; retired. Live planning runs through Hermes/GPT-5.5 (see hermes/iris/config.yaml)."
+    purpose: "Audit label for the Hermes Iris profile. Live planning runs through hermes/iris/config.yaml."
 
   vision:
     provider: gemini
@@ -30,8 +33,8 @@ models:
     purpose: "Camera snapshot crop health analysis"
 
   embedding:
-    provider: gemini
-    model: gemini-embedding-2-preview
+    provider: openai
+    model: text-embedding-3-large
     dimensions: 3072
     purpose: "Observation semantic similarity search"
 
@@ -71,18 +74,16 @@ context:
   max_context_chars: 100000
   max_static_chars: 50000
 
-# ── Planner Routing & SLA (local-first, contract v1.5) ───────────
-# Runtime knobs for the local-first planner routing policy. Consumed by:
+# ── Planner Routing & SLA (Hermes audit labels, contract v1.5) ───
+# Runtime knobs for planner trigger severity and audit-label routing. Consumed by:
 #   - ingestor/planner_routing.py (classify_severity + pick_instance + sla_for)
 #   - ingestor/alert_monitor rule 7 (SLA-breach detection)
 # Contract spec: docs/iris-planner-contract.md §2.F (SLA) + §2.G (routing).
 # All routine planning runs through Hermes (GPT-5.5 high-reasoning); the
 # instance field is an audit label only.
 planner_routing:
-  # Launch override, 2026-05-07: local Gemma overflowed during required
-  # SUNRISE full-plan cycles on May 6-7. Keep lower-risk FORECAST /
-  # TRANSITION work local, but route required full plans through Opus until
-  # the full-plan context is trimmed and a local bake passes.
+  # Required full-plan cycles use the same Hermes/GPT-5.5 profile as other
+  # triggers; this value is an audit label carried into plan_delivery_log.
   required_full_plan_instance: opus
 
   # Severity thresholds — ingestor.classify_severity returns "major" when any
@@ -94,7 +95,8 @@ planner_routing:
 
 planner_sla:
   # SLA in minutes, keyed by (instance, trigger_type). Absent = no SLA.
-  # Local gets all normal triggers. Opus targets are explicit escalation only.
+  # local/opus are audit labels under Hermes. They no longer select different
+  # model backends.
   local:
     SUNRISE:    30
     SUNSET:     30

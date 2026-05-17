@@ -120,9 +120,9 @@ struct Setpoints {
     // shadow validation.
     bool     sw_dwell_gate_enabled;
     uint32_t dwell_gate_ms;                // default 300000 (5 min)
-    // Controller v2: band-first FSM. Default OFF so the legacy cascade remains
-    // the rollback path; when enabled, firmware prioritizes temp/VPD band
-    // compliance and treats failed humidification as a backoff, not forced vent.
+    // Unified band-first controller. Kept as a compatibility/readback field,
+    // but production firmware validates it ON so there is one live controller
+    // path across planner, dispatcher, and ESP32.
     bool     sw_fsm_controller_enabled;
     uint32_t mist_backoff_ms;
 };
@@ -173,11 +173,11 @@ struct ControlState {
     // non-held transition. Initialized to 0 which means "already past
     // dwell at boot" so the first real decision isn't gated.
     uint32_t last_transition_tick_ms;
-    // Controller v2: lockout after a sealed humidification attempt times out.
+    // band-first controller: lockout after a sealed humidification attempt times out.
     // During this window the firmware suppresses new SEALED_MIST entries while
     // still allowing normal temp/dehum control.
     uint32_t mist_backoff_timer_ms;
-    // Controller v2: moisture assist while the temp band requires VENTILATE but
+    // band-first controller: moisture assist while the temp band requires VENTILATE but
     // VPD is also above band. controls.yaml uses this to allow directional
     // misters during vent cooling without pretending the mode is SEALED_MIST.
     bool vent_mist_assist_active;
@@ -191,6 +191,56 @@ struct RelayOutputs {
     bool fog;
     bool vent;
 };
+
+// ── Supplemental lighting state machines ───────────────────────────────
+// Each Lutron circuit is evaluated independently. The crop/DLI policy can
+// seed both circuits with the same defaults, but the planner owns the per-light
+// tunables and can diverge them once we have enough observations.
+struct LightingInputs {
+    float natural_lux;      // Tempest outdoor lux, indoor fallback handled by caller
+    float dli_today;        // accumulated sensor DLI today
+    int local_hour;         // 0-23, from SNTP
+    bool occupied;          // occupancy forces light on inside the eligible window
+};
+
+struct LightingSetpoints {
+    float dli_target;
+    float lux_on_threshold;
+    float lux_hysteresis;
+    int start_hour;
+    int cutoff_hour;
+    uint32_t min_on_ms;
+    uint32_t min_off_ms;
+    bool auto_enabled;
+};
+
+static constexpr uint32_t LIGHT_STATE_SENTINEL = 0xBEEF0043;
+
+struct LightingState {
+    uint32_t sentinel;
+    bool on;
+    uint32_t last_transition_tick_ms;
+    const char* last_reason;
+};
+
+struct LightingDecision {
+    bool want_on;
+    bool in_window;
+    bool dli_below_target;
+    bool lux_below_on_threshold;
+    bool lux_below_off_threshold;
+    float lux_off_threshold;
+    const char* reason;
+};
+
+inline LightingState initial_lighting_state() {
+    return {
+        .sentinel = LIGHT_STATE_SENTINEL,
+        .on = false,
+        .last_transition_tick_ms = 0,
+        .last_reason = "init"
+    };
+}
 
 // ── OBS-1e: firmware silent-override audit (Sprint 16) ──
 // Each flag captures a specific firmware-side decision that negates or
@@ -206,8 +256,8 @@ struct OverrideFlags {
     bool seal_blocked_temp;          // seal wanted but within 5°F of safety_max
     bool vpd_dry_override;           // firmware sealed for VPD safety without planner dwell
     bool summer_vent_active;         // sprint-15 gate suppressed a VPD-seal in favor of VENTILATE
-    bool vent_mist_assist;           // v2 VENTILATE is carrying concurrent mister demand
-    bool fog_heat_assist;            // v2 SEALED_MIST_FOG is humidifying while heat maintains temp
+    bool vent_mist_assist;           // band-first controller VENTILATE is carrying concurrent mister demand
+    bool fog_heat_assist;            // band-first controller SEALED_MIST_FOG is humidifying while heat maintains temp
 };
 
 // ── Saturating addition (prevents uint32_t overflow at 49.7 days) ──
@@ -257,6 +307,9 @@ inline Setpoints default_setpoints() {
         // to active). 5-min dwell projected to reduce whipsaw 80%.
         .sw_dwell_gate_enabled = false,
         .dwell_gate_ms = 300000u,
+        // Library fallback remains legacy so old unit tests/replay rows can
+        // still cover the rollback cascade directly. The ESPHome production
+        // control loop forces the unified band-first path ON.
         .sw_fsm_controller_enabled = false,
         .mist_backoff_ms = 600000u
     };
@@ -361,7 +414,7 @@ inline void validate_setpoints(Setpoints& sp) {
     // 1800s (30-min) ceiling (longer than sealed_max_ms would starve exits).
     sp.dwell_gate_ms = std::max(uint32_t(60000), std::min(uint32_t(1800000), sp.dwell_gate_ms));
 
-    // --- Controller v2 clamps ---
+    // --- band-first controller timing clamps ---
     sp.mist_backoff_ms = std::max(uint32_t(60000), std::min(uint32_t(3600000), sp.mist_backoff_ms));
 }
 
