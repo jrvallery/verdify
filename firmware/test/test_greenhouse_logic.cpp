@@ -2241,6 +2241,25 @@ TEST(lighting_state_machine_respects_per_light_window_and_dli_goal) {
     PASS();
 }
 
+TEST(lighting_dli_increment_uses_corrected_indoor_or_tempest_fallback) {
+    float indoor = lighting_dli_increment(10000.0f, 1000.0f, false, false, 3600.0f);
+    float tempest = lighting_dli_increment(0.0f, 100000.0f, false, false, 3600.0f);
+
+    ASSERT_TRUE(std::fabs(indoor - 2.331f) < 0.01f);
+    ASSERT_TRUE(std::fabs(tempest - 1.066f) < 0.01f);
+    PASS();
+}
+
+TEST(lighting_dli_increment_counts_supplemental_light_runtime) {
+    float both = lighting_dli_increment(0.0f, 0.0f, true, true, 3600.0f);
+    float main = lighting_dli_increment(0.0f, 0.0f, true, false, 3600.0f);
+    float grow = lighting_dli_increment(0.0f, 0.0f, false, true, 3600.0f);
+
+    ASSERT_TRUE(std::fabs(both - 0.800f) < 0.001f);
+    ASSERT_TRUE(std::fabs((main + grow) - both) < 0.001f);
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis + OBS-1e\n");

@@ -337,6 +337,8 @@ def test_dispatcher_band_owned_contract_is_explicit():
         "vpd_target_east",
         "vpd_target_center",
         "gl_dli_target",
+        "gl_lux_hysteresis",
+        "gl_lux_threshold",
         "gl_sunrise_hour",
         "gl_sunset_hour",
         "sw_gl_auto_mode",
@@ -706,6 +708,7 @@ def test_lighting_automation_audit_enforces_post_ota_proof():
     assert "post-OTA Lutron state evidence" in src
     assert "confirmed_at IS NOT NULL" in src
     assert "firmware_state/firmware_reason blank until OTA" in src
+    assert "firmware_telemetry_fresh" in src
     assert "bool_or(state) AS saw_on" in src
     assert "bool_or(NOT state) AS saw_off" in src
     assert "per-circuit cfg readbacks are live; firmware supports per-circuit lighting pushes" in src
@@ -770,6 +773,8 @@ def test_lighting_automation_audit_checks_live_public_site():
     assert "live public home page" in src
     assert "live public lighting page" in src
     assert "live public tunables page" in src
+    assert "setpoint server legacy shared lighting values" in src
+    assert "api legacy shared lighting values" in src
     assert "Circuit Policy And Forecast Bands" in src
     assert "Firmware state and reason fields appear after the next ESP32 OTA" in src
     assert "gl_main_lux_threshold" in src
@@ -801,6 +806,8 @@ def test_lighting_automation_audit_checks_policy_source_and_hysteresis_contracts
 
     assert "lighting policy source-of-truth guard" in src
     assert "lighting graph hysteresis contract" in src
+    assert "lighting rollback freshness guard" in src
+    assert "current_firmware_start" in src
     assert "ESP32 readbacks are excluded" in src
     assert "WITH RECURSIVE bounds AS" in src
     assert "main_seed_on" in src

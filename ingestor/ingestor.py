@@ -1205,6 +1205,11 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
 # ──────────────────────────────────────────────────────────────
 async def task_loop(pool: asyncpg.Pool) -> None:
     """Run periodic tasks on defined intervals."""
+    task_timeouts = {
+        # Reconnect reconciles can push 25+ values through heap-safe ESPHome
+        # pacing, which intentionally exceeds the generic 120s watchdog.
+        "setpoint_dispatch": 300,
+    }
     TASKS = [
         # (name, interval_seconds, coroutine_factory)
         ("water_flowing", 60, water_flowing_sync),
@@ -1246,9 +1251,10 @@ async def task_loop(pool: asyncpg.Pool) -> None:
             if now - last_run[name] >= interval:
                 last_run[name] = now
                 try:
-                    await asyncio.wait_for(coro_fn(pool), timeout=120)
+                    timeout_s = task_timeouts.get(name, 120)
+                    await asyncio.wait_for(coro_fn(pool), timeout=timeout_s)
                 except TimeoutError:
-                    log.error("Task %s timed out (120s)", name)
+                    log.error("Task %s timed out (%ss)", name, timeout_s)
                 except Exception as e:
                     log.error("Task %s failed: %s", name, e)
 

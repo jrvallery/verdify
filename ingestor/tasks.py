@@ -72,6 +72,8 @@ from config import (
 LIGHTING_POLICY_PARAMS = frozenset(
     {
         "gl_dli_target",
+        "gl_lux_hysteresis",
+        "gl_lux_threshold",
         "gl_sunrise_hour",
         "gl_sunset_hour",
         "sw_gl_auto_mode",
@@ -119,6 +121,8 @@ BAND_DRIVEN_PARAMS = frozenset(
         "vpd_target_east",
         "vpd_target_center",
         "gl_dli_target",
+        "gl_lux_hysteresis",
+        "gl_lux_threshold",
         "gl_sunrise_hour",
         "gl_sunset_hour",
         "sw_gl_auto_mode",
@@ -3082,6 +3086,11 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 "gl_sunset_hour": float(int(lighting_row["cutoff_hour"])),
                 "sw_gl_auto_mode": 1.0,
             }
+            if lighting_circuit_rows:
+                main_lighting = next((row for row in lighting_circuit_rows if row["light_key"] == "main"), None)
+                if main_lighting:
+                    lighting_defaults["gl_lux_threshold"] = round(float(main_lighting["lux_on_threshold"]), 0)
+                    lighting_defaults["gl_lux_hysteresis"] = round(float(main_lighting["lux_hysteresis"]), 0)
             for param, val in lighting_defaults.items():
                 if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
                     continue

@@ -523,7 +523,14 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     # VPD uses the DB-owned house control band, and lighting uses the highest
     # active crop DLI to set the photoperiod window firmware enforces.
     BAND_COMPUTED = {"temp_high", "temp_low", "vpd_high", "vpd_low"}
-    LIGHTING_COMPUTED = {"gl_dli_target", "gl_sunrise_hour", "gl_sunset_hour", "sw_gl_auto_mode"}
+    LIGHTING_COMPUTED = {
+        "gl_dli_target",
+        "gl_lux_hysteresis",
+        "gl_lux_threshold",
+        "gl_sunrise_hour",
+        "gl_sunset_hour",
+        "sw_gl_auto_mode",
+    }
     async with pool.acquire() as conn:
         # Get latest value per parameter (Tier 1 + band-driven only, no legacy params)
         rows = await conn.fetch(
@@ -629,8 +636,13 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 "gl_sunset_hour": int(lighting_row["cutoff_hour"]),
                 "sw_gl_auto_mode": 1,
             }
+            main_lighting = next((row for row in lighting_circuit_rows if row["light_key"] == "main"), None)
+            if main_lighting:
+                lighting_values["gl_lux_threshold"] = _round_half_up(float(main_lighting["lux_on_threshold"]), 0)
+                lighting_values["gl_lux_hysteresis"] = _round_half_up(float(main_lighting["lux_hysteresis"]), 0)
             for param in LIGHTING_COMPUTED:
-                params[param] = lighting_values[param]
+                if param in lighting_values:
+                    params[param] = lighting_values[param]
         for row in lighting_circuit_rows:
             key = row["light_key"]
             lighting_values = {

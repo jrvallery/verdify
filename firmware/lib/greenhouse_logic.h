@@ -114,6 +114,33 @@ inline void validate_lighting_setpoints(LightingSetpoints& sp) noexcept {
     sp.min_off_ms = std::max(uint32_t(0), std::min(uint32_t(3600000), sp.min_off_ms));
 }
 
+inline float lighting_dli_increment(
+    float indoor_lux,
+    float tempest_lux,
+    bool main_light_on,
+    bool grow_light_on,
+    float dt_s
+) noexcept {
+    constexpr float LUX_TO_PPFD = 0.0185f;
+    constexpr float INDOOR_LDR_CORRECTION = 3.5f;
+    constexpr float TEMPEST_TO_PLANT_LUX = 0.16f;
+    constexpr float MAIN_LIGHT_DLI_PER_HOUR = 0.3485f;
+    constexpr float GROW_LIGHT_DLI_PER_HOUR = 0.4515f;
+
+    const float indoor_equiv = (std::isfinite(indoor_lux) && indoor_lux > 10.0f)
+        ? indoor_lux * INDOOR_LDR_CORRECTION
+        : 0.0f;
+    const float tempest_equiv = (std::isfinite(tempest_lux) && tempest_lux > 10.0f)
+        ? tempest_lux * TEMPEST_TO_PLANT_LUX
+        : 0.0f;
+    const float natural_lux_equiv = std::max(indoor_equiv, tempest_equiv);
+    const float natural_dli = natural_lux_equiv * LUX_TO_PPFD * std::max(0.0f, dt_s) / 1000000.0f;
+    const float supplemental_dli_per_hour =
+        (main_light_on ? MAIN_LIGHT_DLI_PER_HOUR : 0.0f)
+        + (grow_light_on ? GROW_LIGHT_DLI_PER_HOUR : 0.0f);
+    return natural_dli + supplemental_dli_per_hour * std::max(0.0f, dt_s) / 3600.0f;
+}
+
 inline LightingDecision evaluate_lighting(
     const LightingInputs& in,
     LightingSetpoints sp,

@@ -389,6 +389,7 @@ def static_checks(audit: Audit) -> None:
         )
 
     migration = read(REPO_ROOT / "db" / "migrations" / "123-lighting-per-circuit-state-machines.sql")
+    live_fixes_migration = read(REPO_ROOT / "db" / "migrations" / "125-lighting-live-fixes.sql")
     performance_migration = read(REPO_ROOT / "db" / "migrations" / "124-lighting-timeline-performance.sql")
     audit.check(
         all(
@@ -420,6 +421,17 @@ def static_checks(audit: Audit) -> None:
         "lighting graph hysteresis contract",
         "status/timeline expected-on values follow firmware window, DLI, auto, and ON/OFF hysteresis gates",
         "status/timeline expected-on values do not match firmware hysteresis semantics",
+    )
+    audit.check(
+        "firmware_telemetry_fresh" in live_fixes_migration
+        and "current_firmware_start" in live_fixes_migration
+        and "state_row.ts >= COALESCE((SELECT ts FROM current_firmware_start)" in live_fixes_migration
+        and "CASE WHEN j.firmware_telemetry_fresh THEN j.firmware_state_raw END AS firmware_state"
+        in live_fixes_migration
+        and "cycles count TRUE rising edges only" in live_fixes_migration,
+        "lighting rollback freshness guard",
+        "status views suppress stale firmware telemetry after rollback and runtime cycles count rising edges",
+        "live lighting views can still present stale firmware text or duplicate TRUE rows as fresh evidence",
     )
     audit.check(
         "fn_lighting_circuit_policy((SELECT now_ts FROM bounds), p_greenhouse_id)" in performance_migration
@@ -512,6 +524,8 @@ def static_checks(audit: Audit) -> None:
 
 
 def live_checks(audit: Audit, require_ota: bool) -> None:
+    from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG
+
     services = run(
         ["systemctl", "is-active", "verdify-ingestor.service", "verdify-mcp.service", "verdify-setpoint-server.service"]
     )
@@ -585,7 +599,8 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         SELECT light_key, expected_on, actual_on, natural_lux,
                lux_on_threshold, lux_off_threshold,
                COALESCE(firmware_state, '') AS firmware_state,
-               COALESCE(firmware_reason, '') AS firmware_reason
+               COALESCE(firmware_reason, '') AS firmware_reason,
+               COALESCE(firmware_telemetry_fresh, false) AS firmware_telemetry_fresh
           FROM v_lighting_circuit_status_now
          ORDER BY light_key
         """
@@ -596,13 +611,16 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         "v_lighting_circuit_status_now returns main and grow rows",
         f"unexpected status rows: {status}",
     )
-    telemetry_live = all(row.get("firmware_state") and row.get("firmware_reason") for row in status)
+    telemetry_live = all(
+        row.get("firmware_telemetry_fresh") and row.get("firmware_state") and row.get("firmware_reason")
+        for row in status
+    )
     audit.add(
         "firmware per-circuit telemetry",
         "PASS" if telemetry_live else ("FAIL" if require_ota else "BLOCKED"),
-        "state/reason populated for both circuits"
+        "fresh state/reason populated for both circuits"
         if telemetry_live
-        else "firmware_state/firmware_reason blank until OTA",
+        else "firmware_state/firmware_reason blank until OTA or stale after rollback",
     )
 
     try:
@@ -768,7 +786,7 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         )
         audit.check(
             "Planner-policy knobs" in tunables_html
-            and "<strong>48</strong>" in tunables_html
+            and f"<strong>{len(PLANNER_PUSHABLE_REG)}</strong>" in tunables_html
             and "gl_main_lux_threshold" in tunables_html
             and "set_tunable allowed" in tunables_html
             and "gl_lux_threshold" in tunables_html
@@ -801,16 +819,29 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
     confirmed_changes = psql_json(
         f"""
         WITH latest_fw AS (
-            SELECT min(ts) AS first_ts
-              FROM diagnostics
-             WHERE firmware_version = (
-                 SELECT firmware_version
-                   FROM diagnostics
-                  WHERE firmware_version IS NOT NULL
-                    AND firmware_version <> ''
-                  ORDER BY ts DESC
-                  LIMIT 1
-             )
+            WITH firmware_ordered AS (
+                SELECT
+                    ts,
+                    firmware_version,
+                    lag(firmware_version) OVER (ORDER BY ts) AS previous_firmware_version
+                  FROM diagnostics
+                 WHERE firmware_version IS NOT NULL
+                   AND firmware_version <> ''
+                   AND ts > now() - interval '30 days'
+            ),
+            current_firmware AS (
+                SELECT firmware_version
+                  FROM diagnostics
+                 WHERE firmware_version IS NOT NULL
+                   AND firmware_version <> ''
+                 ORDER BY ts DESC
+                 LIMIT 1
+            )
+            SELECT max(fo.ts) AS first_ts
+              FROM firmware_ordered fo
+              CROSS JOIN current_firmware cf
+             WHERE fo.firmware_version = cf.firmware_version
+               AND fo.previous_firmware_version IS DISTINCT FROM fo.firmware_version
         ),
         evidence AS (
             SELECT parameter, max(confirmed_at) AS latest_ts, 'confirmed_change' AS kind
@@ -847,16 +878,29 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
     circuit_state_rows = psql_json(
         """
         WITH latest_fw AS (
-            SELECT min(ts) AS first_ts
-              FROM diagnostics
-             WHERE firmware_version = (
-                 SELECT firmware_version
-                   FROM diagnostics
-                  WHERE firmware_version IS NOT NULL
-                    AND firmware_version <> ''
-                  ORDER BY ts DESC
-                  LIMIT 1
-             )
+            WITH firmware_ordered AS (
+                SELECT
+                    ts,
+                    firmware_version,
+                    lag(firmware_version) OVER (ORDER BY ts) AS previous_firmware_version
+                  FROM diagnostics
+                 WHERE firmware_version IS NOT NULL
+                   AND firmware_version <> ''
+                   AND ts > now() - interval '30 days'
+            ),
+            current_firmware AS (
+                SELECT firmware_version
+                  FROM diagnostics
+                 WHERE firmware_version IS NOT NULL
+                   AND firmware_version <> ''
+                 ORDER BY ts DESC
+                 LIMIT 1
+            )
+            SELECT max(fo.ts) AS first_ts
+              FROM firmware_ordered fo
+              CROSS JOIN current_firmware cf
+             WHERE fo.firmware_version = cf.firmware_version
+               AND fo.previous_firmware_version IS DISTINCT FROM fo.firmware_version
         )
         SELECT equipment,
                bool_or(state) AS saw_on,
@@ -894,6 +938,25 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         "local setpoint server exposes all per-circuit lighting values",
         "setpoint server is missing per-circuit values",
     )
+    legacy_expected = {
+        "gl_lux_threshold": float(keys["main"]["lux_on_threshold"]),
+        "gl_lux_hysteresis": float(keys["main"]["lux_off_threshold"]) - float(keys["main"]["lux_on_threshold"]),
+    }
+
+    def legacy_values_match(values: dict[str, str]) -> bool:
+        try:
+            return all(
+                abs(float(values.get(param, "nan")) - expected) < 0.5 for param, expected in legacy_expected.items()
+            )
+        except ValueError:
+            return False
+
+    audit.check(
+        legacy_values_match(setpoint_text),
+        "setpoint server legacy shared lighting values",
+        "local setpoint server exposes legacy gl_lux_* values derived from the main circuit policy",
+        f"local setpoint server legacy gl_lux_* mismatch: expected={legacy_expected} got={setpoint_text}",
+    )
     api_proc = run(
         [
             "docker",
@@ -911,6 +974,12 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         "api per-circuit values",
         "API /setpoints exposes all per-circuit lighting values",
         api_proc.stderr.strip() or "API /setpoints missing per-circuit values",
+    )
+    audit.check(
+        api_proc.returncode == 0 and legacy_values_match(api_values),
+        "api legacy shared lighting values",
+        "API /setpoints exposes legacy gl_lux_* values derived from the main circuit policy",
+        api_proc.stderr.strip() or f"API legacy gl_lux_* mismatch: expected={legacy_expected} got={api_values}",
     )
 
     deploy_preflight = run(["bash", "scripts/firmware-deploy-preflight.sh"], timeout=30)

@@ -183,7 +183,16 @@ BAND_OWNED_PARAMS = frozenset(
         "vpd_target_center",
     }
 )
-LIGHTING_POLICY_PARAMS = frozenset({"gl_dli_target", "gl_sunrise_hour", "gl_sunset_hour", "sw_gl_auto_mode"})
+LIGHTING_POLICY_PARAMS = frozenset(
+    {
+        "gl_dli_target",
+        "gl_lux_hysteresis",
+        "gl_lux_threshold",
+        "gl_sunrise_hour",
+        "gl_sunset_hour",
+        "sw_gl_auto_mode",
+    }
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -406,8 +415,11 @@ def get_setpoint_text_sync() -> str:
         db_cmd
         + [
             "SELECT parameter, value FROM fn_lighting_policy(now(), 'vallery') p "
+            "CROSS JOIN LATERAL (SELECT * FROM fn_lighting_circuit_policy(now(), 'vallery') WHERE light_key = 'main') lp "
             "CROSS JOIN LATERAL (VALUES "
             "('gl_dli_target', round(p.target_dli::numeric, 1)::text), "
+            "('gl_lux_threshold', round(lp.lux_on_threshold::numeric, 0)::text), "
+            "('gl_lux_hysteresis', round(lp.lux_hysteresis::numeric, 0)::text), "
             "('gl_sunrise_hour', p.sunrise_hour::text), "
             "('gl_sunset_hour', p.cutoff_hour::text), "
             "('sw_gl_auto_mode', '1')"

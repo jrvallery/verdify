@@ -998,12 +998,12 @@ interval:
 
           /*** B5 — DLI accumulation (every 5s) ***/
           {
-            float lux = id(greenhouse_light_lux).state;
-            if(!isnan(lux) && lux > 10.0f){
-              // DLI += lux * PPFD_factor * dt_seconds / 1e6
-              // Threshold raised from 0→10 to ignore ADC noise near zero
-              id(dli_accumulator) += lux * 0.0185f * 5.0f / 1e6f;
-            }
+            id(dli_accumulator) += lighting_dli_increment(
+              id(greenhouse_light_lux).state,
+              id(tempest_lux),
+              id(grow_light_main).state,
+              id(grow_light_grow).state,
+              5.0f);
           }
 
           /*** B6 — Per-circuit lighting state machines (every 60s) ***/
