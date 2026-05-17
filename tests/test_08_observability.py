@@ -252,11 +252,13 @@ class TestHeapPressureObservability:
         assert "heap_min_free_kb" in body
         assert "heap_largest_free_block_kb" in body
 
-    def test_ingestor_defaults_esp32_log_subscription_to_warn(self):
+    def test_ingestor_defaults_esp32_log_subscription_to_disabled(self):
         body = (REPO_ROOT / "ingestor/ingestor.py").read_text()
-        assert 'os.environ.get("ESP32_LOG_LEVEL", "WARN")' in body
+        assert 'os.environ.get("ESP32_LOG_LEVEL", "NONE")' in body
+        assert '"NONE": LogLevel.LOG_LEVEL_NONE' in body
+        assert "ESP32_LOG_LEVEL != LogLevel.LOG_LEVEL_NONE" in body
         assert "client.subscribe_logs(on_log_message, log_level=ESP32_LOG_LEVEL)" in body
-        assert "Default WARN+ keeps heap-pressure" in body
+        assert "ESP32 log subscription disabled" in body
 
     def test_heap_fragmentation_migration_exists(self):
         body = (REPO_ROOT / "db/migrations/105-heap-fragmentation-diagnostics.sql").read_text()

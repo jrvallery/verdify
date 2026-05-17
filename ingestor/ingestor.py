@@ -110,6 +110,7 @@ LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
 
 # Map aioesphomeapi LogLevel to string
 LOG_LEVEL_MAP = {
+    LogLevel.LOG_LEVEL_NONE: "NONE",
     LogLevel.LOG_LEVEL_ERROR: "ERROR",
     LogLevel.LOG_LEVEL_WARN: "WARN",
     LogLevel.LOG_LEVEL_INFO: "INFO",
@@ -118,6 +119,7 @@ LOG_LEVEL_MAP = {
     LogLevel.LOG_LEVEL_VERY_VERBOSE: "VERY_VERBOSE",
 }
 LOG_LEVEL_BY_NAME = {
+    "NONE": LogLevel.LOG_LEVEL_NONE,
     "ERROR": LogLevel.LOG_LEVEL_ERROR,
     "WARN": LogLevel.LOG_LEVEL_WARN,
     "WARNING": LogLevel.LOG_LEVEL_WARN,
@@ -126,10 +128,10 @@ LOG_LEVEL_BY_NAME = {
     "VERBOSE": LogLevel.LOG_LEVEL_VERBOSE,
     "VERY_VERBOSE": LogLevel.LOG_LEVEL_VERY_VERBOSE,
 }
-ESP32_LOG_LEVEL = LOG_LEVEL_BY_NAME.get(os.environ.get("ESP32_LOG_LEVEL", "WARN").strip().upper())
+ESP32_LOG_LEVEL = LOG_LEVEL_BY_NAME.get(os.environ.get("ESP32_LOG_LEVEL", "NONE").strip().upper())
 if ESP32_LOG_LEVEL is None:
-    ESP32_LOG_LEVEL = LogLevel.LOG_LEVEL_WARN
-ESP32_LOG_LEVEL_NAME = LOG_LEVEL_MAP.get(ESP32_LOG_LEVEL, "WARN")
+    ESP32_LOG_LEVEL = LogLevel.LOG_LEVEL_NONE
+ESP32_LOG_LEVEL_NAME = LOG_LEVEL_MAP.get(ESP32_LOG_LEVEL, "NONE")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1158,10 +1160,13 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             # Subscribe to state changes
             client.subscribe_states(on_state_change)
 
-            # Subscribe to ESP32 log messages. Default WARN+ keeps heap-pressure
-            # evidence without streaming routine INFO chatter over the native API.
-            client.subscribe_logs(on_log_message, log_level=ESP32_LOG_LEVEL)
-            log.info("Subscribed to ESP32 logs (%s+)", ESP32_LOG_LEVEL_NAME)
+            # Keep ESP32 log streaming opt-in. Heap pressure is covered by
+            # binary sensors and diagnostics; a live API log stream costs heap.
+            if ESP32_LOG_LEVEL != LogLevel.LOG_LEVEL_NONE:
+                client.subscribe_logs(on_log_message, log_level=ESP32_LOG_LEVEL)
+                log.info("Subscribed to ESP32 logs (%s+)", ESP32_LOG_LEVEL_NAME)
+            else:
+                log.info("ESP32 log subscription disabled")
 
             # Immediate setpoint re-push after reconnect (don't wait for 300s cycle)
             try:
