@@ -815,7 +815,12 @@ class TestSetpointConfirmation:
 
     def test_confirmations_happening_in_real_time(self):
         """After ingestor restart + a full cfg_snapshot cycle (~60s), recent
-        setpoint_changes rows for readbackable params should be confirmed."""
+        setpoint_changes rows for readbackable params should be confirmed.
+
+        During heap-pressure holds, there may be no fresh non-ESP32 pushes to
+        confirm. In that case the cfg snapshot stream still needs to be live
+        and there must be no recent unresolved push rows.
+        """
         confirmed = int(
             db_query(
                 "SELECT count(*) FROM setpoint_changes "
@@ -823,9 +828,22 @@ class TestSetpointConfirmation:
             )
             or "0"
         )
-        assert confirmed > 0, (
-            "No setpoint_changes rows confirmed in the last 30 min. "
-            "Is the ingestor writing confirmed_at? Is setpoint_snapshot cycle running?"
+        snapshot_recent = int(
+            db_query("SELECT count(*) FROM setpoint_snapshot WHERE ts > now() - interval '5 minutes'") or "0"
+        )
+        unresolved_recent = int(
+            db_query(
+                "SELECT count(*) FROM setpoint_changes "
+                "WHERE source != 'esp32' "
+                "AND confirmed_at IS NULL "
+                "AND COALESCE(delivery_status, '') NOT IN ('deferred_heap_pressure', 'superseded') "
+                "AND ts > now() - interval '30 minutes'"
+            )
+            or "0"
+        )
+        assert confirmed > 0 or (snapshot_recent > 0 and unresolved_recent == 0), (
+            "No recent confirmations and cfg snapshot evidence is not clean. "
+            f"confirmed={confirmed} snapshot_recent={snapshot_recent} unresolved_recent={unresolved_recent}"
         )
 
     def test_confirmation_monitor_task_wired(self):
@@ -880,6 +898,9 @@ class TestSetpointConfirmation:
     def test_confirmation_monitor_ignores_superseded_rows(self):
         body = Path("/srv/verdify/ingestor/tasks.py").read_text()
         assert "auto-resolved: superseded by newer setpoint" in body
+        assert "marked %d stale pending row(s) superseded" in body
+        assert "delivery_status = 'superseded'" in body
+        assert "superseded_by_ts =" in body
         assert "newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)" in body
         assert "AND NOT EXISTS (" in body
         assert "newer.ts > sc.ts" in body

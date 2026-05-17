@@ -5324,6 +5324,43 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
         if superseded:
             log.info("setpoint_unconfirmed: auto-resolved %d superseded alert(s)", len(superseded))
 
+        superseded_rows = await conn.fetch(
+            """
+            UPDATE setpoint_changes sc
+               SET delivery_status = 'superseded',
+                   superseded_by_ts = (
+                       SELECT min(newer.ts)
+                         FROM setpoint_changes newer
+                        WHERE newer.parameter = sc.parameter
+                          AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                          AND newer.ts > sc.ts
+                   ),
+                   expired_at = COALESCE(
+                       sc.expired_at,
+                       (
+                           SELECT min(newer.ts)
+                             FROM setpoint_changes newer
+                            WHERE newer.parameter = sc.parameter
+                              AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                              AND newer.ts > sc.ts
+                       )
+                   )
+             WHERE sc.confirmed_at IS NULL
+               AND COALESCE(sc.source, '') <> 'esp32'
+               AND COALESCE(sc.delivery_status, 'pending') = 'pending'
+               AND EXISTS (
+                   SELECT 1
+                     FROM setpoint_changes newer
+                    WHERE newer.parameter = sc.parameter
+                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                      AND newer.ts > sc.ts
+               )
+            RETURNING sc.parameter
+            """
+        )
+        if superseded_rows:
+            log.info("setpoint_unconfirmed: marked %d stale pending row(s) superseded", len(superseded_rows))
+
         # Pass 2: scan for still-unconfirmed rows that need alerting.
         rows = await conn.fetch(
             """

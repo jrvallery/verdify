@@ -71,7 +71,29 @@ class TestIngestorTasks:
         )
         # Dispatcher runs every 5 min; allow 15 min tolerance. During active
         # heap pressure it may intentionally hold setpoint_changes while still
-        # writing clamp/audit evidence.
+        # writing clamp/audit evidence. If there are no rows to write, require
+        # recent journal evidence instead.
+        if int(age) >= 900:
+            result = subprocess.run(
+                [
+                    "journalctl",
+                    "-u",
+                    "verdify-ingestor",
+                    "--since",
+                    "15 minutes ago",
+                    "--no-pager",
+                    "-q",
+                    "-o",
+                    "cat",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert "Dispatcher:" in result.stdout, (
+                f"Last dispatch DB write was {age}s ago and no recent journal evidence"
+            )
+            return
         assert int(age) < 900, f"Last dispatch was {age}s ago (>15min)"
 
     def test_forecast_sync_recent(self):
