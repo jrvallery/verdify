@@ -8,7 +8,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Sensor DLI, corrected estimate, and crop-driven target DLI from fn_lighting_policy().",
+      "description": "Observational DLI trend for crop context. Runtime grow-light control is tracked in qualified light minutes from fn_lighting_minutes_policy().",
       "fieldConfig": {
         "defaults": {
           "color": {
