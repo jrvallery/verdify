@@ -143,9 +143,7 @@ class TestDispatcherWiring:
         assert "alert_type IN ('heap_pressure_warning', 'heap_pressure_critical')" in body
         assert "heap_defer_active" in body
         assert "heap_recovery_limited" in body
-        assert "recent_heap_deferred" in body
-        assert "ts > now() - interval '30 minutes'" in body
-        assert "suppressed %d duplicate heap-deferred setpoint retry row(s)" in body
+        assert "held %d setpoint retry row(s) during active heap pressure" in body
         assert "limited heap-recovery push to %d priority lighting setpoint(s)" in body
         assert "_last_pushed.pop(param, None)" in body
         assert "delivery_status = 'deferred_heap_pressure'" in body
