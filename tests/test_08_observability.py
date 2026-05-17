@@ -132,14 +132,21 @@ class TestDispatcherWiring:
     def test_dispatcher_heap_skip_marks_deferred_without_realtime_bypass(self):
         body = self._read()
         assert "HEAP_DEFER_FREE_KB = 30.0" in body
-        assert "HEAP_DEFER_MIN_FREE_KB = 10.0" in body
         assert "HEAP_DEFER_LARGEST_BLOCK_KB = 18.0" in body
+        assert "HEAP_RECOVERY_LIMIT_FREE_KB = 35.0" in body
+        assert "HEAP_RECOVERY_LIMIT_MIN_FREE_KB = 12.0" in body
+        assert "HEAP_RECOVERY_MAX_CHANGES = 12" in body
+        assert "HEAP_RECOVERY_PRIORITY_PARAMS" in body
         assert "_heap_push_defer_active" in body
+        assert "_heap_push_recovery_limited" in body
         assert "return heap_alert_open" in body
+        assert "alert_type IN ('heap_pressure_warning', 'heap_pressure_critical')" in body
         assert "heap_defer_active" in body
+        assert "heap_recovery_limited" in body
         assert "recent_heap_deferred" in body
         assert "ts > now() - interval '30 minutes'" in body
         assert "suppressed %d duplicate heap-deferred setpoint retry row(s)" in body
+        assert "limited heap-recovery push to %d priority lighting setpoint(s)" in body
         assert "_last_pushed.pop(param, None)" in body
         assert "delivery_status = 'deferred_heap_pressure'" in body
         assert "COALESCE(sc.delivery_status, '') <> 'deferred_heap_pressure'" in body

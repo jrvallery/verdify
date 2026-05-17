@@ -119,6 +119,23 @@ LIGHTING_TARGET_MINUTE_PARAMS = frozenset(
     }
 )
 
+HEAP_RECOVERY_PRIORITY_PARAMS = frozenset(
+    {
+        "gl_main_target_light_minutes",
+        "gl_main_sunrise_hour",
+        "gl_main_sunset_hour",
+        "gl_main_lux_threshold",
+        "gl_main_lux_hysteresis",
+        "sw_gl_main_auto_mode",
+        "gl_grow_target_light_minutes",
+        "gl_grow_sunrise_hour",
+        "gl_grow_sunset_hour",
+        "gl_grow_lux_threshold",
+        "gl_grow_lux_hysteresis",
+        "sw_gl_grow_auto_mode",
+    }
+)
+
 BAND_DRIVEN_PARAMS = frozenset(
     {
         "temp_high",
@@ -2555,8 +2572,11 @@ _last_pushed: dict[str, float] = {}
 # stale after the controller has rebooted and current fragmentation is healthy.
 # Gate on fresh diagnostics so post-OTA setpoint reconciliation can recover.
 HEAP_DEFER_FREE_KB = 30.0
-HEAP_DEFER_MIN_FREE_KB = 10.0
 HEAP_DEFER_LARGEST_BLOCK_KB = 18.0
+HEAP_RECOVERY_LIMIT_FREE_KB = 35.0
+HEAP_RECOVERY_LIMIT_MIN_FREE_KB = 12.0
+HEAP_RECOVERY_LIMIT_LARGEST_BLOCK_KB = 24.0
+HEAP_RECOVERY_MAX_CHANGES = 12
 
 # Unified band-first controller compatibility/readback field. ESPHome control
 # loop, dispatcher, MCP, and outbound-listener guardrails force it ON.
@@ -2717,9 +2737,28 @@ def _heap_push_defer_active(
         return heap_alert_open
     if heap_free_kb < HEAP_DEFER_FREE_KB:
         return True
-    if heap_min_free_kb is not None and heap_min_free_kb < HEAP_DEFER_MIN_FREE_KB:
-        return True
     if heap_largest_free_block_kb is not None and heap_largest_free_block_kb < HEAP_DEFER_LARGEST_BLOCK_KB:
+        return True
+    return False
+
+
+def _heap_push_recovery_limited(
+    heap_alert_open: bool,
+    heap_free_kb: float | None,
+    heap_min_free_kb: float | None,
+    heap_largest_free_block_kb: float | None,
+) -> bool:
+    """Return true when only high-priority lighting reconciliation should push."""
+
+    if _heap_push_defer_active(heap_alert_open, heap_free_kb, heap_min_free_kb, heap_largest_free_block_kb):
+        return False
+    if heap_alert_open:
+        return True
+    if heap_free_kb is not None and heap_free_kb < HEAP_RECOVERY_LIMIT_FREE_KB:
+        return True
+    if heap_min_free_kb is not None and heap_min_free_kb < HEAP_RECOVERY_LIMIT_MIN_FREE_KB:
+        return True
+    if heap_largest_free_block_kb is not None and heap_largest_free_block_kb < HEAP_RECOVERY_LIMIT_LARGEST_BLOCK_KB:
         return True
     return False
 
@@ -3288,9 +3327,9 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             """
             SELECT EXISTS (
                 SELECT 1
-                  FROM alert_log
+                 FROM alert_log
                  WHERE disposition = 'open'
-                   AND alert_type = 'heap_pressure_critical'
+                   AND alert_type IN ('heap_pressure_warning', 'heap_pressure_critical')
             )
             """
         )
@@ -3304,6 +3343,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             else None
         )
         heap_defer_active = _heap_push_defer_active(bool(heap_alert_open), heap_free, heap_min, heap_largest)
+        heap_recovery_limited = _heap_push_recovery_limited(bool(heap_alert_open), heap_free, heap_min, heap_largest)
         recent_heap_deferred: dict[str, float] = {}
         if heap_defer_active:
             recent_heap_deferred = {
@@ -3323,6 +3363,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
 
         dispatchable_changes: list[tuple[str, float, str]] = []
         skipped_heap_deferred = 0
+        skipped_heap_recovery = 0
+        heap_recovery_push_count = 0
         for param, val in changes:
             if param in BAND_DRIVEN_PARAMS:
                 source = "band"
@@ -3365,6 +3407,12 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 skipped_heap_deferred += 1
                 _last_pushed.pop(param, None)
                 continue
+            if heap_recovery_limited:
+                if param not in HEAP_RECOVERY_PRIORITY_PARAMS or heap_recovery_push_count >= HEAP_RECOVERY_MAX_CHANGES:
+                    skipped_heap_recovery += 1
+                    _last_pushed.pop(param, None)
+                    continue
+                heap_recovery_push_count += 1
 
             # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
             # Defense-in-depth: MCP's PlanTransition.params already validates
@@ -3418,6 +3466,12 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 "Dispatcher: suppressed %d duplicate heap-deferred setpoint retry row(s)",
                 skipped_heap_deferred,
             )
+        if skipped_heap_recovery:
+            log.warning(
+                "Dispatcher: limited heap-recovery push to %d priority lighting setpoint(s); held %d other drift row(s)",
+                heap_recovery_push_count,
+                skipped_heap_recovery,
+            )
         # Tier 1 #2: persist guardrail audit. Rows are written even when the
         # guardrail intentionally holds an unchanged applied value and no
         # setpoint_changes row is emitted.
@@ -3470,7 +3524,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     SELECT 1
                       FROM alert_log
                      WHERE disposition = 'open'
-                       AND alert_type = 'heap_pressure_critical'
+                       AND alert_type IN ('heap_pressure_warning', 'heap_pressure_critical')
                 )
                 """
             )
