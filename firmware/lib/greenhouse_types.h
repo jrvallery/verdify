@@ -193,18 +193,18 @@ struct RelayOutputs {
 };
 
 // ── Supplemental lighting state machines ───────────────────────────────
-// Each Lutron circuit is evaluated independently. The crop/DLI policy can
-// seed both circuits with the same defaults, but the planner owns the per-light
-// tunables and can diverge them once we have enough observations.
+// Each Lutron circuit is evaluated independently. The crop/DLI policy can seed
+// both circuits with a default photoperiod, but runtime control is based on
+// qualified light minutes: natural lux above the circuit threshold OR actual
+// switch-on time. Natural and switch light are counted once via OR semantics.
 struct LightingInputs {
     float natural_lux;      // Tempest outdoor lux, indoor fallback handled by caller
-    float dli_today;        // accumulated sensor DLI today
     int local_hour;         // 0-23, from SNTP
     bool occupied;          // occupancy forces light on inside the eligible window
 };
 
 struct LightingSetpoints {
-    float dli_target;
+    uint32_t target_light_minutes;
     float lux_on_threshold;
     float lux_hysteresis;
     int start_hour;
@@ -220,16 +220,25 @@ struct LightingState {
     uint32_t sentinel;
     bool on;
     uint32_t last_transition_tick_ms;
+    float qualified_light_s;
+    float natural_qualified_s;
+    float switch_on_s;
+    float overlap_s;
+    int last_count_hour;
     const char* last_reason;
 };
 
 struct LightingDecision {
     bool want_on;
     bool in_window;
-    bool dli_below_target;
+    bool minutes_below_target;
+    bool natural_qualified;
     bool lux_below_on_threshold;
     bool lux_below_off_threshold;
     float lux_off_threshold;
+    float qualified_light_minutes;
+    float target_light_minutes;
+    float remaining_light_minutes;
     const char* reason;
 };
 
@@ -238,6 +247,11 @@ inline LightingState initial_lighting_state() {
         .sentinel = LIGHT_STATE_SENTINEL,
         .on = false,
         .last_transition_tick_ms = 0,
+        .qualified_light_s = 0.0f,
+        .natural_qualified_s = 0.0f,
+        .switch_on_s = 0.0f,
+        .overlap_s = 0.0f,
+        .last_count_hour = -1,
         .last_reason = "init"
     };
 }

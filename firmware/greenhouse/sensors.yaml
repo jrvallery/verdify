@@ -2101,6 +2101,18 @@ sensor:
       return id(gl_main_dli_target);
 
   - platform: template
+    id: cfg_gl_main_target_light_minutes
+    name: "Cfg GL Main Target Light Minutes"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_main_target_light_minutes);
+
+  - platform: template
     id: cfg_gl_main_lux_threshold
     name: "Cfg GL Main Lux Threshold"
     unit_of_measurement: "lx"
@@ -2192,6 +2204,18 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(gl_grow_dli_target);
+
+  - platform: template
+    id: cfg_gl_grow_target_light_minutes
+    name: "Cfg GL Grow Target Light Minutes"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(gl_grow_target_light_minutes);
 
   - platform: template
     id: cfg_gl_grow_lux_threshold

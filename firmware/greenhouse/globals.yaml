@@ -251,6 +251,11 @@ globals:
     restore_value: no
     initial_value: '14.0'
 
+  - id: gl_main_target_light_minutes
+    type: int
+    restore_value: no
+    initial_value: '960'
+
   - id: gl_main_sunrise_hour
     type: int
     restore_value: no
@@ -290,6 +295,11 @@ globals:
     type: float
     restore_value: no
     initial_value: '14.0'
+
+  - id: gl_grow_target_light_minutes
+    type: int
+    restore_value: no
+    initial_value: '960'
 
   - id: gl_grow_sunrise_hour
     type: int

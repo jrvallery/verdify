@@ -1165,7 +1165,7 @@ number:
 
   - platform: template
     id: num_gl_dli_target
-    name: "GL DLI Target (mol)"
+    name: "GL Legacy DLI Target (mol)"
     min_value: 1
     max_value: 50
     step: 1
@@ -1174,7 +1174,7 @@ number:
       - lambda: |
           id(gl_dli_target) = x;
           id(num_gl_dli_target).publish_state(x);
-          ESP_LOGI("grow_light","DLI target set to %.0f mol/m²/day", x);
+          ESP_LOGI("grow_light","Legacy DLI telemetry target set to %.0f mol/m²/day", x);
 
   - platform: template
     id: num_gl_sunrise_hour
@@ -1213,6 +1213,19 @@ number:
           id(cfg_first_pull_ok) = true;
           id(gl_main_dli_target) = x;
           id(num_gl_main_dli_target).publish_state(x);
+
+  - platform: template
+    id: num_gl_main_target_light_minutes
+    name: "GL Main Target Light Minutes"
+    min_value: 0
+    max_value: 1080
+    step: 15
+    lambda: "return id(gl_main_target_light_minutes);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_main_target_light_minutes) = (int)x;
+          id(num_gl_main_target_light_minutes).publish_state(x);
 
   - platform: template
     id: num_gl_main_lux_threshold
@@ -1304,6 +1317,19 @@ number:
           id(cfg_first_pull_ok) = true;
           id(gl_grow_dli_target) = x;
           id(num_gl_grow_dli_target).publish_state(x);
+
+  - platform: template
+    id: num_gl_grow_target_light_minutes
+    name: "GL Grow Target Light Minutes"
+    min_value: 0
+    max_value: 1080
+    step: 15
+    lambda: "return id(gl_grow_target_light_minutes);"
+    set_action:
+      - lambda: |
+          id(cfg_first_pull_ok) = true;
+          id(gl_grow_target_light_minutes) = (int)x;
+          id(num_gl_grow_target_light_minutes).publish_state(x);
 
   - platform: template
     id: num_gl_grow_lux_threshold

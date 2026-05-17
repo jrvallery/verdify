@@ -2176,7 +2176,7 @@ TEST(obs1e_fog_heat_assist_flag_fires) {
 
 static LightingSetpoints lighting_setpoints() {
     return {
-        .dli_target = 22.0f,
+        .target_light_minutes = 960,
         .lux_on_threshold = 40000.0f,
         .lux_hysteresis = 8000.0f,
         .start_hour = 6,
@@ -2187,10 +2187,9 @@ static LightingSetpoints lighting_setpoints() {
     };
 }
 
-static LightingInputs lighting_inputs(float lux, float dli, int hour = 10, bool occupied = false) {
+static LightingInputs lighting_inputs(float lux, int hour = 10, bool occupied = false) {
     return {
         .natural_lux = lux,
-        .dli_today = dli,
         .local_hour = hour,
         .occupied = occupied
     };
@@ -2199,10 +2198,10 @@ static LightingInputs lighting_inputs(float lux, float dli, int hour = 10, bool 
 TEST(lighting_state_machine_turns_on_below_lux_band) {
     auto sp = lighting_setpoints();
     auto s = initial_lighting_state();
-    auto d = evaluate_lighting(lighting_inputs(30000.0f, 8.0f), sp, s, false, 120000);
+    auto d = evaluate_lighting(lighting_inputs(30000.0f), sp, s, false, 120000);
     ASSERT_TRUE(d.want_on);
     ASSERT_TRUE(d.in_window);
-    ASSERT_TRUE(d.dli_below_target);
+    ASSERT_TRUE(d.minutes_below_target);
     ASSERT_TRUE(d.lux_below_on_threshold);
     ASSERT_TRUE(std::string(d.reason) == "lux_low");
     PASS();
@@ -2211,7 +2210,7 @@ TEST(lighting_state_machine_turns_on_below_lux_band) {
 TEST(lighting_state_machine_holds_until_off_threshold) {
     auto sp = lighting_setpoints();
     auto s = initial_lighting_state();
-    auto d = evaluate_lighting(lighting_inputs(45000.0f, 8.0f), sp, s, true, 180000);
+    auto d = evaluate_lighting(lighting_inputs(45000.0f), sp, s, true, 180000);
     ASSERT_TRUE(d.want_on);
     ASSERT_TRUE(d.lux_below_off_threshold);
     ASSERT_TRUE(std::string(d.reason) == "hysteresis_hold");
@@ -2221,23 +2220,36 @@ TEST(lighting_state_machine_holds_until_off_threshold) {
 TEST(lighting_state_machine_enforces_min_on_dwell) {
     auto sp = lighting_setpoints();
     auto s = initial_lighting_state();
-    evaluate_lighting(lighting_inputs(30000.0f, 8.0f), sp, s, false, 120000);
-    auto d = evaluate_lighting(lighting_inputs(90000.0f, 8.0f), sp, s, true, 180000);
+    evaluate_lighting(lighting_inputs(30000.0f), sp, s, false, 120000);
+    auto d = evaluate_lighting(lighting_inputs(90000.0f), sp, s, true, 180000);
     ASSERT_TRUE(d.want_on);
     ASSERT_TRUE(std::string(d.reason) == "min_on_hold");
     PASS();
 }
 
-TEST(lighting_state_machine_respects_per_light_window_and_dli_goal) {
+TEST(lighting_state_machine_respects_per_light_window_and_minutes_goal) {
     auto sp = lighting_setpoints();
     auto s = initial_lighting_state();
-    auto night = evaluate_lighting(lighting_inputs(1000.0f, 8.0f, 23), sp, s, false, 120000);
+    auto night = evaluate_lighting(lighting_inputs(1000.0f, 23), sp, s, false, 120000);
     ASSERT_FALSE(night.want_on);
     ASSERT_TRUE(std::string(night.reason) == "outside_window");
 
-    auto met = evaluate_lighting(lighting_inputs(1000.0f, 23.0f, 10), sp, s, false, 240000);
+    sp.target_light_minutes = 1;
+    evaluate_lighting(lighting_inputs(90000.0f, 10), sp, s, false, 180000, 60.0f);
+    auto met = evaluate_lighting(lighting_inputs(1000.0f, 10), sp, s, false, 240000, 60.0f);
     ASSERT_FALSE(met.want_on);
-    ASSERT_TRUE(std::string(met.reason) == "dli_met");
+    ASSERT_TRUE(std::string(met.reason) == "minutes_met");
+    PASS();
+}
+
+TEST(lighting_qualified_minutes_count_natural_or_switch_once) {
+    auto sp = lighting_setpoints();
+    auto s = initial_lighting_state();
+    evaluate_lighting(lighting_inputs(45000.0f, 10), sp, s, true, 120000, 60.0f);
+    ASSERT_TRUE(std::fabs(s.natural_qualified_s - 60.0f) < 0.001f);
+    ASSERT_TRUE(std::fabs(s.switch_on_s - 60.0f) < 0.001f);
+    ASSERT_TRUE(std::fabs(s.overlap_s - 60.0f) < 0.001f);
+    ASSERT_TRUE(std::fabs(s.qualified_light_s - 60.0f) < 0.001f);
     PASS();
 }
 

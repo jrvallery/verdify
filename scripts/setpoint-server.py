@@ -72,6 +72,7 @@ FIRMWARE_SETPOINT_PARAMS = {
     "fog_time_window_start",
     "gl_dli_target",
     "gl_grow_dli_target",
+    "gl_grow_target_light_minutes",
     "gl_grow_lux_hysteresis",
     "gl_grow_lux_threshold",
     "gl_grow_min_off_s",
@@ -81,6 +82,7 @@ FIRMWARE_SETPOINT_PARAMS = {
     "gl_lux_hysteresis",
     "gl_lux_threshold",
     "gl_main_dli_target",
+    "gl_main_target_light_minutes",
     "gl_main_lux_hysteresis",
     "gl_main_lux_threshold",
     "gl_main_min_off_s",
@@ -415,7 +417,7 @@ def get_setpoint_text_sync() -> str:
         db_cmd
         + [
             "SELECT parameter, value FROM fn_lighting_policy(now(), 'vallery') p "
-            "CROSS JOIN LATERAL (SELECT * FROM fn_lighting_circuit_policy(now(), 'vallery') WHERE light_key = 'main') lp "
+            "CROSS JOIN LATERAL (SELECT * FROM fn_lighting_minutes_policy(now(), 'vallery') WHERE light_key = 'main') lp "
             "CROSS JOIN LATERAL (VALUES "
             "('gl_dli_target', round(p.target_dli::numeric, 1)::text), "
             "('gl_lux_threshold', round(lp.lux_on_threshold::numeric, 0)::text), "
@@ -442,9 +444,10 @@ def get_setpoint_text_sync() -> str:
     result = subprocess.run(
         db_cmd
         + [
-            "SELECT parameter, value FROM fn_lighting_circuit_policy(now(), 'vallery') p "
+            "SELECT parameter, value FROM fn_lighting_minutes_policy(now(), 'vallery') p "
             "CROSS JOIN LATERAL (VALUES "
-            "('gl_' || p.light_key || '_dli_target', round(p.dli_target::numeric, 1)::text), "
+            "('gl_' || p.light_key || '_dli_target', round(p.legacy_dli_target::numeric, 1)::text), "
+            "('gl_' || p.light_key || '_target_light_minutes', p.target_light_minutes::text), "
             "('gl_' || p.light_key || '_sunrise_hour', p.start_hour::text), "
             "('gl_' || p.light_key || '_sunset_hour', p.cutoff_hour::text), "
             "('gl_' || p.light_key || '_lux_threshold', round(p.lux_on_threshold::numeric, 0)::text), "

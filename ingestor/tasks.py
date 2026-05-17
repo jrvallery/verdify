@@ -83,6 +83,7 @@ LIGHTING_POLICY_PARAMS = frozenset(
 LIGHTING_CIRCUIT_DEFAULT_PARAMS = frozenset(
     {
         "gl_main_dli_target",
+        "gl_main_target_light_minutes",
         "gl_main_sunrise_hour",
         "gl_main_sunset_hour",
         "gl_main_lux_threshold",
@@ -91,6 +92,7 @@ LIGHTING_CIRCUIT_DEFAULT_PARAMS = frozenset(
         "gl_main_min_off_s",
         "sw_gl_main_auto_mode",
         "gl_grow_dli_target",
+        "gl_grow_target_light_minutes",
         "gl_grow_sunrise_hour",
         "gl_grow_sunset_hour",
         "gl_grow_lux_threshold",
@@ -107,6 +109,13 @@ LIGHTING_CIRCUIT_SUPPORT_SENTINELS = frozenset(
         "gl_grow_lux_threshold",
         "sw_gl_main_auto_mode",
         "sw_gl_grow_auto_mode",
+    }
+)
+
+LIGHTING_TARGET_MINUTE_PARAMS = frozenset(
+    {
+        "gl_main_target_light_minutes",
+        "gl_grow_target_light_minutes",
     }
 )
 
@@ -2606,6 +2615,8 @@ _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
     "fog_time_window_end": (1, 24),
     "gl_sunrise_hour": (0, 23),
     "gl_sunset_hour": (1, 24),
+    "gl_main_target_light_minutes": (0, 1080),
+    "gl_grow_target_light_minutes": (0, 1080),
     # Integer counters (seconds)
     "mister_engage_delay_s": (5, 300),
     "mister_all_delay_s": (10, 600),
@@ -2942,7 +2953,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         zone_row = await conn.fetchrow("SELECT * FROM fn_zone_vpd_targets(now())")
         house_row = await conn.fetchrow("SELECT * FROM fn_house_vpd_control_band(now())")
         lighting_row = await conn.fetchrow("SELECT * FROM fn_lighting_policy(now())")
-        lighting_circuit_rows = await conn.fetch("SELECT * FROM fn_lighting_circuit_policy(now()) ORDER BY light_key")
+        lighting_circuit_rows = await conn.fetch("SELECT * FROM fn_lighting_minutes_policy(now()) ORDER BY light_key")
         control_band = _control_band_from_house_row(house_row)
         moisture_guardrails = _vpd_high_moisture_guardrails(
             control_band,
@@ -2956,6 +2967,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         lighting_circuit_supported = any(
             param in shared.cfg_readback or param in _last_pushed for param in LIGHTING_CIRCUIT_SUPPORT_SENTINELS
         )
+        lighting_target_minutes_supported = all(param in shared.cfg_readback for param in LIGHTING_TARGET_MINUTE_PARAMS)
         planner_meta = {
             r["parameter"]: {
                 "trigger_id": str(r["trigger_id"]) if r["trigger_id"] else None,
@@ -3104,7 +3116,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 continue
             key = row["light_key"]
             circuit_defaults = {
-                f"gl_{key}_dli_target": round(float(row["dli_target"]), 1),
+                f"gl_{key}_dli_target": round(float(row["legacy_dli_target"]), 1),
+                f"gl_{key}_target_light_minutes": float(int(row["target_light_minutes"])),
                 f"gl_{key}_sunrise_hour": float(int(row["start_hour"])),
                 f"gl_{key}_sunset_hour": float(int(row["cutoff_hour"])),
                 f"gl_{key}_lux_threshold": round(float(row["lux_on_threshold"]), 0),
@@ -3114,6 +3127,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 f"sw_gl_{key}_auto_mode": 1.0 if row["auto_enabled"] else 0.0,
             }
             for param, val in circuit_defaults.items():
+                if param in LIGHTING_TARGET_MINUTE_PARAMS and not lighting_target_minutes_supported:
+                    continue
                 if param in planner_params:
                     continue
                 if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
@@ -3157,6 +3172,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             param = row["parameter"]
             planned_val = planner_params.get(param, row["value"])
             if param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and not lighting_circuit_supported:
+                continue
+            if param in LIGHTING_TARGET_MINUTE_PARAMS and not lighting_target_minutes_supported:
                 continue
             if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue

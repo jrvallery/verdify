@@ -1034,7 +1034,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Current per-circuit lighting state-machine policy, expected state, actual Lutron state, and latest firmware reason.",
+      "description": "Per-circuit qualified-light-minutes policy, progress, expected state, and actual Lutron switch state.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1083,11 +1083,11 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT light_key AS \"Circuit\",\n       equipment AS \"Equipment\",\n       dli_target AS \"DLI Goal\",\n       start_hour AS \"Start\",\n       cutoff_hour AS \"Cutoff\",\n       lux_on_threshold AS \"ON Lux\",\n       lux_off_threshold AS \"OFF Lux\",\n       min_on_s AS \"Min ON s\",\n       min_off_s AS \"Min OFF s\",\n       CASE WHEN expected_on THEN 'ON' ELSE 'OFF' END AS \"Expected\",\n       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Actual\",\n       firmware_state AS \"FW State\",\n       firmware_reason AS \"FW Reason\"\nFROM v_lighting_circuit_status_now\nORDER BY light_key",
+          "rawSql": "SELECT light_key AS \"Circuit\",\n       equipment AS \"Equipment\",\n       target_light_minutes AS \"Target min\",\n       qualified_light_minutes AS \"Qualified min\",\n       natural_qualified_minutes AS \"Natural min\",\n       switch_on_minutes AS \"Switch min\",\n       overlap_minutes AS \"Overlap min\",\n       remaining_light_minutes AS \"Remaining min\",\n       start_hour AS \"Start\",\n       cutoff_hour AS \"Cutoff\",\n       lux_on_threshold AS \"ON Lux\",\n       lux_off_threshold AS \"OFF Lux\",\n       CASE WHEN expected_on THEN 'ON' ELSE 'OFF' END AS \"Expected\",\n       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Actual\",\n       firmware_state AS \"FW State\",\n       firmware_reason AS \"FW Reason\"\nFROM v_lighting_minutes_status_now\nORDER BY light_key",
           "refId": "A"
         }
       ],
-      "title": "Per-Circuit Lighting Policy Now",
+      "title": "Qualified Light Minutes Now",
       "type": "table"
     },
     {

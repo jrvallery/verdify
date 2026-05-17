@@ -551,9 +551,9 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 'east_adjacency_factor','irrig_vpd_boost_pct','irrig_vpd_boost_threshold_hrs',
                 'fog_rh_ceiling_pct','fog_min_temp_f','fog_time_window_start','fog_time_window_end',
                 'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold','gl_lux_hysteresis',
-                'gl_main_dli_target','gl_main_sunrise_hour','gl_main_sunset_hour',
+                'gl_main_dli_target','gl_main_target_light_minutes','gl_main_sunrise_hour','gl_main_sunset_hour',
                 'gl_main_lux_threshold','gl_main_lux_hysteresis','gl_main_min_on_s','gl_main_min_off_s',
-                'gl_grow_dli_target','gl_grow_sunrise_hour','gl_grow_sunset_hour',
+                'gl_grow_dli_target','gl_grow_target_light_minutes','gl_grow_sunrise_hour','gl_grow_sunset_hour',
                 'gl_grow_lux_threshold','gl_grow_lux_hysteresis','gl_grow_min_on_s','gl_grow_min_off_s',
                 'sw_gl_main_auto_mode','sw_gl_grow_auto_mode',
                 'safety_min','safety_max','safety_vpd_min','safety_vpd_max',
@@ -570,7 +570,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         house_row = await conn.fetchrow("SELECT * FROM fn_house_vpd_control_band(now())")
         lighting_row = await conn.fetchrow("SELECT * FROM fn_lighting_policy(now(), $1)", greenhouse_id)
         lighting_circuit_rows = await conn.fetch(
-            "SELECT * FROM fn_lighting_circuit_policy(now(), $1) ORDER BY light_key",
+            "SELECT * FROM fn_lighting_minutes_policy(now(), $1) ORDER BY light_key",
             greenhouse_id,
         )
         # Tier 1 #3: fail loud if band computation returned NULL.
@@ -646,7 +646,8 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         for row in lighting_circuit_rows:
             key = row["light_key"]
             lighting_values = {
-                f"gl_{key}_dli_target": _round_half_up(float(row["dli_target"]), 1),
+                f"gl_{key}_dli_target": _round_half_up(float(row["legacy_dli_target"]), 1),
+                f"gl_{key}_target_light_minutes": int(row["target_light_minutes"]),
                 f"gl_{key}_sunrise_hour": int(row["start_hour"]),
                 f"gl_{key}_sunset_hour": int(row["cutoff_hour"]),
                 f"gl_{key}_lux_threshold": _round_half_up(float(row["lux_on_threshold"]), 0),

@@ -1035,12 +1035,11 @@ interval:
 
                 LightingInputs light_in = {
                   .natural_lux = cur_lux,
-                  .dli_today = id(dli_accumulator),
                   .local_hour = time.hour,
                   .occupied = id(greenhouse_occupied)
                 };
                 LightingSetpoints main_sp = {
-                  .dli_target = id(gl_main_dli_target),
+                  .target_light_minutes = (uint32_t)id(gl_main_target_light_minutes),
                   .lux_on_threshold = id(gl_main_lux_threshold),
                   .lux_hysteresis = id(gl_main_lux_hysteresis),
                   .start_hour = id(gl_main_sunrise_hour),
@@ -1050,7 +1049,7 @@ interval:
                   .auto_enabled = id(gl_auto_enabled) && id(gl_main_auto_enabled)
                 };
                 LightingSetpoints grow_sp = {
-                  .dli_target = id(gl_grow_dli_target),
+                  .target_light_minutes = (uint32_t)id(gl_grow_target_light_minutes),
                   .lux_on_threshold = id(gl_grow_lux_threshold),
                   .lux_hysteresis = id(gl_grow_lux_hysteresis),
                   .start_hour = id(gl_grow_sunrise_hour),
@@ -1068,12 +1067,12 @@ interval:
                 auto apply_light = [&](const char* label, esphome::switch_::Switch* sw, LightingDecision dec){
                   if(dec.want_on && !sw->state){
                     sw->turn_on();
-                    ESP_LOGI("grow_light","%s ON: %s | lux=%.0f | DLI=%.2f | h=%d",
-                             label, dec.reason, cur_lux, id(dli_accumulator), time.hour);
+                    ESP_LOGI("grow_light","%s ON: %s | lux=%.0f | light=%.0f/%.0f min | h=%d",
+                             label, dec.reason, cur_lux, dec.qualified_light_minutes, dec.target_light_minutes, time.hour);
                   } else if(!dec.want_on && sw->state){
                     sw->turn_off();
-                    ESP_LOGI("grow_light","%s OFF: %s | lux=%.0f | DLI=%.2f | h=%d",
-                             label, dec.reason, cur_lux, id(dli_accumulator), time.hour);
+                    ESP_LOGI("grow_light","%s OFF: %s | lux=%.0f | light=%.0f/%.0f min | h=%d",
+                             label, dec.reason, cur_lux, dec.qualified_light_minutes, dec.target_light_minutes, time.hour);
                   }
                 };
                 apply_light("main", id(grow_light_main), main_dec);

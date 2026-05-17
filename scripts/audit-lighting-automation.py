@@ -33,7 +33,7 @@ PUBLIC_HOME = REPO_ROOT / "verdify-site" / "public" / "index.html"
 GRAFANA_RENDER_BASE = "https://graphs.verdify.ai"
 
 PER_CIRCUIT_PARAMS = (
-    "gl_main_dli_target",
+    "gl_main_target_light_minutes",
     "gl_main_lux_threshold",
     "gl_main_lux_hysteresis",
     "gl_main_sunrise_hour",
@@ -41,7 +41,7 @@ PER_CIRCUIT_PARAMS = (
     "gl_main_min_on_s",
     "gl_main_min_off_s",
     "sw_gl_main_auto_mode",
-    "gl_grow_dli_target",
+    "gl_grow_target_light_minutes",
     "gl_grow_lux_threshold",
     "gl_grow_lux_hysteresis",
     "gl_grow_sunrise_hour",
@@ -51,7 +51,7 @@ PER_CIRCUIT_PARAMS = (
     "sw_gl_grow_auto_mode",
 )
 CFG_READBACK_PARAMS = (
-    "gl_main_dli_target",
+    "gl_main_target_light_minutes",
     "gl_main_lux_threshold",
     "gl_main_lux_hysteresis",
     "gl_main_sunrise_hour",
@@ -59,7 +59,7 @@ CFG_READBACK_PARAMS = (
     "gl_main_min_on_s",
     "gl_main_min_off_s",
     "sw_gl_main_auto_mode",
-    "gl_grow_dli_target",
+    "gl_grow_target_light_minutes",
     "gl_grow_lux_threshold",
     "gl_grow_lux_hysteresis",
     "gl_grow_sunrise_hour",
@@ -185,7 +185,16 @@ def mcp_set_tunable_dry_run() -> tuple[bool, str]:
     spec.loader.exec_module(module)
     fake_trigger = str(uuid4())
 
-    async def _calls() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    async def _calls() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+        minutes = json.loads(
+            await module.set_tunable(
+                "gl_main_target_light_minutes",
+                960,
+                "lighting audit dry-run",
+                trigger_id=fake_trigger,
+                planner_instance="local",
+            )
+        )
         main = json.loads(
             await module.set_tunable(
                 "gl_main_lux_threshold",
@@ -213,19 +222,22 @@ def mcp_set_tunable_dry_run() -> tuple[bool, str]:
                 planner_instance="local",
             )
         )
-        return main, auto, legacy
+        return minutes, main, auto, legacy
 
-    main, auto, legacy = asyncio.run(_calls())
+    minutes, main, auto, legacy = asyncio.run(_calls())
     allowed = set(legacy.get("allowed", []))
     ok = (
-        main.get("error") == "trigger_id not found in plan_delivery_log"
+        minutes.get("error") == "trigger_id not found in plan_delivery_log"
+        and main.get("error") == "trigger_id not found in plan_delivery_log"
         and auto.get("error") == "trigger_id not found in plan_delivery_log"
         and "not planner-pushable" in legacy.get("error", "")
+        and "gl_main_target_light_minutes" in allowed
         and "gl_main_lux_threshold" in allowed
         and "sw_gl_main_auto_mode" in allowed
         and "gl_lux_threshold" not in allowed
     )
     detail = (
+        f"gl_main_target_light_minutes={minutes.get('error')}; "
         f"gl_main_lux_threshold={main.get('error')}; "
         f"sw_gl_main_auto_mode={auto.get('error')}; "
         f"gl_lux_threshold={legacy.get('error')}"
@@ -342,6 +354,21 @@ def static_checks(audit: Audit) -> None:
         "legacy shared gl_lux_* params are dispatcher/default context; planner writes use per-circuit gl_main_* and gl_grow_*",
         f"legacy shared lighting params are still planner-writable or mis-owned: {legacy_bad}",
     )
+    legacy_dli_params = ("gl_main_dli_target", "gl_grow_dli_target")
+    legacy_dli_bad = sorted(
+        param
+        for param in legacy_dli_params
+        if param not in REGISTRY
+        or REGISTRY[param].planner_pushable
+        or param in PLANNER_PUSHABLE_REG
+        or REGISTRY[param].push_owner != "dispatcher_default"
+    )
+    audit.check(
+        not legacy_dli_bad,
+        "legacy per-circuit DLI params are telemetry-only",
+        "legacy gl_main/gl_grow DLI targets are dispatcher compatibility values; target minutes are the planner control goal",
+        f"legacy per-circuit DLI params are still planner-writable or mis-owned: {legacy_dli_bad}",
+    )
     audit.check(
         all(
             token in hardware
@@ -382,23 +409,28 @@ def static_checks(audit: Audit) -> None:
     for relpath in ("ingestor/tasks.py", "api/main.py", "scripts/setpoint-server.py", "scripts/gather-plan-context.sh"):
         src = read(REPO_ROOT / relpath)
         audit.check(
-            "fn_lighting_circuit_policy" in src,
+            "fn_lighting_minutes_policy" in src,
             f"{relpath} policy source",
-            "uses fn_lighting_circuit_policy",
-            "does not use fn_lighting_circuit_policy",
+            "uses fn_lighting_minutes_policy",
+            "does not use fn_lighting_minutes_policy",
         )
 
     migration = read(REPO_ROOT / "db" / "migrations" / "123-lighting-per-circuit-state-machines.sql")
+    minutes_migration = read(REPO_ROOT / "db" / "migrations" / "126-lighting-qualified-minutes.sql")
     live_fixes_migration = read(REPO_ROOT / "db" / "migrations" / "125-lighting-live-fixes.sql")
     performance_migration = read(REPO_ROOT / "db" / "migrations" / "124-lighting-timeline-performance.sql")
     audit.check(
         all(
-            token in migration
-            for token in ("fn_lighting_circuit_policy", "v_lighting_circuit_status_now", "fn_lighting_timeline")
+            token in minutes_migration
+            for token in (
+                "fn_lighting_minutes_policy",
+                "v_lighting_minutes_status_now",
+                "v_lighting_qualified_minutes_daily",
+            )
         ),
         "database lighting traceability surfaces",
-        "policy, status, and timeline DB surfaces are defined",
-        "migration 123 is missing one or more lighting traceability surfaces",
+        "qualified-minutes policy, status, and daily DB surfaces are defined",
+        "migration 126 is missing one or more qualified-minutes lighting surfaces",
     )
     recommendation_migration = read(REPO_ROOT / "db" / "migrations" / "122-lighting-lux-threshold-recommendation.sql")
     audit.check(
@@ -410,16 +442,17 @@ def static_checks(audit: Audit) -> None:
         "lighting policy/recommendation can still treat ESP32 cfg readbacks as authoritative setpoints",
     )
     audit.check(
-        "state_row.value" in migration
-        and "p.lux_off_threshold" in migration
+        "qualified minute = exterior/natural lux" in minutes_migration
+        and "COALESCE(t.qualified_light_minutes, 0) < p.target_light_minutes" in minutes_migration
+        and "natural_qualified OR switch_on" in minutes_migration
+        and "p.lux_off_threshold" in minutes_migration
         and "WITH RECURSIVE bounds AS" in performance_migration
         and "main_seed_on" in performance_migration
         and "grow_seed_on" in performance_migration
         and "o.natural_lux < o.main_lux_off_threshold" in performance_migration
-        and "o.natural_lux < o.grow_lux_off_threshold" in performance_migration
-        and "t.dli_today < t.main_dli_target" in performance_migration,
+        and "o.natural_lux < o.grow_lux_off_threshold" in performance_migration,
         "lighting graph hysteresis contract",
-        "status/timeline expected-on values follow firmware window, DLI, auto, and ON/OFF hysteresis gates",
+        "status values follow firmware window, qualified-minute, auto, and ON/OFF hysteresis gates",
         "status/timeline expected-on values do not match firmware hysteresis semantics",
     )
     audit.check(
@@ -448,16 +481,21 @@ def static_checks(audit: Audit) -> None:
     forecast_panel = panel_by_id(site_climate_lighting, 17)
     audit.check(
         home_panel
-        and home_panel.get("title") == "Lighting Forecast Bands"
-        and "fn_lighting_timeline" in panel_sql(home_panel),
-        "home lighting forecast graph",
-        "site-home panel 36 renders lighting forecast bands from fn_lighting_timeline",
-        "site-home panel 36 is missing or not bound to fn_lighting_timeline",
+        and home_panel.get("title") == "Lighting Trace: Qualified Minutes"
+        and "fn_lighting_minutes_policy" in panel_sql(home_panel)
+        and "equipment_state" in panel_sql(home_panel)
+        and "plan_delivery_log" in panel_sql(home_panel)
+        and "Main qualified light minutes" in panel_sql(home_panel)
+        and "Main target gl_main_target_light_minutes" in panel_sql(home_panel)
+        and "fn_lighting_timeline" not in panel_sql(home_panel),
+        "home lighting state graph",
+        "site-home panel 36 renders natural lux, policy thresholds, actual switch ON windows, qualified minutes, switch minutes, and target-minute lines without fn_lighting_timeline",
+        "site-home panel 36 is missing, stale, or still bound to fn_lighting_timeline",
     )
     audit.check(
-        policy_panel and "v_lighting_circuit_status_now" in panel_sql(policy_panel),
+        policy_panel and "v_lighting_minutes_status_now" in panel_sql(policy_panel),
         "lighting policy table graph",
-        "site-climate-lighting panel 16 queries v_lighting_circuit_status_now",
+        "site-climate-lighting panel 16 queries v_lighting_minutes_status_now",
         "site-climate-lighting panel 16 is missing the per-circuit status view",
     )
     audit.check(
@@ -466,7 +504,29 @@ def static_checks(audit: Audit) -> None:
         "site-climate-lighting panel 17 queries fn_lighting_timeline",
         "site-climate-lighting panel 17 is missing fn_lighting_timeline",
     )
-    forecast_panel_contract = json.dumps([home_panel, forecast_panel])
+    home_panel_contract = json.dumps(home_panel)
+    forecast_panel_contract = json.dumps(forecast_panel)
+    home_state_tokens = (
+        "Natural Lux (10m avg)",
+        "Main/Grow ON Threshold",
+        "Main/Grow OFF Threshold",
+        "Actual switch.greenhouse_main ON",
+        "Actual switch.greenhouse_grow ON",
+        "switch.greenhouse_main actual",
+        "switch.greenhouse_grow actual",
+        "Main qualified light minutes",
+        "Grow qualified light minutes",
+        "Main switch-on minutes",
+        "Grow switch-on minutes",
+        "Latest plan",
+        "Main target gl_main_target_light_minutes",
+        "Grow target gl_grow_target_light_minutes",
+        "fn_lighting_minutes_policy",
+        "plan_delivery_log",
+        "equipment_state",
+        "custom.axisPlacement",
+        "custom.fillBelowTo",
+    )
     forecast_label_tokens = (
         "Tempest/Forecast Lux",
         "Main ON Threshold",
@@ -478,10 +538,13 @@ def static_checks(audit: Audit) -> None:
         "custom.fillBelowTo",
     )
     audit.check(
-        home_panel and forecast_panel and all(token in forecast_panel_contract for token in forecast_label_tokens),
-        "lighting forecast graph labels and fills",
-        "home and lighting forecast graphs label Tempest lux, ON/OFF bands, expected-on markers, and shaded hysteresis fills",
-        "lighting forecast graphs are missing user-facing labels or shaded band fill configuration",
+        home_panel
+        and forecast_panel
+        and all(token in home_panel_contract for token in home_state_tokens)
+        and all(token in forecast_panel_contract for token in forecast_label_tokens),
+        "lighting state graph labels and fills",
+        "home graph labels natural lux, ON/OFF bands, actual switch ON windows, qualified/switch minutes, target-minute lines, and shaded hysteresis/state fills",
+        "lighting state or forecast graphs are missing user-facing labels or shaded band fill configuration",
     )
 
     greenhouse_lighting = json.loads(
@@ -499,8 +562,8 @@ def static_checks(audit: Audit) -> None:
     audit.check(
         PUBLIC_HOME.exists() and "panelId=36" in read(PUBLIC_HOME),
         "built home page embed",
-        "public home HTML embeds lighting forecast panel 36",
-        "public home HTML is missing lighting forecast panel 36",
+        "public home HTML embeds lighting state panel 36",
+        "public home HTML is missing lighting state panel 36",
         status="WARN",
     )
     audit.check(
@@ -562,9 +625,9 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
 
     policy = psql_json(
         """
-        SELECT light_key, equipment, dli_target, start_hour, cutoff_hour,
+        SELECT light_key, equipment, target_light_minutes, start_hour, cutoff_hour,
                lux_on_threshold, lux_off_threshold, min_on_s, min_off_s, auto_enabled
-          FROM fn_lighting_circuit_policy(now(), 'vallery')
+          FROM fn_lighting_minutes_policy(now(), 'vallery')
          ORDER BY light_key
         """
     )
@@ -597,18 +660,19 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
     status = psql_json(
         """
         SELECT light_key, expected_on, actual_on, natural_lux,
+               qualified_light_minutes, remaining_light_minutes,
                lux_on_threshold, lux_off_threshold,
                COALESCE(firmware_state, '') AS firmware_state,
                COALESCE(firmware_reason, '') AS firmware_reason,
                COALESCE(firmware_telemetry_fresh, false) AS firmware_telemetry_fresh
-          FROM v_lighting_circuit_status_now
+          FROM v_lighting_minutes_status_now
          ORDER BY light_key
         """
     )
     audit.check(
         {row["light_key"] for row in status} == {"grow", "main"},
         "live per-circuit status view",
-        "v_lighting_circuit_status_now returns main and grow rows",
+        "v_lighting_minutes_status_now returns main and grow rows",
         f"unexpected status rows: {status}",
     )
     telemetry_live = all(
@@ -627,14 +691,16 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         planner_context = run(["bash", "scripts/gather-plan-context.sh"], timeout=90)
         context_text = planner_context.stdout
         required_context_tokens = (
-            "PER-CIRCUIT LIGHTING POLICY",
+            "QUALIFIED LIGHT MINUTES + GROW LIGHTS",
             "grow|grow_light_grow",
             "main|grow_light_main",
+            "target_light_minutes",
+            "QUALIFIED LIGHT MINUTES TODAY",
             "TEMPEST LUX THRESHOLD RECOMMENDATION",
             "ESP32 cfg readbacks are excluded from this source-of-truth view",
             "Use Tempest outdoor illuminance as the lighting trigger",
-            "Set gl_main_lux_threshold/gl_main_lux_hysteresis and gl_grow_lux_threshold/gl_grow_lux_hysteresis",
-            "Per-circuit gl_main_* and gl_grow_* lighting params are planner-managed",
+            "Set gl_main_target_light_minutes/gl_grow_target_light_minutes",
+            "Per-circuit gl_main_target_light_minutes/gl_grow_target_light_minutes",
         )
         audit.check(
             planner_context.returncode == 0 and all(token in context_text for token in required_context_tokens),
@@ -688,15 +754,17 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         f"timeline incomplete: {timeline}",
     )
 
-    support_probe = psql_json(
+    support_rows = psql_json(
         f"""
-        SELECT count(DISTINCT parameter)::int AS readback_count
+        SELECT DISTINCT parameter
           FROM setpoint_snapshot
          WHERE parameter = ANY(ARRAY{list(CFG_READBACK_PARAMS)!r}::text[])
            AND ts > now() - interval '15 minutes'
         """
-    )[0]
-    if support_probe["readback_count"] == len(CFG_READBACK_PARAMS):
+    )
+    supported_params = {row["parameter"] for row in support_rows}
+    missing_support = sorted(set(CFG_READBACK_PARAMS) - supported_params)
+    if not missing_support:
         audit.add(
             "pre-OTA unsupported-push guard",
             "PASS",
@@ -704,38 +772,44 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         )
     else:
         changes = psql_json(
-            """
+            f"""
             SELECT count(*)::int AS per_circuit_changes
               FROM setpoint_changes
              WHERE ts > now() - interval '2 hours'
-               AND (
-                 parameter LIKE 'gl_main_%'
-                 OR parameter LIKE 'gl_grow_%'
-                 OR parameter IN ('sw_gl_main_auto_mode','sw_gl_grow_auto_mode')
-               )
+               AND parameter = ANY(ARRAY{missing_support!r}::text[])
+               AND COALESCE(delivery_status, '') NOT LIKE 'deferred_%'
             """
         )[0]
         audit.check(
             changes["per_circuit_changes"] == 0,
             "pre-OTA unsupported-push guard",
-            "old firmware has not received unsupported per-circuit pushes",
-            f"per-circuit pushes exist before firmware readback support: {changes}",
+            "old firmware has not received non-deferred pushes for unsupported per-circuit params",
+            f"non-deferred pushes exist before firmware readback support: missing={missing_support} changes={changes}",
         )
 
     try:
         home = grafana_dashboard("site-home")
         lighting = grafana_dashboard("site-climate-lighting")
         greenhouse = grafana_dashboard("greenhouse-lighting")
+        home_live_panel = panel_by_id(home, 36)
+        home_live_sql = panel_sql(home_live_panel) if home_live_panel else ""
         audit.check(
-            panel_by_id(home, 36) and "fn_lighting_timeline" in panel_sql(panel_by_id(home, 36)),
+            home_live_panel
+            and home_live_panel.get("title") == "Lighting Trace: Qualified Minutes"
+            and "fn_lighting_minutes_policy" in home_live_sql
+            and "equipment_state" in home_live_sql
+            and "plan_delivery_log" in home_live_sql
+            and "Main qualified light minutes" in home_live_sql
+            and "Main target gl_main_target_light_minutes" in home_live_sql
+            and "fn_lighting_timeline" not in home_live_sql,
             "live home Grafana panel",
-            "site-home panel 36 is live and bound to fn_lighting_timeline",
+            "site-home panel 36 is live and bound to natural lux, thresholds, actual switch state, qualified minutes, plan, and target-minute sources",
             "site-home panel 36 missing or stale in live Grafana",
         )
         audit.check(
             panel_by_id(lighting, 16)
             and panel_by_id(lighting, 17)
-            and "v_lighting_circuit_status_now" in panel_sql(panel_by_id(lighting, 16))
+            and "v_lighting_minutes_status_now" in panel_sql(panel_by_id(lighting, 16))
             and "fn_lighting_timeline" in panel_sql(panel_by_id(lighting, 17)),
             "live lighting Grafana panels",
             "site-climate-lighting panels 16/17 are live and bound to policy/timeline views",
@@ -771,8 +845,8 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         audit.check(
             "panelId=36" in home_html and "site-home" in home_html and "graphs.verdify.ai" in home_html,
             "live public home page",
-            "verdify.ai homepage serves lighting forecast panel 36",
-            "verdify.ai homepage is missing the lighting forecast embed",
+            "verdify.ai homepage serves lighting state panel 36",
+            "verdify.ai homepage is missing the lighting state embed",
         )
         audit.check(
             "Circuit Policy And Forecast Bands" in lighting_html

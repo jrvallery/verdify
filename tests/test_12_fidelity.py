@@ -349,7 +349,7 @@ def test_dispatcher_band_owned_contract_is_explicit():
     assert "fn_band_setpoints(now())" in src
     assert "fn_house_vpd_control_band(now())" in src
     assert "fn_lighting_policy(now())" in src
-    assert "fn_lighting_circuit_policy(now())" in src
+    assert "fn_lighting_minutes_policy(now())" in src
     assert "LIGHTING_CIRCUIT_DEFAULT_PARAMS" in src
     assert "LIGHTING_POLICY_PARAMS" in src
     assert "param in BAND_DRIVEN_PARAMS" in src
@@ -369,7 +369,7 @@ def test_api_setpoint_fallback_uses_computed_band_not_planner_band_rows():
     assert "SELECT * FROM fn_band_setpoints(now())" in body
     assert "SELECT * FROM fn_house_vpd_control_band(now())" in body
     assert "SELECT * FROM fn_lighting_policy(now(), $1)" in body
-    assert "fn_lighting_circuit_policy(now(), $1)" in body
+    assert "fn_lighting_minutes_policy(now(), $1)" in body
     assert "planner_band" not in body
     assert "params[param] = _round_half_up(band_val, precision)" in body
     assert "params[param] = lighting_values[param]" in body
@@ -399,7 +399,7 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
     assert "fn_zone_vpd_targets(now())" in script
     assert "'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode'" in script
     assert "fn_lighting_policy(now(), 'vallery')" in script
-    assert "fn_lighting_circuit_policy(now(), 'vallery')" in script
+    assert "fn_lighting_minutes_policy(now(), 'vallery')" in script
     assert "if k.strip() not in plan_params" in script
 
 
@@ -443,14 +443,16 @@ def test_planner_context_surfaces_band_source_trace():
     assert "LIGHTING POLICY (read-only; dispatcher pushes these to ESP32)" in script
     assert "fn_lighting_policy(now(), '${GREENHOUSE_ID}')" in script
     assert "Do not set gl_dli_target, gl_sunrise_hour, gl_sunset_hour, or sw_gl_auto_mode" in script
-    assert "PER-CIRCUIT LIGHTING POLICY" in script
-    assert "fn_lighting_circuit_policy(now(), '${GREENHOUSE_ID}')" in script
+    assert "QUALIFIED LIGHT MINUTES + GROW LIGHTS" in script
+    assert "fn_lighting_minutes_policy(now(), '${GREENHOUSE_ID}')" in script
+    assert "target_light_minutes" in script
+    assert "qualified_light_minutes" in script
     assert "TEMPEST LUX THRESHOLD RECOMMENDATION" in script
     assert "fn_lighting_lux_threshold_recommendation(now(), '${GREENHOUSE_ID}')" in script
     assert "lux_hysteresis" in script
     assert "ESP32 cfg readbacks are excluded from this source-of-truth view" in script
     assert (
-        "Set gl_main_lux_threshold/gl_main_lux_hysteresis and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence"
+        "Set gl_main_target_light_minutes/gl_grow_target_light_minutes, gl_main_lux_threshold/gl_main_lux_hysteresis, and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence"
         in script
     )
 
@@ -467,18 +469,20 @@ def test_lighting_policy_sql_excludes_esp32_readbacks_from_source_of_truth():
 
 def test_lighting_status_and_timeline_follow_firmware_hysteresis():
     """Graphs must show the same ON/OFF band behavior that firmware enforces."""
-    status = Path("db/migrations/123-lighting-per-circuit-state-machines.sql").read_text()
+    status = Path("db/migrations/126-lighting-qualified-minutes.sql").read_text()
     timeline = Path("db/migrations/124-lighting-timeline-performance.sql").read_text()
 
-    assert "state_row.value" in status
+    assert "v_lighting_minutes_status_now" in status
+    assert "qualified minute = exterior/natural lux" in status
+    assert "natural_qualified OR switch_on" in status
+    assert "target_light_minutes" in status
     assert "p.lux_off_threshold" in status
     assert "WITH RECURSIVE bounds AS" in timeline
     assert "main_seed_on" in timeline
     assert "grow_seed_on" in timeline
     assert "o.natural_lux < o.main_lux_off_threshold" in timeline
     assert "o.natural_lux < o.grow_lux_off_threshold" in timeline
-    assert "t.dli_today < t.main_dli_target" in timeline
-    assert "expected-on projection follows firmware ON/OFF hysteresis" in timeline
+    assert "COALESCE(t.qualified_light_minutes, 0) < p.target_light_minutes" in status
 
 
 def test_house_vpd_control_band_uses_zone_median_not_strictest_crop():
@@ -655,15 +659,18 @@ def test_per_circuit_lighting_thresholds_are_planner_pushable_but_not_required_t
     assert not REGISTRY["gl_lux_hysteresis"].planner_pushable
     assert REGISTRY["gl_lux_hysteresis"].tier == 2
     assert REGISTRY["gl_lux_hysteresis"].push_owner == "dispatcher_default"
+    for param in ("gl_main_dli_target", "gl_grow_dli_target"):
+        assert not REGISTRY[param].planner_pushable
+        assert REGISTRY[param].push_owner == "dispatcher_default"
     for param in (
-        "gl_main_dli_target",
+        "gl_main_target_light_minutes",
         "gl_main_lux_threshold",
         "gl_main_lux_hysteresis",
         "gl_main_sunrise_hour",
         "gl_main_sunset_hour",
         "gl_main_min_on_s",
         "gl_main_min_off_s",
-        "gl_grow_dli_target",
+        "gl_grow_target_light_minutes",
         "gl_grow_lux_threshold",
         "gl_grow_lux_hysteresis",
         "gl_grow_sunrise_hour",
@@ -781,21 +788,32 @@ def test_lighting_automation_audit_checks_live_public_site():
     assert "MCP rejects planner writes" in src
 
 
-def test_lighting_automation_audit_checks_forecast_graph_labels():
-    """The forecast-band graph proof should include the user-facing labels and
-    shaded hysteresis fills, not only the backing SQL function.
+def test_lighting_automation_audit_checks_state_graph_labels():
+    """The lighting graph proof should include the user-facing labels and
+    shaded hysteresis fills, not only the backing SQL sources.
     """
     src = Path("scripts/audit-lighting-automation.py").read_text()
 
-    assert "lighting forecast graph labels and fills" in src
+    assert "lighting state graph labels and fills" in src
     for token in (
-        "Tempest/Forecast Lux",
-        "Main ON Threshold",
-        "Main OFF Threshold",
-        "Grow ON Threshold",
-        "Grow OFF Threshold",
-        "Main Expected On",
-        "Grow Expected On",
+        "Natural Lux (10m avg)",
+        "Main/Grow ON Threshold",
+        "Main/Grow OFF Threshold",
+        "Actual switch.greenhouse_main ON",
+        "Actual switch.greenhouse_grow ON",
+        "switch.greenhouse_main actual",
+        "switch.greenhouse_grow actual",
+        "Main qualified light minutes",
+        "Grow qualified light minutes",
+        "Main switch-on minutes",
+        "Grow switch-on minutes",
+        "Latest plan",
+        "Main target gl_main_target_light_minutes",
+        "Grow target gl_grow_target_light_minutes",
+        "fn_lighting_minutes_policy",
+        "plan_delivery_log",
+        "equipment_state",
+        "custom.axisPlacement",
         "custom.fillBelowTo",
     ):
         assert token in src
@@ -842,12 +860,14 @@ def test_lighting_automation_audit_checks_live_planner_context():
 
     assert "live planner lighting context" in src
     assert 'run(["bash", "scripts/gather-plan-context.sh"], timeout=90)' in src
-    assert "PER-CIRCUIT LIGHTING POLICY" in src
+    assert "QUALIFIED LIGHT MINUTES + GROW LIGHTS" in src
     assert "grow|grow_light_grow" in src
     assert "main|grow_light_main" in src
+    assert "target_light_minutes" in src
+    assert "qualified_light_minutes" in src
     assert "TEMPEST LUX THRESHOLD RECOMMENDATION" in src
     assert "ESP32 cfg readbacks are excluded from this source-of-truth view" in src
-    assert "Set gl_main_lux_threshold/gl_main_lux_hysteresis and gl_grow_lux_threshold/gl_grow_lux_hysteresis" in src
+    assert "Set gl_main_target_light_minutes/gl_grow_target_light_minutes" in src
 
 
 def test_lighting_automation_audit_checks_mcp_set_tunable_gate():
@@ -857,6 +877,7 @@ def test_lighting_automation_audit_checks_mcp_set_tunable_gate():
     src = Path("scripts/audit-lighting-automation.py").read_text()
 
     assert "MCP lighting set_tunable gate" in src
+    assert "gl_main_target_light_minutes" in src
     assert "gl_main_lux_threshold" in src
     assert "sw_gl_main_auto_mode" in src
     assert "gl_lux_threshold" in src

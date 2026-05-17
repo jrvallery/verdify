@@ -65,6 +65,8 @@ class TestSchemaIntegrity:
         "v_band_trace_latest",
         "v_lighting_status_now",
         "v_lighting_circuit_status_now",
+        "v_lighting_minutes_status_now",
+        "v_lighting_qualified_minutes_daily",
         "v_lighting_daily",
     ]
 
@@ -82,6 +84,7 @@ class TestSchemaIntegrity:
         "fn_timeline_setpoint_value",
         "fn_lighting_policy",
         "fn_lighting_circuit_policy",
+        "fn_lighting_minutes_policy",
         "fn_lighting_timeline",
         "fn_lighting_lux_threshold_recommendation",
     ]
@@ -271,35 +274,58 @@ class TestViewsCompute:
         assert "Tempest outdoor_lux" in source_chain
         assert "per-circuit gl_main_*/gl_grow_* lux tunables" in source_chain
 
-    def test_lighting_circuit_policy_exposes_two_state_machines(self):
+    def test_lighting_minutes_policy_exposes_two_state_machines(self):
         rows = db_query_rows(
             """
             SELECT light_key,
                    equipment,
-                   dli_target,
+                   target_light_minutes,
                    lux_on_threshold,
                    lux_off_threshold,
                    min_on_s,
                    min_off_s,
                    auto_enabled,
                    source_chain
-            FROM fn_lighting_circuit_policy(now(), 'vallery')
+            FROM fn_lighting_minutes_policy(now(), 'vallery')
             ORDER BY light_key
             """
         )
         assert len(rows) == 2
         keys = []
         for row in rows:
-            key, equipment, dli, lux_on, lux_off, min_on, min_off, auto, source_chain = row.split("|")
+            key, equipment, target_minutes, lux_on, lux_off, min_on, min_off, auto, source_chain = row.split("|")
             keys.append(key)
             assert equipment in {"grow_light_main", "grow_light_grow"}
-            assert float(dli) >= 1
+            assert 0 <= int(target_minutes) <= 1080
             assert float(lux_on) < float(lux_off)
             assert int(min_on) >= 0
             assert int(min_off) >= 0
             assert auto in {"t", "f"}
-            assert "ESP32 per-circuit lighting state machines" in source_chain
+            assert "qualified-minutes state machines" in source_chain
         assert keys == ["grow", "main"]
+
+    def test_lighting_minutes_status_traces_actual_switch_and_progress(self):
+        rows = db_query_rows(
+            """
+            SELECT light_key,
+                   target_light_minutes,
+                   qualified_light_minutes,
+                   remaining_light_minutes,
+                   actual_on IS NOT NULL AS has_actual,
+                   expected_on IS NOT NULL AS has_expected,
+                   minutes_below_target IS NOT NULL AS has_minutes_gate
+            FROM v_lighting_minutes_status_now
+            ORDER BY light_key
+            """
+        )
+        assert len(rows) == 2
+        for row in rows:
+            key, target, qualified, remaining, has_actual, has_expected, has_minutes_gate = row.split("|")
+            assert key in {"grow", "main"}
+            assert 0 <= int(target) <= 1080
+            assert int(qualified) >= 0
+            assert int(remaining) >= 0
+            assert (has_actual, has_expected, has_minutes_gate) == ("t", "t", "t")
 
     def test_band_trace_latest_computes(self):
         rows = db_query_rows(

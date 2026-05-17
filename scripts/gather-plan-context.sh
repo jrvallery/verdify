@@ -247,8 +247,8 @@ FROM irrigation_log WHERE ts > now() - interval '7 days' ORDER BY ts DESC LIMIT 
 " 2>/dev/null || echo "(none)"
 echo ""
 
-# ── 12. DLI + GROW LIGHTS ─────────────────────────────────────────
-echo "--- DLI + GROW LIGHTS ---"
+# ── 12. QUALIFIED LIGHT MINUTES + GROW LIGHTS ─────────────────────
+echo "--- QUALIFIED LIGHT MINUTES + GROW LIGHTS ---"
 echo "Current readings:"
 $DB -c "
 SELECT round(dli_today::numeric,1) as dli_mol, round(lux::numeric,0) as lux_now
@@ -278,7 +278,7 @@ echo "PER-CIRCUIT LIGHTING POLICY (planner-managed tunables; crop policy seeds d
 $DB -c "
 SELECT light_key,
        equipment,
-       dli_target,
+       target_light_minutes,
        start_hour,
        cutoff_hour,
        lux_on_threshold,
@@ -287,10 +287,26 @@ SELECT light_key,
        min_on_s,
        min_off_s,
        auto_enabled
-FROM fn_lighting_circuit_policy(now(), '${GREENHOUSE_ID}')
+FROM fn_lighting_minutes_policy(now(), '${GREENHOUSE_ID}')
 ORDER BY light_key;
 " 2>/dev/null || echo "(per-circuit lighting policy unavailable)"
-echo "You may set gl_main_* and gl_grow_* tunables independently when observations support diverging the two circuits."
+echo "You may set gl_main_target_light_minutes/gl_grow_target_light_minutes plus threshold/hysteresis independently when observations support diverging the two circuits."
+echo ""
+echo "QUALIFIED LIGHT MINUTES TODAY:"
+$DB -c "
+SELECT light_key,
+       target_light_minutes AS target,
+       qualified_light_minutes AS qualified,
+       natural_qualified_minutes AS natural,
+       switch_on_minutes AS switch_on,
+       overlap_minutes AS overlap,
+       remaining_light_minutes AS remaining,
+       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS actual_switch,
+       firmware_reason
+FROM v_lighting_minutes_status_now
+ORDER BY light_key;
+" 2>/dev/null || echo "(qualified light minutes status unavailable)"
+echo "A qualified minute counts once when natural lux is above the circuit threshold OR the actual switch is ON; overlap is not double-counted."
 echo ""
 echo "TEMPEST LUX THRESHOLD RECOMMENDATION (planner guidance for per-circuit tunables):"
 $DB -c "
@@ -306,7 +322,7 @@ SELECT sample_count,
 FROM fn_lighting_lux_threshold_recommendation(now(), '${GREENHOUSE_ID}');
 " 2>/dev/null || echo "(lux threshold recommendation unavailable)"
 echo "current_gl_lux_threshold/current_gl_lux_hysteresis are the current planner/default per-circuit policy values; ESP32 cfg readbacks are excluded from this source-of-truth view."
-echo "Use Tempest outdoor illuminance as the lighting trigger. Set gl_main_lux_threshold/gl_main_lux_hysteresis and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence unless you have a stronger observation."
+echo "Use Tempest outdoor illuminance as the lighting trigger. Set gl_main_target_light_minutes/gl_grow_target_light_minutes, gl_main_lux_threshold/gl_main_lux_hysteresis, and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence unless you have a stronger observation."
 echo ""
 echo "DLI CORRECTION (estimated actual plant DLI):"
 SENSOR_DLI=$($DB -c "SELECT round(COALESCE(max(dli_today), 0)::numeric, 1) FROM climate WHERE ts >= date_trunc('day', now() AT TIME ZONE 'America/Denver');" 2>/dev/null)
@@ -316,8 +332,8 @@ GL_HOURS=${GL_HOURS:-0}
 python3 -c "s=${SENSOR_DLI};g=${GL_HOURS};print(f'sensor_dli={s} | estimated_actual_dli={s*3.5:.1f} | gl_hours={g} | estimated_total_plant_dli={s*3.5+g*0.8:.1f}')" 2>/dev/null || echo "sensor_dli=${SENSOR_DLI} | gl_hours=${GL_HOURS}"
 echo "SENSOR LIMITATION: The lux sensor reads 25-40% of actual plant-available light."
 echo "Sensor DLI of 5-7 mol corresponds to actual plant DLI of 17-27 mol."
-echo "Do NOT react to low sensor DLI as if plants are light-starved."
-echo "The lux threshold is the overcast/shade detector; crop DLI sets the photoperiod target."
+echo "Do NOT use DLI as the primary grow-light control signal. The lighting controller now targets qualified light minutes."
+echo "The lux threshold is the overcast/shade detector; target_light_minutes sets the per-circuit photoperiod budget."
 echo ""
 
 # ── 13. DISEASE RISK ──────────────────────────────────────────────
@@ -631,9 +647,9 @@ WHERE parameter IN (
   'temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis',
   'mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s',
   'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode',
-  'gl_main_dli_target','gl_main_sunrise_hour','gl_main_sunset_hour',
+  'gl_main_dli_target','gl_main_target_light_minutes','gl_main_sunrise_hour','gl_main_sunset_hour',
   'gl_main_lux_threshold','gl_main_lux_hysteresis','gl_main_min_on_s','gl_main_min_off_s','sw_gl_main_auto_mode',
-  'gl_grow_dli_target','gl_grow_sunrise_hour','gl_grow_sunset_hour',
+  'gl_grow_dli_target','gl_grow_target_light_minutes','gl_grow_sunrise_hour','gl_grow_sunset_hour',
   'gl_grow_lux_threshold','gl_grow_lux_hysteresis','gl_grow_min_on_s','gl_grow_min_off_s','sw_gl_grow_auto_mode'
 )
 ORDER BY parameter;
@@ -641,7 +657,7 @@ ORDER BY parameter;
 echo "Band-driven values above reflect current diurnal crop profiles and shift throughout the day."
 echo "Nighttime values are typically lower (temp_high ~62-65°F, vpd_high ~0.6-0.8 kPa). These are normal, not corruption."
 echo "Do not set band-driven or lighting-policy params in your plan — use bias_heat/bias_cool to shift climate bands."
-echo "Per-circuit gl_main_* and gl_grow_* lighting params are planner-managed; use them when light evidence warrants a circuit-specific target or threshold."
+echo "Per-circuit gl_main_target_light_minutes/gl_grow_target_light_minutes and lux threshold/hysteresis params are planner-managed; legacy gl_*_dli_target values are telemetry compatibility, not the primary control goal."
 echo ""
 
 echo "--- BAND SETPOINT PROVENANCE (crop -> dispatcher/API -> firmware -> cfg readback) ---"

@@ -105,7 +105,7 @@ inline bool lighting_hour_in_window(int hour, int start, int end) noexcept {
 }
 
 inline void validate_lighting_setpoints(LightingSetpoints& sp) noexcept {
-    sp.dli_target = std::max(1.0f, std::min(50.0f, sp.dli_target));
+    sp.target_light_minutes = std::max(uint32_t(0), std::min(uint32_t(1080), sp.target_light_minutes));
     sp.lux_on_threshold = std::max(100.0f, std::min(100000.0f, sp.lux_on_threshold));
     sp.lux_hysteresis = std::max(0.0f, std::min(25000.0f, sp.lux_hysteresis));
     sp.start_hour = std::max(0, std::min(23, sp.start_hour));
@@ -146,7 +146,8 @@ inline LightingDecision evaluate_lighting(
     LightingSetpoints sp,
     LightingState& state,
     bool current_on,
-    uint32_t now_ms
+    uint32_t now_ms,
+    float dt_s = 60.0f
 ) noexcept {
     if (state.sentinel != LIGHT_STATE_SENTINEL) {
         state = initial_lighting_state();
@@ -159,10 +160,37 @@ inline LightingDecision evaluate_lighting(
     }
 
     const float natural_lux = std::isfinite(in.natural_lux) ? std::max(0.0f, in.natural_lux) : 0.0f;
-    const float dli_today = std::isfinite(in.dli_today) ? std::max(0.0f, in.dli_today) : 0.0f;
     const float lux_off_threshold = sp.lux_on_threshold + sp.lux_hysteresis;
     const bool in_window = sp.auto_enabled && lighting_hour_in_window(in.local_hour, sp.start_hour, sp.cutoff_hour);
-    const bool dli_below_target = dli_today < sp.dli_target;
+    const bool crossed_midnight = state.last_count_hour >= 0 && in.local_hour < state.last_count_hour;
+    const bool reached_start_hour = in.local_hour == sp.start_hour && state.last_count_hour != sp.start_hour;
+    if (crossed_midnight || reached_start_hour) {
+        state.qualified_light_s = 0.0f;
+        state.natural_qualified_s = 0.0f;
+        state.switch_on_s = 0.0f;
+        state.overlap_s = 0.0f;
+    }
+
+    const bool natural_qualified = natural_lux >= sp.lux_on_threshold;
+    const float count_dt_s = std::isfinite(dt_s) ? std::max(0.0f, dt_s) : 0.0f;
+    if (in_window && count_dt_s > 0.0f) {
+        if (natural_qualified) {
+            state.natural_qualified_s += count_dt_s;
+        }
+        if (current_on) {
+            state.switch_on_s += count_dt_s;
+        }
+        if (natural_qualified && current_on) {
+            state.overlap_s += count_dt_s;
+        }
+        if (natural_qualified || current_on) {
+            state.qualified_light_s += count_dt_s;
+        }
+    }
+    state.last_count_hour = in.local_hour;
+
+    const float target_light_s = float(sp.target_light_minutes) * 60.0f;
+    const bool minutes_below_target = state.qualified_light_s < target_light_s;
     const bool lux_below_on = natural_lux < sp.lux_on_threshold;
     const bool lux_below_off = natural_lux < lux_off_threshold;
 
@@ -177,9 +205,9 @@ inline LightingDecision evaluate_lighting(
     } else if (in.occupied) {
         want_on = true;
         reason = "occupied";
-    } else if (!dli_below_target) {
+    } else if (!minutes_below_target) {
         want_on = false;
-        reason = "dli_met";
+        reason = "minutes_met";
     } else if (!current_on && lux_below_on) {
         want_on = true;
         reason = "lux_low";
@@ -211,10 +239,14 @@ inline LightingDecision evaluate_lighting(
     return {
         .want_on = want_on,
         .in_window = in_window,
-        .dli_below_target = dli_below_target,
+        .minutes_below_target = minutes_below_target,
+        .natural_qualified = natural_qualified,
         .lux_below_on_threshold = lux_below_on,
         .lux_below_off_threshold = lux_below_off,
         .lux_off_threshold = lux_off_threshold,
+        .qualified_light_minutes = state.qualified_light_s / 60.0f,
+        .target_light_minutes = float(sp.target_light_minutes),
+        .remaining_light_minutes = std::max(0.0f, (target_light_s - state.qualified_light_s) / 60.0f),
         .reason = reason
     };
 }
