@@ -117,6 +117,19 @@ LOG_LEVEL_MAP = {
     LogLevel.LOG_LEVEL_VERBOSE: "VERBOSE",
     LogLevel.LOG_LEVEL_VERY_VERBOSE: "VERY_VERBOSE",
 }
+LOG_LEVEL_BY_NAME = {
+    "ERROR": LogLevel.LOG_LEVEL_ERROR,
+    "WARN": LogLevel.LOG_LEVEL_WARN,
+    "WARNING": LogLevel.LOG_LEVEL_WARN,
+    "INFO": LogLevel.LOG_LEVEL_INFO,
+    "DEBUG": LogLevel.LOG_LEVEL_DEBUG,
+    "VERBOSE": LogLevel.LOG_LEVEL_VERBOSE,
+    "VERY_VERBOSE": LogLevel.LOG_LEVEL_VERY_VERBOSE,
+}
+ESP32_LOG_LEVEL = LOG_LEVEL_BY_NAME.get(os.environ.get("ESP32_LOG_LEVEL", "WARN").strip().upper())
+if ESP32_LOG_LEVEL is None:
+    ESP32_LOG_LEVEL = LogLevel.LOG_LEVEL_WARN
+ESP32_LOG_LEVEL_NAME = LOG_LEVEL_MAP.get(ESP32_LOG_LEVEL, "WARN")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -623,8 +636,7 @@ def on_log_message(msg) -> None:
     if isinstance(tag, bytes):
         tag = tag.decode("utf-8", errors="replace")
     message = re.sub(r"\x1b\[[0-9;]*m", "", raw)  # Strip ANSI colors
-    # Only capture INFO and above (skip DEBUG/VERBOSE flood)
-    if msg.level <= LogLevel.LOG_LEVEL_INFO:
+    if msg.level <= ESP32_LOG_LEVEL:
         state.pending_logs.append((level, tag, message))
 
 
@@ -1146,9 +1158,10 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             # Subscribe to state changes
             client.subscribe_states(on_state_change)
 
-            # Subscribe to ESP32 log messages
-            client.subscribe_logs(on_log_message, log_level=LogLevel.LOG_LEVEL_INFO)
-            log.info("Subscribed to ESP32 logs (INFO+)")
+            # Subscribe to ESP32 log messages. Default WARN+ keeps heap-pressure
+            # evidence without streaming routine INFO chatter over the native API.
+            client.subscribe_logs(on_log_message, log_level=ESP32_LOG_LEVEL)
+            log.info("Subscribed to ESP32 logs (%s+)", ESP32_LOG_LEVEL_NAME)
 
             # Immediate setpoint re-push after reconnect (don't wait for 300s cycle)
             try:
