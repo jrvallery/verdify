@@ -3249,7 +3249,46 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             "mister_all_delay_s",
             "mister_center_penalty",
         }
+        heap_guard = await conn.fetchrow(
+            """
+            SELECT heap_bytes, heap_min_free_kb, heap_largest_free_block_kb
+              FROM diagnostics
+             WHERE heap_bytes IS NOT NULL
+             ORDER BY ts DESC
+             LIMIT 1
+            """
+        )
+        heap_alert_open = await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM alert_log
+                 WHERE disposition = 'open'
+                   AND alert_type = 'heap_pressure_critical'
+            )
+            """
+        )
+        heap_free = float(heap_guard["heap_bytes"]) if heap_guard and heap_guard["heap_bytes"] is not None else None
+        heap_defer_active = bool(heap_alert_open or (heap_free is not None and heap_free < 38.0))
+        recent_heap_deferred: dict[str, float] = {}
+        if heap_defer_active:
+            recent_heap_deferred = {
+                row["parameter"]: float(row["value"])
+                for row in await conn.fetch(
+                    """
+                    SELECT DISTINCT ON (parameter) parameter, value
+                      FROM setpoint_changes
+                     WHERE delivery_status = 'deferred_heap_pressure'
+                       AND confirmed_at IS NULL
+                       AND COALESCE(source, '') <> 'esp32'
+                       AND ts > now() - interval '30 minutes'
+                     ORDER BY parameter, ts DESC
+                    """
+                )
+            }
+
         dispatchable_changes: list[tuple[str, float, str]] = []
+        skipped_heap_deferred = 0
         for param, val in changes:
             if param in BAND_DRIVEN_PARAMS:
                 source = "band"
@@ -3288,6 +3327,10 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     registry_violation,
                 )
             val = registry_val
+            if heap_defer_active and _should_skip(recent_heap_deferred.get(param), val):
+                skipped_heap_deferred += 1
+                _last_pushed.pop(param, None)
+                continue
 
             # Sprint 24.9 (G-2): validate through SetpointChange before INSERT.
             # Defense-in-depth: MCP's PlanTransition.params already validates
@@ -3336,6 +3379,11 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             )
             _last_pushed[param] = val
             dispatchable_changes.append((param, float(val), source))
+        if skipped_heap_deferred:
+            log.warning(
+                "Dispatcher: suppressed %d duplicate heap-deferred setpoint retry row(s)",
+                skipped_heap_deferred,
+            )
         # Tier 1 #2: persist guardrail audit. Rows are written even when the
         # guardrail intentionally holds an unchanged applied value and no
         # setpoint_changes row is emitted.
