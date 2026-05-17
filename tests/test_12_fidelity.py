@@ -719,8 +719,9 @@ def test_lighting_automation_audit_enforces_post_ota_proof():
     assert "confirmed_at IS NOT NULL" in src
     assert "firmware_state/firmware_reason blank until OTA" in src
     assert "firmware_telemetry_fresh" in src
-    assert "bool_or(state) AS saw_on" in src
-    assert "bool_or(NOT state) AS saw_off" in src
+    assert "v_lighting_minutes_status_now" in src
+    assert "equipment_ts" in src
+    assert "matching firmware telemetry" in src
     assert "per-circuit cfg readbacks are live; firmware supports per-circuit lighting pushes" in src
     assert "confirmed_at >= COALESCE(latest_fw.first_ts" in src
     assert "'cfg_readback' AS kind" in src

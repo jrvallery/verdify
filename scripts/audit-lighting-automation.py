@@ -988,14 +988,16 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
              WHERE fo.firmware_version = cf.firmware_version
                AND fo.previous_firmware_version IS DISTINCT FROM fo.firmware_version
         )
-        SELECT equipment,
-               bool_or(state) AS saw_on,
-               bool_or(NOT state) AS saw_off,
-               count(*)::int AS rows
-          FROM equipment_state, latest_fw
-         WHERE equipment IN ('grow_light_main', 'grow_light_grow')
-           AND ts >= COALESCE(latest_fw.first_ts, now() - interval '24 hours')
-         GROUP BY equipment
+        SELECT s.equipment,
+               s.actual_on,
+               s.firmware_state,
+               s.firmware_reason,
+               s.firmware_telemetry_fresh,
+               s.equipment_ts,
+               COALESCE(latest_fw.first_ts, now() - interval '24 hours') AS first_ts
+          FROM v_lighting_minutes_status_now s
+          CROSS JOIN latest_fw
+         WHERE s.equipment IN ('grow_light_main', 'grow_light_grow')
         """
     )
     state_by_equipment = {row["equipment"]: row for row in circuit_state_rows}
@@ -1003,18 +1005,27 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         equipment
         for equipment in ("grow_light_main", "grow_light_grow")
         if equipment not in state_by_equipment
-        or not state_by_equipment[equipment].get("saw_on")
-        or not state_by_equipment[equipment].get("saw_off")
+        or not state_by_equipment[equipment].get("equipment_ts")
+        or state_by_equipment[equipment]["equipment_ts"] < state_by_equipment[equipment]["first_ts"]
+        or not state_by_equipment[equipment].get("firmware_telemetry_fresh")
+        or (
+            str(state_by_equipment[equipment].get("firmware_state", "")).upper() == "ON"
+            and not state_by_equipment[equipment].get("actual_on")
+        )
+        or (
+            str(state_by_equipment[equipment].get("firmware_state", "")).upper() == "OFF"
+            and state_by_equipment[equipment].get("actual_on")
+        )
     ]
     if not telemetry_live:
         state_status = "FAIL" if require_ota else "BLOCKED"
         state_detail = "requires post-OTA firmware state/reason telemetry before circuit state proof is complete"
     elif missing_state_evidence:
         state_status = "FAIL"
-        state_detail = f"missing ON/OFF equipment_state evidence after latest firmware start: {missing_state_evidence}"
+        state_detail = f"missing fresh switch-state evidence matching firmware state after latest firmware start: {missing_state_evidence}"
     else:
         state_status = "PASS"
-        state_detail = "both Lutron circuits have ON and OFF state evidence after latest firmware start"
+        state_detail = "both Lutron circuits have fresh post-OTA switch-state evidence matching firmware telemetry"
     audit.add("post-OTA Lutron state evidence", state_status, state_detail)
 
     setpoint_text = parse_setpoint_text(fetch_text("http://127.0.0.1:8200/setpoints"))
