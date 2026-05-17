@@ -235,38 +235,22 @@ inline Mode determine_mode_band_first(
     const bool vpd_high_resolved = in.vpd_kpa <= (sp.vpd_high - HV);
     const bool outdoor_cold_for_vent =
         std::isfinite(in.outdoor_temp_f) && in.outdoor_temp_f < (sp.temp_low - 10.0f);
-    const bool solar_feedforward =
-        std::isfinite(in.solar_w_m2)
-        && in.solar_w_m2 >= 500.0f
-        && in.local_hour >= 10
-        && in.local_hour <= 17
-        && !vpd_high
-        && vpd_high_resolved;
     const float cooling_exit_hysteresis =
         outdoor_cold_for_vent ? std::max(sp.temp_hysteresis, 3.0f) : sp.temp_hysteresis;
     const float cooling_entry_margin =
         outdoor_cold_for_vent ? band_cool_stage2_delta_f(sp) : 0.0f;
-    const float solar_cooling_lead_f = (solar_feedforward && !outdoor_cold_for_vent) ? 1.0f : 0.0f;
-    const float cooling_entry_threshold =
-        std::max(sp.temp_low + 1.0f, temp_high + cooling_entry_margin - solar_cooling_lead_f);
-    const float cooling_hold_threshold =
-        std::min(temp_high - cooling_exit_hysteresis, cooling_entry_threshold - cooling_exit_hysteresis);
     const bool needs_cooling = was_cooling
-        ? in.temp_f > cooling_hold_threshold
-        : in.temp_f > cooling_entry_threshold;
-    const bool solar_preventive_cooling =
-        needs_cooling && !was_cooling && solar_cooling_lead_f > 0.0f && in.temp_f <= temp_high;
+        ? in.temp_f > (temp_high - cooling_exit_hysteresis)
+        : in.temp_f > (temp_high + cooling_entry_margin);
     const float heat_target = band_heat_target_f(sp);
     const bool temp_below_band = in.temp_f < sp.temp_low;
     const bool needs_heating_s1 = in.temp_f < (heat_target + sp.heat_hysteresis);
 
     const bool cold_dehum_allowed =
         !outdoor_cold_for_vent || in.temp_f > (sp.temp_low + std::max(2.0f, sp.temp_hysteresis));
-    const float vpd_dehum_entry_threshold = outdoor_cold_for_vent ? (sp.vpd_low - HV) : sp.vpd_low;
-    const bool vpd_low_enter = in.vpd_kpa < vpd_dehum_entry_threshold && !sp.econ_block && cold_dehum_allowed;
-    const bool vpd_dehum_exit = in.vpd_kpa >= (sp.vpd_low + HV) || !cold_dehum_allowed;
+    const bool vpd_low_enter = in.vpd_kpa < (sp.vpd_low - HV) && !sp.econ_block && cold_dehum_allowed;
+    const bool vpd_dehum_exit = in.vpd_kpa >= sp.vpd_low || !cold_dehum_allowed;
     const bool was_dehum = prev == DEHUM_VENT;
-    const bool dehum_vpd_overshoot = was_dehum && vpd_high;
     const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
 
     {
@@ -283,10 +267,6 @@ inline Mode determine_mode_band_first(
         state.vpd_watch_timer_ms = 0;
         state.relief_cycle_count = 0;
         state.vent_latch_timer_ms = 0;
-        state.mist_backoff_timer_ms = 0;
-    }
-    if (dehum_vpd_overshoot && !safety_cool && !safety_heat) {
-        state.vpd_watch_timer_ms = std::max(state.vpd_watch_timer_ms, sp.vpd_watch_dwell_ms);
         state.mist_backoff_timer_ms = 0;
     }
     const bool humidify_ready = vpd_high && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
@@ -375,21 +355,8 @@ inline Mode determine_mode_band_first(
         }
     } else if (needs_cooling) {
         mode = VENTILATE;
-        state.last_mode_reason = state.override_summer_vent
-            ? "summer_vent"
-            : (solar_preventive_cooling ? "solar_preventive_cool" : "temp_high");
+        state.last_mode_reason = state.override_summer_vent ? "summer_vent" : "temp_high";
         state.sealed_timer_ms = 0;
-    } else if (dehum_vpd_overshoot
-               && !moisture_blocked
-               && !temp_below_band
-               && in.temp_f < (sp.safety_max - sp.safety_max_seal_margin_f)) {
-        mode = SEALED_MIST;
-        state.last_mode_reason = "dehum_vpd_overshoot";
-        state.sealed_timer_ms = dt_ms;
-        state.mist_stage = MIST_S1;
-        state.mist_stage_timer_ms = 0;
-        state.vent_latch_timer_ms = 0;
-        state.mist_backoff_timer_ms = 0;
     } else if (vpd_low_enter) {
         mode = DEHUM_VENT;
         state.last_mode_reason = "vpd_low";
@@ -424,16 +391,13 @@ inline Mode determine_mode_band_first(
 
     {
         const bool safety_preempts_dwell =
-            (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) || (mode == SENSOR_FAULT) || dehum_vpd_overshoot;
-        const bool temp_preempts_humidify =
-            (state.mode_prev == SEALED_MIST) && (mode == VENTILATE) && needs_cooling;
+            (mode == SAFETY_COOL) || (mode == SAFETY_HEAT) || (mode == SENSOR_FAULT);
         const bool mode_would_change = mode != state.mode_prev;
         const bool in_dwell = state.last_transition_tick_ms < sp.dwell_gate_ms;
         if (sp.sw_dwell_gate_enabled
             && mode_would_change
             && in_dwell
-            && !safety_preempts_dwell
-            && !temp_preempts_humidify) {
+            && !safety_preempts_dwell) {
             mode = state.mode_prev;
             state.last_mode_reason = "dwell_hold";
         }

@@ -1957,7 +1957,7 @@ TEST(band_first_cold_outdoor_cooling_entry_uses_band_margin) {
     PASS();
 }
 
-TEST(band_first_solar_preventive_cooling_before_temp_high) {
+TEST(band_first_replay_safe_no_solar_preventive_cooling_before_temp_high) {
     auto sp = band_first_setpoints();
     auto s = initial_state();
     auto in = make_inputs(sp.temp_high - 0.5f, 0.9f);
@@ -1965,8 +1965,8 @@ TEST(band_first_solar_preventive_cooling_before_temp_high) {
     in.local_hour = 14;
 
     Mode m = determine_mode(in, sp, s, 5000);
-    ASSERT_EQ(m, VENTILATE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "solar_preventive_cool");
+    ASSERT_EQ(m, IDLE);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "idle");
     PASS();
 }
 
@@ -1996,24 +1996,25 @@ TEST(band_first_cooling_stage2_is_band_scaled) {
     PASS();
 }
 
-TEST(band_first_dehum_enters_at_vpd_low_edge_and_holds_to_hysteresis) {
+TEST(band_first_dehum_enters_below_vpd_low_hysteresis_and_exits_at_low_edge) {
     auto sp = band_first_setpoints();
     auto s = initial_state();
+    const float HV = band_vpd_hysteresis(sp);
 
-    Mode m1 = determine_mode(make_inputs(75.0f, sp.vpd_low - 0.01f), sp, s, 5000);
+    Mode m1 = determine_mode(make_inputs(75.0f, sp.vpd_low - HV - 0.01f), sp, s, 5000);
     ASSERT_EQ(m1, DEHUM_VENT);
     ASSERT_TRUE(std::string(s.last_mode_reason) == "vpd_low");
 
-    Mode m2 = determine_mode(make_inputs(75.0f, sp.vpd_low + 0.05f), sp, s, 5000);
+    Mode m2 = determine_mode(make_inputs(75.0f, sp.vpd_low - 0.01f), sp, s, 5000);
     ASSERT_EQ(m2, DEHUM_VENT);
     ASSERT_TRUE(std::string(s.last_mode_reason) == "dehum_continue");
 
-    Mode m3 = determine_mode(make_inputs(75.0f, sp.vpd_low + band_vpd_hysteresis(sp) + 0.01f), sp, s, 5000);
+    Mode m3 = determine_mode(make_inputs(75.0f, sp.vpd_low + 0.01f), sp, s, 5000);
     ASSERT_EQ(m3, IDLE);
     PASS();
 }
 
-TEST(band_first_dehum_overshoot_exits_without_dwell_hold) {
+TEST(band_first_dehum_overshoot_respects_existing_dwell_hold) {
     auto sp = band_first_setpoints();
     sp.sw_dwell_gate_enabled = true;
     sp.dwell_gate_ms = 300000;
@@ -2024,13 +2025,13 @@ TEST(band_first_dehum_overshoot_exits_without_dwell_hold) {
 
     Mode m = determine_mode(make_inputs(75.0f, sp.vpd_high + 0.2f), sp, s, 5000);
 
-    ASSERT_EQ(m, SEALED_MIST);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "dehum_vpd_overshoot");
-    ASSERT_TRUE(s.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms);
+    ASSERT_EQ(m, DEHUM_VENT);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "dwell_hold");
+    ASSERT_FALSE(s.vent_mist_assist_active);
     PASS();
 }
 
-TEST(band_first_dehum_overshoot_cooling_uses_vent_mist_assist) {
+TEST(band_first_dehum_overshoot_cooling_respects_existing_dwell_hold) {
     auto sp = band_first_setpoints();
     sp.sw_dwell_gate_enabled = true;
     sp.dwell_gate_ms = 300000;
@@ -2041,13 +2042,12 @@ TEST(band_first_dehum_overshoot_cooling_uses_vent_mist_assist) {
 
     Mode m = determine_mode(make_inputs(sp.temp_high + 1.0f, sp.vpd_high + 0.2f), sp, s, 5000);
 
-    ASSERT_EQ(m, VENTILATE);
-    ASSERT_TRUE(s.vent_mist_assist_active);
-    ASSERT_TRUE(s.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms);
+    ASSERT_EQ(m, DEHUM_VENT);
+    ASSERT_FALSE(s.vent_mist_assist_active);
     PASS();
 }
 
-TEST(band_first_sealed_temp_preempt_bypasses_dwell_gate) {
+TEST(band_first_sealed_temp_preempt_respects_existing_dwell_gate) {
     auto sp = band_first_setpoints();
     sp.sw_dwell_gate_enabled = true;
     sp.dwell_gate_ms = 300000;
@@ -2061,9 +2061,9 @@ TEST(band_first_sealed_temp_preempt_bypasses_dwell_gate) {
 
     Mode m = determine_mode(make_inputs(sp.temp_high + 1.0f, sp.vpd_high + 0.2f), sp, s, 5000);
 
-    ASSERT_EQ(m, VENTILATE);
-    ASSERT_TRUE(std::string(s.last_mode_reason) == "temp_preempts_humidify");
-    ASSERT_TRUE(s.vent_mist_assist_active);
+    ASSERT_EQ(m, SEALED_MIST);
+    ASSERT_TRUE(std::string(s.last_mode_reason) == "dwell_hold");
+    ASSERT_FALSE(s.vent_mist_assist_active);
     PASS();
 }
 
