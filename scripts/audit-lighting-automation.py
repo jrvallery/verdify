@@ -418,7 +418,7 @@ def static_checks(audit: Audit) -> None:
     migration = read(REPO_ROOT / "db" / "migrations" / "123-lighting-per-circuit-state-machines.sql")
     minutes_migration = read(REPO_ROOT / "db" / "migrations" / "126-lighting-qualified-minutes.sql")
     live_fixes_migration = read(REPO_ROOT / "db" / "migrations" / "125-lighting-live-fixes.sql")
-    performance_migration = read(REPO_ROOT / "db" / "migrations" / "124-lighting-timeline-performance.sql")
+    timeline_migration = read(REPO_ROOT / "db" / "migrations" / "127-lighting-timeline-qualified-minutes.sql")
     audit.check(
         all(
             token in minutes_migration
@@ -446,11 +446,14 @@ def static_checks(audit: Audit) -> None:
         and "COALESCE(t.qualified_light_minutes, 0) < p.target_light_minutes" in minutes_migration
         and "natural_qualified OR switch_on" in minutes_migration
         and "p.lux_off_threshold" in minutes_migration
-        and "WITH RECURSIVE bounds AS" in performance_migration
-        and "main_seed_on" in performance_migration
-        and "grow_seed_on" in performance_migration
-        and "o.natural_lux < o.main_lux_off_threshold" in performance_migration
-        and "o.natural_lux < o.grow_lux_off_threshold" in performance_migration,
+        and "CREATE OR REPLACE FUNCTION fn_lighting_timeline" in timeline_migration
+        and "fn_lighting_minutes_policy((SELECT now_ts FROM bounds), p_greenhouse_id)" in timeline_migration
+        and "main_pre_minutes < r.row_main_target_light_minutes" in timeline_migration
+        and "grow_pre_minutes < r.row_grow_target_light_minutes" in timeline_migration
+        and "main_natural_qualified OR main_on" in timeline_migration
+        and "grow_natural_qualified OR grow_on" in timeline_migration
+        and "legacy DLI target columns remain compatibility-only" in timeline_migration
+        and "dli_today <" not in timeline_migration,
         "lighting graph hysteresis contract",
         "status values follow firmware window, qualified-minute, auto, and ON/OFF hysteresis gates",
         "status/timeline expected-on values do not match firmware hysteresis semantics",
@@ -467,10 +470,11 @@ def static_checks(audit: Audit) -> None:
         "live lighting views can still present stale firmware text or duplicate TRUE rows as fresh evidence",
     )
     audit.check(
-        "fn_lighting_circuit_policy((SELECT now_ts FROM bounds), p_greenhouse_id)" in performance_migration
-        and "fn_lighting_circuit_policy(t.ts" not in performance_migration,
+        "fn_lighting_minutes_policy((SELECT now_ts FROM bounds), p_greenhouse_id)" in timeline_migration
+        and "fn_lighting_minutes_policy(t.ts" not in timeline_migration
+        and "fn_lighting_circuit_policy(t.ts" not in timeline_migration,
         "lighting timeline performance guard",
-        "timeline resolves lighting policy once instead of once per graph bucket",
+        "timeline resolves lighting minutes policy once instead of once per graph bucket",
         "timeline performance migration may call policy once per bucket",
     )
 
@@ -739,7 +743,11 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
                min(grow_lux_on_threshold) AS grow_on_min,
                max(grow_lux_off_threshold) AS grow_off_max,
                sum(main_expected_on)::int AS main_expected_slots,
-               sum(grow_expected_on)::int AS grow_expected_slots
+               sum(grow_expected_on)::int AS grow_expected_slots,
+               max(main_target_light_minutes)::int AS main_target_light_minutes,
+               max(grow_target_light_minutes)::int AS grow_target_light_minutes,
+               max(main_qualified_light_minutes) AS main_qualified_light_minutes,
+               max(grow_qualified_light_minutes) AS grow_qualified_light_minutes
           FROM rows
         """,
         timeout=90,
@@ -748,7 +756,11 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         timeline["rows"] > 0
         and timeline["lux_rows"] > 0
         and timeline["main_on_min"] is not None
-        and timeline["grow_on_min"] is not None,
+        and timeline["grow_on_min"] is not None
+        and timeline["main_target_light_minutes"] is not None
+        and timeline["grow_target_light_minutes"] is not None
+        and timeline["main_qualified_light_minutes"] is not None
+        and timeline["grow_qualified_light_minutes"] is not None,
         "live lighting timeline",
         json.dumps(timeline, sort_keys=True),
         f"timeline incomplete: {timeline}",

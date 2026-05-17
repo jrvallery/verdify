@@ -470,18 +470,21 @@ def test_lighting_policy_sql_excludes_esp32_readbacks_from_source_of_truth():
 def test_lighting_status_and_timeline_follow_firmware_hysteresis():
     """Graphs must show the same ON/OFF band behavior that firmware enforces."""
     status = Path("db/migrations/126-lighting-qualified-minutes.sql").read_text()
-    timeline = Path("db/migrations/124-lighting-timeline-performance.sql").read_text()
+    timeline = Path("db/migrations/127-lighting-timeline-qualified-minutes.sql").read_text()
 
     assert "v_lighting_minutes_status_now" in status
     assert "qualified minute = exterior/natural lux" in status
     assert "natural_qualified OR switch_on" in status
     assert "target_light_minutes" in status
     assert "p.lux_off_threshold" in status
-    assert "WITH RECURSIVE bounds AS" in timeline
-    assert "main_seed_on" in timeline
-    assert "grow_seed_on" in timeline
-    assert "o.natural_lux < o.main_lux_off_threshold" in timeline
-    assert "o.natural_lux < o.grow_lux_off_threshold" in timeline
+    assert "CREATE OR REPLACE FUNCTION fn_lighting_timeline" in timeline
+    assert "fn_lighting_minutes_policy((SELECT now_ts FROM bounds), p_greenhouse_id)" in timeline
+    assert "main_pre_minutes < r.row_main_target_light_minutes" in timeline
+    assert "grow_pre_minutes < r.row_grow_target_light_minutes" in timeline
+    assert "main_natural_qualified OR main_on" in timeline
+    assert "grow_natural_qualified OR grow_on" in timeline
+    assert "legacy DLI target columns remain compatibility-only" in timeline
+    assert "dli_today <" not in timeline
     assert "COALESCE(t.qualified_light_minutes, 0) < p.target_light_minutes" in status
 
 
@@ -827,9 +830,9 @@ def test_lighting_automation_audit_checks_policy_source_and_hysteresis_contracts
     assert "lighting rollback freshness guard" in src
     assert "current_firmware_start" in src
     assert "ESP32 readbacks are excluded" in src
-    assert "WITH RECURSIVE bounds AS" in src
-    assert "main_seed_on" in src
-    assert "grow_seed_on" in src
+    assert "fn_lighting_minutes_policy((SELECT now_ts FROM bounds), p_greenhouse_id)" in src
+    assert "main_pre_minutes < r.row_main_target_light_minutes" in src
+    assert "grow_pre_minutes < r.row_grow_target_light_minutes" in src
 
 
 def test_lighting_automation_audit_checks_tunable_and_lutron_contracts():
