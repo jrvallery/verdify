@@ -1086,8 +1086,8 @@ interval:
             }
           }
 
-              // Log a concise summary at debug level.  To see these logs,
-              // set logger.level to DEBUG in the top‑level config (already done).
+              // Log a concise summary at debug level. To see these logs,
+              // temporarily raise logger.level in the top-level config.
               ESP_LOGD("summary","%s | Tin %.1f°F VPD %.2f kPa | "
                                  "H1:%d H2:%d F1:%d F2:%d Fog:%d Vent:%d",
                        lbl, Tin, VPD,

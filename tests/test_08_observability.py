@@ -195,6 +195,13 @@ class TestHeapPressureObservability:
         assert "id: heap_largest_free_block" in sensors
         assert 'ESP_LOGD("heap", "Heap profile: free=%.1f kB min=%.1f kB largest=%.1f kB"' in controls
 
+    def test_firmware_logger_defaults_to_warn_for_heap_protection(self):
+        body = (REPO_ROOT / "firmware/greenhouse.yaml").read_text()
+        assert "level: WARN" in body
+        assert "lambda: WARN" in body
+        assert "protect ESP32 heap" in body
+        assert "warning/error logs remain available for alerting" in body
+
     def test_firmware_removes_heap_expensive_http_fallback(self):
         for rel in (
             "firmware/greenhouse.yaml",

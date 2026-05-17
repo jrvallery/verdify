@@ -151,16 +151,18 @@ wifi:
 
 logger:
   baud_rate: 0
-  level: INFO
+  # Keep runtime logging at WARN to protect ESP32 heap. Routine state,
+  # lighting, Tempest, and irrigation status is published through sensors/text
+  # sensors; warning/error logs remain available for alerting.
+  level: WARN
   logs:
-    # Keep noisy components quiet
+    # Keep noisy components quiet while preserving warning/error evidence.
     wifi: WARN
     api: WARN
     ota: WARN
     mdns: WARN
     web_server: WARN
-    # Control at INFO for state transitions; Modbus detail is covered by probe health.
-    lambda: INFO
+    lambda: WARN
     modbus_controller: WARN
     sensor: WARN
 
