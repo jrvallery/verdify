@@ -1068,7 +1068,8 @@ def test_dispatcher_propagates_plan_audit_to_setpoint_changes():
     assert "trigger_id, planner_instance FROM v_active_plan" in body
     assert "planner_meta =" in body
     assert "trigger_id=change_trigger_id" in body
-    assert "(ts, parameter, value, source, trigger_id, planner_instance)" in body
+    assert "(ts, parameter, value, source, trigger_id, planner_instance, delivery_status)" in body
+    assert "VALUES (now(), $1, $2, $3, $4::uuid, $5, 'pending')" in body
 
 
 def test_dispatcher_writes_guardrail_hold_audits_without_setpoint_push():

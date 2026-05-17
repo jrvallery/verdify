@@ -134,8 +134,9 @@ async def collect():
         lines.append(f'verdify_esp32_mode{{mode="{mode_str}"}} {mode_map.get(mode_str, -1)}')
 
         # ESP32 diagnostics
+        # heap_bytes is a legacy column name; firmware publishes this diagnostic in kB.
         diag = await conn.fetchrow(
-            "SELECT round((uptime_s / 3600.0)::numeric, 1) as uptime_hours, round((heap_bytes / 1024.0)::numeric, 0) as free_heap_kb, wifi_rssi FROM diagnostics ORDER BY ts DESC LIMIT 1"
+            "SELECT round((uptime_s / 3600.0)::numeric, 1) as uptime_hours, round(heap_bytes::numeric, 1) as free_heap_kb, wifi_rssi FROM diagnostics ORDER BY ts DESC LIMIT 1"
         )
         if diag:
             lines.append("# HELP verdify_esp32_uptime_hours ESP32 uptime in hours")

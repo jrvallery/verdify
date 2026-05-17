@@ -129,6 +129,16 @@ class TestDispatcherWiring:
         assert "async with _PUSH_LOCK" in push_helper
         assert "await asyncio.sleep(_BATCH_PAUSE_S)" in push_helper
 
+    def test_dispatcher_heap_skip_marks_deferred_without_realtime_bypass(self):
+        body = self._read()
+        assert "heap_free < 38.0" in body
+        assert "_last_pushed.pop(param, None)" in body
+        assert "delivery_status = 'deferred_heap_pressure'" in body
+        assert "COALESCE(sc.delivery_status, '') <> 'deferred_heap_pressure'" in body
+        assert "Keep shared.recently_pushed" in body
+        assert "shared.recently_pushed.pop(param, None)" not in body
+        assert "shared.recently_pushed_values.pop(param, None)" not in body
+
     def test_reconnect_forces_dispatcher_owned_band_setpoints(self):
         body = self._read()
         ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
@@ -247,6 +257,22 @@ class TestHeapPressureObservability:
         assert '"alert_type": "heap_pressure_warning"' in body
         assert '"alert_type": "heap_pressure_critical"' in body
         assert '"sensor_id": "equipment.heap_pressure_critical"' in body
+
+    def test_prometheus_heap_metric_uses_firmware_kb_units(self):
+        metrics = (REPO_ROOT / "scripts" / "verdify-metrics.py").read_text()
+        assert "heap_bytes is a legacy column name" in metrics
+        assert "round(heap_bytes::numeric, 1) as free_heap_kb" in metrics
+        assert "heap_bytes / 1024.0" not in metrics
+
+    def test_firmware_artifact_archive_captures_dirty_source_provenance(self):
+        script = (REPO_ROOT / "scripts" / "archive-firmware-artifacts.sh").read_text()
+        assert "git-status.txt" in script
+        assert "git-diff.patch" in script
+        assert "git-diff-cached.patch" in script
+        assert "source-snapshot" in script
+        assert "generated-src" in script
+        assert "untracked-source-files.z" in script
+        assert "SOURCE_SHA256SUMS" in script
 
     def test_alert_monitor_does_not_call_demanded_heat_a_stuck_relay(self):
         body = (REPO_ROOT / "ingestor/tasks.py").read_text()
@@ -828,6 +854,7 @@ class TestSetpointConfirmation:
         ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
         migration = (REPO_ROOT / "db" / "migrations" / "099-backfill-readback-confirmations.sql").read_text()
         assert "interval '7 days'" in ingestor
+        assert "delivery_status = 'confirmed'" in ingestor
         assert "newer.value" in ingestor
         assert "latest_readback" in migration
         assert "confirmed_at = latest_readback.ts" in migration

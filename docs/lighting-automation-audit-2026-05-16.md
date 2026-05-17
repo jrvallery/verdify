@@ -166,6 +166,20 @@ Latest lighting status proof showed both circuits `expected_on=false`,
 `actual_on=false`, natural lux around `60k`, and ON/OFF thresholds of
 `40000/48000 lux`.
 
+## Post-Rollback Firmware Status
+
+Later on 2026-05-16, Iris was rolled back from the dirty 2026-05-16 lighting
+firmware line after ESP32 heap pressure recurred during reconnect/direct-push
+bursts. The current accepted production firmware is:
+
+- `2026.5.10.1847.e7e7d37`
+
+After rollback, `iris`, `iris-planner`, and `iris-planner-local` returned
+healthy, the Iris sensor sweep reported `27` pass, `0` fail, `0` warn, and
+open Iris alerts returned to zero. Treat the earlier
+`2026.5.16.1723.c9b842b.dirty` proof as lighting implementation evidence, not
+as the current deploy target.
+
 ## Completion Audit
 
 Objective restated as concrete criteria:
@@ -208,11 +222,9 @@ Prompt-to-artifact checklist:
 | Validation gates cover code and dashboards | `make test-firmware`: 137 passed; `make firmware-check`: compiled; `make firmware-invariants`: 16 invariants passed over 193,525 rows; `make firmware-replay-worktree`: 0 divergent rows over 193,525 rows; `scripts/audit-tunable-traceability.py`: OK with 37 required Tier 1 planner params and 53 MCP-writable planner-policy params; `make lint`: passed; `make test`: 390 passed, 2 skipped, 1 xfailed; `make site-doctor`: 0 errors, 2 stale snapshot warnings unrelated to lighting | Verified |
 | OTA safety gate outcome | Normal preflight still reports the expected 48-hour bake blocker, but Jason explicitly requested a deployment-gate bypass; the accepted OTA kept rollback artifacts intact, passed sensor health, and now has zero open critical/legacy-high alerts | Operator-bypassed; post-OTA proof complete |
 
-Current conclusion: the lighting automation path is live end to end. The normal
-48-hour bake policy is still in effect for future OTAs, but this deployment was
-completed under explicit operator override and then validated with the final
-post-OTA proof gate. The final proof requires per-circuit cfg readbacks,
-confirmed per-circuit `setpoint_changes`, firmware state/reason telemetry, and
-ON/OFF `equipment_state` evidence for both Lutron circuits after the latest
-firmware start; all of those checks passed on firmware
-`2026.5.16.1723.c9b842b.dirty`.
+Historical conclusion: the lighting automation path was validated end to end on
+the dirty 2026-05-16 firmware line under explicit operator override. That proof
+is now superseded as a deployment target by the later rollback to
+`2026.5.10.1847.e7e7d37`. Keep the normal 48-hour bake policy in effect for
+future OTAs, and require a fresh replay diff, invariant suite, unit-test output,
+and post-OTA sensor-health proof before accepting any new firmware version.

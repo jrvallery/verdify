@@ -976,7 +976,8 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                         await conn.executemany(
                             """
                             UPDATE setpoint_changes sc
-                               SET confirmed_at = now()
+                               SET confirmed_at = now(),
+                                   delivery_status = 'confirmed'
                              WHERE sc.parameter = $1
                                AND sc.confirmed_at IS NULL
                                AND sc.ts > now() - interval '7 days'

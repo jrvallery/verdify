@@ -3280,6 +3280,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     source=source,
                     trigger_id=change_trigger_id,
                     planner_instance=change_planner_instance,
+                    delivery_status="pending",
                 )
             except ValidationError as e:
                 log.error(
@@ -3299,8 +3300,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             shared.recently_pushed_values[param] = float(val)
             await conn.execute(
                 "INSERT INTO setpoint_changes "
-                "(ts, parameter, value, source, trigger_id, planner_instance) "
-                "VALUES (now(), $1, $2, $3, $4::uuid, $5)",
+                "(ts, parameter, value, source, trigger_id, planner_instance, delivery_status) "
+                "VALUES (now(), $1, $2, $3, $4::uuid, $5, 'pending')",
                 param,
                 val,
                 source,
@@ -3331,15 +3332,18 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
     # Direct ESP32 push via shared ingestor connection (non-blocking optimization)
     # Tier 1 #4: retry on failure, escalate to alert_log after exhausted attempts.
     esp32_changes = []
+    esp32_params = []
     for param, val, _source in dispatchable_changes:
         if param.startswith("sw_"):
             eid = SWITCH_TO_ENTITY.get(param)
             if eid:
                 esp32_changes.append((eid, val, "switch"))
+                esp32_params.append(param)
         else:
             eid = PARAM_TO_ENTITY.get(param)
             if eid:
                 esp32_changes.append((eid, val, "number"))
+                esp32_params.append(param)
 
     if esp32_changes:
         async with pool.acquire() as conn:
@@ -3381,6 +3385,23 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 f"{heap_largest:.1f}" if heap_largest is not None else "unknown",
                 bool(heap_alert_open),
             )
+            # Clear only the dispatcher's retry cache. Keep shared.recently_pushed
+            # so LISTEN/NOTIFY cannot bypass this heap guard with the same row.
+            for param in esp32_params:
+                _last_pushed.pop(param, None)
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE setpoint_changes
+                       SET delivery_status = 'deferred_heap_pressure'
+                     WHERE parameter = ANY($1::text[])
+                       AND confirmed_at IS NULL
+                       AND COALESCE(source, '') <> 'esp32'
+                       AND delivery_status IS DISTINCT FROM 'confirmed'
+                       AND ts > now() - interval '5 minutes'
+                    """,
+                    esp32_params,
+                )
             esp32_changes = []
 
     if esp32_changes:
@@ -5146,6 +5167,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
              FROM setpoint_changes sc
              WHERE sc.confirmed_at IS NULL
                AND COALESCE(sc.source, '') <> 'esp32'
+               AND COALESCE(sc.delivery_status, '') <> 'deferred_heap_pressure'
                AND sc.ts < now() - interval '5 minutes'
                AND sc.ts > now() - interval '1 hour'
                AND sc.parameter = ANY($1::text[])
