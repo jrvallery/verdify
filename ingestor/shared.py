@@ -21,5 +21,10 @@ cfg_readback: dict[str, float] = {}
 # setpoints against cfg_readback and push only drift/missing values.
 force_setpoint_push = asyncio.Event()
 
+# True while ingestor.py is running setpoint_dispatcher from any entrypoint.
+# Prevents reconnect dispatch and the periodic task loop from queueing
+# duplicate heap-sensitive ESPHome pushes.
+setpoint_dispatch_in_progress = False
+
 # Timestamp of last ESP32 connect (used for boot-window gating)
 esp32_connected_at: float = 0.0

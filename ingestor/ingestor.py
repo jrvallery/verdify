@@ -1155,8 +1155,15 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
                 from tasks import setpoint_dispatcher
 
                 await asyncio.sleep(2)
-                await setpoint_dispatcher(pool)
-                log.info("Post-reconnect setpoint dispatch complete")
+                if shared.setpoint_dispatch_in_progress:
+                    log.info("Post-reconnect setpoint dispatch skipped; dispatcher already running")
+                else:
+                    shared.setpoint_dispatch_in_progress = True
+                    try:
+                        await setpoint_dispatcher(pool)
+                    finally:
+                        shared.setpoint_dispatch_in_progress = False
+                    log.info("Post-reconnect setpoint dispatch complete")
             except Exception as e:
                 log.error(f"Post-reconnect dispatch failed: {e}")
 
@@ -1250,6 +1257,11 @@ async def task_loop(pool: asyncpg.Pool) -> None:
         for name, interval, coro_fn in TASKS:
             if now - last_run[name] >= interval:
                 last_run[name] = now
+                if name == "setpoint_dispatch" and shared.setpoint_dispatch_in_progress:
+                    log.info("Task setpoint_dispatch skipped; dispatcher already running")
+                    continue
+                if name == "setpoint_dispatch":
+                    shared.setpoint_dispatch_in_progress = True
                 try:
                     timeout_s = task_timeouts.get(name, 120)
                     await asyncio.wait_for(coro_fn(pool), timeout=timeout_s)
@@ -1257,6 +1269,9 @@ async def task_loop(pool: asyncpg.Pool) -> None:
                     log.error("Task %s timed out (%ss)", name, timeout_s)
                 except Exception as e:
                     log.error("Task %s failed: %s", name, e)
+                finally:
+                    if name == "setpoint_dispatch":
+                        shared.setpoint_dispatch_in_progress = False
 
 
 # ──────────────────────────────────────────────────────────────
