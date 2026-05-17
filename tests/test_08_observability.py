@@ -133,6 +133,9 @@ class TestDispatcherWiring:
         body = self._read()
         assert "HEAP_DEFER_FREE_KB = 30.0" in body
         assert "HEAP_DEFER_LARGEST_BLOCK_KB = 18.0" in body
+        assert "HEAP_CRITICAL_RECOVERY_FREE_KB = 25.0" in body
+        assert "HEAP_CRITICAL_RECOVERY_LARGEST_BLOCK_KB = 20.0" in body
+        assert "HEAP_CRITICAL_RECOVERY_SAMPLES = 2" in body
         assert "HEAP_RECOVERY_LIMIT_FREE_KB = 35.0" in body
         assert "HEAP_RECOVERY_LIMIT_MIN_FREE_KB = 12.0" in body
         assert "HEAP_RECOVERY_MAX_CHANGES = 12" in body
@@ -278,6 +281,9 @@ class TestHeapPressureObservability:
         assert "SELECT heap_bytes," in body
         assert "heap_min_free_kb" in body
         assert "heap_largest_free_block_kb" in body
+        assert "heap_largest_free_block_kb >= $3" in body
+        assert "largest_block_recovered" in body
+        assert "HEAP_CRITICAL_RECOVERY_SAMPLES" in body
         assert "low_watermark_warning" in body
         assert "fragmentation_warning" in body
         assert "startup_heap_grace" in body

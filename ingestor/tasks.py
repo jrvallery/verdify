@@ -2214,9 +2214,15 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 SELECT count(*)
                   FROM diagnostics
                  WHERE ts > $1
-                   AND heap_bytes >= 35.0
+                   AND heap_bytes >= $2
+                   AND (
+                       heap_largest_free_block_kb IS NULL
+                       OR heap_largest_free_block_kb >= $3
+                   )
                 """,
                 last_critical_event_ts,
+                HEAP_CRITICAL_RECOVERY_FREE_KB,
+                HEAP_CRITICAL_RECOVERY_LARGEST_BLOCK_KB,
             )
         if last_warning_event_ts:
             healthy_after_warning = await conn.fetchval(
@@ -2224,9 +2230,15 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 SELECT count(*)
                   FROM diagnostics
                  WHERE ts > $1
-                   AND heap_bytes >= 35.0
+                   AND heap_bytes >= $2
+                   AND (
+                       heap_largest_free_block_kb IS NULL
+                       OR heap_largest_free_block_kb >= $3
+                   )
                 """,
                 last_warning_event_ts,
+                HEAP_CRITICAL_RECOVERY_FREE_KB,
+                HEAP_CRITICAL_RECOVERY_LARGEST_BLOCK_KB,
             )
         startup_heap_grace = False
         if last_critical_event_ts and heap_diag and heap_diag["uptime_s"] is not None:
@@ -2241,11 +2253,15 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
         warning_active = bool((heap_warning and heap_warning["recent_true"]) or warning_logs > 0)
         low_watermark_warning = bool(heap_min_free_kb is not None and heap_min_free_kb < 10.0)
         fragmentation_warning = bool(heap_largest_free_block_kb is not None and heap_largest_free_block_kb < 20.0)
+        largest_block_recovered = bool(
+            heap_largest_free_block_kb is None or heap_largest_free_block_kb >= HEAP_CRITICAL_RECOVERY_LARGEST_BLOCK_KB
+        )
         if heap_bytes is not None:
             # The binary sensors and diagnostics can arrive at the same second;
-            # a recent true event still matters even if a same-second false
-            # event or later diagnostic sample recovered. Alert on the
-            # transient for 30 min, then let the normal lifecycle resolve it.
+            # a recent true event still matters until firmware reports the
+            # problem sensor false and current fragmentation has recovered.
+            # Historical low-watermark risk remains a warning; it should not
+            # hold the OTA critical gate open after the current heap recovers.
             if heap_bytes < 15.0:
                 critical_active = True
                 warning_active = False
@@ -2254,7 +2270,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                 warning_active = True
             elif (low_watermark_warning or fragmentation_warning) and not critical_active:
                 warning_active = True
-            elif heap_bytes >= 35.0 and heap_diag:
+            elif heap_bytes >= HEAP_CRITICAL_RECOVERY_FREE_KB and largest_block_recovered and heap_diag:
                 # Recovery is explicit once firmware publishes a false binary
                 # event after the last true/log event and the numeric heap
                 # sample is healthy after that false. This preserves real
@@ -2264,7 +2280,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     critical_active
                     and last_critical_event_ts
                     and heap_diag["ts"] > last_critical_event_ts
-                    and healthy_after_critical >= 2
+                    and healthy_after_critical >= HEAP_CRITICAL_RECOVERY_SAMPLES
                     and not (
                         heap_critical
                         and heap_critical["latest_state"] is True
@@ -2276,7 +2292,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     warning_active
                     and last_warning_event_ts
                     and heap_diag["ts"] > last_warning_event_ts
-                    and healthy_after_warning >= 2
+                    and healthy_after_warning >= HEAP_CRITICAL_RECOVERY_SAMPLES
                     and not (
                         heap_warning
                         and heap_warning["latest_state"] is True
@@ -2284,8 +2300,10 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                     )
                 ):
                     warning_active = False
-            if critical_active and startup_heap_grace and heap_bytes >= 35.0:
+            if critical_active and startup_heap_grace and heap_bytes >= HEAP_CRITICAL_RECOVERY_FREE_KB:
                 critical_active = False
+            if not critical_active and (low_watermark_warning or fragmentation_warning):
+                warning_active = True
         elif low_watermark_warning or fragmentation_warning:
             warning_active = True
         if critical_active:
@@ -2573,6 +2591,9 @@ _last_pushed: dict[str, float] = {}
 # Gate on fresh diagnostics so post-OTA setpoint reconciliation can recover.
 HEAP_DEFER_FREE_KB = 30.0
 HEAP_DEFER_LARGEST_BLOCK_KB = 18.0
+HEAP_CRITICAL_RECOVERY_FREE_KB = 25.0
+HEAP_CRITICAL_RECOVERY_LARGEST_BLOCK_KB = 20.0
+HEAP_CRITICAL_RECOVERY_SAMPLES = 2
 HEAP_RECOVERY_LIMIT_FREE_KB = 35.0
 HEAP_RECOVERY_LIMIT_MIN_FREE_KB = 12.0
 HEAP_RECOVERY_LIMIT_LARGEST_BLOCK_KB = 24.0

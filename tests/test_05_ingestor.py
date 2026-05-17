@@ -54,9 +54,24 @@ class TestIngestorTasks:
     """Periodic tasks must be running on schedule."""
 
     def test_setpoint_dispatcher_recent(self):
-        """Setpoints must have been dispatched recently."""
-        age = db_query("SELECT extract(epoch FROM now() - max(ts))::int FROM setpoint_changes WHERE source != 'esp32'")
-        # Dispatcher runs every 5 min; allow 15 min tolerance
+        """Setpoint dispatcher must have produced recent write-side evidence."""
+        age = db_query(
+            """
+            SELECT extract(epoch FROM now() - GREATEST(
+                COALESCE(
+                    (SELECT max(ts) FROM setpoint_changes WHERE source != 'esp32'),
+                    '-infinity'::timestamptz
+                ),
+                COALESCE(
+                    (SELECT max(ts) FROM setpoint_clamps),
+                    '-infinity'::timestamptz
+                )
+            ))::int
+            """
+        )
+        # Dispatcher runs every 5 min; allow 15 min tolerance. During active
+        # heap pressure it may intentionally hold setpoint_changes while still
+        # writing clamp/audit evidence.
         assert int(age) < 900, f"Last dispatch was {age}s ago (>15min)"
 
     def test_forecast_sync_recent(self):
