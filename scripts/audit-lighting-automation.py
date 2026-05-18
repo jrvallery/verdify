@@ -31,6 +31,7 @@ VAULT_LIGHTING = Path("/mnt/iris/verdify-vault/website/greenhouse/lighting.md")
 PUBLIC_LIGHTING = REPO_ROOT / "verdify-site" / "public" / "greenhouse" / "lighting.html"
 PUBLIC_HOME = REPO_ROOT / "verdify-site" / "public" / "index.html"
 GRAFANA_RENDER_BASE = "https://graphs.verdify.ai"
+PUBLIC_SITE_BASE = "https://lab.verdify.ai"
 
 PER_CIRCUIT_PARAMS = (
     "gl_main_target_light_minutes",
@@ -854,14 +855,14 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         )
 
     try:
-        home_html = fetch_text("https://verdify.ai/", timeout=15)
-        lighting_html = fetch_text("https://verdify.ai/greenhouse/lighting/", timeout=15)
-        tunables_html = fetch_text("https://verdify.ai/reference/ai-tunables/", timeout=15)
+        home_html = fetch_text(f"{PUBLIC_SITE_BASE}/", timeout=15)
+        lighting_html = fetch_text(f"{PUBLIC_SITE_BASE}/greenhouse/lighting/", timeout=15)
+        tunables_html = fetch_text(f"{PUBLIC_SITE_BASE}/reference/ai-tunables/", timeout=15)
         audit.check(
             "panelId=36" in home_html and "site-home" in home_html and "graphs.verdify.ai" in home_html,
             "live public home page",
-            "verdify.ai homepage serves lighting state panel 36",
-            "verdify.ai homepage is missing the lighting state embed",
+            "lab.verdify.ai homepage serves lighting state panel 36",
+            "lab.verdify.ai homepage is missing the lighting state embed",
         )
         audit.check(
             "Circuit Policy And Forecast Bands" in lighting_html
@@ -870,8 +871,8 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
             and "Tempest outdoor illuminance" in lighting_html
             and "Firmware state and reason fields appear after the next ESP32 OTA" in lighting_html,
             "live public lighting page",
-            "verdify.ai/greenhouse/lighting serves the per-circuit policy story and panels 16/17",
-            "verdify.ai/greenhouse/lighting is missing the per-circuit lighting story or embeds",
+            "lab.verdify.ai/greenhouse/lighting serves the per-circuit policy story and panels 16/17",
+            "lab.verdify.ai/greenhouse/lighting is missing the per-circuit lighting story or embeds",
         )
         audit.check(
             "Planner-policy knobs" in tunables_html
@@ -881,8 +882,8 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
             and "gl_lux_threshold" in tunables_html
             and "MCP rejects planner writes" in tunables_html,
             "live public tunables page",
-            "verdify.ai/reference/ai-tunables reflects per-circuit lighting as planner-writable and legacy gl_lux_* as read-only",
-            "verdify.ai/reference/ai-tunables is stale for lighting tunable writeability",
+            "lab.verdify.ai/reference/ai-tunables reflects per-circuit lighting as planner-writable and legacy gl_lux_* as read-only",
+            "lab.verdify.ai/reference/ai-tunables is stale for lighting tunable writeability",
         )
     except (TimeoutError, UnicodeDecodeError, urllib.error.URLError) as exc:
         audit.add("live public website pages", "FAIL", str(exc))

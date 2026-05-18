@@ -42,6 +42,7 @@ from config import DB_DSN  # noqa: E402
 from verdify_schemas.tunable_registry import (  # noqa: E402
     PLANNER_PUSHABLE_REG,
     REGISTRY,
+    TIER1_REG,
     TUNABLE_CONTRACT_CLASSES_REG,
     TunableDef,
 )
@@ -108,6 +109,10 @@ class Evidence:
 
 def _assigned_set(path: Path, name: str) -> set[str]:
     tree = ast.parse(path.read_text())
+    known_names = {
+        "TIER1_REG": TIER1_REG,
+        "PLANNER_PUSHABLE_REG": PLANNER_PUSHABLE_REG,
+    }
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
@@ -116,6 +121,8 @@ def _assigned_set(path: Path, name: str) -> set[str]:
         value = node.value
         if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
             value = value.args[0]
+        if isinstance(value, ast.Name) and value.id in known_names:
+            return set(known_names[value.id])
         return set(ast.literal_eval(value))
     raise RuntimeError(f"{name} assignment not found in {path}")
 

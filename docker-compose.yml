@@ -68,7 +68,7 @@ services:
       # Lock down viewers — no editing, no admin, no org switching
       GF_USERS_VIEWERS_CAN_EDIT: "false"
       GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
-      # Allow embedding in verdify.ai iframes
+      # Allow embedding in lab.verdify.ai iframes
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_SECURITY_COOKIE_SAMESITE: "none"
       GF_SECURITY_COOKIE_SECURE: "true"
@@ -118,7 +118,7 @@ services:
       HTTP_PORT: "8081"
       LOG_LEVEL: warn
       # Default mode is single-browser, which serializes all renders.
-      # The verdify.ai homepage fires 8 panels at once on iOS — without
+      # The lab.verdify.ai homepage fires 8 panels at once on iOS — without
       # clustered mode they hit "Too many rendering requests" (429) and
       # most return broken images. Clustered mode spawns up to MAX
       # browser instances in parallel; 3 is enough headroom for the 8
@@ -221,7 +221,7 @@ services:
       - "traefik.http.routers.verdify-api.middlewares=api-security-headers@file"
       - "traefik.http.services.verdify-api.loadbalancer.server.port=8080"
 
-  # ── Verdify.ai Website (Quartz static site) ─────────────────
+  # ── Verdify Lab Website (Quartz static site) ─────────────────
   verdify-site:
     image: nginx:alpine
     container_name: verdify-site
@@ -231,10 +231,19 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=verdify-proxy"
-      - "traefik.http.routers.verdify-site.rule=Host(`verdify.ai`) || Host(`www.verdify.ai`)"
+      - "traefik.http.routers.verdify-site.rule=Host(`lab.verdify.ai`)"
       - "traefik.http.routers.verdify-site.entrypoints=websecure"
       - "traefik.http.routers.verdify-site.tls=true"
       - "traefik.http.routers.verdify-site.middlewares=security-headers@file"
+      - "traefik.http.routers.verdify-site.service=verdify-site"
+      - "traefik.http.routers.verdify-site-redirect.rule=Host(`verdify.ai`) || Host(`www.verdify.ai`)"
+      - "traefik.http.routers.verdify-site-redirect.entrypoints=websecure"
+      - "traefik.http.routers.verdify-site-redirect.tls=true"
+      - "traefik.http.routers.verdify-site-redirect.middlewares=verdify-lab-redirect@docker"
+      - "traefik.http.routers.verdify-site-redirect.service=verdify-site"
+      - "traefik.http.middlewares.verdify-lab-redirect.redirectregex.regex=^https?://(?:www\\.)?verdify\\.ai/(.*)"
+      - "traefik.http.middlewares.verdify-lab-redirect.redirectregex.replacement=https://lab.verdify.ai/$${1}"
+      - "traefik.http.middlewares.verdify-lab-redirect.redirectregex.permanent=true"
       - "traefik.http.services.verdify-site.loadbalancer.server.port=80"
     networks:
       - verdify-proxy

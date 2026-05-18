@@ -3,13 +3,13 @@ import * as Plugin from "./quartz/plugins";
 
 const config: QuartzConfig = {
     configuration: {
-        pageTitle: "🌱 Verdify",
-        pageTitleSuffix: " — Verdify",
+        pageTitle: "Verdify Lab",
+        pageTitleSuffix: " — Verdify Lab",
         enableSPA: true,
         enablePopovers: true,
         analytics: null,
         locale: "en-US",
-        baseUrl: "verdify.ai",
+        baseUrl: "lab.verdify.ai",
         ignorePatterns: ["private", "templates", ".obsidian"],
         defaultDateType: "modified",
         theme: {

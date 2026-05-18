@@ -1,6 +1,6 @@
 # Verdify Site Publishing Pipeline
 
-This is the operator trace for publishing `verdify.ai` from Obsidian content.
+This is the operator trace for publishing `lab.verdify.ai` from Obsidian content.
 
 ## Source of Truth
 
@@ -64,7 +64,7 @@ Obsidian on Mac
   -> rsync staged output into /srv/verdify/verdify-site/public
   -> /srv/verdify/verdify-site/public
   -> verdify-site nginx stays running
-  -> Traefik / Cloudflare / verdify.ai
+  -> Traefik / Cloudflare / lab.verdify.ai
 ```
 
 ## Low-Downtime Publish
@@ -158,8 +158,8 @@ make site-doctor
 For generated planning and forecast pages, also confirm the nav-facing routes:
 
 ```bash
-curl -fsSL https://verdify.ai/data/forecast/ | rg '05-[0-9]{2} [0-9]{2}:00'
-curl -fsSL https://verdify.ai/data/plans/ | rg "$(date +%Y-%m-%d)"
+curl -fsSL https://lab.verdify.ai/data/forecast/ | rg '05-[0-9]{2} [0-9]{2}:00'
+curl -fsSL https://lab.verdify.ai/data/plans/ | rg "$(date +%Y-%m-%d)"
 ```
 
 ## Debugging Mac/Syncthing Edits
@@ -184,11 +184,11 @@ make site-rebuild
 make site-doctor
 ```
 
-If the generated HTML is correct locally but `verdify.ai` is stale, the issue is
+If the generated HTML is correct locally but `lab.verdify.ai` is stale, the issue is
 serving/cache. Check:
 
 ```bash
-curl -I https://verdify.ai/
+curl -I https://lab.verdify.ai/
 ```
 
 Only restart `verdify-site` if nginx is serving errors while

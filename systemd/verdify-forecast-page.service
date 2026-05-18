@@ -1,5 +1,5 @@
 [Unit]
-Description=Regenerate generated verdify.ai content after forecast refresh
+Description=Regenerate generated lab.verdify.ai content after forecast refresh
 After=verdify-timescaledb.service
 
 [Service]

@@ -5,7 +5,7 @@ Test 06: Website & Grafana — Public-facing services respond correctly.
 import subprocess
 
 
-def curl_get(url: str, host: str) -> tuple[int, str]:
+def curl_get(url: str, host: str) -> int:
     result = subprocess.run(
         ["curl", "-sk", url, "-H", f"Host: {host}", "-w", "\n%{http_code}", "-o", "/dev/null"],
         capture_output=True,
@@ -16,35 +16,62 @@ def curl_get(url: str, host: str) -> tuple[int, str]:
     return status
 
 
+def curl_head(url: str, host: str) -> tuple[int, str]:
+    result = subprocess.run(
+        ["curl", "-skI", url, "-H", f"Host: {host}"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    status_line = result.stdout.splitlines()[0]
+    status = int(status_line.split()[1])
+    location = ""
+    for line in result.stdout.splitlines()[1:]:
+        if line.lower().startswith("location:"):
+            location = line.split(":", 1)[1].strip()
+            break
+    return status, location
+
+
 class TestWebsite:
-    """verdify.ai must serve pages."""
+    """lab.verdify.ai must serve pages; apex hosts must redirect."""
 
     def test_homepage(self):
-        status = curl_get("https://127.0.0.1/", "verdify.ai")
+        status = curl_get("https://127.0.0.1/", "lab.verdify.ai")
         assert status == 200, f"Homepage returned {status}"
 
     def test_plans_page(self):
-        status = curl_get("https://127.0.0.1/plans/", "verdify.ai")
-        assert status in (200, 301, 302), f"Plans page returned {status}"
+        status = curl_get("https://127.0.0.1/plans/", "lab.verdify.ai")
+        assert status == 200, f"Plans page returned {status}"
 
     def test_forecast_page(self):
         """Sprint 20 Phase 7: auto-generated forecast page at /forecast/."""
-        status = curl_get("https://127.0.0.1/forecast/", "verdify.ai")
-        assert status in (200, 301, 302), f"Forecast page returned {status}"
+        status = curl_get("https://127.0.0.1/forecast/", "lab.verdify.ai")
+        assert status == 200, f"Forecast page returned {status}"
 
     def test_todays_plan_page_served(self):
         """Sprint 20 Phase 6: today's plan markdown should be served (auto-publish)."""
         from datetime import datetime
 
         today = datetime.now().strftime("%Y-%m-%d")
-        status = curl_get(f"https://127.0.0.1/plans/{today}", "verdify.ai")
-        assert status in (200, 301, 302), f"Today's plan page ({today}) returned {status}"
+        status = curl_get(f"https://127.0.0.1/plans/{today}", "lab.verdify.ai")
+        assert status == 200, f"Today's plan page ({today}) returned {status}"
 
     def test_static_assets(self):
         """CSS/JS must load."""
-        status = curl_get("https://127.0.0.1/static/styles.css", "verdify.ai")
+        status = curl_get("https://127.0.0.1/static/styles.css", "lab.verdify.ai")
         # Quartz uses different asset paths; just check the site responds
         assert status in (200, 404), f"Static assets returned {status}"
+
+    def test_apex_redirects_to_lab(self):
+        status, location = curl_head("https://127.0.0.1/greenhouse/lighting", "verdify.ai")
+        assert status in (301, 302, 307, 308), f"verdify.ai returned {status}"
+        assert location == "https://lab.verdify.ai/greenhouse/lighting"
+
+    def test_www_redirects_to_lab(self):
+        status, location = curl_head("https://127.0.0.1/data/plans/", "www.verdify.ai")
+        assert status in (301, 302, 307, 308), f"www.verdify.ai returned {status}"
+        assert location == "https://lab.verdify.ai/data/plans/"
 
 
 class TestGrafana:

@@ -21,6 +21,7 @@ SITE_RUNTIME=${VERDIFY_SITE_RUNTIME:-/srv/verdify/verdify-site}
 LIVE_PUBLIC=${VERDIFY_SITE_PUBLIC:-"$SITE_RUNTIME/public"}
 BUILD_ROOT=${VERDIFY_SITE_BUILD_ROOT:-"$SITE_RUNTIME/.builds"}
 RSYNC_IO_TIMEOUT=${VERDIFY_SITE_RSYNC_TIMEOUT:-180}
+SITE_CONTAINER=${VERDIFY_SITE_CONTAINER:-verdify-site}
 mkdir -p "$(dirname "$LOG")"
 mkdir -p "$(dirname "$MARKER")"
 
@@ -89,9 +90,9 @@ mkdir -p "$(dirname "$MARKER")"
         rsync -a --delete-delay --timeout="$RSYNC_IO_TIMEOUT" "$staging"/ "$LIVE_PUBLIC"/
 
         if [ "$nginx_changed" = true ]; then
-            if docker exec verdify-site nginx -s reload > /dev/null 2>&1; then
+            if docker exec "$SITE_CONTAINER" nginx -s reload > /dev/null 2>&1; then
                 nginx_action="nginx reloaded"
-            elif docker restart verdify-site > /dev/null 2>&1; then
+            elif docker restart "$SITE_CONTAINER" > /dev/null 2>&1; then
                 nginx_action="nginx restarted after reload failure"
             else
                 echo "$(date -Is) quartz built but nginx reload/restart failed"

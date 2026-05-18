@@ -156,7 +156,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://verdify.ai", "https://www.verdify.ai", "http://localhost:8080"],
+    allow_origins=[
+        "https://lab.verdify.ai",
+        "https://verdify.ai",
+        "https://www.verdify.ai",
+        "http://localhost:8080",
+    ],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -1664,7 +1669,7 @@ async def public_contact_submission(request: Request):
 
     if _trim(payload.website, 200):
         if is_form_submission:
-            return RedirectResponse("https://verdify.ai/contact/?sent=1", status_code=303)
+            return RedirectResponse("https://lab.verdify.ai/start/contact?sent=1", status_code=303)
         return {"ok": True, "status": "received"}
 
     name = _trim(payload.name, 120)
@@ -1693,7 +1698,7 @@ async def public_contact_submission(request: Request):
     user_agent = _trim(request.headers.get("User-Agent"), 500)
     referrer = _trim(request.headers.get("Referer"), 500)
     metadata = {
-        "source": "verdify.ai/contact",
+        "source": "lab.verdify.ai/start/contact",
         "cf_ray": _trim(request.headers.get("CF-Ray"), 120),
         "turnstile_configured": bool(os.environ.get("VERDIFY_TURNSTILE_SECRET", "").strip()),
     }
@@ -1764,7 +1769,7 @@ async def public_contact_submission(request: Request):
     )
 
     if is_form_submission:
-        return RedirectResponse("https://verdify.ai/contact/?sent=1", status_code=303)
+        return RedirectResponse("https://lab.verdify.ai/start/contact?sent=1", status_code=303)
     return {"ok": True, "status": "received"}
 
 
@@ -1821,7 +1826,7 @@ async def retry_contact_notifications(
 
 @app.get("/api/v1/public/home-metrics", response_model=PublicHomeMetrics)
 async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
-    """Launch-safe live metrics for verdify.ai proof cards."""
+    """Launch-safe live metrics for lab.verdify.ai proof cards."""
     cache_key = greenhouse_id
     now_mono = time.monotonic()
     cached = _PUBLIC_HOME_METRICS_CACHE.get(cache_key)

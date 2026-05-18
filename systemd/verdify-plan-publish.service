@@ -1,5 +1,5 @@
 [Unit]
-Description=Publish the latest planner output to verdify.ai
+Description=Publish the latest planner output to lab.verdify.ai
 After=verdify-timescaledb.service docker.service
 
 [Service]

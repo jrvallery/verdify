@@ -11,7 +11,7 @@ Canonical refocus backlog: [`docs/backlog/refocus.md`](backlog/refocus.md).
 Current posture:
 
 - Track A greenhouse operations still outrank all business/site/repo work.
-- `verdify.ai` should become one integrated company + services + lab + evidence site.
+- `lab.verdify.ai` is the greenhouse lab + evidence site; `verdify.ai` / `www.verdify.ai` redirect there until the separate consulting CMS is ready.
 - Broad SaaS/multi-tenant work moves behind consulting validation unless needed for Track A or public-site reliability.
 - Repo, GitHub, project-board, and agent-scope splits are coordinator-owned until boundaries are decided.
 

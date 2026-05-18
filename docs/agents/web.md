@@ -1,6 +1,6 @@
 # Agent: `web`
 
-The FastAPI crop catalog, every vault markdown writer, every page generator, and the Quartz static site that serves `verdify.ai`.
+The FastAPI crop catalog, every vault markdown writer, every page generator, and the Quartz static lab site that serves `lab.verdify.ai`.
 
 ## Owns
 
@@ -44,9 +44,9 @@ The FastAPI crop catalog, every vault markdown writer, every page generator, and
 
 ## Site operations reference
 
-`verdify.ai` is a Quartz static site. The public serving path is:
+`lab.verdify.ai` is a Quartz static site. The public serving path is:
 
-`/mnt/iris/verdify-vault/website` → `/srv/verdify/verdify-site/content` symlink → `npx quartz build` → `/srv/verdify/verdify-site/public` → `verdify-site` nginx → Traefik.
+`/mnt/iris/verdify-vault/website` → `/srv/verdify/verdify-site/content` symlink → `npx quartz build` → `/srv/verdify/verdify-site/public` → `verdify-site` nginx → Traefik → `lab.verdify.ai`.
 
 Do not edit `/srv/verdify/verdify-site/public`; it is build output. Hand-authored content lives in `/mnt/iris/verdify-vault/website`. Repo-owned Quartz/build code lives in `site/` and `scripts/`.
 
@@ -61,7 +61,7 @@ Build/publish units:
 - `verdify-plan-publish.path` watches `/var/local/verdify/state/plan-publish-trigger`.
 - `verdify-plan-publish.service` writes today's plan markdown.
 
-`scripts/rebuild-site.sh` syncs the repo-owned Quartz source into `/srv/verdify/verdify-site`, builds Quartz into `/srv/verdify/verdify-site/.builds/public.*`, verifies the staged `index.html`, then rsyncs the complete staged output into `/srv/verdify/verdify-site/public` with delayed deletes. Normal content rebuilds leave `verdify-site` nginx running; the script reloads nginx only when `site/nginx.conf` changes, with restart as the fallback. If `verdify.ai` serves 404 while host `public/index.html` exists, check `docker logs verdify-site` for serving errors before restarting only `verdify-site`.
+`scripts/rebuild-site.sh` syncs the repo-owned Quartz source into `/srv/verdify/verdify-site`, builds Quartz into `/srv/verdify/verdify-site/.builds/public.*`, verifies the staged `index.html`, then rsyncs the complete staged output into `/srv/verdify/verdify-site/public` with delayed deletes. Normal content rebuilds leave `verdify-site` nginx running; the script reloads nginx only when `site/nginx.conf` changes, with restart as the fallback. If `lab.verdify.ai` serves 404 while host `public/index.html` exists, check `docker logs verdify-site` for serving errors before restarting only `verdify-site`.
 
 Use `make site-publish-status` to trace the live path from Obsidian vault content through the last successful signature, Quartz output, timer state, and latest build log. The detailed operator doc is `docs/site-publishing-pipeline.md`.
 

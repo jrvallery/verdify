@@ -19,8 +19,19 @@ content_signature() {
         ! -path './.obsidian/*' \
         ! -path './.stfolder/*' \
         ! -path './@eaDir/*' \
-        -printf '%P\t%s\t%T@\t%C@\n' 2>/dev/null \
-        | LC_ALL=C sort \
+        -printf '%P\0' 2>/dev/null \
+        | LC_ALL=C sort -z \
+        | while IFS= read -r -d '' file; do
+            case "$file" in
+                *.md|*.txt|*.json|*.csv|*.html|*.css|*.js|*.ts|*.tsx|*.yaml|*.yml|robots.txt)
+                    printf 'H\t%s\t' "$file"
+                    sha256sum "$file" | awk '{print $1}'
+                    ;;
+                *)
+                    stat -c 'M\t%n\t%s\t%Y' "$file"
+                    ;;
+            esac
+        done \
         | sha256sum \
         | awk '{print $1}'
 }

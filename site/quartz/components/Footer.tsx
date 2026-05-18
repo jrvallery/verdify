@@ -18,7 +18,7 @@ export default ((opts?: Options) => {
         return (
             <footer class={`${displayClass ?? ""}`}>
                 <p>
-                    Copyright {year} Verdify.ai. Public greenhouse telemetry
+                    Copyright {year} Verdify Lab. Public greenhouse telemetry
                     from Longmont, Colorado.
                 </p>
                 <ul>

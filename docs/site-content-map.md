@@ -1,6 +1,6 @@
 # Verdify Site Content Map
 
-This is the working contract for `verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `site/`; Quartz builds into `/srv/verdify/verdify-site/public`.
+This is the working contract for `lab.verdify.ai` content. The content source tree is `/mnt/iris/verdify-vault/website`; the repo-owned Quartz source tree is `site/`; Quartz builds into `/srv/verdify/verdify-site/public`.
 
 Current active source size after the 2026-05-16 refocus pass: 110 Markdown pages. Legacy `/greenhouse/lessons` and `/intelligence/lessons` are aliases for the generated `/reference/lessons` page.
 

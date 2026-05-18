@@ -13,7 +13,7 @@ Strategy:
   - FB-1 alert path: synthetic row with ts=6 min ago + a deliberately
     mismatched value. setpoint_confirmation_monitor (invoked directly)
     writes a setpoint_unconfirmed alert. We clean that up too.
-  - Website surface: three curl checks with Host: verdify.ai.
+  - Website surface: three curl checks with Host: lab.verdify.ai.
 
 Run: python3 scripts/smoke-sprint20.py
 Exit code: 0 on all pass, 1 on any fail.
@@ -356,7 +356,7 @@ def test_website_surface() -> None:
         (f"/plans/{today}", f"today's plan ({today})"),
         ("/forecast/", "forecast page"),
     ]:
-        status = curl(f"https://127.0.0.1{path}", "verdify.ai")
+        status = curl(f"https://127.0.0.1{path}", "lab.verdify.ai")
         step(f"GET {path} — {label} returns 200", status == 200, f"got {status}")
 
 

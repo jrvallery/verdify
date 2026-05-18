@@ -101,7 +101,7 @@ All source-of-truth content lives on NFS (`/mnt/iris/` or `/mnt/jason/`). Three 
 
 ### 2. `/mnt/iris/verdify-vault/` → `jvallery/verdify-vault`
 
-Obsidian-editable. Syncthing shares this with the Mac. The `website/` subtree drives verdify.ai; everything else is Iris's operational notes.
+Obsidian-editable. Syncthing shares this with the Mac. The `website/` subtree drives lab.verdify.ai; everything else is Iris's operational notes.
 
 ```
 /mnt/iris/verdify-vault/
@@ -109,7 +109,7 @@ Obsidian-editable. Syncthing shares this with the Mac. The `website/` subtree dr
 ├── .stignore                   Syncthing ignores — .git is excluded (critical)
 ├── dashboard.md                top-level dashboard (Obsidian home)
 │
-├── website/                    verdify.ai public content (58 md files)
+├── website/                    lab.verdify.ai public content
 │   ├── index.md / about.md / project/
 │   ├── greenhouse/             structure, equipment, growing, hydroponics, crops/, zones/
 │   ├── climate/                controller, cooling, heating, humidity, lighting, water
@@ -221,7 +221,7 @@ rebuild-site.sh
 /srv/verdify/verdify-site/public/ (on NFS via symlink)
     │
     ▼ docker restart verdify-site
-verdify.ai    ────────────────▶   visitors
+lab.verdify.ai ───────────────▶   visitors
 
 
 VS Code edit                                 ESP32 ──aioesphomeapi──▶ ingestor

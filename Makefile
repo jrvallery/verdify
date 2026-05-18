@@ -148,13 +148,13 @@ firmware-promote-last-good: ## Promote a baked archived firmware FW_VERSION=<ver
 	if [ -n "$$DEPLOYED_AT" ]; then touch -d "$$DEPLOYED_AT" firmware/artifacts/last-good.ota.bin; fi; \
 	echo "✓ Promoted rollback target: $(FW_VERSION)"
 
-site-rebuild: ## Manually rebuild verdify.ai site (watcher does this automatically on vault changes)
+site-rebuild: ## Manually rebuild lab.verdify.ai site (watcher does this automatically on vault changes)
 	bash scripts/rebuild-site.sh
 
 site-publish-status: ## Trace Obsidian vault -> Quartz build -> nginx publish state
 	bash scripts/site-publish-status.sh
 
-site-doctor: ## Audit verdify.ai source, build output, and Grafana embeds
+site-doctor: ## Audit lab.verdify.ai source, build output, and Grafana embeds
 	$(PYTHON) scripts/site-doctor.py
 
 site-lint: ## Run cheap launch lint for public-site content and routes
@@ -220,7 +220,7 @@ greenhouse-quiet-status: ## Show recording quiet-mode status
 
 # ── Planner (event-driven via Iris agent) ────────────────────────────
 
-planner-publish: ## Publish today's plan to verdify.ai
+planner-publish: ## Publish today's plan to lab.verdify.ai
 	bash scripts/publish-daily-plan.sh
 
 planner-dry: ## Dry-run planner prompts — render every event type and assert G2/G4/G7 invariants

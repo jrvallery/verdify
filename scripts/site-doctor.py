@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit verdify.ai source content, build output, and Grafana embeds.
+"""Audit lab.verdify.ai source content, build output, and Grafana embeds.
 
 This is a validation gate for the Quartz website. It intentionally checks the
 source vault and live Grafana, because Quartz builds can succeed while iframe

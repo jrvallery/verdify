@@ -97,7 +97,7 @@ def fetch_snapshot(url: str) -> dict:
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "Verdify-Site-Publisher/1.0 (+https://verdify.ai)",
+            "User-Agent": "Verdify-Site-Publisher/1.0 (+https://lab.verdify.ai)",
             "Accept": "application/json",
         },
     )

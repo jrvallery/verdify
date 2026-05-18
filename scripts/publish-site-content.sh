@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# publish-site-content.sh — regenerate all generated verdify.ai content and rebuild.
+# publish-site-content.sh — regenerate all generated lab.verdify.ai content and rebuild.
 #
 # This is the single production entry point for public site refreshes. Planner
 # publishes, forecast refreshes, and manual full refreshes should call this

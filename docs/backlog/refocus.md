@@ -26,11 +26,11 @@ Brand architecture:
 | Product/IP later | Verdify Platform | Only if reusable software becomes a real product |
 | Vertical labels | Verdify CEA, Verdify Physical Ops, Verdify Workflow Automation | Website taxonomy, not separate brands |
 
-One-site decision:
+Domain split decision:
 
-- Keep the commercial story, lab, evidence, and architecture on `verdify.ai`.
-- Do not create a second consulting brand or separate marketing domain now.
-- Use the greenhouse as the flagship proof point, not as the whole company category.
+- Move the greenhouse lab, evidence, telemetry, daily plans, and Quartz publishing pipeline to `lab.verdify.ai`.
+- Keep `verdify.ai` / `www.verdify.ai` as redirects until the separate consulting CMS is ready.
+- The consulting CMS and its agent are out of Iris Dev scope; Iris Dev continues to own greenhouse, controller, and lab publishing work.
 
 ## Non-negotiables
 
@@ -44,7 +44,7 @@ One-site decision:
 
 | ID | Owner | Task | Acceptance |
 |---|---|---|---|
-| R0.1 | coordinator + Jason | Ratify the refocus decision record | One short internal doc states: Verdify is the brand, `verdify.ai` is one integrated site, greenhouse is Verdify Lab, SaaS is product-later, consulting is the commercial path |
+| R0.1 | coordinator + Jason | Ratify the refocus decision record | One short internal doc states: Verdify is the brand, `lab.verdify.ai` is the lab/evidence site, `verdify.ai` is reserved for the consulting CMS, SaaS is product-later, consulting is the commercial path |
 | R0.2 | coordinator | Track A impact review | List which refocus tasks touch firmware, DB, MCP, public API, Grafana, or deploy scripts; anything operational gets routed through the existing agent gates |
 | R0.3 | Jason + attorney | Trademark/name clearance | Attorney or formal clearance process reviews Verdify / Verdify Systems / Verdify AI classes, geography, likelihood of confusion, domains, and social handles before formal entity launch |
 | R0.4 | coordinator + web | Public claim inventory | Current site copy is inventoried for "greenhouse-only", "not commercial", "autonomous", "self-improving", yield/profit, SaaS, and lab-only language |
@@ -55,7 +55,7 @@ Trademark note: a quick public check shows another [`verdify.tech`](https://www.
 
 ## P1 - Commercial website layer
 
-Goal: make `verdify.ai` read as a real-world automation company with a public greenhouse proof point.
+Goal: make the future `verdify.ai` CMS read as a real-world automation company, with `lab.verdify.ai` as the public greenhouse proof point.
 
 | ID | Owner | Task | Acceptance |
 |---|---|---|---|

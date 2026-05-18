@@ -17,7 +17,7 @@ ESP32 (192.168.10.111, IoT VLAN)
 TimescaleDB (44 tables, 54 views, 23 functions, 2.54M+ rows)
   ├─→ Grafana (graphs.verdify.ai, 54 dashboards)
   ├─→ API (api.verdify.ai, 14 crop endpoints + /setpoints)
-  └─→ verdify.ai (Quartz static site with embedded Grafana panels)
+  └─→ lab.verdify.ai (Quartz static lab site with embedded Grafana panels)
 
 Iris Planner (Hermes + GPT-5.5, MCP-only tool surface)
   └─→ Event-driven (sunrise/transitions/sunset/forecast/deviation)
@@ -32,10 +32,11 @@ Iris Planner (Hermes + GPT-5.5, MCP-only tool surface)
 Internet → Cloudflare (DNS, DDoS protection)
   → nexus Traefik (192.168.30.100, TLS termination, LE wildcard cert *.verdify.ai)
     ├─ auth.verdify.ai (priority 110) → Authentik SSO (nexus)
-    ├─ verdify.ai / www (priority 100) → iris:443
+    ├─ verdify.ai / www (priority 100) → iris:443 (redirects to lab.verdify.ai)
     └─ *.verdify.ai (priority 50) → iris:443 (insecureSkipVerify)
       → iris Traefik (self-signed cert, Docker label routing)
-        ├─ verdify.ai → verdify-site:80 (Quartz)
+        ├─ lab.verdify.ai → verdify-site:80 (Quartz)
+        ├─ verdify.ai / www → permanent redirect to lab.verdify.ai
         ├─ graphs.verdify.ai → grafana-proxy:80 → grafana:3000
         ├─ api.verdify.ai → verdify-api:8080 (FastAPI)
         └─ traefik.verdify.ai → dashboard (BasicAuth)
@@ -93,7 +94,7 @@ All managed via `/srv/verdify/docker-compose.yml`:
 | verdify-grafana-proxy | nginx:alpine | 80 (internal) | proxy + internal | CSS injection to hide Grafana branding |
 | verdify-api | verdify-api (local build) | 8080 (internal) | proxy + internal | Crop API + /setpoints for ESP32 |
 | verdify-mqtt | eclipse-mosquitto:2 | 0.0.0.0:1883 | internal | MQTT broker for ESP32 + Sentinel |
-| verdify-site | nginx:alpine | 80 (internal) | proxy | Quartz static site (verdify.ai) |
+| verdify-site | nginx:alpine | 80 (internal) | proxy | Quartz static lab site (lab.verdify.ai) |
 
 ### Docker Networks
 

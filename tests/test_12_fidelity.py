@@ -882,14 +882,14 @@ def test_lighting_completion_make_target_requires_ota_proof():
 
 
 def test_lighting_automation_audit_checks_live_public_site():
-    """The live lighting proof should verify the served verdify.ai pages, not
+    """The live lighting proof should verify the served lab.verdify.ai pages, not
     only local build artifacts.
     """
     src = Path("scripts/audit-lighting-automation.py").read_text()
 
-    assert "https://verdify.ai/" in src
-    assert "https://verdify.ai/greenhouse/lighting/" in src
-    assert "https://verdify.ai/reference/ai-tunables/" in src
+    assert 'PUBLIC_SITE_BASE = "https://lab.verdify.ai"' in src
+    assert 'f"{PUBLIC_SITE_BASE}/greenhouse/lighting/"' in src
+    assert 'f"{PUBLIC_SITE_BASE}/reference/ai-tunables/"' in src
     assert "live public home page" in src
     assert "live public lighting page" in src
     assert "live public tunables page" in src

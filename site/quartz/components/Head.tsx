@@ -79,7 +79,7 @@ export default (() => {
                 {
                     "@type": "WebSite",
                     "@id": `https://${cfg.baseUrl}/#website`,
-                    name: "Verdify",
+                    name: "Verdify Lab",
                     url: `https://${cfg.baseUrl}`,
                     description:
                         "An ESP32-run greenhouse where Iris uses Claude to write bounded tactical plans, while telemetry, costs, failures, and lessons stay public.",
