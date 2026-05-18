@@ -307,12 +307,12 @@ Use tactical knobs below to shift behavior instead.
 - `sw_fog_closes_vent` — when ON, suppresses fog while the vent is physically open except vent-mist assist
 - `sw_mister_closes_vent` — when ON, suppresses normal physical mister pulses while the vent is open; explicit VENTILATE vent-mist assist bypasses it
 
-**Direct-wet activity windows (optional planner-policy knobs):**
-- `activity_start_hour`, `activity_start_min`, `activity_duration_min` are dispatcher-owned mirrors of the main-light runtime policy. Do not set them directly; tune the shared biological activity day through `gl_main_sunrise_hour` and `gl_main_target_light_minutes`.
-- `sw_direct_wet_gate_enabled` — master gate for automated direct wetting. Keep ON unless executing an explicit rollback.
-- `direct_wet_min_temp_f` °F, [0-90], dispatcher default 65 — cold lockout for automated misters, fert paths, and drips.
-- `direct_wet_<south|west|center>_start_offset_min`, `direct_wet_<south|west|center>_drydown_before_off_min` min, [0-720] — zone wettable window inside the global activity window. Increase drydown when late wetting or disease risk appears; center can be stricter without Vanda-specific logic.
-- `irrig_wall_days_mask`, `irrig_center_days_mask`, `irrig_wall_fert_days_mask`, `irrig_center_fert_days_mask` — bit masks, bit0=Sunday through bit6=Saturday. Nonzero fert masks replace legacy every-N fert cadence; zero preserves the existing every-N fallback.
+**Greenhouse activity / direct wetting (all clean/fert misters and drips):**
+- Global biological activity is mirrored from the grow-light policy: `gl_sunrise_hour` + `gl_sunset_hour` define the on/off window, and dispatcher owns `activity_start_hour`, `activity_start_minute`, `activity_duration_min`. Do not push the activity mirror directly; tune the light window when the global on/off window should move.
+- `sw_direct_wet_gate_enabled` is the master direct-wet gate. When enabled, misters and scheduled clean/fert irrigation are blocked outside the activity window and during each zone drydown hold.
+- Zone offsets: `direct_wet_wall_start_offset_min`, `direct_wet_south_start_offset_min`, `direct_wet_west_start_offset_min`, `direct_wet_center_start_offset_min` delay wetting after global on. `direct_wet_*_drydown_before_off_min` blocks direct wetting before global off. Use these per zone rather than crop-specific logic.
+- `direct_wet_min_temp_f` blocks automated wetting when the house is too cold.
+- Fertigation scheduling can use day masks: `irrig_wall_fert_days_mask`, `irrig_center_fert_days_mask` (bit0=Sunday ... bit6=Saturday). Nonzero masks supersede the legacy every-N fert cadence; zero preserves existing every-N behavior.
 
 **Phase-2 dwell gate (whipsaw reduction):**
 - `sw_dwell_gate_enabled` — master switch; firmware default OFF, planner may enable for oscillation control. THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, SENSOR_FAULT, dehum→humidify overshoot, and sealed-mist temp preemption bypass the gate.

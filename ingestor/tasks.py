@@ -91,15 +91,21 @@ HEAP_RECOVERY_PRIORITY_PARAMS = frozenset(
 ) | frozenset(
     {
         "activity_start_hour",
-        "activity_start_min",
+        "activity_start_minute",
         "activity_duration_min",
         "direct_wet_min_temp_f",
+        "direct_wet_wall_start_offset_min",
+        "direct_wet_wall_drydown_before_off_min",
         "direct_wet_south_start_offset_min",
         "direct_wet_south_drydown_before_off_min",
         "direct_wet_west_start_offset_min",
         "direct_wet_west_drydown_before_off_min",
         "direct_wet_center_start_offset_min",
         "direct_wet_center_drydown_before_off_min",
+        "irrig_wall_days_mask",
+        "irrig_wall_fert_days_mask",
+        "irrig_center_days_mask",
+        "irrig_center_fert_days_mask",
         "sw_direct_wet_gate_enabled",
     }
 )
@@ -2568,6 +2574,38 @@ HEAP_RECOVERY_MAX_CHANGES = 12
 # Unified band-first controller compatibility/readback field. ESPHome control
 # loop, dispatcher, MCP, and outbound-listener guardrails force it ON.
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+ACTIVITY_MIRROR_PARAMS = frozenset(
+    {
+        "activity_start_hour",
+        "activity_start_minute",
+        "activity_duration_min",
+    }
+)
+DIRECT_WET_DEFAULTS = {
+    "direct_wet_min_temp_f": 65,
+    "direct_wet_wall_start_offset_min": 60,
+    "direct_wet_wall_drydown_before_off_min": 120,
+    "direct_wet_south_start_offset_min": 60,
+    "direct_wet_south_drydown_before_off_min": 120,
+    "direct_wet_west_start_offset_min": 60,
+    "direct_wet_west_drydown_before_off_min": 120,
+    "direct_wet_center_start_offset_min": 120,
+    "direct_wet_center_drydown_before_off_min": 180,
+    "irrig_wall_days_mask": 127,
+    "irrig_wall_fert_days_mask": 0,
+    "irrig_center_days_mask": 127,
+    "irrig_center_fert_days_mask": 0,
+    "sw_direct_wet_gate_enabled": 1,
+}
+DIRECT_WET_POLICY_PARAMS = ACTIVITY_MIRROR_PARAMS | frozenset(DIRECT_WET_DEFAULTS)
+DIRECT_WET_REQUIRED_OBJECT_IDS = frozenset(
+    {
+        "activity_duration__min_",
+        "direct_wet_gate_enabled",
+        "direct_wet_wall_drydown_before_off__min_",
+        "direct_wet_center_drydown_before_off__min_",
+    }
+)
 
 QUIET_STATE_ENTITIES = (
     QUIET_MODE_ENTITY,
@@ -2584,27 +2622,6 @@ MISTER_DEFAULTS = frozenset(
         "mister_center_penalty",
     }
 )
-ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_min", "activity_duration_min"})
-DIRECT_WET_POLICY_PARAMS = frozenset(
-    {
-        "activity_start_hour",
-        "activity_start_min",
-        "activity_duration_min",
-        "direct_wet_min_temp_f",
-        "direct_wet_south_start_offset_min",
-        "direct_wet_south_drydown_before_off_min",
-        "direct_wet_west_start_offset_min",
-        "direct_wet_west_drydown_before_off_min",
-        "direct_wet_center_start_offset_min",
-        "direct_wet_center_drydown_before_off_min",
-        "irrig_wall_days_mask",
-        "irrig_wall_fert_days_mask",
-        "irrig_center_days_mask",
-        "irrig_center_fert_days_mask",
-        "sw_direct_wet_gate_enabled",
-    }
-)
-DIRECT_WET_SUPPORT_OBJECT_IDS = frozenset({"direct_wet_gate_enabled", "activity_start_hour"})
 
 
 def _upsert_change(changes: list[tuple[str, float]], param: str, value: float) -> None:
@@ -2629,11 +2646,9 @@ def _apply_manual_overlay(changes: list[tuple[str, float]], overlay: dict[str, f
 def _direct_wet_policy_supported() -> bool:
     """Return true once the connected firmware exposes the direct-wet contract."""
     keys = shared.esp32.get("keys") or {}
-    return (
-        bool(DIRECT_WET_SUPPORT_OBJECT_IDS & set(keys))
-        or any(param in shared.cfg_readback for param in DIRECT_WET_POLICY_PARAMS)
-        or any(param in _last_pushed for param in DIRECT_WET_POLICY_PARAMS)
-    )
+    if keys:
+        return DIRECT_WET_REQUIRED_OBJECT_IDS.issubset(set(keys))
+    return any(param in shared.cfg_readback for param in DIRECT_WET_POLICY_PARAMS)
 
 
 def _activity_defaults_from_lighting(lighting_row, lighting_circuit_rows) -> dict[str, float]:
@@ -2651,9 +2666,11 @@ def _activity_defaults_from_lighting(lighting_row, lighting_circuit_rows) -> dic
     activity_duration_min = max(0, min(1440, activity_duration_min))
     return {
         "activity_start_hour": float(max(0, min(23, activity_start_hour))),
-        "activity_start_min": 0.0,
+        "activity_start_minute": 0.0,
         "activity_duration_min": float(activity_duration_min),
         "direct_wet_min_temp_f": 65.0,
+        "direct_wet_wall_start_offset_min": 60.0,
+        "direct_wet_wall_drydown_before_off_min": 120.0,
         "direct_wet_south_start_offset_min": 60.0,
         "direct_wet_south_drydown_before_off_min": 120.0,
         "direct_wet_west_start_offset_min": 60.0,

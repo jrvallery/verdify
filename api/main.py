@@ -102,7 +102,23 @@ HOUSE_BAND_COMPUTED_PARAMS = frozenset(
 )
 ZONE_VPD_TARGET_PARAMS = frozenset(name for name in CROP_BAND_REG if name.startswith("vpd_target_"))
 LEGACY_LIGHTING_COMPUTED_PARAMS = LEGACY_SHARED_LIGHTING_REG & FIRMWARE_SETPOINT_PARAMS
-ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_min", "activity_duration_min"})
+ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_minute", "activity_duration_min"})
+DIRECT_WET_DEFAULTS = {
+    "direct_wet_min_temp_f": 65,
+    "direct_wet_wall_start_offset_min": 60,
+    "direct_wet_wall_drydown_before_off_min": 120,
+    "direct_wet_south_start_offset_min": 60,
+    "direct_wet_south_drydown_before_off_min": 120,
+    "direct_wet_west_start_offset_min": 60,
+    "direct_wet_west_drydown_before_off_min": 120,
+    "direct_wet_center_start_offset_min": 120,
+    "direct_wet_center_drydown_before_off_min": 180,
+    "irrig_wall_days_mask": 127,
+    "irrig_wall_fert_days_mask": 0,
+    "irrig_center_days_mask": 127,
+    "irrig_center_fert_days_mask": 0,
+    "sw_direct_wet_gate_enabled": 1,
+}
 
 
 def _activity_policy_values(lighting_row, lighting_circuit_rows) -> dict[str, float | int]:
@@ -120,9 +136,11 @@ def _activity_policy_values(lighting_row, lighting_circuit_rows) -> dict[str, fl
     activity_duration_min = max(0, min(1440, activity_duration_min))
     return {
         "activity_start_hour": max(0, min(23, activity_start_hour)),
-        "activity_start_min": 0,
+        "activity_start_minute": 0,
         "activity_duration_min": activity_duration_min,
         "direct_wet_min_temp_f": 65,
+        "direct_wet_wall_start_offset_min": 60,
+        "direct_wet_wall_drydown_before_off_min": 120,
         "direct_wet_south_start_offset_min": 60,
         "direct_wet_south_drydown_before_off_min": 120,
         "direct_wet_west_start_offset_min": 60,
