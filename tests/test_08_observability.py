@@ -550,7 +550,10 @@ class TestContractDriftGuardrails:
         assert "FIRMWARE_DEPLOY_OPERATOR_SIGNOFF=1" in preflight
         assert "FIRMWARE_DEPLOY_OVERRIDE_REASON" in preflight
         assert "No last-good rollback artifact" in preflight
-        assert "48-hour bake check passed for $last_good mtime" in preflight
+        assert "FIRMWARE_OTA_FREEZE_OVERRIDE_REASON" in preflight
+        assert 'record_override "48-hour bake"' in preflight
+        assert 'record_override "Weekly OTA limit"' in preflight
+        assert "48-hour bake check passed for $last_good" in preflight
 
 
 class TestFirmwareCheckTargets:
