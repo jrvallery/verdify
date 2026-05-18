@@ -76,6 +76,16 @@ DIRECT_WET_DEFAULTS = {
     "irrig_center_fert_days_mask": "0",
     "sw_direct_wet_gate_enabled": "1",
 }
+SAFETY_DEFAULTS = {
+    "safety_max": "100",
+    "safety_min": "40",
+}
+LEGACY_LIGHTING_DEFAULTS = {
+    # Per-circuit gl_main_* / gl_grow_* controls own lighting now. Keep the
+    # retired shared hysteresis at firmware default instead of replaying old
+    # dispatcher rows through the fallback endpoint.
+    "gl_lux_hysteresis": "1500",
+}
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [setpoint-server] %(levelname)s %(message)s",
@@ -108,6 +118,19 @@ def _overlay_activity_direct_wet_defaults(params: dict[str, str], plan_params: s
     for param, value in DIRECT_WET_DEFAULTS.items():
         if param not in plan_params:
             params.setdefault(param, value)
+
+
+def _overlay_dispatcher_owned_defaults(params: dict[str, str], plan_params: set[str]) -> None:
+    """Mirror dispatcher-owned defaults that should not drift from stale rows."""
+    for param, value in SAFETY_DEFAULTS.items():
+        if param not in plan_params:
+            params[param] = value
+
+    has_per_circuit_lighting = "gl_main_lux_hysteresis" in params and "gl_grow_lux_hysteresis" in params
+    if has_per_circuit_lighting:
+        for param, value in LEGACY_LIGHTING_DEFAULTS.items():
+            if param not in plan_params:
+                params[param] = value
 
 
 def load_token() -> str:
@@ -334,6 +357,7 @@ def get_setpoint_text_sync() -> str:
                 params[k.strip()] = v.strip()
 
     _overlay_activity_direct_wet_defaults(params, plan_params)
+    _overlay_dispatcher_owned_defaults(params, plan_params)
 
     # Step 3: Keep this ESP32 endpoint small and numeric. Metadata such as
     # source/next_* used to bloat the response and triggered malformed parses.

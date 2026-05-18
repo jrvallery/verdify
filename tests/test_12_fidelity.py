@@ -422,15 +422,27 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
     assert "fn_lighting_minutes_policy(now(), 'vallery')" in script
     assert "if k.strip() not in plan_params" in script
     assert "_overlay_activity_direct_wet_defaults(params, plan_params)" in script
+    assert "_overlay_dispatcher_owned_defaults(params, plan_params)" in script
 
     params = {"gl_main_sunrise_hour": "7", "gl_main_target_light_minutes": "780"}
     module["_overlay_activity_direct_wet_defaults"](params, set())
+    module["_overlay_dispatcher_owned_defaults"](params, set())
     assert params["activity_start_hour"] == "7"
     assert params["activity_start_minute"] == "0"
     assert params["activity_duration_min"] == "780"
     assert params["direct_wet_wall_start_offset_min"] == "60"
     assert params["irrig_center_fert_days_mask"] == "0"
     assert params["sw_direct_wet_gate_enabled"] == "1"
+    assert params["safety_min"] == "40"
+    assert params["safety_max"] == "100"
+
+    legacy_params = {
+        "gl_lux_hysteresis": "8000",
+        "gl_main_lux_hysteresis": "8000",
+        "gl_grow_lux_hysteresis": "8000",
+    }
+    module["_overlay_dispatcher_owned_defaults"](legacy_params, set())
+    assert legacy_params["gl_lux_hysteresis"] == "1500"
 
 
 def test_setpoint_server_controls_real_lutron_switch_entities_and_confirms_state():
