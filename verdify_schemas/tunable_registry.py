@@ -2044,6 +2044,35 @@ def _planner_pushable() -> frozenset[str]:
     return frozenset(n for n, d in REGISTRY.items() if d.control_class == "planner_policy")
 
 
+_LIGHTING_CIRCUIT_PREFIXES = ("gl_main_", "gl_grow_", "sw_gl_main_", "sw_gl_grow_")
+
+
+def _crop_band() -> frozenset[str]:
+    """Tunables owned by crop/zone band policy rather than routine plans."""
+    return frozenset(n for n, d in REGISTRY.items() if d.control_class == "crop_band")
+
+
+def _legacy_shared_lighting() -> frozenset[str]:
+    """Legacy shared lighting values computed by policy, not planner waypoints.
+
+    Per-circuit `gl_main_*` and `gl_grow_*` tunables are planner-policy rows.
+    The remaining shared `gl_*` values and the shared auto-mode switch stay
+    dispatcher-owned compatibility values while older firmware/routes exist.
+    """
+    return frozenset(
+        n
+        for n, d in REGISTRY.items()
+        if d.control_class == "controller_safety"
+        and not d.planner_pushable
+        and (n == "sw_gl_auto_mode" or (n.startswith("gl_") and not n.startswith(("gl_main_", "gl_grow_"))))
+    )
+
+
+def _lighting_circuit_defaults() -> frozenset[str]:
+    """Per-circuit lighting state-machine tunables keyed by main/grow circuit."""
+    return frozenset(n for n in REGISTRY if n.startswith(_LIGHTING_CIRCUIT_PREFIXES))
+
+
 def _setpoint_map() -> dict[str, str]:
     """ESPHome object_id → canonical name. Replaces ingestor.entity_map.SETPOINT_MAP."""
     return {d.esp_object_id: n for n, d in REGISTRY.items() if d.esp_object_id}
@@ -2062,6 +2091,10 @@ ALL_TUNABLES_REG: frozenset[str] = _all_tunables()
 TIER1_REG: frozenset[str] = _tier1()
 PLANNER_PUSHABLE_REG: frozenset[str] = _planner_pushable()
 TUNABLE_CONTRACT_CLASSES_REG: dict[str, str] = _contract_classes()
+CROP_BAND_REG: frozenset[str] = _crop_band()
+LEGACY_SHARED_LIGHTING_REG: frozenset[str] = _legacy_shared_lighting()
+BAND_OWNED_REG: frozenset[str] = CROP_BAND_REG | LEGACY_SHARED_LIGHTING_REG
+LIGHTING_CIRCUIT_DEFAULT_REG: frozenset[str] = _lighting_circuit_defaults()
 SETPOINT_MAP_REG: dict[str, str] = _setpoint_map()
 CFG_READBACK_MAP_REG: dict[str, str] = _cfg_readback_map()
 

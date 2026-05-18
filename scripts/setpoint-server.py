@@ -37,14 +37,18 @@ import asyncpg
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INGESTOR_DIR = REPO_ROOT / "ingestor"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(INGESTOR_DIR) not in sys.path:
     sys.path.insert(0, str(INGESTOR_DIR))
 
 from quiet_mode import QUIET_MODE_ENTITY, QUIET_MODE_SETPOINTS, QUIET_UNTIL_ENTITY, quiet_is_active  # noqa: E402
 
+from verdify_schemas.tunable_registry import BAND_OWNED_REG, CROP_BAND_REG, SETPOINT_MAP_REG  # noqa: E402
+
 # --- Configuration ---
 HA_URL = "http://192.168.30.107:8123"
-HA_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/ha_token.txt"
+HA_TOKEN_FILE = "/mnt/agents/shared/credentials/ha_token.txt"
 LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 8200
 
@@ -53,132 +57,11 @@ LIGHTS = {
     "grow": {"ha_entity": "switch.greenhouse_grow", "equipment": "grow_light_grow"},
 }
 
-FIRMWARE_SETPOINT_PARAMS = {
-    "bias_cool",
-    "bias_heat",
-    "d_cool_stage_2",
-    "d_heat_stage_2",
-    "dwell_gate_ms",
-    "east_adjacency_factor",
-    "enthalpy_close",
-    "enthalpy_open",
-    "fan_burst_min",
-    "heat_hysteresis",
-    "fog_burst_min",
-    "fog_escalation_kpa",
-    "fog_min_temp_f",
-    "fog_rh_ceiling_pct",
-    "fog_time_window_end",
-    "fog_time_window_start",
-    "gl_grow_dli_target",
-    "gl_grow_target_light_minutes",
-    "gl_grow_lux_hysteresis",
-    "gl_grow_lux_threshold",
-    "gl_grow_min_off_s",
-    "gl_grow_min_on_s",
-    "gl_grow_sunrise_hour",
-    "gl_grow_sunset_hour",
-    "gl_main_dli_target",
-    "gl_main_target_light_minutes",
-    "gl_main_lux_hysteresis",
-    "gl_main_lux_threshold",
-    "gl_main_min_off_s",
-    "gl_main_min_on_s",
-    "gl_main_sunrise_hour",
-    "gl_main_sunset_hour",
-    "irrig_center_duration_min",
-    "irrig_center_fert_duration_min",
-    "irrig_center_fert_every_n",
-    "irrig_center_flush_min",
-    "irrig_center_interval_days",
-    "irrig_center_start_hour",
-    "irrig_center_start_min",
-    "irrig_vpd_boost_pct",
-    "irrig_vpd_boost_threshold_hrs",
-    "irrig_wall_duration_min",
-    "irrig_wall_fert_duration_min",
-    "irrig_wall_fert_every_n",
-    "irrig_wall_flush_min",
-    "irrig_wall_interval_days",
-    "irrig_wall_start_hour",
-    "irrig_wall_start_min",
-    "lead_rotate_s",
-    "min_fan_off_s",
-    "min_fan_on_s",
-    "min_fog_off_s",
-    "min_fog_on_s",
-    "min_heat_off_s",
-    "min_heat_on_s",
-    "min_vent_off_s",
-    "min_vent_on_s",
-    "mist_backoff_s",
-    "mist_max_closed_vent_s",
-    "mist_thermal_relief_s",
-    "mist_vent_close_lead_s",
-    "mist_vent_reopen_delay_s",
-    "mister_all_delay_s",
-    "mister_all_kpa",
-    "mister_all_off_s",
-    "mister_all_on_s",
-    "mister_center_penalty",
-    "mister_engage_delay_s",
-    "mister_engage_kpa",
-    "mister_max_runtime_min",
-    "mister_off_s",
-    "mister_on_s",
-    "mister_pulse_gap_s",
-    "mister_pulse_on_s",
-    "mister_vpd_weight",
-    "mister_water_budget_gal",
-    "outdoor_staleness_max_s",
-    "safety_max",
-    "safety_min",
-    "safety_vpd_max",
-    "safety_vpd_min",
-    "site_pressure_hpa",
-    "summer_vent_min_runtime_s",
-    "sw_dwell_gate_enabled",
-    "sw_economiser_enabled",
-    "sw_fog_closes_vent",
-    "sw_fsm_controller_enabled",
-    "sw_gl_grow_auto_mode",
-    "sw_gl_main_auto_mode",
-    "sw_irrigation_center_enabled",
-    "sw_irrigation_enabled",
-    "sw_irrigation_wall_enabled",
-    "sw_irrigation_weather_skip",
-    "sw_mister_closes_vent",
-    "sw_occupancy_inhibit",
-    "sw_summer_vent_enabled",
-    "temp_high",
-    "temp_hysteresis",
-    "temp_low",
-    "vent_bypass_min",
-    "vent_prefer_dp_delta_f",
-    "vent_prefer_temp_delta_f",
-    "vpd_high",
-    "vpd_hysteresis",
-    "vpd_low",
-    "vpd_target_center",
-    "vpd_target_east",
-    "vpd_target_south",
-    "vpd_target_west",
-    "vpd_watch_dwell_s",
-}
+FIRMWARE_SETPOINT_PARAMS = frozenset(SETPOINT_MAP_REG.values())
 
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
-BAND_OWNED_PARAMS = frozenset(
-    {
-        "temp_low",
-        "temp_high",
-        "vpd_low",
-        "vpd_high",
-        "vpd_target_south",
-        "vpd_target_west",
-        "vpd_target_east",
-        "vpd_target_center",
-    }
-)
+BAND_OWNED_PARAMS = CROP_BAND_REG
+PLAN_EXCLUDED_PARAMS_SQL = ",".join("'" + param.replace("'", "''") + "'" for param in sorted(BAND_OWNED_REG))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [setpoint-server] %(levelname)s %(message)s",
@@ -345,15 +228,7 @@ def get_setpoint_text_sync() -> str:
     # authoritative for crop/house bands or photoperiod.
     plan_params: set[str] = set()
     result = subprocess.run(
-        db_cmd
-        + [
-            "SELECT parameter, value FROM v_active_plan "
-            "WHERE parameter NOT IN ("
-            "'temp_low','temp_high','vpd_low','vpd_high',"
-            "'vpd_target_south','vpd_target_west','vpd_target_east','vpd_target_center',"
-            "'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode'"
-            ")"
-        ],
+        db_cmd + [f"SELECT parameter, value FROM v_active_plan WHERE parameter NOT IN ({PLAN_EXCLUDED_PARAMS_SQL})"],
         capture_output=True,
         text=True,
         timeout=5,

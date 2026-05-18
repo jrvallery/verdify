@@ -258,9 +258,9 @@ The `/setpoints` endpoint computes values in this order (later overrides earlier
 
 | File | Location | Purpose |
 |------|----------|---------|
-| gemini_api_key.txt | /mnt/jason/agents/shared/credentials/ | Google AI Studio API key (planner, vision, embeddings) |
-| ha_token.txt | /mnt/jason/agents/shared/credentials/ | Home Assistant long-lived access token |
-| slack_bot_token.txt | /mnt/jason/agents/shared/credentials/ | Slack bot token for #greenhouse |
+| gemini_api_key.txt | /mnt/agents/shared/credentials/ | Google AI Studio API key (planner, vision, embeddings) |
+| ha_token.txt | /mnt/agents/shared/credentials/ | Home Assistant long-lived access token |
+| slack_bot_token.txt | /mnt/agents/shared/credentials/ | Slack bot token for #greenhouse |
 | .env | /srv/verdify/ | POSTGRES_PASSWORD, GRAFANA_ADMIN_PASSWORD |
 | .env | /srv/verdify/ingestor/ | ESP32_API_KEY, DB credentials |
 | .env | /srv/verdify/api/ | DB credentials |
@@ -342,7 +342,7 @@ The `/setpoints` endpoint computes values in this order (later overrides earlier
     .esphome/                          # Build cache
   .venv/                               # Python 3.13 virtualenv
 
-/mnt/jason/agents/iris/                # Agent config (NAS, survives VM rebuild)
+/mnt/agents/iris/                # Agent config (NAS, survives VM rebuild)
   CLAUDE.md                            # VM operations manual
   BACKLOG.md                           # Sprint tasks and priorities
   MEMORY.md                            # Long-term memory index
@@ -360,7 +360,7 @@ To rebuild this VM from scratch:
 
 1. **Provision VM** — Debian 13, 4 vCPU, 8GB RAM, 125GB disk
 2. **Mount NFS** — `/mnt/jason` (agents), `/mnt/iris` (data)
-3. **Clone repo** — `git clone git@github.com:jvallery/agents.git /mnt/jason/agents`
+3. **Clone repo** — `git clone git@github.com:jvallery/agents.git /mnt/agents`
 4. **Install Docker** — `apt install docker.io docker-compose-plugin`
 5. **Install Python** — Build 3.13 venv at `/srv/greenhouse/.venv/`
 6. **Copy secrets** — `.env` files from vault, `secrets.yaml` from vault
@@ -370,4 +370,4 @@ To rebuild this VM from scratch:
 10. **Install crontab** — From this document's cron section
 11. **DNS** — Point `*.verdify.ai` through nexus Traefik, `mqtt.verdify.ai` via local DNS to VM IP
 
-All configuration lives on NAS (`/mnt/jason/agents/iris/`) or in git. The VM itself is disposable — only Docker volumes (DB data, Grafana state) need backup, and DB is backed up nightly to NFS.
+All configuration lives on NAS (`/mnt/agents/iris/`) or in git. The VM itself is disposable — only Docker volumes (DB data, Grafana state) need backup, and DB is backed up nightly to NFS.

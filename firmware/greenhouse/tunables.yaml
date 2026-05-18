@@ -1165,7 +1165,7 @@ number:
 
   - platform: template
     id: num_gl_dli_target
-    name: "GL Legacy DLI Target (mol)"
+    name: "GL DLI Target (mol)"
     min_value: 1
     max_value: 50
     step: 1

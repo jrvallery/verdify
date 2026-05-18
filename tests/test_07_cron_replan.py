@@ -82,7 +82,7 @@ class TestPlannerConfig:
         assert ai.config["models"]["planner"]["provider"] == "openai"
 
     def test_anthropic_key_exists(self):
-        key_path = "/mnt/jason/agents/shared/credentials/anthropic_api_key.txt"
+        key_path = "/mnt/agents/shared/credentials/anthropic_api_key.txt"
         assert os.path.isfile(key_path), "Anthropic API key file missing"
         with open(key_path) as f:
             key = f.read().strip()

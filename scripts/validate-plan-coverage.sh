@@ -3,11 +3,32 @@
 set -uo pipefail
 
 DB="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A -c"
+PYTHON_BIN="${PYTHON:-/srv/greenhouse/.venv/bin/python}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# The 37 tactical Tier 1 params the planner must emit at every transition.
-# Crop-band params (temp_low/temp_high/vpd_low/vpd_high) are read-only context.
-CORE="vpd_hysteresis,vpd_watch_dwell_s,mister_engage_kpa,mister_all_kpa,mister_engage_delay_s,mister_all_delay_s,mister_pulse_on_s,mister_pulse_gap_s,mister_vpd_weight,mister_water_budget_gal,mist_max_closed_vent_s,mist_thermal_relief_s,enthalpy_open,enthalpy_close,min_vent_on_s,min_vent_off_s,min_fog_on_s,min_fog_off_s,fog_escalation_kpa,d_heat_stage_2,d_cool_stage_2,temp_hysteresis,heat_hysteresis,bias_heat,bias_cool,min_heat_on_s,min_heat_off_s,sw_summer_vent_enabled,vent_prefer_temp_delta_f,vent_prefer_dp_delta_f,outdoor_staleness_max_s,sw_fog_closes_vent,sw_mister_closes_vent,sw_dwell_gate_enabled,dwell_gate_ms,sw_fsm_controller_enabled,mist_backoff_s"
-BAND_OWNED="'temp_low','temp_high','vpd_low','vpd_high'"
+# The tactical Tier 1 params and dispatcher-owned exclusion set come from the
+# tunable registry. This keeps plan coverage validation aligned with MCP,
+# dispatcher ownership checks, and firmware setpoint routing.
+mapfile -t REGISTRY_LINES < <("$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+sys.path.insert(0, str(repo))
+
+from verdify_schemas.tunable_registry import BAND_OWNED_REG, TIER1_REG  # noqa: E402
+
+core = ",".join(sorted(TIER1_REG))
+dispatcher_owned = sorted(BAND_OWNED_REG)
+sql_list = ",".join("'" + name.replace("'", "''") + "'" for name in dispatcher_owned)
+print(core)
+print(sql_list)
+print(len(TIER1_REG))
+PY
+)
+CORE="${REGISTRY_LINES[0]}"
+BAND_OWNED="${REGISTRY_LINES[1]}"
+CORE_COUNT="${REGISTRY_LINES[2]}"
 
 # 1. Get latest plan_id
 LATEST=$($DB "SELECT plan_id FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
@@ -59,7 +80,7 @@ WHERE is_active = true
 " 2>/dev/null | tr -d ' ')
 if [ -n "$BAND_PRESENT" ]; then
     echo "BAND_OWNED_PRESENT: $BAND_PRESENT"
-    echo "Crop-band params are dispatcher-owned read-only context and must not be in active planner waypoints."
+    echo "Dispatcher-owned band/lighting params are read-only context and must not be in active planner waypoints."
     exit 1
 fi
 
@@ -72,6 +93,6 @@ elif [ -n "$MISSING_LIST" ]; then
     echo "MISSING: $MISSING_LIST"
     exit 1
 else
-    echo "All transitions have full coverage of 37 tactical Tier 1 params; no crop-band params present."
+    echo "All transitions have full coverage of $CORE_COUNT tactical Tier 1 params; no dispatcher-owned params present."
     exit 0
 fi

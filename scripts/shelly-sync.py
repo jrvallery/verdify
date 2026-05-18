@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 import asyncpg
 
 HA_URL = "http://192.168.30.107:8123"
-TOKEN = open("/mnt/jason/agents/shared/credentials/ha_token.txt").read().strip()
+TOKEN = open("/mnt/agents/shared/credentials/ha_token.txt").read().strip()
 
 # Shelly Pro EM50 greenhouse meter
 SHELLY_PREFIX = "sensor.shellyproem50_ac15186daafc_energy_meter"

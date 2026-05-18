@@ -5,7 +5,7 @@ set -uo pipefail
 
 PYTHON="/srv/greenhouse/.venv/bin/python3"
 SCRIPTS="/srv/verdify/scripts"
-SLACK_TOKEN=$(cat /mnt/jason/agents/shared/credentials/slack_bot_token.txt)
+SLACK_TOKEN=$(cat /mnt/agents/shared/credentials/slack_bot_token.txt)
 CHANNEL="C0ANVVAPLD6"
 LOG="/srv/verdify/state/checklist-slack.log"
 

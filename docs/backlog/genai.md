@@ -16,7 +16,7 @@ Three findings at HIGH severity:
    and names 16. `mcp/server.py` defines 17 — `plan_run` exists, is live,
    unbriefed.
 3. **`skills/greenhouse-planner.md` is unversioned.** Prompt tells Iris to
-   read it; file lives at `/mnt/jason/agents/iris/skills/…`, not in-repo.
+   read it; file lives at `/mnt/agents/iris/skills/…`, not in-repo.
    No CI drift guard.
 
 Full findings preserved in genai agent memory (`project_genai_audit_2026_04_18.md`).

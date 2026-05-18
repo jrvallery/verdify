@@ -90,6 +90,18 @@ from verdify_schemas import (  # noqa: E402
     ZoneListItem,
 )
 from verdify_schemas.mcp_responses import ScorecardResponse  # noqa: E402
+from verdify_schemas.tunable_registry import (  # noqa: E402
+    CROP_BAND_REG,
+    LEGACY_SHARED_LIGHTING_REG,
+    SETPOINT_MAP_REG,
+)
+
+FIRMWARE_SETPOINT_PARAMS = frozenset(SETPOINT_MAP_REG.values())
+HOUSE_BAND_COMPUTED_PARAMS = frozenset(
+    name for name in CROP_BAND_REG if name.startswith("temp_") or name in {"vpd_high", "vpd_low"}
+)
+ZONE_VPD_TARGET_PARAMS = frozenset(name for name in CROP_BAND_REG if name.startswith("vpd_target_"))
+LEGACY_LIGHTING_COMPUTED_PARAMS = LEGACY_SHARED_LIGHTING_REG & FIRMWARE_SETPOINT_PARAMS
 
 # ── DB Connection ──
 
@@ -524,47 +536,17 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
     # Dispatcher-owned params: temperature uses crop profile envelope directly,
     # VPD uses the DB-owned house control band, and lighting uses the highest
     # active crop DLI to set the photoperiod window firmware enforces.
-    BAND_COMPUTED = {"temp_high", "temp_low", "vpd_high", "vpd_low"}
-    LIGHTING_COMPUTED = {
-        "gl_dli_target",
-        "gl_lux_hysteresis",
-        "gl_lux_threshold",
-        "gl_sunrise_hour",
-        "gl_sunset_hour",
-        "sw_gl_auto_mode",
-    }
     async with pool.acquire() as conn:
         # Get latest value per parameter (Tier 1 + band-driven only, no legacy params)
         rows = await conn.fetch(
             """
             SELECT DISTINCT ON (parameter) parameter, value
             FROM setpoint_changes WHERE greenhouse_id = $1
-              AND parameter IN (
-                'vpd_hysteresis','vpd_watch_dwell_s','mister_engage_kpa','mister_all_kpa',
-                'mister_pulse_on_s','mister_pulse_gap_s','mister_vpd_weight','mister_water_budget_gal',
-                'mist_vent_close_lead_s','mist_max_closed_vent_s','mist_vent_reopen_delay_s','mist_thermal_relief_s',
-                'enthalpy_open','enthalpy_close','min_vent_on_s','min_vent_off_s',
-                'min_fog_on_s','min_fog_off_s','fog_escalation_kpa',
-                'd_cool_stage_2','bias_heat','bias_cool','min_heat_on_s','min_heat_off_s',
-                'temp_high','temp_low','vpd_high','vpd_low',
-                'vpd_target_south','vpd_target_west','vpd_target_east','vpd_target_center',
-                'mister_engage_delay_s','mister_all_delay_s','mister_center_penalty',
-                'lead_rotate_s','min_fan_on_s','min_fan_off_s',
-                'east_adjacency_factor','irrig_vpd_boost_pct','irrig_vpd_boost_threshold_hrs',
-                'fog_rh_ceiling_pct','fog_min_temp_f','fog_time_window_start','fog_time_window_end',
-                'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold','gl_lux_hysteresis',
-                'gl_main_dli_target','gl_main_target_light_minutes','gl_main_sunrise_hour','gl_main_sunset_hour',
-                'gl_main_lux_threshold','gl_main_lux_hysteresis','gl_main_min_on_s','gl_main_min_off_s',
-                'gl_grow_dli_target','gl_grow_target_light_minutes','gl_grow_sunrise_hour','gl_grow_sunset_hour',
-                'gl_grow_lux_threshold','gl_grow_lux_hysteresis','gl_grow_min_on_s','gl_grow_min_off_s',
-                'sw_gl_main_auto_mode','sw_gl_grow_auto_mode',
-                'safety_min','safety_max','safety_vpd_min','safety_vpd_max',
-                'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min',
-                'sw_fsm_controller_enabled','sw_gl_auto_mode','mist_backoff_s'
-              )
+              AND parameter = ANY($2::text[])
             ORDER BY parameter, ts DESC
         """,
             greenhouse_id,
+            sorted(FIRMWARE_SETPOINT_PARAMS),
         )
         # For band-driven params, compute from crop science + house VPD policy.
         band_row = await conn.fetchrow("SELECT * FROM fn_band_setpoints(now())")
@@ -620,7 +602,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         # Band-driven params: use the same source as the live dispatcher so the
         # legacy ESP32 polling fallback cannot diverge from direct pushes.
         if band_row and house_row:
-            for param in BAND_COMPUTED:
+            for param in HOUSE_BAND_COMPUTED_PARAMS:
                 if param.startswith("temp"):
                     band_val = float(band_row[param])
                     precision = 1
@@ -642,7 +624,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             if main_lighting:
                 lighting_values["gl_lux_threshold"] = _round_half_up(float(main_lighting["lux_on_threshold"]), 0)
                 lighting_values["gl_lux_hysteresis"] = _round_half_up(float(main_lighting["lux_hysteresis"]), 0)
-            for param in LIGHTING_COMPUTED:
+            for param in LEGACY_LIGHTING_COMPUTED_PARAMS:
                 if param in lighting_values:
                     params[param] = lighting_values[param]
         for row in lighting_circuit_rows:
@@ -663,7 +645,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                     params[param] = value
         # Per-zone VPD targets (from crop data per zone)
         if zone_row:
-            for param in ("vpd_target_south", "vpd_target_west", "vpd_target_east", "vpd_target_center"):
+            for param in ZONE_VPD_TARGET_PARAMS:
                 params[param] = _round_half_up(float(zone_row[param]), 2)
         # Mister tuning: band provides defaults, planner can override.
         # Set band-derived values first, then planner values overwrite if present.

@@ -110,7 +110,7 @@ docker exec verdify-timescaledb psql -U verdify -d verdify -c "\d plan_delivery_
 ## Quick Health Check
 
 ```bash
-bash /mnt/jason/agents/iris/health-check.sh
+bash /mnt/agents/iris/health-check.sh
 ```
 
 Expected: 22/22 passing, HEALTHY.
@@ -169,9 +169,9 @@ Expected: 22/22 passing, HEALTHY.
 3. Check setpoint-server state: `curl -s http://127.0.0.1:8200/lights`
 4. Check HA state directly:
    ```bash
-   curl -s -H "Authorization: Bearer $(cat /mnt/jason/agents/shared/credentials/ha_token.txt)" \
+   curl -s -H "Authorization: Bearer $(cat /mnt/agents/shared/credentials/ha_token.txt)" \
      http://192.168.30.107:8123/api/states/switch.greenhouse_main
-   curl -s -H "Authorization: Bearer $(cat /mnt/jason/agents/shared/credentials/ha_token.txt)" \
+   curl -s -H "Authorization: Bearer $(cat /mnt/agents/shared/credentials/ha_token.txt)" \
      http://192.168.30.107:8123/api/states/switch.greenhouse_grow
    ```
 5. Check the live policy and expected/actual state:
@@ -284,7 +284,7 @@ sudo systemctl start verdify-ingestor verdify-setpoint-server
 | /srv/verdify/.env | POSTGRES_PASSWORD, GRAFANA_ADMIN_PASSWORD, GRAFANA_API_TOKEN | 600 |
 | /srv/verdify/ingestor/.env | DB credentials, ESP32_API_KEY (noise_psk) | 600 |
 | /srv/greenhouse/esphome/secrets.yaml | WiFi SSID/pass, OTA password, API key | 600 |
-| /mnt/jason/agents/shared/credentials/ | HA token, Slack bot token | Fleet shared |
+| /mnt/agents/shared/credentials/ | HA token, Slack bot token | Fleet shared |
 
 ## Architecture
 

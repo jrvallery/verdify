@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import runpy
 import sys
 import types
 from pathlib import Path
@@ -21,6 +22,7 @@ _WORKTREE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 @pytest.fixture(scope="module")
 def iris_planner():
     """Import iris_planner with stubbed config module, same pattern as planner-dry."""
+    original_config = sys.modules.get("config")
     cfg = types.ModuleType("config")
     cfg.HERMES_URL = "http://127.0.0.1:8642"
     cfg.HERMES_API_KEY = "x"
@@ -33,7 +35,11 @@ def iris_planner():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module
+    yield module
+    if original_config is None:
+        sys.modules.pop("config", None)
+    else:
+        sys.modules["config"] = original_config
 
 
 class TestComposePreamble:
@@ -149,8 +155,10 @@ class TestSplitInvariants:
 
     def test_mcp_drops_band_owned_plan_params(self):
         """set_plan must enforce the same ownership boundary as the prompt."""
-        server = (Path(_WORKTREE) / "mcp" / "server.py").read_text()
-        for param in (
+        mcp_path = Path(_WORKTREE) / "mcp" / "server.py"
+        server = mcp_path.read_text()
+        module = runpy.run_path(str(mcp_path), run_name="_test_mcp_prompt_variants")
+        expected = {
             "temp_low",
             "temp_high",
             "vpd_low",
@@ -159,8 +167,8 @@ class TestSplitInvariants:
             "gl_sunrise_hour",
             "gl_sunset_hour",
             "sw_gl_auto_mode",
-        ):
-            assert f'"{param}"' in server
+        }
+        assert expected <= set(module["BAND_OWNED_PARAMS"])
         assert "PLAN_REQUIRED_PARAMS" in server
         assert "Plan transitions must include all {len(PLAN_REQUIRED_PARAMS)} tactical Tier 1 params" in server
         assert "band_params_dropped" in server

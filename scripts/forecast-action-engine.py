@@ -18,8 +18,14 @@ import os
 import sys
 import urllib.request
 from datetime import UTC, datetime
+from pathlib import Path
 
 import asyncpg
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from verdify_schemas.tunable_registry import BAND_OWNED_REG  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,24 +35,11 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DRY_RUN = "--dry-run" in sys.argv
-SLACK_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/slack_bot_token.txt"
+SLACK_TOKEN_FILE = "/mnt/agents/shared/credentials/slack_bot_token.txt"
 SLACK_CHANNEL = "C0ANVVAPLD6"
 
 INTERVAL_MAP = {"24h": "24 hours", "48h": "48 hours", "12h": "12 hours", "6h": "6 hours"}
-BAND_OWNED_PARAMS = {
-    "temp_low",
-    "temp_high",
-    "vpd_low",
-    "vpd_high",
-    "vpd_target_south",
-    "vpd_target_west",
-    "vpd_target_east",
-    "vpd_target_center",
-    "gl_dli_target",
-    "gl_sunrise_hour",
-    "gl_sunset_hour",
-    "sw_gl_auto_mode",
-}
+BAND_OWNED_PARAMS = BAND_OWNED_REG
 
 
 def get_db_url():

@@ -26,6 +26,7 @@ import ast
 import asyncio
 import importlib.util
 import os
+import runpy
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -48,7 +49,13 @@ import iris_planner  # noqa: E402
 
 import ingestor  # noqa: E402
 from verdify_schemas.plan import PlanDeliveryLogRow  # noqa: E402
-from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, REGISTRY  # noqa: E402
+from verdify_schemas.tunable_registry import (  # noqa: E402
+    BAND_OWNED_REG,
+    CROP_BAND_REG,
+    PLANNER_PUSHABLE_REG,
+    REGISTRY,
+    SETPOINT_MAP_REG,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,7 +70,11 @@ def _assigned_set(path: Path, name: str) -> set[str]:
         value = node.value
         if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
             value = value.args[0]
-        return set(ast.literal_eval(value))
+        try:
+            return set(ast.literal_eval(value))
+        except (TypeError, ValueError):
+            module = runpy.run_path(str(path), run_name=f"_test_{path.stem.replace('-', '_')}")
+            return set(module[name])
     raise AssertionError(f"{name} assignment not found in {path}")
 
 
@@ -268,7 +279,7 @@ def test_alert_monitor_detects_band_owned_plan_rows():
     assert "system.planner_band_ownership" in src
     assert "setpoint_plan" in src
     assert "is_active = true" in src
-    for param in (
+    assert {
         "temp_low",
         "temp_high",
         "vpd_low",
@@ -277,8 +288,8 @@ def test_alert_monitor_detects_band_owned_plan_rows():
         "gl_sunrise_hour",
         "gl_sunset_hour",
         "sw_gl_auto_mode",
-    ):
-        assert f"'{param}'" in src
+    } <= set(tasks.BAND_DRIVEN_PARAMS)
+    assert "parameter = ANY($1::text[])" in src
 
 
 def test_forecast_action_engine_does_not_write_dispatcher_owned_setpoints():
@@ -359,13 +370,18 @@ def test_api_setpoint_fallback_uses_computed_band_not_planner_band_rows():
     """The ESP32 HTTP fallback must match the dispatcher for band-owned
     values. Active-plan rows for crop bands are drift signals, not authority.
     """
-    api = Path("api/main.py").read_text()
+    path = Path("api/main.py")
+    api = path.read_text()
+    module = runpy.run_path(str(path), run_name="_test_api_main")
     start = api.index("async def get_setpoints")
     end = api.index("        # Per-zone VPD targets", start)
     body = api[start:end]
 
-    assert 'BAND_COMPUTED = {"temp_high", "temp_low", "vpd_high", "vpd_low"}' in body
-    assert "LIGHTING_COMPUTED" in body
+    assert "SETPOINT_MAP_REG" in api
+    assert set(module["FIRMWARE_SETPOINT_PARAMS"]) == set(SETPOINT_MAP_REG.values())
+    assert set(module["HOUSE_BAND_COMPUTED_PARAMS"]) == {"temp_low", "temp_high", "vpd_low", "vpd_high"}
+    assert "HOUSE_BAND_COMPUTED_PARAMS" in body
+    assert "LEGACY_LIGHTING_COMPUTED_PARAMS" in body
     assert "SELECT * FROM fn_band_setpoints(now())" in body
     assert "SELECT * FROM fn_house_vpd_control_band(now())" in body
     assert "SELECT * FROM fn_lighting_policy(now(), $1)" in body
@@ -382,7 +398,7 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
     """
     script = Path("scripts/setpoint-server.py").read_text()
 
-    for param in (
+    expected_band_params = {
         "temp_low",
         "temp_high",
         "vpd_low",
@@ -391,13 +407,17 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
         "vpd_target_west",
         "vpd_target_east",
         "vpd_target_center",
-    ):
-        assert f'"{param}"' in script
+    }
+    assert expected_band_params <= set(CROP_BAND_REG)
     assert "LIGHTING_POLICY_PARAMS" not in script
     assert "fn_band_setpoints(now())" in script
     assert "fn_house_vpd_control_band(now())" in script
     assert "fn_zone_vpd_targets(now())" in script
-    assert "'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode'" in script
+    module = runpy.run_path(str(REPO_ROOT / "scripts" / "setpoint-server.py"), run_name="_test_setpoint_server")
+    assert set(module["BAND_OWNED_PARAMS"]) == set(CROP_BAND_REG)
+    assert "PLAN_EXCLUDED_PARAMS_SQL" in script
+    for param in BAND_OWNED_REG:
+        assert f"'{param}'" in module["PLAN_EXCLUDED_PARAMS_SQL"]
     assert "fn_lighting_policy(now(), 'vallery')" not in script
     assert "fn_lighting_minutes_policy(now(), 'vallery')" in script
     assert "if k.strip() not in plan_params" in script
@@ -621,16 +641,8 @@ def test_mcp_set_tunable_treats_vpd_low_as_band_owned():
     band_owned = _assigned_set(mcp_path, "BAND_OWNED_PARAMS")
     tier1 = _assigned_set(mcp_path, "TIER1_TUNABLES")
 
-    assert band_owned == {
-        "temp_low",
-        "temp_high",
-        "vpd_low",
-        "vpd_high",
-        "gl_dli_target",
-        "gl_sunrise_hour",
-        "gl_sunset_hour",
-        "sw_gl_auto_mode",
-    }
+    assert band_owned == set(BAND_OWNED_REG)
+    assert "vpd_low" in band_owned
     assert not (band_owned & tier1), f"Band-owned params must not be Tier 1 tunables: {band_owned & tier1}"
 
 
@@ -649,6 +661,18 @@ def test_plan_required_params_match_registry_tier1_and_have_readback():
     assert not {"mist_vent_close_lead_s", "mist_vent_reopen_delay_s", "summer_vent_min_runtime_s"} & required
     missing_readback = sorted(p for p in required if not REGISTRY[p].cfg_readback_object_id)
     assert not missing_readback
+
+
+def test_setpoint_server_firmware_allowlist_comes_from_registry_routes():
+    """The fallback pull endpoint should not carry a hand-maintained firmware
+    parameter allowlist that can drift from the dispatchable registry routes.
+    """
+    path = Path(__file__).resolve().parent.parent / "scripts" / "setpoint-server.py"
+    src = path.read_text()
+    module = runpy.run_path(str(path), run_name="_test_setpoint_server")
+
+    assert "SETPOINT_MAP_REG" in src
+    assert set(module["FIRMWARE_SETPOINT_PARAMS"]) == set(SETPOINT_MAP_REG.values())
 
 
 def test_per_circuit_lighting_thresholds_are_planner_pushable_but_not_required_tier1():

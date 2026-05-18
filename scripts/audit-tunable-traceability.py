@@ -8,7 +8,7 @@ lacks a readback, or is known to be a reserved/no-op firmware global.
 
 from __future__ import annotations
 
-import ast
+import runpy
 import sys
 from pathlib import Path
 
@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPO_ROOT / "ingestor"))
 
 from entity_map import CFG_READBACK_MAP, SETPOINT_MAP  # noqa: E402
 
-from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, REGISTRY, TIER1_REG  # noqa: E402
+from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, REGISTRY, SETPOINT_MAP_REG, TIER1_REG  # noqa: E402
 from verdify_schemas.tunables import ALL_TUNABLES  # noqa: E402
 
 RESERVED_NO_EFFECT = {
@@ -36,29 +36,24 @@ RESERVED_NO_EFFECT = {
 }
 
 
-def _assigned_set(path: Path, name: str) -> set[str]:
-    tree = ast.parse(path.read_text())
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
-            continue
-        value = node.value
-        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
-            value = value.args[0]
-        return set(ast.literal_eval(value))
-    raise RuntimeError(f"{name} assignment not found in {path}")
-
-
 def main() -> int:
     mcp_path = REPO_ROOT / "mcp" / "server.py"
-    plan_required = _assigned_set(mcp_path, "PLAN_REQUIRED_PARAMS")
-    mcp_tier1 = _assigned_set(mcp_path, "TIER1_TUNABLES")
+    mcp_globals = runpy.run_path(str(mcp_path), run_name="_traceability_mcp_server")
+    api_globals = runpy.run_path(str(REPO_ROOT / "api" / "main.py"), run_name="_traceability_api_main")
+    fallback_globals = runpy.run_path(
+        str(REPO_ROOT / "scripts" / "setpoint-server.py"),
+        run_name="_traceability_setpoint_server",
+    )
+    plan_required = set(mcp_globals["PLAN_REQUIRED_PARAMS"])
+    mcp_tier1 = set(mcp_globals["TIER1_TUNABLES"])
     registry_tier1 = set(TIER1_REG)
     planner_policy = set(PLANNER_PUSHABLE_REG)
     registry_planner_policy = {name for name, spec in REGISTRY.items() if spec.control_class == "planner_policy"}
+    registry_setpoint_params = set(SETPOINT_MAP_REG.values())
     setpoint_params = set(SETPOINT_MAP.values())
     readback_params = set(CFG_READBACK_MAP.values())
+    api_setpoint_params = set(api_globals["FIRMWARE_SETPOINT_PARAMS"])
+    fallback_setpoint_params = set(fallback_globals["FIRMWARE_SETPOINT_PARAMS"])
 
     failures: list[str] = []
     if plan_required != registry_tier1:
@@ -75,6 +70,23 @@ def main() -> int:
         failures.append(
             "PLANNER_PUSHABLE_REG must equal canonical planner-policy rows: "
             f"missing={sorted(registry_planner_policy - planner_policy)} extra={sorted(planner_policy - registry_planner_policy)}"
+        )
+    if setpoint_params != registry_setpoint_params:
+        failures.append(
+            "entity_map SETPOINT_MAP differs from registry setpoint routes: "
+            f"missing={sorted(registry_setpoint_params - setpoint_params)} extra={sorted(setpoint_params - registry_setpoint_params)}"
+        )
+    if api_setpoint_params != registry_setpoint_params:
+        failures.append(
+            "api/main.py FIRMWARE_SETPOINT_PARAMS differs from registry setpoint routes: "
+            f"missing={sorted(registry_setpoint_params - api_setpoint_params)} "
+            f"extra={sorted(api_setpoint_params - registry_setpoint_params)}"
+        )
+    if fallback_setpoint_params != registry_setpoint_params:
+        failures.append(
+            "scripts/setpoint-server.py FIRMWARE_SETPOINT_PARAMS differs from registry setpoint routes: "
+            f"missing={sorted(registry_setpoint_params - fallback_setpoint_params)} "
+            f"extra={sorted(fallback_setpoint_params - registry_setpoint_params)}"
         )
 
     registry_missing = sorted(set(ALL_TUNABLES) - set(REGISTRY))
@@ -112,6 +124,9 @@ def main() -> int:
     print(f"mcp_tier1={len(mcp_tier1)}")
     print(f"planner_policy={len(planner_policy)}")
     print(f"planner_policy_optional={len(planner_policy - registry_tier1)}")
+    print(f"setpoint_routes={len(registry_setpoint_params)}")
+    print(f"api_setpoint_allowlist={len(api_setpoint_params)}")
+    print(f"fallback_setpoint_allowlist={len(fallback_setpoint_params)}")
     print(f"tier1_with_readback={len(plan_required & readback_params)}")
     print(f"reserved_no_effect={len(RESERVED_NO_EFFECT)}")
 

@@ -51,7 +51,12 @@ from verdify_schemas import (  # noqa: E402
     SetpointSummary,
     TreatmentCreate,
 )
-from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, registry_value_error  # noqa: E402
+from verdify_schemas.tunable_registry import (  # noqa: E402
+    BAND_OWNED_REG,
+    PLANNER_PUSHABLE_REG,
+    TIER1_REG,
+    registry_value_error,
+)
 
 # ── Config ──
 # Read DB password from .env
@@ -63,102 +68,13 @@ if _env_path.exists():
             _db_pass = line.split("=", 1)[1].strip().strip('"').strip("'")
 DB_DSN = os.environ.get("DB_DSN", f"postgresql://verdify:{_db_pass}@localhost:5432/verdify")
 # Legacy planner.py removed — planning runs via iris_planner.py → Hermes /v1/runs
-BAND_OWNED_PARAMS = {
-    "temp_low",
-    "temp_high",
-    "vpd_low",
-    "vpd_high",
-    "gl_dli_target",
-    "gl_sunrise_hour",
-    "gl_sunset_hour",
-    "sw_gl_auto_mode",
-}
+BAND_OWNED_PARAMS = BAND_OWNED_REG
 _OPENAI_KEY_FILES = (
     Path("/etc/verdify/hermes-iris.env"),
-    Path("/mnt/jason/agents/shared/credentials/openai_api_key.txt"),
+    Path("/mnt/agents/shared/credentials/openai_api_key.txt"),
 )
-PLAN_REQUIRED_PARAMS = frozenset(
-    {
-        "vpd_hysteresis",
-        "vpd_watch_dwell_s",
-        "mister_engage_kpa",
-        "mister_all_kpa",
-        "mister_engage_delay_s",
-        "mister_all_delay_s",
-        "mister_pulse_on_s",
-        "mister_pulse_gap_s",
-        "mister_vpd_weight",
-        "mister_water_budget_gal",
-        "mist_max_closed_vent_s",
-        "mist_thermal_relief_s",
-        "enthalpy_open",
-        "enthalpy_close",
-        "min_vent_on_s",
-        "min_vent_off_s",
-        "min_fog_on_s",
-        "min_fog_off_s",
-        "fog_escalation_kpa",
-        "d_heat_stage_2",
-        "d_cool_stage_2",
-        "temp_hysteresis",
-        "heat_hysteresis",
-        "bias_heat",
-        "bias_cool",
-        "min_heat_on_s",
-        "min_heat_off_s",
-        "sw_summer_vent_enabled",
-        "vent_prefer_temp_delta_f",
-        "vent_prefer_dp_delta_f",
-        "outdoor_staleness_max_s",
-        "sw_fog_closes_vent",
-        "sw_mister_closes_vent",
-        "sw_dwell_gate_enabled",
-        "dwell_gate_ms",
-        "sw_fsm_controller_enabled",
-        "mist_backoff_s",
-    }
-)
-TIER1_TUNABLES = frozenset(
-    {
-        "vpd_hysteresis",
-        "vpd_watch_dwell_s",
-        "mister_engage_kpa",
-        "mister_all_kpa",
-        "mister_pulse_on_s",
-        "mister_pulse_gap_s",
-        "mister_vpd_weight",
-        "mister_water_budget_gal",
-        "mist_max_closed_vent_s",
-        "mist_thermal_relief_s",
-        "enthalpy_open",
-        "enthalpy_close",
-        "min_vent_on_s",
-        "min_vent_off_s",
-        "min_fog_on_s",
-        "min_fog_off_s",
-        "fog_escalation_kpa",
-        "d_heat_stage_2",
-        "d_cool_stage_2",
-        "temp_hysteresis",
-        "heat_hysteresis",
-        "bias_heat",
-        "bias_cool",
-        "min_heat_on_s",
-        "min_heat_off_s",
-        "mister_engage_delay_s",
-        "mister_all_delay_s",
-        "sw_summer_vent_enabled",
-        "vent_prefer_temp_delta_f",
-        "vent_prefer_dp_delta_f",
-        "outdoor_staleness_max_s",
-        "sw_fog_closes_vent",
-        "sw_mister_closes_vent",
-        "sw_dwell_gate_enabled",
-        "dwell_gate_ms",
-        "sw_fsm_controller_enabled",
-        "mist_backoff_s",
-    }
-)
+PLAN_REQUIRED_PARAMS = TIER1_REG
+TIER1_TUNABLES = TIER1_REG
 
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
 

@@ -28,7 +28,7 @@ import asyncpg
 
 # --- Configuration ---
 HA_URL = "http://192.168.30.107:8123"
-HA_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/ha_token.txt"
+HA_TOKEN_FILE = "/mnt/agents/shared/credentials/ha_token.txt"
 POLL_INTERVAL_S = 300  # 5 minutes
 STATE_FILE = "/srv/verdify/state/ha-sensor-sync-state.json"
 

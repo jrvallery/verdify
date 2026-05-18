@@ -9,6 +9,7 @@ change" gate per the fleet DoD.
 
 import ast
 import os
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -31,7 +32,11 @@ def _assigned_frozenset(path: Path, name: str) -> set[str]:
         value = node.value
         if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "frozenset":
             value = value.args[0]
-        return set(ast.literal_eval(value))
+        try:
+            return set(ast.literal_eval(value))
+        except (TypeError, ValueError):
+            module = runpy.run_path(str(path), run_name=f"_test_{path.stem.replace('-', '_')}")
+            return set(module[name])
     raise AssertionError(f"{name} assignment not found in {path}")
 
 
@@ -611,13 +616,9 @@ class TestSprint18Wiring:
     def test_fw3_invariants_table_defined(self):
         body = self._read(self.TASKS_PATH)
         assert "_PHYSICS_INVARIANTS" in body, "FW-3 invariants table must be defined"
-        # Sprint 24 renamed keys to canonical ALL_TUNABLES names and removed
-        # non-tunable entries (max_relief_cycles, vpd_max_safe, etc.). Assert
-        # representatives from each remaining category: fog window, safety
-        # rail, resource budget.
-        assert '"fog_time_window_start"' in body, "FW-3 must cover fog_time_window_start bounds"
-        assert '"safety_vpd_max"' in body, "FW-3 must cover safety_vpd_max bounds"
-        assert '"mister_water_budget_gal"' in body, "FW-3 must cover mister_water_budget_gal bounds"
+        assert "REGISTRY.items()" in body, "FW-3 invariants must derive from tunable_registry"
+        assert "spec.fw_clamp_lo" in body, "FW-3 lower bounds must derive from registry fw_clamp_lo"
+        assert "spec.fw_clamp_hi" in body, "FW-3 upper bounds must derive from registry fw_clamp_hi"
 
     def test_fw3_validator_invoked_in_dispatcher(self):
         body = self._read(self.TASKS_PATH)
@@ -628,8 +629,11 @@ class TestSprint18Wiring:
         sys.modules.pop("tasks", None)
         import tasks
 
-        assert tasks._PHYSICS_INVARIANTS["mister_engage_delay_s"] == (30, 900)
-        assert tasks._PHYSICS_INVARIANTS["mister_all_delay_s"] == (60, 900)
+        from verdify_schemas.tunable_registry import REGISTRY
+
+        for param in ("mister_engage_delay_s", "mister_all_delay_s"):
+            spec = REGISTRY[param]
+            assert tasks._PHYSICS_INVARIANTS[param] == (spec.fw_clamp_lo, spec.fw_clamp_hi)
 
     # ── OBS-3: relief-cycle state to DB ──
     def test_obs3_migration_082_applied(self):

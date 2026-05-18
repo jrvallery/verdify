@@ -43,6 +43,6 @@ These `.env` / secrets files live on the VM outside the git tree and are preserv
 - `/srv/verdify/api/.env` — API-specific
 - `/srv/verdify/ingestor/.env` — `ESP32_HOST`, `ESP32_PORT`, `ESP32_API_KEY`, DB credentials
 - `/srv/greenhouse/esphome/secrets.yaml` — WiFi SSID/password, ESP32 API key, OTA password
-- Fleet-shared credentials in `/mnt/jason/agents/shared/credentials/`
+- Fleet-shared credentials in `/mnt/agents/shared/credentials/`
 
-Canonical recovery (if VM snapshots are unavailable): Orbit vault → `/mnt/jason/agents/root/secrets/` → `/mnt/jason/agents/shared/credentials/` → per-VM `.env`. See fleet `ARCHITECTURE.md` and the credential-management doc.
+Canonical recovery (if VM snapshots are unavailable): Orbit vault → `/mnt/agents/root/secrets/` → `/mnt/agents/shared/credentials/` → per-VM `.env`. See fleet `ARCHITECTURE.md` and the credential-management doc.

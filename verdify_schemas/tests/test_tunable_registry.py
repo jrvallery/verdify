@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import runpy
 import sys
 
 import pytest
@@ -230,26 +231,11 @@ class TestDriftGuard:
         )
 
     def test_registry_tier1_is_subset_of_mcp_tier1(self) -> None:
-        """Every REGISTRY entry with tier=1 + planner_pushable=True must be in
-        mcp/server.py TIER1_TUNABLES so Iris can actually push it.
-
-        Phase-1a: one-directional check. Phase-1b replaces mcp TIER1 with
-        `PLANNER_PUSHABLE_REG` from this module.
-        """
+        """MCP's mandatory Tier 1 surface must come from the registry."""
         mcp_path = REPO_ROOT / "mcp" / "server.py"
-        text = mcp_path.read_text()
-        # Grab either the legacy local TIER1 set or the module-level
-        # TIER1_TUNABLES frozenset contract.
-        m = re.search(r"TIER1(?:_TUNABLES)?\s*=\s*(?:frozenset\(\s*)?\{([^}]+)\}", text, re.DOTALL)
-        assert m, "Couldn't find TIER1/TIER1_TUNABLES set in mcp/server.py"
-        tier1_body = m.group(1)
-        mcp_tier1 = set(re.findall(r'"([a-z0-9_]+)"', tier1_body))
-        registry_tier1 = {n for n, d in REGISTRY.items() if d.tier == 1 and d.planner_pushable}
-        missing = registry_tier1 - mcp_tier1
-        assert not missing, (
-            f"{len(missing)} registry tier-1 entries not in mcp/server.py TIER1_TUNABLES: "
-            f"{sorted(missing)}. Add to TIER1_TUNABLES (Phase-1b retires it entirely)."
-        )
+        module = runpy.run_path(str(mcp_path), run_name="_test_mcp_server_registry")
+        assert set(module["TIER1_TUNABLES"]) == set(TIER1_REG)
+        assert set(module["PLAN_REQUIRED_PARAMS"]) == set(TIER1_REG)
 
     def test_mcp_set_tunable_uses_planner_pushable_registry(self) -> None:
         """MCP set_tunable must use the canonical planner-policy gate."""

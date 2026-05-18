@@ -40,7 +40,7 @@ docker compose rm -fv openclaw
 sudo rm -rf /opt/openclaw
 sudo rm /etc/systemd/system/openclaw.service && sudo systemctl daemon-reload
 # Remove OPENCLAW_* env vars from /etc/verdify/ingestor.env
-# Remove OpenClaw secrets from /mnt/jason/agents/shared/credentials/
+# Remove OpenClaw secrets from /mnt/agents/shared/credentials/
 ```
 
 ## Post-cutover measurement (the answer to "did this work")

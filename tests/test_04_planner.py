@@ -125,7 +125,7 @@ class TestMCPToolAvailability:
     def test_skill_file_exists(self):
         import os
 
-        assert os.path.isfile("/mnt/jason/agents/iris/skills/greenhouse-planner.md"), "Skill file missing"
+        assert os.path.isfile("/mnt/agents/iris/skills/greenhouse-planner.md"), "Skill file missing"
 
     def test_vendored_playbook_exists(self):
         """G4: `docs/planner/greenhouse-playbook.md` is the version-controlled
@@ -158,7 +158,7 @@ class TestMCPToolAvailability:
             "planner",
             "greenhouse-playbook.md",
         )
-        host = "/mnt/jason/agents/iris/skills/greenhouse-planner.md"
+        host = "/mnt/agents/iris/skills/greenhouse-planner.md"
         if not (os.path.isfile(repo) and os.path.isfile(host)):
             pytest.skip("one of the playbook paths isn't readable")
         with open(repo) as f:

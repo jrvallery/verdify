@@ -60,7 +60,7 @@ PLAYBOOK_ROOTS = [
 ]
 # Agent-host skills mirror — may or may not be present at runtime
 SKILLS_PATHS = [
-    Path("/mnt/jason/agents/iris/skills/greenhouse-planner.md"),
+    Path("/mnt/agents/iris/skills/greenhouse-planner.md"),
 ]
 
 # Soft target: ~512 tokens ≈ 2KB of English text. We chunk by heading first;

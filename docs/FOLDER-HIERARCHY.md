@@ -12,7 +12,7 @@ All source-of-truth content lives on NFS (`/mnt/iris/` or `/mnt/jason/`). Three 
 |---|---|---|
 | `jrvallery/verdify` | `/mnt/iris/verdify/` | Code, firmware, dashboards, migrations, scripts, tests |
 | `jvallery/verdify-vault` | `/mnt/iris/verdify-vault/` | Obsidian vault: website content + Iris operational notes |
-| `jvallery/agents` (iris/ subtree) | `/mnt/jason/agents/iris/` | Agent config: CLAUDE.md, BACKLOG, memory, skills, docs |
+| `jvallery/agents` (iris/ subtree) | `/mnt/agents/iris/` | Agent config: CLAUDE.md, BACKLOG, memory, skills, docs |
 
 ### 1. `/mnt/iris/verdify/` → `jrvallery/verdify`
 
@@ -127,12 +127,12 @@ Obsidian-editable. Syncthing shares this with the Mac. The `website/` subtree dr
 └── assets/                     photo library + derived thumbnails
 ```
 
-### 3. `/mnt/jason/agents/iris/` → `jvallery/agents/iris/`
+### 3. `/mnt/agents/iris/` → `jvallery/agents/iris/`
 
 Part of the fleet-wide agents repo (siblings: `ace/`, `bloom/`, `backup/`, `cortex/`, `haos/`, `sentinel/`, `nexus/`, `orbit/`, `root/`, ...).
 
 ```
-/mnt/jason/agents/iris/
+/mnt/agents/iris/
 ├── CLAUDE.md                   this instance's runtime config
 ├── BACKLOG.md                  sprint roadmap + completed sprints
 ├── AGENTS.md                   session startup conventions
@@ -264,12 +264,12 @@ Manual on VM:
 | Website build output (HTML) | `/srv/verdify/verdify-site/public/` | untracked |
 | Iris crop records | `/mnt/iris/verdify-vault/crops/` | verdify-vault |
 | Iris daily notes | `/mnt/iris/verdify-vault/daily/` | verdify-vault |
-| Agent config (CLAUDE.md, BACKLOG, etc.) | `/mnt/jason/agents/iris/` | agents |
-| Agent memory logs | `/mnt/jason/agents/iris/memory/` | agents |
+| Agent config (CLAUDE.md, BACKLOG, etc.) | `/mnt/agents/iris/` | agents |
+| Agent memory logs | `/mnt/agents/iris/memory/` | agents |
 | Dispatch state (Iris↔Iris-dev) | `/var/local/verdify/state/dispatch/` | untracked, **local** |
 | Cron + ingestor logs | `/var/local/verdify/state/*.log` | untracked, **local** |
 | Site build log | `/var/local/verdify/state/site-build.log` | untracked |
-| Secrets (.env, OTA password, API keys) | `/srv/verdify/.env`, `/srv/greenhouse/esphome/secrets.yaml`, `/mnt/jason/agents/shared/credentials/` | **never in git** |
+| Secrets (.env, OTA password, API keys) | `/srv/verdify/.env`, `/srv/greenhouse/esphome/secrets.yaml`, `/mnt/agents/shared/credentials/` | **never in git** |
 | Backup dumps | `/mnt/iris/backups/verdify-YYYYMMDD.dump` | untracked, NFS |
 | Python venv | `/srv/greenhouse/.venv/` | untracked, **local SSD** |
 

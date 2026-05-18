@@ -42,7 +42,7 @@ GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
 # means Iris silently loses detailed tuning guidance — so we check at send
 # time and (a) log critical, (b) flag the outgoing prompt so Iris knows to
 # degrade gracefully instead of referencing a file she can't open.
-PLANNER_PLAYBOOK_PATH = Path("/mnt/jason/agents/iris/skills/greenhouse-planner.md")
+PLANNER_PLAYBOOK_PATH = Path("/mnt/agents/iris/skills/greenhouse-planner.md")
 if not PLANNER_PLAYBOOK_PATH.exists():  # pragma: no cover — host-path check
     log.warning(
         "Planner playbook missing at %s. Iris will not have detailed tuning "

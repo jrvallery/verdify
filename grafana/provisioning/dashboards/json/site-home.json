@@ -4118,7 +4118,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Traceability panel for the qualified-light-minutes controller. Natural lux and threshold lines show the confirmed policy band; lower lanes are physical Lutron switch state from equipment_state; right-axis minutes count natural lux above threshold OR actual switch-on time once per bucket. Use the lighting traceability table for desired-vs-cfg-vs-physical status when investigating drift.",
+      "description": "Planner-managed lux trigger bands for the two Lutron lighting circuits, with confirmed switch state shown as filled lanes. Solar irradiance (current + forecast) appears as a background fill matching the temperature and VPD trends. DLI accounting, qualified-minutes math, and per-circuit cfg readbacks remain in the lighting traceability tables.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4138,7 +4138,7 @@
               "tooltip": false,
               "viz": false
             },
-            "lineInterpolation": "linear",
+            "lineInterpolation": "smooth",
             "lineWidth": 1,
             "pointSize": 5,
             "showPoints": "never",
@@ -4169,25 +4169,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Natural Lux (10m avg)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#F2CC0C",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Main/Grow OFF Threshold"
             },
             "properties": [
@@ -4199,16 +4180,16 @@
                 }
               },
               {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
                 "id": "custom.fillBelowTo",
                 "value": "Main/Grow ON Threshold"
               },
               {
                 "id": "custom.fillOpacity",
                 "value": 10
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
               }
             ]
           },
@@ -4226,6 +4207,10 @@
                 }
               },
               {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
                 "id": "custom.lineStyle",
                 "value": {
                   "fill": "dash",
@@ -4234,10 +4219,6 @@
                     4
                   ]
                 }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
               }
             ]
           },
@@ -4255,16 +4236,16 @@
                 }
               },
               {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
                 "id": "custom.fillBelowTo",
                 "value": "Main ON Threshold"
               },
               {
                 "id": "custom.fillOpacity",
                 "value": 10
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
               }
             ]
           },
@@ -4282,6 +4263,10 @@
                 }
               },
               {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
                 "id": "custom.lineStyle",
                 "value": {
                   "fill": "dash",
@@ -4290,10 +4275,6 @@
                     4
                   ]
                 }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
               }
             ]
           },
@@ -4311,16 +4292,16 @@
                 }
               },
               {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
                 "id": "custom.fillBelowTo",
                 "value": "Grow ON Threshold"
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 8
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
+                "value": 10
               }
             ]
           },
@@ -4338,25 +4319,25 @@
                 }
               },
               {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
                 "id": "custom.lineStyle",
                 "value": {
                   "fill": "dash",
                   "dash": [
-                    4,
+                    8,
                     4
                   ]
                 }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Actual switch.greenhouse_main ON Base"
+              "options": "switch.greenhouse_main ON Base"
             },
             "properties": [
               {
@@ -4415,7 +4396,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Actual switch.greenhouse_main ON"
+              "options": "switch.greenhouse_main ON"
             },
             "properties": [
               {
@@ -4426,12 +4407,71 @@
                 }
               },
               {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 150000
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
+              },
+              {
                 "id": "custom.fillBelowTo",
-                "value": "Actual switch.greenhouse_main ON Base"
+                "value": "switch.greenhouse_main ON Base"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 30
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 4
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
               },
               {
                 "id": "displayName",
                 "value": "switch.greenhouse_main ON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "switch.greenhouse_grow ON Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5794F2",
+                  "mode": "fixed"
+                }
               },
               {
                 "id": "unit",
@@ -4460,6 +4500,69 @@
               {
                 "id": "custom.spanNulls",
                 "value": false
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "switch.greenhouse_grow ON"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5794F2",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 150000
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "switch.greenhouse_grow ON Base"
               },
               {
                 "id": "custom.fillOpacity",
@@ -4472,96 +4575,49 @@
               {
                 "id": "custom.hideFrom",
                 "value": {
-                  "legend": true,
+                  "legend": false,
                   "tooltip": true,
                   "viz": false
                 }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Actual switch.greenhouse_grow ON Base"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#5794F2",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 150000
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.spanNulls",
-                "value": false
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": true,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Actual switch.greenhouse_grow ON"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#5794F2",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.fillBelowTo",
-                "value": "Actual switch.greenhouse_grow ON Base"
               },
               {
                 "id": "displayName",
                 "value": "switch.greenhouse_grow ON"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Solar"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFA726",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 35
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
               },
               {
                 "id": "unit",
-                "value": "none"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "min",
@@ -4569,692 +4625,68 @@
               },
               {
                 "id": "max",
-                "value": 150000
+                "value": 1200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Solar Forecast"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFD740",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 18
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               },
               {
                 "id": "custom.axisPlacement",
                 "value": "hidden"
               },
               {
-                "id": "custom.drawStyle",
-                "value": "line"
+                "id": "unit",
+                "value": "watt/m\u00b2"
               },
               {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
+                "id": "min",
+                "value": 0
               },
               {
-                "id": "custom.spanNulls",
-                "value": false
+                "id": "max",
+                "value": 1200
               },
               {
-                "id": "custom.fillOpacity",
-                "value": 30
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 4
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
               },
               {
                 "id": "custom.hideFrom",
                 "value": {
                   "legend": true,
-                  "tooltip": true,
+                  "tooltip": false,
                   "viz": false
                 }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "switch.greenhouse_main actual"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "switch.greenhouse_main actual"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FF5C8A",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "switch.greenhouse_grow actual"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "switch.greenhouse_grow actual"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#5794F2",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Main qualified light minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FF5C8A",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 3
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Grow qualified light minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#5794F2",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 3
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Main switch-on minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#E02F64",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    2,
-                    4
-                  ]
-                }
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Grow switch-on minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#3274D9",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    2,
-                    4
-                  ]
-                }
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Main natural-qualified minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#56A64B",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Grow natural-qualified minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#56A64B",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Main target gl_main_target_light_minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#B877D9",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "Main target minutes"
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    8,
-                    4
-                  ]
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Grow target gl_grow_target_light_minutes"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#FF9830",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "Grow target minutes"
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    8,
-                    4
-                  ]
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "^Latest plan .* max target minutes$"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#E0B400",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "Latest plan max target"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              },
-              {
-                "id": "unit",
-                "value": "suffix: min"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1080
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "qualified minutes"
-              },
-              {
-                "id": "custom.lineInterpolation",
-                "value": "stepAfter"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
               }
             ]
           }
@@ -5264,18 +4696,15 @@
         "x": 0,
         "y": 88,
         "w": 24,
-        "h": 12
+        "h": 14
       },
       "id": 36,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "width": 420
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -5291,11 +4720,33 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH raw_bounds AS (\n  SELECT\n    $__timeFrom()::timestamptz AS raw_from_ts,\n    LEAST($__timeTo()::timestamptz, now()) AS raw_to_ts\n),\nbounds AS MATERIALIZED (\n  SELECT\n    GREATEST(raw_from_ts, raw_to_ts - interval '72 hours') AS from_ts,\n    raw_to_ts AS to_ts,\n    interval '10 minutes' AS step,\n    date_trunc('day', GREATEST(raw_from_ts, raw_to_ts - interval '72 hours') AT TIME ZONE 'America/Denver') AT TIME ZONE 'America/Denver' AS seed_start_ts\n  FROM raw_bounds\n),\nbuckets AS MATERIALIZED (\n  SELECT generate_series(time_bucket(b.step, b.seed_start_ts), b.to_ts, b.step) AS time\n  FROM bounds b\n),\npolicy AS MATERIALIZED (\n  SELECT *\n  FROM fn_lighting_minutes_policy((SELECT to_ts FROM bounds), 'vallery')\n  WHERE light_key IN ('main', 'grow')\n  LIMIT 2\n),\npolicy_wide AS (\n  SELECT\n    max(target_light_minutes) FILTER (WHERE light_key = 'main') AS main_target_minutes,\n    max(target_light_minutes) FILTER (WHERE light_key = 'grow') AS grow_target_minutes,\n    max(lux_on_threshold) FILTER (WHERE light_key = 'main') AS main_on,\n    max(lux_off_threshold) FILTER (WHERE light_key = 'main') AS main_off,\n    max(lux_on_threshold) FILTER (WHERE light_key = 'grow') AS grow_on,\n    max(lux_off_threshold) FILTER (WHERE light_key = 'grow') AS grow_off\n  FROM policy\n),\nlatest_plan AS MATERIALIZED (\n  SELECT resulting_plan_id\n  FROM plan_delivery_log\n  WHERE greenhouse_id = 'vallery'\n    AND status = 'plan_written'\n    AND resulting_plan_id IS NOT NULL\n  ORDER BY plan_written_at DESC NULLS LAST, delivered_at DESC\n  LIMIT 1\n),\nlux AS MATERIALIZED (\n  SELECT\n    time_bucket((SELECT step FROM bounds), c.ts) AS time,\n    avg(COALESCE(c.outdoor_lux, c.lux))::double precision AS natural_lux\n  FROM climate c, bounds b\n  WHERE c.ts >= b.seed_start_ts\n    AND c.ts <= b.to_ts\n    AND c.greenhouse_id = 'vallery'\n    AND COALESCE(c.outdoor_lux, c.lux) IS NOT NULL\n  GROUP BY 1\n  ORDER BY 1\n  LIMIT 1000\n),\nthresholds AS (\n  SELECT x.time, s.metric, s.value\n  FROM bounds bd\n  CROSS JOIN policy_wide p\n  CROSS JOIN LATERAL (VALUES (bd.from_ts), (bd.to_ts)) AS x(time)\n  CROSS JOIN LATERAL (VALUES\n    (CASE WHEN p.main_on = p.grow_on THEN 'Main/Grow ON Threshold' ELSE 'Main ON Threshold' END, p.main_on),\n    (CASE WHEN p.main_on = p.grow_on THEN NULL ELSE 'Grow ON Threshold' END, p.grow_on),\n    (CASE WHEN p.main_off = p.grow_off THEN 'Main/Grow OFF Threshold' ELSE 'Main OFF Threshold' END, p.main_off),\n    (CASE WHEN p.main_off = p.grow_off THEN NULL ELSE 'Grow OFF Threshold' END, p.grow_off)\n  ) AS s(metric, value)\n  WHERE s.metric IS NOT NULL\n),\nstate_seed AS MATERIALIZED (\n  SELECT bd.seed_start_ts AS time, p.equipment, COALESCE(seed.state, false) AS state\n  FROM bounds bd\n  CROSS JOIN policy p\n  LEFT JOIN LATERAL (\n    SELECT e.state\n    FROM equipment_state e\n    WHERE e.greenhouse_id = 'vallery'\n      AND e.equipment = p.equipment\n      AND e.ts <= bd.seed_start_ts\n    ORDER BY e.ts DESC\n    LIMIT 1\n  ) seed ON true\n),\nstate_events AS MATERIALIZED (\n  SELECT e.ts AS time, e.equipment, e.state\n  FROM equipment_state e, bounds bd\n  WHERE e.greenhouse_id = 'vallery'\n    AND e.equipment IN ('grow_light_main', 'grow_light_grow')\n    AND e.ts >= bd.seed_start_ts\n    AND e.ts <= bd.to_ts\n),\nstate_timeline AS MATERIALIZED (\n  SELECT\n    e.time,\n    e.equipment,\n    e.state,\n    lead(e.time, 1, (SELECT to_ts FROM bounds)) OVER (PARTITION BY e.equipment ORDER BY e.time) AS next_time\n  FROM (\n    SELECT time, equipment, state FROM state_seed\n    UNION ALL\n    SELECT time, equipment, state FROM state_events\n  ) e\n),\nstate_segments AS MATERIALIZED (\n  SELECT\n    greatest(st.time, bd.seed_start_ts) AS start_time,\n    least(st.next_time, bd.to_ts) AS end_time,\n    st.equipment\n  FROM state_timeline st\n  CROSS JOIN bounds bd\n  WHERE st.state\n    AND st.time < bd.to_ts\n    AND st.next_time > bd.seed_start_ts\n),\nstate_metrics AS MATERIALIZED (\n  SELECT *\n  FROM (VALUES\n    ('main'::text, 'grow_light_main'::text, 'Actual switch.greenhouse_main ON'::text, 'Actual switch.greenhouse_main ON Base'::text, 11000.0::double precision, 5000.0::double precision, 'switch.greenhouse_main actual'::text),\n    ('grow'::text, 'grow_light_grow'::text, 'Actual switch.greenhouse_grow ON'::text, 'Actual switch.greenhouse_grow ON Base'::text, 19000.0::double precision, 13000.0::double precision, 'switch.greenhouse_grow actual'::text)\n  ) AS metrics(light_key, equipment, metric, base_metric, lane_high, lane_low, status_metric)\n),\nstate_lanes AS (\n  SELECT\n    b.time,\n    m.metric,\n    CASE WHEN EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = m.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) THEN m.lane_high ELSE NULL::double precision END AS value\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN state_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n  UNION ALL\n  SELECT b.time, m.base_metric, m.lane_low\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN state_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n),\nswitch_status AS (\n  SELECT\n    b.time,\n    m.status_metric AS metric,\n    CASE WHEN EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = m.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) THEN 1.0 ELSE 0.0 END::double precision AS value\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN state_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n),\nbucket_raw AS MATERIALIZED (\n  SELECT\n    b.time,\n    p.light_key,\n    p.equipment,\n    p.target_light_minutes,\n    p.start_hour,\n    p.cutoff_hour,\n    p.lux_on_threshold,\n    p.lux_off_threshold,\n    EXTRACT(hour FROM b.time AT TIME ZONE 'America/Denver')::integer AS local_hour,\n    (b.time AT TIME ZONE 'America/Denver')::date AS local_date,\n    COALESCE(l.natural_lux, 0.0) AS natural_lux,\n    GREATEST(0.0, EXTRACT(epoch FROM LEAST(b.time + bd.step, bd.to_ts) - b.time) / 60.0)::double precision AS bucket_minutes,\n    EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = p.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) AS switch_on\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN policy p\n  LEFT JOIN lux l ON l.time = b.time\n),\nbucket_eval AS (\n  SELECT *,\n         CASE\n           WHEN start_hour <= cutoff_hour THEN local_hour >= start_hour AND local_hour < cutoff_hour\n           ELSE local_hour >= start_hour OR local_hour < cutoff_hour\n         END AS in_window,\n         natural_lux >= lux_on_threshold AS natural_qualified\n  FROM bucket_raw\n),\nminute_series AS MATERIALIZED (\n  SELECT\n    time,\n    light_key,\n    target_light_minutes,\n    sum(CASE WHEN in_window AND (natural_qualified OR switch_on) THEN bucket_minutes ELSE 0.0 END)\n      OVER (PARTITION BY light_key, local_date ORDER BY time) AS qualified_minutes,\n    sum(CASE WHEN in_window AND natural_qualified THEN bucket_minutes ELSE 0.0 END)\n      OVER (PARTITION BY light_key, local_date ORDER BY time) AS natural_minutes,\n    sum(CASE WHEN in_window AND switch_on THEN bucket_minutes ELSE 0.0 END)\n      OVER (PARTITION BY light_key, local_date ORDER BY time) AS switch_minutes,\n    sum(CASE WHEN in_window AND natural_qualified AND switch_on THEN bucket_minutes ELSE 0.0 END)\n      OVER (PARTITION BY light_key, local_date ORDER BY time) AS overlap_minutes\n  FROM bucket_eval\n),\nminute_long AS (\n  SELECT\n    time,\n    CASE WHEN light_key = 'main' THEN 'Main qualified light minutes' ELSE 'Grow qualified light minutes' END AS metric,\n    qualified_minutes::double precision AS value\n  FROM minute_series, bounds bd\n  WHERE time >= bd.from_ts\n    AND time <= bd.to_ts\n  UNION ALL\n  SELECT\n    time,\n    CASE WHEN light_key = 'main' THEN 'Main switch-on minutes' ELSE 'Grow switch-on minutes' END,\n    switch_minutes::double precision\n  FROM minute_series, bounds bd\n  WHERE time >= bd.from_ts\n    AND time <= bd.to_ts\n  UNION ALL\n  SELECT\n    time,\n    CASE WHEN light_key = 'main' THEN 'Main natural-qualified minutes' ELSE 'Grow natural-qualified minutes' END,\n    natural_minutes::double precision\n  FROM minute_series, bounds bd\n  WHERE time >= bd.from_ts\n    AND time <= bd.to_ts\n),\ntarget_lines AS (\n  SELECT x.time, s.metric, s.value\n  FROM bounds bd\n  LEFT JOIN latest_plan lp ON true\n  CROSS JOIN LATERAL (VALUES (bd.from_ts), (bd.to_ts)) AS x(time)\n  CROSS JOIN LATERAL (\n    SELECT\n      CASE WHEN p.light_key = 'main' THEN 'Main target gl_main_target_light_minutes' ELSE 'Grow target gl_grow_target_light_minutes' END AS metric,\n      p.target_light_minutes::double precision AS value\n    FROM policy p\n    UNION ALL\n    SELECT\n      format('Latest plan %s max target minutes', COALESCE(lp.resulting_plan_id, 'none')) AS metric,\n      max(target_light_minutes)::double precision AS value\n    FROM policy\n  ) s\n),\nlux_long AS (\n  SELECT\n    l.time,\n    'Natural Lux (10m avg)'::text AS metric,\n    l.natural_lux::double precision AS value\n  FROM lux l, bounds bd\n  WHERE l.time >= bd.from_ts\n    AND l.time <= bd.to_ts\n)\nSELECT time, metric, value FROM lux_long\nUNION ALL\nSELECT time, metric, value FROM thresholds\nUNION ALL\nSELECT time, metric, value FROM state_lanes\nUNION ALL\nSELECT time, metric, value FROM switch_status\nUNION ALL\nSELECT time, metric, value FROM minute_long\nUNION ALL\nSELECT time, metric, value FROM target_lines\nORDER BY time, metric",
+          "rawSql": "WITH raw_bounds AS (\n  SELECT\n    $__timeFrom()::timestamptz AS from_ts,\n    $__timeTo()::timestamptz AS to_ts\n),\nbounds AS MATERIALIZED (\n  SELECT\n    GREATEST(from_ts, to_ts - interval '7 days') AS from_ts,\n    to_ts AS to_ts,\n    LEAST(to_ts, now()) AS state_to_ts,\n    interval '10 minutes' AS step,\n    date_trunc('day', GREATEST(from_ts, to_ts - interval '7 days') AT TIME ZONE 'America/Denver') AT TIME ZONE 'America/Denver' AS seed_start_ts\n  FROM raw_bounds\n),\nbuckets AS MATERIALIZED (\n  SELECT generate_series(time_bucket(b.step, b.seed_start_ts), b.state_to_ts, b.step) AS time\n  FROM bounds b\n),\npolicy AS MATERIALIZED (\n  SELECT *\n  FROM fn_lighting_minutes_policy((SELECT to_ts FROM bounds), 'vallery')\n  WHERE light_key IN ('main', 'grow')\n  LIMIT 2\n),\npolicy_wide AS (\n  SELECT\n    max(lux_on_threshold) FILTER (WHERE light_key = 'main') AS main_on,\n    max(lux_off_threshold) FILTER (WHERE light_key = 'main') AS main_off,\n    max(lux_on_threshold) FILTER (WHERE light_key = 'grow') AS grow_on,\n    max(lux_off_threshold) FILTER (WHERE light_key = 'grow') AS grow_off\n  FROM policy\n),\nthresholds AS (\n  SELECT x.time, s.metric, s.value\n  FROM bounds bd\n  CROSS JOIN policy_wide p\n  CROSS JOIN LATERAL (VALUES (bd.from_ts), (bd.to_ts)) AS x(time)\n  CROSS JOIN LATERAL (VALUES\n    (CASE WHEN p.main_on = p.grow_on THEN 'Main/Grow ON Threshold' ELSE 'Main ON Threshold' END, p.main_on),\n    (CASE WHEN p.main_on = p.grow_on THEN NULL ELSE 'Grow ON Threshold' END, p.grow_on),\n    (CASE WHEN p.main_off = p.grow_off THEN 'Main/Grow OFF Threshold' ELSE 'Main OFF Threshold' END, p.main_off),\n    (CASE WHEN p.main_off = p.grow_off THEN NULL ELSE 'Grow OFF Threshold' END, p.grow_off)\n  ) AS s(metric, value)\n  WHERE s.metric IS NOT NULL\n),\nstate_seed AS MATERIALIZED (\n  SELECT bd.seed_start_ts AS time, p.equipment, COALESCE(seed.state, false) AS state\n  FROM bounds bd\n  CROSS JOIN policy p\n  LEFT JOIN LATERAL (\n    SELECT e.state\n    FROM equipment_state e\n    WHERE e.greenhouse_id = 'vallery'\n      AND e.equipment = p.equipment\n      AND e.ts <= bd.seed_start_ts\n    ORDER BY e.ts DESC\n    LIMIT 1\n  ) seed ON true\n),\nstate_events AS MATERIALIZED (\n  SELECT e.ts AS time, e.equipment, e.state\n  FROM equipment_state e, bounds bd\n  WHERE e.greenhouse_id = 'vallery'\n    AND e.equipment IN ('grow_light_main', 'grow_light_grow')\n    AND e.ts >= bd.seed_start_ts\n    AND e.ts <= bd.state_to_ts\n),\nstate_timeline AS MATERIALIZED (\n  SELECT\n    e.time,\n    e.equipment,\n    e.state,\n    lead(e.time, 1, (SELECT state_to_ts FROM bounds)) OVER (PARTITION BY e.equipment ORDER BY e.time) AS next_time\n  FROM (\n    SELECT time, equipment, state FROM state_seed\n    UNION ALL\n    SELECT time, equipment, state FROM state_events\n  ) e\n),\nstate_segments AS MATERIALIZED (\n  SELECT\n    greatest(st.time, bd.seed_start_ts) AS start_time,\n    least(st.next_time, bd.state_to_ts) AS end_time,\n    st.equipment\n  FROM state_timeline st\n  CROSS JOIN bounds bd\n  WHERE st.state\n    AND st.time < bd.state_to_ts\n    AND st.next_time > bd.seed_start_ts\n),\nstate_metrics AS MATERIALIZED (\n  SELECT *\n  FROM (VALUES\n    ('main'::text, 'grow_light_main'::text, 'switch.greenhouse_main ON'::text, 'switch.greenhouse_main ON Base'::text, 11000.0::double precision, 5000.0::double precision),\n    ('grow'::text, 'grow_light_grow'::text, 'switch.greenhouse_grow ON'::text, 'switch.greenhouse_grow ON Base'::text, 19000.0::double precision, 13000.0::double precision)\n  ) AS metrics(light_key, equipment, metric, base_metric, lane_high, lane_low)\n),\nstate_lanes AS (\n  SELECT\n    b.time,\n    m.metric,\n    CASE WHEN EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = m.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) THEN m.lane_high ELSE NULL::double precision END AS value\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN state_metrics m\n  UNION ALL\n  SELECT b.time, m.base_metric, m.lane_low\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN state_metrics m\n)\nSELECT time, metric, value FROM thresholds\nUNION ALL\nSELECT time, metric, value FROM state_lanes\nORDER BY time, metric",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "verdify-tsdb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "(SELECT ts AS time, solar_irradiance_w_m2 AS \"Solar Forecast\"\nFROM climate WHERE solar_irradiance_w_m2 IS NOT NULL ORDER BY ts DESC LIMIT 1)\nUNION ALL\n(SELECT DISTINCT ON (date_trunc('hour', ts))\n    date_trunc('hour', ts) AS time, solar_w_m2 AS \"Solar Forecast\"\nFROM weather_forecast WHERE ts > now() AND ts < now() + interval '72 hours'\nORDER BY date_trunc('hour', ts), fetched_at DESC)\nORDER BY time",
+          "refId": "K"
         }
       ],
-      "title": "Lighting Trace: Qualified Minutes",
+      "title": "Lighting Switches & Bands",
       "type": "timeseries"
     }
   ],

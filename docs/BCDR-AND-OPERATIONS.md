@@ -4,7 +4,7 @@
 
 Last updated: 2026-04-18
 
-This document is prescriptive: "here's what could go wrong and what's in place (or missing) to handle it." It's a companion to `FOLDER-HIERARCHY.md` (where things live) and `IRIS-PROVISIONING-RUNBOOK.md` (how to build a new VM from scratch — in `/mnt/jason/agents/iris/docs/`).
+This document is prescriptive: "here's what could go wrong and what's in place (or missing) to handle it." It's a companion to `FOLDER-HIERARCHY.md` (where things live) and `IRIS-PROVISIONING-RUNBOOK.md` (how to build a new VM from scratch — in `/mnt/agents/iris/docs/`).
 
 ## 1. What is actually protected right now
 
@@ -72,7 +72,7 @@ Grafana state is recoverable-ish because dashboards are provisioned from git. UI
 - `/srv/verdify/.env` (POSTGRES_PASSWORD, GRAFANA_ADMIN_PASSWORD)
 - `/srv/verdify/ingestor/.env` (ESP32 credentials)
 - `/srv/greenhouse/esphome/secrets.yaml` (WiFi SSID/pw, ESP32 API key, OTA pw)
-- `/mnt/jason/agents/shared/credentials/` (Anthropic key, Gemini key, HA token, Slack bot token)
+- `/mnt/agents/shared/credentials/` (Anthropic key, Gemini key, HA token, Slack bot token)
 - Traefik basic-auth tokens in `/mnt/iris/verdify/traefik/dynamic/`
 
 If this VM is destroyed, rebuilding requires retrieving all of these from the Orbit vault (per CLAUDE.md credential flow).
@@ -175,7 +175,7 @@ docker compose up -d && make test
 
 ### 4d. Full VM rebuild
 
-See `/mnt/jason/agents/iris/docs/IRIS-PROVISIONING-RUNBOOK.md`. Summary:
+See `/mnt/agents/iris/docs/IRIS-PROVISIONING-RUNBOOK.md`. Summary:
 
 1. Provision new Debian VM, give it `192.168.30.150`, install docker + python3.13 + esphome
 2. Mount NFS (`/mnt/iris/` from NAS)

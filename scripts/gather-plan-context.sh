@@ -12,7 +12,7 @@ if [ "${1:-}" = "--greenhouse-id" ] && [ -n "${2:-}" ]; then
 fi
 
 DB="docker exec verdify-timescaledb psql -U verdify -d verdify -t -A"
-HA_TOKEN=$(cat /mnt/jason/agents/shared/credentials/ha_token.txt 2>/dev/null || echo "")
+HA_TOKEN=$(cat /mnt/agents/shared/credentials/ha_token.txt 2>/dev/null || echo "")
 HA_URL="http://192.168.30.107:8123"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON:-/srv/greenhouse/.venv/bin/python}"

@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 
 # --- Configuration ---
 SLACK_CHANNEL = "C0ANVVAPLD6"  # #greenhouse
-SLACK_TOKEN_FILE = "/mnt/jason/agents/shared/credentials/slack_bot_token.txt"
+SLACK_TOKEN_FILE = "/mnt/agents/shared/credentials/slack_bot_token.txt"
 DRY_RUN = "--dry-run" in sys.argv
 DIGEST_MODE = "--digest" in sys.argv
 AIR_EXCHANGE_RELAY_STUCK_MODES = frozenset({"VENTILATE", "DEHUM_VENT", "THERMAL_RELIEF", "SAFETY_COOL"})

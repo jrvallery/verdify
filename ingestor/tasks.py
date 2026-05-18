@@ -44,8 +44,14 @@ from verdify_schemas import (
     PlanDeliveryLogRow,
     SetpointChange,
 )
+from verdify_schemas.tunable_registry import (
+    CROP_BAND_REG,
+    LEGACY_SHARED_LIGHTING_REG,
+    LIGHTING_CIRCUIT_DEFAULT_REG,
+    REGISTRY,
+    registry_value_error,
+)
 from verdify_schemas.tunable_registry import get as get_tunable
-from verdify_schemas.tunable_registry import registry_value_error
 
 log = logging.getLogger("tasks")
 
@@ -64,96 +70,30 @@ from config import (
     load_token as _load_token,
 )
 
-# Crop-band and lighting-policy params are not planner-owned waypoints. The
-# dispatcher derives them from DB policy functions every cycle and pushes them
-# to firmware.
-# A missing setpoint_plan row for vpd_low is therefore not a firmware fallback:
-# vpd_low is explicit in the band contract here.
-LIGHTING_POLICY_PARAMS = frozenset(
-    {
-        "gl_dli_target",
-        "gl_lux_hysteresis",
-        "gl_lux_threshold",
-        "gl_sunrise_hour",
-        "gl_sunset_hour",
-        "sw_gl_auto_mode",
-    }
-)
-
-LIGHTING_CIRCUIT_DEFAULT_PARAMS = frozenset(
-    {
-        "gl_main_dli_target",
-        "gl_main_target_light_minutes",
-        "gl_main_sunrise_hour",
-        "gl_main_sunset_hour",
-        "gl_main_lux_threshold",
-        "gl_main_lux_hysteresis",
-        "gl_main_min_on_s",
-        "gl_main_min_off_s",
-        "sw_gl_main_auto_mode",
-        "gl_grow_dli_target",
-        "gl_grow_target_light_minutes",
-        "gl_grow_sunrise_hour",
-        "gl_grow_sunset_hour",
-        "gl_grow_lux_threshold",
-        "gl_grow_lux_hysteresis",
-        "gl_grow_min_on_s",
-        "gl_grow_min_off_s",
-        "sw_gl_grow_auto_mode",
-    }
-)
-
+# Crop-band and lighting-policy params are dispatcher-owned read-only context.
+# Import these sets from tunable_registry so planner/MCP/dispatcher ownership
+# checks cannot drift apart.
+LIGHTING_POLICY_PARAMS = LEGACY_SHARED_LIGHTING_REG
+LIGHTING_CIRCUIT_DEFAULT_PARAMS = LIGHTING_CIRCUIT_DEFAULT_REG
 LIGHTING_CIRCUIT_SUPPORT_SENTINELS = frozenset(
-    {
-        "gl_main_lux_threshold",
-        "gl_grow_lux_threshold",
-        "sw_gl_main_auto_mode",
-        "sw_gl_grow_auto_mode",
-    }
+    name
+    for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS
+    if name.endswith("_lux_threshold") or name.startswith(("sw_gl_main_", "sw_gl_grow_"))
 )
-
 LIGHTING_TARGET_MINUTE_PARAMS = frozenset(
-    {
-        "gl_main_target_light_minutes",
-        "gl_grow_target_light_minutes",
-    }
+    name for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS if name.endswith("_target_light_minutes")
 )
-
 HEAP_RECOVERY_PRIORITY_PARAMS = frozenset(
-    {
-        "gl_main_target_light_minutes",
-        "gl_main_sunrise_hour",
-        "gl_main_sunset_hour",
-        "gl_main_lux_threshold",
-        "gl_main_lux_hysteresis",
-        "sw_gl_main_auto_mode",
-        "gl_grow_target_light_minutes",
-        "gl_grow_sunrise_hour",
-        "gl_grow_sunset_hour",
-        "gl_grow_lux_threshold",
-        "gl_grow_lux_hysteresis",
-        "sw_gl_grow_auto_mode",
-    }
+    name
+    for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS
+    if name.endswith(("_target_light_minutes", "_sunrise_hour", "_sunset_hour", "_lux_threshold", "_lux_hysteresis"))
+    or name.startswith(("sw_gl_main_", "sw_gl_grow_"))
 )
-
-BAND_DRIVEN_PARAMS = frozenset(
-    {
-        "temp_high",
-        "temp_low",
-        "vpd_high",
-        "vpd_low",
-        "vpd_target_south",
-        "vpd_target_west",
-        "vpd_target_east",
-        "vpd_target_center",
-        "gl_dli_target",
-        "gl_lux_hysteresis",
-        "gl_lux_threshold",
-        "gl_sunrise_hour",
-        "gl_sunset_hour",
-        "sw_gl_auto_mode",
-    }
+HOUSE_BAND_PARAMS = frozenset(
+    name for name in CROP_BAND_REG if name.startswith("temp_") or name in {"vpd_low", "vpd_high"}
 )
+BAND_DRIVEN_PARAMS = CROP_BAND_REG | LIGHTING_POLICY_PARAMS
+SAFETY_RAIL_PARAMS = frozenset(name for name, spec in REGISTRY.items() if spec.push_owner == "safety")
 
 HOUSE_VPD_MIN_WIDTH_KPA = 0.55
 HOUSE_VPD_LOW_MARGIN_KPA = 0.20
@@ -1679,14 +1619,11 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
                    count(*)::int AS rows
               FROM setpoint_plan
              WHERE is_active = true
-               AND parameter IN (
-                   'temp_low', 'temp_high', 'vpd_low', 'vpd_high',
-                   'vpd_target_south', 'vpd_target_west', 'vpd_target_east', 'vpd_target_center',
-                   'gl_dli_target', 'gl_sunrise_hour', 'gl_sunset_hour', 'sw_gl_auto_mode'
-               )
+               AND parameter = ANY($1::text[])
              GROUP BY parameter, coalesce(plan_id, '<null>'), coalesce(source, '<null>')
              ORDER BY parameter, plan_id, source
-            """
+            """,
+            sorted(BAND_DRIVEN_PARAMS),
         )
         if band_owned_rows:
             offenders = [
@@ -1851,23 +1788,22 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
             )
 
         # 8. Safety value sanity check — catch zeroed/invalid safety rails
-        for r in await conn.fetch("""
+        for r in await conn.fetch(
+            """
             SELECT DISTINCT ON (parameter) parameter, value
             FROM setpoint_snapshot
-            WHERE parameter IN ('safety_min','safety_max','safety_vpd_min','safety_vpd_max')
+            WHERE parameter = ANY($1::text[])
               AND ts > now() - interval '5 minutes'
             ORDER BY parameter, ts DESC
-        """):
+        """,
+            sorted(SAFETY_RAIL_PARAMS),
+        ):
             val = r["value"]
             param = r["parameter"]
-            is_invalid = (
-                val is None
-                or val == 0
-                or (param == "safety_min" and (val < 30 or val > 70))
-                or (param == "safety_max" and (val < 70 or val > 120))
-                or (param == "safety_vpd_min" and val < 0)
-                or (param == "safety_vpd_max" and val < 1)
-            )
+            spec = REGISTRY[param]
+            lo = spec.fw_clamp_lo
+            hi = spec.fw_clamp_hi
+            is_invalid = val is None or (lo is not None and val < lo) or (hi is not None and val > hi)
             if is_invalid:
                 alerts.append(
                     {
@@ -2664,40 +2600,14 @@ async def _record_quiet_mode(conn: asyncpg.Connection, mode: str) -> None:
     )
 
 
-# FW-3 (Sprint 18): physics sanity invariants. Planner values outside
-# these bounds are clamped before dispatch and logged to setpoint_clamps
-# with reason='invariant_violation'. Every key must be a canonical
-# ALL_TUNABLES entry — see test_physics_invariants_are_canonical.
-#
-# Format: param → (min, max). None means no bound on that side.
+# FW-3 (Sprint 18): dispatcher guardrails are derived from the registry's
+# fw_clamp_lo/fw_clamp_hi fields. This keeps the setpoint path from carrying a
+# second hand-maintained bounds table that can drift from MCP, schema, and
+# ESPHome number limits.
 _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
-    # Time-of-day windows (hour of day)
-    "fog_time_window_start": (0, 23),
-    "fog_time_window_end": (1, 24),
-    "gl_sunrise_hour": (0, 23),
-    "gl_sunset_hour": (1, 24),
-    "gl_main_target_light_minutes": (0, 1080),
-    "gl_grow_target_light_minutes": (0, 1080),
-    # Integer counters (seconds)
-    "mister_engage_delay_s": (30, 900),
-    "mister_all_delay_s": (60, 900),
-    "vpd_watch_dwell_s": (10, 600),
-    # Resource budgets
-    "mister_water_budget_gal": (100, 5000),
-    # Temperature bounds (°F)
-    "fog_min_temp_f": (32, 90),
-    "safety_min": (30, 60),
-    "safety_max": (80, 120),
-    # Percentages
-    "fog_rh_ceiling_pct": (50, 100),
-    # VPD (kPa) safety rails
-    "safety_vpd_min": (0.1, 1.0),
-    "safety_vpd_max": (1.5, 5.0),
-    # Hysteresis (kPa)
-    "vpd_hysteresis": (0.05, 1.0),
-    # Biases (°F)
-    "bias_cool": (-5, 5),
-    "bias_heat": (-5, 5),
+    name: (spec.fw_clamp_lo, spec.fw_clamp_hi)
+    for name, spec in REGISTRY.items()
+    if spec.kind == "numeric" and (spec.fw_clamp_lo is not None or spec.fw_clamp_hi is not None)
 }
 
 
@@ -4191,15 +4101,12 @@ async def _refresh_daily_summary_for_date(conn: asyncpg.Connection, target_day) 
         """
         SELECT parameter, value, ts
         FROM setpoint_changes
-        WHERE parameter IN ('temp_high','temp_low','vpd_high','vpd_low')
+        WHERE parameter = ANY($2::text[])
           AND ts <= ($1::date + 1)::timestamp AT TIME ZONE 'America/Denver'
-          AND CASE
-              WHEN parameter IN ('temp_high','temp_low') THEN value BETWEEN 30 AND 120
-              WHEN parameter IN ('vpd_high','vpd_low') THEN value BETWEEN 0.1 AND 5.0
-          END
         ORDER BY parameter, ts
         """,
         target_day,
+        sorted(HOUSE_BAND_PARAMS),
     )
     from bisect import bisect_right
 
@@ -4207,7 +4114,13 @@ async def _refresh_daily_summary_for_date(conn: asyncpg.Connection, target_day) 
     timeline_ts: dict[str, list] = {}
     for r in band_changes:
         param = r["parameter"]
-        timelines.setdefault(param, []).append((r["ts"], float(r["value"])))
+        val = float(r["value"])
+        spec = REGISTRY[param]
+        if spec.fw_clamp_lo is not None and val < spec.fw_clamp_lo:
+            continue
+        if spec.fw_clamp_hi is not None and val > spec.fw_clamp_hi:
+            continue
+        timelines.setdefault(param, []).append((r["ts"], val))
         timeline_ts.setdefault(param, []).append(r["ts"])
 
     def _band_at(param: str, ts):

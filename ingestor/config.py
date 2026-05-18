@@ -34,7 +34,7 @@ EXPECTED_FIRMWARE_VERSION_FILE = os.environ.get(
 
 # ── Home Assistant ────────────────────────────────────────────────
 HA_URL = os.environ.get("HA_URL", "http://192.168.30.107:8123")
-HA_TOKEN_FILE = os.environ.get("HA_TOKEN_FILE", "/mnt/jason/agents/shared/credentials/ha_token.txt")
+HA_TOKEN_FILE = os.environ.get("HA_TOKEN_FILE", "/mnt/agents/shared/credentials/ha_token.txt")
 
 # ── MQTT (Sentinel occupancy bridge) ─────────────────────────────
 MQTT_HOST = os.environ.get("MQTT_HOST", "192.168.30.107")
@@ -43,13 +43,13 @@ MQTT_USER = os.environ.get("MQTT_USER", "")
 MQTT_PASS = os.environ.get("MQTT_PASS", "")
 
 # ── Slack ─────────────────────────────────────────────────────────
-SLACK_TOKEN_FILE = os.environ.get("SLACK_TOKEN_FILE", "/mnt/jason/agents/shared/credentials/slack_bot_token.txt")
+SLACK_TOKEN_FILE = os.environ.get("SLACK_TOKEN_FILE", "/mnt/agents/shared/credentials/slack_bot_token.txt")
 SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "C0ANVVAPLD6")
 
 # ── External services ────────────────────────────────────────────
 FRIGATE_URL = os.environ.get("FRIGATE_URL", "http://192.168.30.142:5000")
 LOKI_URL = os.environ.get("LOKI_URL", "")  # Empty = disabled
-GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/jason/agents/shared/credentials/gemini_api_key.txt")
+GEMINI_API_KEY_FILE = os.environ.get("GEMINI_API_KEY_FILE", "/mnt/agents/shared/credentials/gemini_api_key.txt")
 
 # ── Hermes Iris (sole planner gateway) ───────────────────────────
 HERMES_URL = os.environ.get("HERMES_URL", "http://127.0.0.1:8642")

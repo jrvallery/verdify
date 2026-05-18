@@ -7,7 +7,7 @@ description: Verdify greenhouse planning skill — complete operational playbook
 Canonical source of the Verdify planner operational playbook.
 
 Iris reads this file at runtime from the agent-host path
-`/mnt/jason/agents/iris/skills/greenhouse-planner.md`. That file is an
+`/mnt/agents/iris/skills/greenhouse-planner.md`. That file is an
 operational mirror of this one and must stay in sync — any content change
 should land here first (reviewed, version-controlled) and then be copied
 out to the agent host.

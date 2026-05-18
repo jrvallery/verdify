@@ -8,7 +8,7 @@ sync — only fetches messages newer than the last export.
 
 Run via cron: 0 */6 * * * /srv/verdify/scripts/slack-channel-archive.py
 
-Output: /mnt/jason/agents/iris/memory/slack/YYYY-MM-DD.md
+Output: /mnt/agents/iris/memory/slack/YYYY-MM-DD.md
 """
 
 import json
@@ -24,8 +24,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [slack-archive] %(me
 log = logging.getLogger(__name__)
 
 CHANNEL_ID = "C0ANVVAPLD6"
-TOKEN_FILE = "/mnt/jason/agents/shared/credentials/slack_bot_token.txt"
-OUTPUT_DIR = Path("/mnt/jason/agents/iris/memory/slack")
+TOKEN_FILE = "/mnt/agents/shared/credentials/slack_bot_token.txt"
+OUTPUT_DIR = Path("/mnt/agents/iris/memory/slack")
 STATE_FILE = OUTPUT_DIR / ".last-sync.json"
 TZ = ZoneInfo("America/Denver")
 
