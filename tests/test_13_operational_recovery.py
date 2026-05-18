@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 INGESTOR_PATH = str(Path(__file__).resolve().parent.parent / "ingestor")
@@ -66,6 +67,88 @@ def test_esp32_push_marks_shared_recently_pushed():
     assert pushed == 1
     assert "temp_low" in shared.recently_pushed
     assert shared.recently_pushed_values["temp_low"] == 64.0
+
+
+def test_occupancy_push_targets_presence_state_not_inhibit_tunable():
+    import esp32_push
+    import shared
+    from entity_map import EQUIPMENT_SWITCH_MAP
+
+    class FakeClient:
+        def __init__(self):
+            self.commands = []
+
+        def switch_command(self, key, state):
+            self.commands.append((key, state))
+
+    client = FakeClient()
+    shared.esp32["client"] = client
+    shared.esp32["keys"] = {"greenhouse_occupied": 456}
+    esp32_push._LAST_COMMAND_TS = 0.0
+
+    pushed = asyncio.run(esp32_push.push_occupancy_to_esp32(True, "test"))
+
+    assert pushed == 1
+    assert client.commands == [(456, True)]
+    assert EQUIPMENT_SWITCH_MAP["greenhouse_occupied"] == "occupancy"
+
+
+def test_occupancy_quiet_preserves_manual_owner_when_window_covers_refresh():
+    import occupancy
+    from quiet_mode import QUIET_MODE_ENTITY, QUIET_REASON_ENTITY, QUIET_UNTIL_ENTITY, iso_utc
+
+    class FakeConn:
+        def __init__(self):
+            self.inserts = []
+
+        async def fetch(self, *args, **kwargs):
+            raise AssertionError("manual active quiet should not fetch restore params")
+
+        async def execute(self, _sql, *args):
+            self.inserts.append(args)
+
+    conn = FakeConn()
+    manual_until = iso_utc(datetime.now(UTC) + timedelta(hours=1))
+    state = {
+        QUIET_MODE_ENTITY: "on",
+        QUIET_UNTIL_ENTITY: manual_until,
+        QUIET_REASON_ENTITY: "manual:recording",
+    }
+
+    until = asyncio.run(occupancy._enable_occupancy_quiet(conn, state, "test"))
+
+    assert until == manual_until
+    assert not any(args[0] == QUIET_REASON_ENTITY for args in conn.inserts)
+    assert ("recording_quiet_occupancy_active", "on") in conn.inserts
+
+
+def test_occupancy_quiet_takes_owner_when_manual_window_would_expire():
+    import occupancy
+    from quiet_mode import QUIET_MODE_ENTITY, QUIET_REASON_ENTITY, QUIET_UNTIL_ENTITY, iso_utc
+
+    class FakeConn:
+        def __init__(self):
+            self.inserts = []
+
+        async def fetch(self, *args, **kwargs):
+            raise AssertionError("active quiet should not fetch restore params")
+
+        async def execute(self, _sql, *args):
+            self.inserts.append(args)
+
+    conn = FakeConn()
+    manual_until = iso_utc(datetime.now(UTC) + timedelta(minutes=1))
+    state = {
+        QUIET_MODE_ENTITY: "on",
+        QUIET_UNTIL_ENTITY: manual_until,
+        QUIET_REASON_ENTITY: "manual:recording",
+    }
+
+    until = asyncio.run(occupancy._enable_occupancy_quiet(conn, state, "test"))
+
+    assert until > manual_until
+    assert (QUIET_REASON_ENTITY, "occupancy:test") in conn.inserts
+    assert ("recording_quiet_occupancy_active", "on") in conn.inserts
 
 
 def test_live_active_plan_params_are_pushable():

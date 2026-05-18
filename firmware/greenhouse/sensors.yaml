@@ -2115,7 +2115,9 @@ text_sensor:
     lambda: |-
       uint32_t now = millis();
       const uint32_t STALE_MS = 120000;
-      std::string result;
+      char result[96];
+      size_t n = 0;
+      result[0] = '\0';
       struct { const char* name; uint32_t last; } probes[] = {
         {"Case", id(last_case_ms)},
         {"North", id(last_north_ms)},
@@ -2124,15 +2126,21 @@ text_sensor:
         {"East", id(last_east_ms)}
       };
       bool all_ok = true;
+      auto append = [&](const char* s) {
+        while (*s != '\0' && n + 1 < sizeof(result)) {
+          result[n++] = *s++;
+        }
+        result[n] = '\0';
+      };
       for(auto &p : probes){
         if(p.last == 0 || (now - p.last) > STALE_MS){
-          if(!all_ok) result += ", ";
-          result += p.name;
-          result += " STALE";
+          if(!all_ok) append(", ");
+          append(p.name);
+          append(" STALE");
           all_ok = false;
         }
       }
-      return all_ok ? std::string("OK") : result;
+      return all_ok ? std::string("OK") : std::string(result);
 
 ###############################################################################
 # END OF FILE

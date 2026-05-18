@@ -15,7 +15,9 @@ json:
 # ═══════════════════════════════════════════════════════════════════
 # TEMPEST WEATHER — UDP listener on port 50222
 # WeatherFlow Tempest hub broadcasts JSON packets on the local network.
-# We parse obs_st (full observation, every 60s) and rapid_wind (every 3s).
+# We parse obs_st (full observation, every 60s). rapid_wind packets arrive
+# every ~3s, but they are not needed by greenhouse control and parsing each one
+# creates avoidable heap churn, so they are ignored.
 # ═══════════════════════════════════════════════════════════════════
 
 # Globals to hold parsed Tempest values (updated on each obs_st packet)
@@ -108,11 +110,28 @@ udp:
   on_receive:
     then:
       - lambda: |-
-          // Parse Tempest UDP JSON packet
-          std::string payload(data.begin(), data.end());
-
-          // Quick type check before full JSON parse
-          if (payload.find("\"obs_st\"") != std::string::npos) {
+          // Cheap raw-byte type check first. Most Tempest UDP packets are
+          // rapid_wind; avoid allocating a std::string for those.
+          const char needle[] = "\"obs_st\"";
+          const size_t needle_len = sizeof(needle) - 1;
+          bool is_obs_st = false;
+          if (data.size() >= needle_len) {
+            for (size_t i = 0; i + needle_len <= data.size(); i++) {
+              bool match = true;
+              for (size_t j = 0; j < needle_len; j++) {
+                if ((char) data[i + j] != needle[j]) {
+                  match = false;
+                  break;
+                }
+              }
+              if (match) {
+                is_obs_st = true;
+                break;
+              }
+            }
+          }
+          if (is_obs_st) {
+            std::string payload(data.begin(), data.end());
             // Full observation (every ~60s)
             // obs_st.obs[0] = [ts, wind_lull, wind_avg, wind_gust, wind_dir, wind_interval,
             //                  pressure_mb, temp_c, rh, lux, uv, solar_w_m2, rain_mm_min,
@@ -182,16 +201,6 @@ udp:
 
               ESP_LOGI("tempest", "obs_st: %.1f°F, %.0f%% RH, wind %.1f mph, solar %.0f W/m², pressure %.1f hPa",
                        temp_f, rh, wind_avg, solar, pressure);
-              return true;
-            });
-          }
-          else if (payload.find("\"rapid_wind\"") != std::string::npos) {
-            // Rapid wind (every 3s) — just update wind speed/direction
-            json::parse_json(payload, [](JsonObject root) -> bool {
-              if (root["ob"].isNull() || root["ob"].size() < 3) return false;
-              JsonArray ob = root["ob"];
-              id(tempest_wind_speed_mph) = ob[1].as<float>() * 2.237f;
-              id(tempest_wind_dir_deg) = ob[2].as<float>();
               return true;
             });
           }

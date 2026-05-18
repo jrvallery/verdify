@@ -28,6 +28,7 @@ if str(REPO_ROOT) not in sys.path:
 import asyncpg
 import shared
 from esp32_push import push_to_esp32
+from occupancy import sync_occupancy_state
 from pydantic import ValidationError
 
 from verdify_schemas import (
@@ -39,7 +40,6 @@ from verdify_schemas import (
     OpenMeteoForecastResponse,
     PlanDeliveryLogRow,
     SetpointChange,
-    SystemStateRow,
 )
 from verdify_schemas.tunable_registry import get as get_tunable
 from verdify_schemas.tunable_registry import registry_value_error
@@ -449,6 +449,7 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
 
     now = datetime.now(UTC)
     new_state = dict(_ha_prev_state)
+    occupancy_observations: list[bool] = []
 
     async with pool.acquire() as conn:
         # Hydro → climate
@@ -514,7 +515,9 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
                 )
             new_state[key] = is_on
 
-        # Occupancy → system_state (on-change)
+        # Occupancy → system_state + quiet mode + ESP32 occupancy state.
+        # Record every observed poll, not only transitions, so quiet mode stays
+        # active while Frigate continues to report the greenhouse occupied.
         for eid, entity in _OCCUPANCY_ENTITIES.items():
             ha = _ha_state(states, eid)
             if ha is None or not ha.is_available:
@@ -522,13 +525,12 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
             val = "occupied" if ha.state == "on" else "empty"
             key = f"occupancy_{entity}"
             if new_state.get(key) != val:
-                try:
-                    SystemStateRow(ts=now, entity=entity, value=val)
-                except ValidationError as e:
-                    log.error("Occupancy transition skipped (validation failed: %s)", e)
-                    continue
-                await conn.execute("INSERT INTO system_state (ts, entity, value) VALUES ($1, $2, $3)", now, entity, val)
+                log.info("Occupancy: %s (via HA)", val)
+            occupancy_observations.append(val == "occupied")
             new_state[key] = val
+
+    for occupied in occupancy_observations:
+        await sync_occupancy_state(pool, occupied, "ha_sensor_sync")
 
     _ha_prev_state = new_state
     _HA_STATE_FILE.write_text(json.dumps(new_state))

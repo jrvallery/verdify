@@ -1084,22 +1084,6 @@ interval:
               }
           }
 
-          {
-            static uint8_t snapshot_ctr = 11;
-            if(++snapshot_ctr >= 12){
-              snapshot_ctr = 0;
-              char js[192];
-              snprintf(js,sizeof(js),
-                  "{\"state\":\"%s\",\"Tin\":%.1f,\"VPD\":%.2f,"\
-                  "\"H1\":%d,\"H2\":%d,\"F1\":%d,\"F2\":%d,\"Fog\":%d,\"Vent\":%d}",
-                  lbl, Tin, VPD,
-                  id(heat1_rly)->state, id(heat2_rly)->state,
-                  id(fan1_rly)->state, id(fan2_rly)->state,
-                  id(fog_rly)->state, id(vent_rly)->state);
-              id(ctl_snapshot_json).publish_state(js);
-            }
-          }
-
               // Expose runtime metrics and economiser state to global variables for HA sensors
               id(runtime_heat1_ms) = R[0].runtime_ms;
               id(runtime_heat2_ms) = R[1].runtime_ms;

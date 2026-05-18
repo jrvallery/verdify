@@ -144,8 +144,8 @@ wifi:
 
 # Disabled 2026-04-27: ESPHome web_server keeps several TCP sockets and
 # response buffers alive on a controller that is already seeing heap-pressure
-# reboots. HA API, MQTT logs, OTA, and the ingestor provide the operational
-# surfaces we actually use; browser access is not worth the RAM cost.
+# reboots. HA API, OTA, and the ingestor provide the operational surfaces we
+# actually use; browser access is not worth the RAM cost.
 # web_server:
 
 logger:
@@ -174,39 +174,10 @@ api:
   encryption:
     key: !secret api_encryption_key
 
-mqtt:
-  broker: !secret cloud_mqtt_broker
-  port: 1883
-  username: !secret cloud_mqtt_user
-  password: !secret cloud_mqtt_password
-  topic_prefix: "greenhouse/vallery"
-  discovery: false
-  log_topic:
-    topic: "greenhouse/vallery/log"
-    level: WARN
-  birth_message:
-    topic: "greenhouse/vallery/status"
-    payload: "online"
-  will_message:
-    topic: "greenhouse/vallery/status"
-    payload: "offline"
-  on_message:
-    - topic: greenhouse/vallery/occupancy
-      then:
-        - lambda: |-
-            bool occ = (x == "ON");
-            if(id(greenhouse_occupied) != occ){
-              id(greenhouse_occupied) = occ;
-              ESP_LOGI("occupancy","Greenhouse %s (MQTT)", occ ? "OCCUPIED — misters inhibited" : "EMPTY — misters allowed");
-            }
-    - topic: sentinel/occupancy/greenhouse_zone
-      then:
-        - lambda: |-
-            bool occ = (x == "ON");
-            if(id(greenhouse_occupied) != occ){
-              id(greenhouse_occupied) = occ;
-              ESP_LOGI("occupancy","Greenhouse %s (MQTT local)", occ ? "OCCUPIED" : "EMPTY");
-            }
+# MQTT is intentionally omitted on the ESP32. The global MQTT component creates
+# a publish wrapper for every public entity, which costs tens of KB of runtime
+# heap on this controller. Sentinel occupancy now enters through the ingestor's
+# API push path (`greenhouse_occupied`) instead of an on-device MQTT client.
 
 ota:
   - platform: esphome
