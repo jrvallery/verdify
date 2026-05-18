@@ -1575,7 +1575,8 @@ switch:
           id(irrig_weather_skip) = false;
           id(sw_irrig_weather_skip).publish_state(false);
 
-  # Occupancy mist/fog inhibit — blocks misters and fogger when greenhouse is occupied
+  # Occupancy quiet inhibit — blocks routine fans plus misters/fogger when occupied
+  # Name retained for API compatibility with the existing entity_map route.
   - platform: template
     id: sw_occupancy_inhibit
     name: "Occupancy Mist Inhibit"

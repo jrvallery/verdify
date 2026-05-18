@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
         OverrideFlags of = evaluate_overrides(in, sp, state, mode);
 
         const char* reason = state.last_mode_reason ? state.last_mode_reason : "";
-        int override_bits = (of.occupancy_blocks_moisture << 0) | (of.fog_gate_rh << 1)
+        int override_bits = (of.occupancy_blocks_equipment << 0) | (of.fog_gate_rh << 1)
                           | (of.fog_gate_temp << 2) | (of.fog_gate_window << 3)
                           | (of.relief_cycle_breaker << 4) | (of.seal_blocked_temp << 5)
                           | (of.vpd_dry_override << 6) | (of.summer_vent_active << 7)

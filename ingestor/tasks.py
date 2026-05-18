@@ -31,7 +31,7 @@ if str(REPO_ROOT) not in sys.path:
 import asyncpg
 import shared
 from esp32_push import push_to_esp32
-from occupancy import sync_occupancy_state
+from occupancy import expire_occupancy_latch, sync_occupancy_state
 from pydantic import ValidationError
 
 from verdify_schemas import (
@@ -868,6 +868,7 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
     loop = asyncio.get_event_loop()
     states = await loop.run_in_executor(None, _fetch_ha_batch, token, all_eids)
     if not states:
+        await expire_occupancy_latch(pool, "ha_sensor_sync")
         return
 
     # Load previous state on first run
@@ -876,7 +877,7 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
 
     now = datetime.now(UTC)
     new_state = dict(_ha_prev_state)
-    occupancy_observations: list[bool] = []
+    occupancy_observations: list[tuple[bool, datetime | None]] = []
 
     async with pool.acquire() as conn:
         # Hydro → climate
@@ -944,9 +945,10 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
                 )
             new_state[key] = is_on
 
-        # Occupancy → system_state + quiet mode + ESP32 occupancy state.
-        # Record every observed poll, not only transitions, so quiet mode stays
-        # active while Frigate continues to report the greenhouse occupied.
+        # Occupancy → latched system_state + ESP32 occupancy switch.
+        # HA's ON state is stateful; repeat ON polls are not fresh Frigate
+        # detections, so only ON transitions extend the latch. OFF is a
+        # definitive empty observation and clears the latch on every poll.
         for eid, entity in _OCCUPANCY_ENTITIES.items():
             ha = _ha_state(states, eid)
             if ha is None or not ha.is_available:
@@ -955,11 +957,15 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
             key = f"occupancy_{entity}"
             if new_state.get(key) != val:
                 log.info("Occupancy: %s (via HA)", val)
-            occupancy_observations.append(val == "occupied")
+            if val == "empty":
+                occupancy_observations.append((False, now))
+            elif new_state.get(key) != val:
+                occupancy_observations.append((True, ha.last_changed))
             new_state[key] = val
 
-    for occupied in occupancy_observations:
-        await sync_occupancy_state(pool, occupied, "ha_sensor_sync")
+    for occupied, observed_at in occupancy_observations:
+        await sync_occupancy_state(pool, occupied, "ha_sensor_sync", observed_at=observed_at)
+    await expire_occupancy_latch(pool, "ha_sensor_sync")
 
     _ha_prev_state = new_state
     _HA_STATE_FILE.write_text(json.dumps(new_state))
@@ -2514,11 +2520,8 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
 from entity_map import CFG_READBACK_MAP, EQUIPMENT_SWITCH_MAP, PARAM_TO_ENTITY, SWITCH_TO_ENTITY
 from quiet_mode import (
     QUIET_MODE_ENTITY,
-    QUIET_MODE_SETPOINTS,
     QUIET_REASON_ENTITY,
-    QUIET_RESTORE_ENTITY,
     QUIET_UNTIL_ENTITY,
-    parse_restore_payload,
     quiet_expired_needs_restore,
     quiet_is_active,
 )
@@ -2555,7 +2558,6 @@ FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
 QUIET_STATE_ENTITIES = (
     QUIET_MODE_ENTITY,
     QUIET_UNTIL_ENTITY,
-    QUIET_RESTORE_ENTITY,
     QUIET_REASON_ENTITY,
 )
 SAFETY_PARAMS = frozenset({"safety_max", "safety_min"})
@@ -3272,24 +3274,13 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     changes.append((param, 1.0))
 
         if quiet_active:
-            quiet_params = _apply_manual_overlay(changes, QUIET_MODE_SETPOINTS)
             log.info(
-                "Dispatcher: recording quiet mode active until %s; forcing %d quiet setpoints",
+                "Dispatcher: recording quiet mode active until %s; no setpoint overlay applied",
                 quiet_until,
-                len(quiet_params),
             )
         elif quiet_restore_due:
-            quiet_restore = parse_restore_payload(quiet_state.get(QUIET_RESTORE_ENTITY))
-            if quiet_restore:
-                quiet_params = _apply_manual_overlay(changes, quiet_restore)
-                await _record_quiet_mode(conn, "expired_restored")
-                log.info(
-                    "Dispatcher: recording quiet mode expired; restoring %d captured setpoints",
-                    len(quiet_params),
-                )
-            else:
-                await _record_quiet_mode(conn, "expired_no_restore")
-                log.warning("Dispatcher: recording quiet mode expired without a restore payload")
+            await _record_quiet_mode(conn, "expired_no_overlay")
+            log.info("Dispatcher: recording quiet mode expired; no restore overlay applied")
 
         if not changes:
             clamp_rows_written = await _write_clamp_audit_rows(conn, clamps_to_log, set())

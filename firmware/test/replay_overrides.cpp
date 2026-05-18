@@ -75,7 +75,7 @@ enum OverrideIdx {
 };
 
 static const char* OVERRIDE_NAMES[OF_COUNT] = {
-    "occupancy_blocks_moisture",
+    "occupancy_blocks_equipment",
     "fog_gate_rh",
     "fog_gate_temp",
     "fog_gate_window",
@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
         Setpoints sp = default_setpoints();
         // Production firmware has occupancy_inhibit=true (defaults to false in
         // default_setpoints for test isolation). Force true for replay so the
-        // occupancy_blocks_moisture path matches the deployed system.
+        // occupancy_blocks_equipment path matches the deployed system.
         sp.occupancy_inhibit = true;
         float v;
         if ((v = parse_float(get("sp_temp_high")))  > 0) sp.temp_high = v;
@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
         // Now evaluate_overrides() against the reconstructed state
         OverrideFlags f = evaluate_overrides(in, sp, state, mode);
         bool flags[OF_COUNT] = {
-            f.occupancy_blocks_moisture, f.fog_gate_rh, f.fog_gate_temp,
+            f.occupancy_blocks_equipment, f.fog_gate_rh, f.fog_gate_temp,
             f.fog_gate_window, f.relief_cycle_breaker, f.seal_blocked_temp,
             f.vpd_dry_override, f.fog_heat_assist,
         };
@@ -410,12 +410,19 @@ int main(int argc, char* argv[]) {
         printf("  %-28s %s\n", name, pass ? "✓" : "✗ BUG");
         if (!pass) self_test_failures++;
     };
-    // occupancy_blocks_moisture
+    // occupancy_blocks_equipment: mister/fog path
     {
         auto p = mk(); p.sp.occupancy_inhibit = true; p.in.occupied = true;
         p.st.vpd_watch_timer_ms = 60000; p.mode = SEALED_MIST;
         auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
-        report("occupancy_blocks_moisture", f.occupancy_blocks_moisture);
+        report("occupancy_blocks_equipment", f.occupancy_blocks_equipment);
+    }
+    // occupancy_blocks_equipment: fan path
+    {
+        auto p = mk(); p.sp.occupancy_inhibit = true; p.in.occupied = true;
+        p.in.temp_f = 86.0f; p.mode = VENTILATE;
+        auto f = evaluate_overrides(p.in, p.sp, p.st, p.mode);
+        report("occupancy_blocks_equipment", f.occupancy_blocks_equipment);
     }
     // fog_gate_rh
     {

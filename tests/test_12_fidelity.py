@@ -824,8 +824,13 @@ def test_firmware_omits_mqtt_and_uses_ingestor_occupancy_push():
     assert "sync_occupancy_state(pool" in ingestor_src
     assert "refresh_latest_occupancy_state(pool" in ingestor_src
     assert "sync_occupancy_state(pool" in tasks_src
-    assert "recording_quiet_occupancy_active" in occupancy_src
-    assert "quiet mode held" in occupancy_src
+    assert "expire_occupancy_latch(pool" in tasks_src
+    assert "OCCUPANCY_LATCH_MIN" in occupancy_src
+    assert "recording_quiet_occupancy_active" not in occupancy_src
+    assert "quiet mode held" not in occupancy_src
+    assert "script.execute: occupancy_quiet_override" in greenhouse
+    controls = Path("firmware/greenhouse/controls.yaml").read_text()
+    assert "Occupancy fail-safe expired without fresh API detection" in controls
     assert "occupancy_mist_inhibit" not in push_src
     assert "greenhouse_occupied API switch unavailable" in push_src
     assert 'push_to_esp32([("greenhouse_occupied"' in push_src

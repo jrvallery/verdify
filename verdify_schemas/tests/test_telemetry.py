@@ -134,7 +134,7 @@ class TestOverrideEvent:
     def test_valid(self):
         ov = OverrideEvent(
             ts=NOW,
-            override_type="occupancy_blocks_moisture,fog_gate_rh",
+            override_type="occupancy_blocks_equipment,fog_gate_rh",
             mode="IDLE",
             details={"rh": 82.0, "occupancy": True},
         )

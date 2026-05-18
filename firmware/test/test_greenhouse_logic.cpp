@@ -381,6 +381,31 @@ TEST(r2_5_occupancy_blocks_fog) {
     PASS();
 }
 
+TEST(r2_5_occupancy_blocks_routine_fans) {
+    auto sp = band_setpoints(); sp.occupancy_inhibit = true;
+    auto s = initial_state();
+    SensorInputs in = make_inputs(86, 1.0, 45);
+    in.occupied = true;
+    auto out = resolve_equipment(VENTILATE, in, sp, s, true);
+    ASSERT_TRUE(out.vent);
+    ASSERT_FALSE(out.fan1);
+    ASSERT_FALSE(out.fan2);
+    ASSERT_FALSE(out.fog);
+    PASS();
+}
+
+TEST(r2_5_occupancy_does_not_block_safety_cool_fans) {
+    auto sp = band_setpoints(); sp.occupancy_inhibit = true;
+    auto s = initial_state();
+    SensorInputs in = make_inputs(sp.safety_max + 1.0f, 1.0, 45);
+    in.occupied = true;
+    auto out = resolve_equipment(SAFETY_COOL, in, sp, s, true);
+    ASSERT_TRUE(out.vent);
+    ASSERT_TRUE(out.fan1);
+    ASSERT_TRUE(out.fan2);
+    PASS();
+}
+
 TEST(r2_6_relief_cycle_forces_ventilate) {
     auto sp = band_setpoints(); sp.max_relief_cycles = 3;
     auto s = initial_state();
@@ -685,12 +710,21 @@ TEST(fw9b_ventilate_fog_production_band) {
 // when the override's "desire trigger" is not met (zero false positives).
 // ═══════════════════════════════════════════════════════════════
 
-TEST(obs1e_occupancy_blocks_moisture_fires_in_seal) {
+TEST(obs1e_occupancy_blocks_equipment_fires_in_seal) {
     auto sp = default_setpoints(); sp.occupancy_inhibit = true;
     auto s = initial_state(); s.vpd_watch_timer_ms = 60000;
     auto in = make_inputs(72.0f, 1.5f); in.occupied = true;
     auto f = evaluate_overrides(in, sp, s, SEALED_MIST);
-    ASSERT_TRUE(f.occupancy_blocks_moisture);
+    ASSERT_TRUE(f.occupancy_blocks_equipment);
+    PASS();
+}
+
+TEST(obs1e_occupancy_blocks_equipment_fires_in_ventilate) {
+    auto sp = band_setpoints(); sp.occupancy_inhibit = true;
+    auto s = initial_state();
+    auto in = make_inputs(86.0f, 1.0f); in.occupied = true;
+    auto f = evaluate_overrides(in, sp, s, VENTILATE);
+    ASSERT_TRUE(f.occupancy_blocks_equipment);
     PASS();
 }
 
@@ -699,7 +733,7 @@ TEST(obs1e_occupancy_quiet_when_nothing_wanted) {
     auto s = initial_state();
     auto in = make_inputs(72.0f, 0.9f); in.occupied = true;  // in-band, nobody wants mist
     auto f = evaluate_overrides(in, sp, s, IDLE);
-    ASSERT_FALSE(f.occupancy_blocks_moisture);
+    ASSERT_FALSE(f.occupancy_blocks_equipment);
     PASS();
 }
 
@@ -840,7 +874,7 @@ TEST(obs1e_all_quiet_on_idle_in_band) {
     auto s = initial_state();
     auto in = make_inputs(72.0f, 0.9f);
     auto f = evaluate_overrides(in, sp, s, IDLE);
-    ASSERT_FALSE(f.occupancy_blocks_moisture);
+    ASSERT_FALSE(f.occupancy_blocks_equipment);
     ASSERT_FALSE(f.fog_gate_rh);
     ASSERT_FALSE(f.fog_gate_temp);
     ASSERT_FALSE(f.fog_gate_window);

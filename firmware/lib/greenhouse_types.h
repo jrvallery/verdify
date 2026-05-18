@@ -262,7 +262,7 @@ inline LightingState initial_lighting_state() {
 // Evaluated after determine_mode() by evaluate_overrides(); published to
 // ingestor as a comma-separated string, routed to override_events table.
 struct OverrideFlags {
-    bool occupancy_blocks_moisture;  // occupancy inhibit active while mist was wanted
+    bool occupancy_blocks_equipment; // occupancy inhibit active while quiet equipment was wanted
     bool fog_gate_rh;                // fog wanted but in.rh_pct > fog_rh_ceiling
     bool fog_gate_temp;              // fog wanted but in.temp_f < fog_min_temp
     bool fog_gate_window;            // fog wanted but outside fog_window_start/end

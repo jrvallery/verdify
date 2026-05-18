@@ -358,6 +358,13 @@ binary_sensor:
     device_class: running
 
   - platform: template
+    id: bs_occupancy_quiet_override
+    name: "Occupancy Quiet Override Active"
+    lambda: |-
+      return id(occupancy_override_until_ms) != 0
+        && (int32_t)(id(occupancy_override_until_ms) - millis()) > 0;
+
+  - platform: template
     id: bs_vent_state
     name: "Vent Open"
     lambda: "return id(vent_rly).state;"
@@ -514,6 +521,7 @@ button:
     id: fan_burst_btn
     name: "Fan Cycle"
     on_press:
+      - script.execute: occupancy_quiet_override
       - if:
           condition:
             lambda: "return id(manual_fan_active);"
@@ -529,6 +537,7 @@ button:
     id: vent_bypass_btn
     name: "Vent Bypass Toggle"
     on_press:
+      - script.execute: occupancy_quiet_override
       - if:
           condition:
             lambda: "return id(vent_lock_active);"
@@ -542,6 +551,7 @@ button:
     id: fog_burst_btn
     name: "Fog Cycle"
     on_press:
+      - script.execute: occupancy_quiet_override
       - if:
           condition:
             lambda: "return id(manual_fog_active);"
@@ -554,6 +564,16 @@ button:
 
 # ───────────────────── SCRIPTS (0 min = 24 h) ────────────────────
 script:
+  - id: occupancy_quiet_override
+    mode: restart
+    then:
+      - lambda: |
+          id(occupancy_override_until_ms) = millis() + 3600000UL;
+          id(greenhouse_occupied) = false;
+          id(occupancy_last_true_ms) = 0;
+          id(sw_greenhouse_occupied).publish_state(false);
+          ESP_LOGW("occupancy","Local button override: occupancy ignored for 60 minutes");
+
   # Manual fan burst script.  Runs both fans for a user-defined number of minutes
   - id: manual_fan_burst
     mode: restart

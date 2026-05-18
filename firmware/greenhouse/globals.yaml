@@ -1014,6 +1014,16 @@ globals:
     restore_value: no
     initial_value: 'true'
 
+  - id: occupancy_last_true_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: occupancy_override_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
 ###############################################################################
 # END OF FILE
 ###############################################################################

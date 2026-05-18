@@ -123,6 +123,7 @@ EQUIPMENT_BINARY_MAP: dict[str, str] = {
     "fan_burst_active": "fan_burst_active",
     "fog_burst_active": "fog_burst_active",
     "vent_bypass_active": "vent_bypass_active",
+    "occupancy_quiet_override_active": "occupancy_quiet_override_active",
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ STATE_MAP: dict[str, str] = {
     "mister_selected_zone": "mister_zone",
     # OBS-1e (Sprint 16): firmware silent-override audit.
     # Value is a comma-separated list of active override flags from
-    # evaluate_overrides() (e.g. "occupancy_blocks_moisture,fog_gate_rh"
+    # evaluate_overrides() (e.g. "occupancy_blocks_equipment,fog_gate_rh"
     # or "none"). Ingestor also diffs transitions and writes one row per
     # start event to the override_events table.
     "active_overrides": "overrides_active",

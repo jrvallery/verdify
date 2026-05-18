@@ -36,8 +36,8 @@ inline bool sensors_plausible(const SensorInputs& in) noexcept {
         && in.local_hour >= 0        && in.local_hour <= 23;
 }
 
-// ── Occupancy blocks ALL moisture injection (fog + misters) ──
-// When occupied, do not seal for misting and do not fire fog.
+// ── Occupancy quiet guards ──
+// When occupied, do not seal for misting, fire fog, or run routine fans.
 // Note: the caller (controls.yaml) already computes sp.occupancy_inhibit as
 // (enabled && occupied). Anding `in.occupied` again here is intentional: it
 // keeps the header standalone-correct for tests that set sp.occupancy_inhibit
@@ -46,13 +46,20 @@ inline bool moisture_blocked_by_occupancy(const SensorInputs& in, const Setpoint
     return sp.occupancy_inhibit && in.occupied;
 }
 
+inline bool air_blocked_by_occupancy(const SensorInputs& in, const Setpoints& sp, Mode mode) noexcept {
+    return sp.occupancy_inhibit
+        && in.occupied
+        && mode != SAFETY_COOL
+        && mode != SAFETY_HEAT
+        && mode != SENSOR_FAULT;
+}
+
 // ── Fog gating helpers (sprint-8) ──────────────────────────────────
 // Consolidates the RH ceiling / min temp / hour-of-day predicates that
 // previously lived in 5 places (MIST_S2→MIST_FOG entry, evaluate_overrides,
 // SAFETY_COOL/SEALED_MIST/VENTILATE-FW-9b in resolve_equipment). Occupancy
-// inhibit is a separate concern — callers check moisture_blocked_by_occupancy
-// themselves so that evaluate_overrides can continue to report fog_gate_* and
-// occupancy_blocks_moisture as independent flags.
+// inhibit is a separate concern so evaluate_overrides can report fog_gate_*
+// independently from the unified occupancy_blocks_equipment flag.
 
 // Midnight-wrap-aware window check. start <= end → [start, end). Otherwise
 // the window crosses midnight (e.g. start=22, end=6 → 22:00-05:59 local).
@@ -1014,10 +1021,13 @@ inline OverrideFlags evaluate_overrides(
         vpd_above_band && state.vpd_watch_timer_ms >= sp.vpd_watch_dwell_ms;
     const bool moisture_blocked = moisture_blocked_by_occupancy(in, sp);
 
-    // Occupancy: fired when a seal is active OR the dwell has matured and
-    // misting WOULD have started — but occupancy is blocking moisture.
-    f.occupancy_blocks_moisture =
+    const bool occupancy_blocks_mister_path =
         moisture_blocked && (mode == SEALED_MIST || vpd_wants_seal);
+    const bool occupancy_blocks_fan_path =
+        air_blocked_by_occupancy(in, sp, mode)
+        && (mode == THERMAL_RELIEF || mode == VENTILATE || mode == DEHUM_VENT);
+    f.occupancy_blocks_equipment =
+        occupancy_blocks_mister_path || occupancy_blocks_fan_path;
 
     // Fog gates — only meaningful while in MIST_S2 and VPD has climbed far
     // enough that the firmware would escalate to MIST_FOG. Any one of the
@@ -1209,6 +1219,12 @@ inline RelayOutputs resolve_equipment(
         default:
             // Corrupted mode — all off (same as SENSOR_FAULT)
             break;
+    }
+
+    if (air_blocked_by_occupancy(in, sp, mode)) {
+        out.fan1 = false;
+        out.fan2 = false;
+        out.fog = false;
     }
 
     return out;

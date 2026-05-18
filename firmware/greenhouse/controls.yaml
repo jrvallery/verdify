@@ -45,6 +45,31 @@ interval:
           if(dt_ms > 5000) dt_ms = 5000;
           last_ms = now_ms;
 
+          /**************** 1b — occupancy fail-safe *****************************/
+          const uint32_t OCCUPANCY_FAILSAFE_MS = 3600000UL;
+          const bool occupancy_override_active = id(occupancy_override_until_ms) != 0
+            && (int32_t)(id(occupancy_override_until_ms) - now_ms) > 0;
+          if(id(occupancy_override_until_ms) != 0 && !occupancy_override_active){
+            id(occupancy_override_until_ms) = 0;
+            ESP_LOGW("occupancy","Local quiet override expired");
+          }
+          if(occupancy_override_active && id(greenhouse_occupied)){
+            id(greenhouse_occupied) = false;
+            id(occupancy_last_true_ms) = 0;
+            id(sw_greenhouse_occupied).publish_state(false);
+            ESP_LOGW("occupancy","Local quiet override forced occupancy empty");
+          }
+          if(id(greenhouse_occupied)){
+            if(id(occupancy_last_true_ms) == 0){
+              id(occupancy_last_true_ms) = now_ms;
+            } else if(now_ms - id(occupancy_last_true_ms) > OCCUPANCY_FAILSAFE_MS){
+              id(greenhouse_occupied) = false;
+              id(occupancy_last_true_ms) = 0;
+              id(sw_greenhouse_occupied).publish_state(false);
+              ESP_LOGW("occupancy","Occupancy fail-safe expired without fresh API detection; forcing empty");
+            }
+          }
+
           /**************** 2 — relay metadata & helpers **************************/
           struct RelayMeta {
             esphome::switch_::Switch *sw;
@@ -420,6 +445,11 @@ interval:
           // Manual overrides (ESP32-only, not in header)
           if(id(manual_fan_active)){ willFan1 = true; willFan2 = true; willVent = true; }
           if(id(manual_fog_active)){ willFog = true; }
+          if(id(vent_lock_active) && !id(manual_fan_active) && mode != SAFETY_COOL){
+            willFan1 = false;
+            willFan2 = false;
+            willVent = false;
+          }
 
           /**************** 11a — FAN/VENT + VENT-CLOSE INTERLOCKS ***************/
           // The pure state machine keeps fans and vent logically consistent,
@@ -920,13 +950,13 @@ interval:
           /*** OBS-1e — Silent-override audit (Sprint 16) ***/
           {
             OverrideFlags of = evaluate_overrides(sensor_in, setpts, ctl_state, mode);
-            char obuf[128]; obuf[0] = '\0'; size_t n = 0;
+            char obuf[224]; obuf[0] = '\0'; size_t n = 0;
             auto add = [&](const char* tag){
               if(n > 0 && n + 1 < sizeof(obuf)) obuf[n++] = ',';
               size_t len = strlen(tag);
               if(n + len < sizeof(obuf)){ memcpy(obuf + n, tag, len); n += len; }
             };
-            if(of.occupancy_blocks_moisture) add("occupancy_blocks_moisture");
+            if(of.occupancy_blocks_equipment) add("occupancy_blocks_equipment");
             if(of.fog_gate_rh)               add("fog_gate_rh");
             if(of.fog_gate_temp)             add("fog_gate_temp");
             if(of.fog_gate_window)           add("fog_gate_window");
@@ -942,7 +972,7 @@ interval:
             if(of.fog_heat_assist)           add("fog_heat_assist");
             obuf[n] = '\0';
             const char* overrides = n > 0 ? obuf : "none";
-            static char last_overrides[128] = "";
+            static char last_overrides[224] = "";
             if(strcmp(last_overrides, overrides) != 0){
               id(gh_overrides).publish_state(overrides);
               snprintf(last_overrides, sizeof(last_overrides), "%s", overrides);

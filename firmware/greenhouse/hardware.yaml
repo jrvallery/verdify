@@ -199,12 +199,24 @@ switch:
     lambda: "return id(greenhouse_occupied);"
     turn_on_action:
       - lambda: |
-          id(greenhouse_occupied) = true;
-          id(sw_greenhouse_occupied).publish_state(true);
-          ESP_LOGI("occupancy","Greenhouse OCCUPIED (API)");
+          const uint32_t now_ms = millis();
+          const bool override_active = id(occupancy_override_until_ms) != 0
+            && (int32_t)(id(occupancy_override_until_ms) - now_ms) > 0;
+          if (override_active) {
+            id(greenhouse_occupied) = false;
+            id(occupancy_last_true_ms) = 0;
+            id(sw_greenhouse_occupied).publish_state(false);
+            ESP_LOGW("occupancy","Ignoring OCCUPIED API push: local quiet override active");
+          } else {
+            id(greenhouse_occupied) = true;
+            id(occupancy_last_true_ms) = now_ms;
+            id(sw_greenhouse_occupied).publish_state(true);
+            ESP_LOGI("occupancy","Greenhouse OCCUPIED (API)");
+          }
     turn_off_action:
       - lambda: |
           id(greenhouse_occupied) = false;
+          id(occupancy_last_true_ms) = 0;
           id(sw_greenhouse_occupied).publish_state(false);
           ESP_LOGI("occupancy","Greenhouse EMPTY (API)");
 

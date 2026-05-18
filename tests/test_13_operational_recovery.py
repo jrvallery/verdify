@@ -95,71 +95,59 @@ def test_occupancy_push_targets_presence_state_not_inhibit_tunable():
     assert EQUIPMENT_SWITCH_MAP["greenhouse_occupied"] == "occupancy"
 
 
-def test_occupancy_quiet_preserves_manual_owner_when_window_covers_refresh():
+def test_occupancy_fresh_detection_latches_effective_presence():
     import occupancy
-    from quiet_mode import QUIET_MODE_ENTITY, QUIET_REASON_ENTITY, QUIET_UNTIL_ENTITY, iso_utc
 
     class FakeConn:
         def __init__(self):
             self.inserts = []
 
-        async def fetch(self, *args, **kwargs):
-            raise AssertionError("manual active quiet should not fetch restore params")
-
         async def execute(self, _sql, *args):
             self.inserts.append(args)
 
     conn = FakeConn()
-    manual_until = iso_utc(datetime.now(UTC) + timedelta(hours=1))
-    state = {
-        QUIET_MODE_ENTITY: "on",
-        QUIET_UNTIL_ENTITY: manual_until,
-        QUIET_REASON_ENTITY: "manual:recording",
-    }
+    observed_at = datetime.now(UTC)
 
-    until = asyncio.run(occupancy._enable_occupancy_quiet(conn, state, "test"))
+    effective, until = asyncio.run(occupancy._record_occupancy_observation(conn, True, "test", observed_at))
 
-    assert until == manual_until
-    assert not any(args[0] == QUIET_REASON_ENTITY for args in conn.inserts)
-    assert ("recording_quiet_occupancy_active", "on") in conn.inserts
+    assert effective is True
+    assert until > observed_at
+    assert (occupancy.OCCUPANCY_ENTITY, "occupied") in conn.inserts
+    assert (occupancy.OCCUPANCY_SOURCE_ENTITY, "test") in conn.inserts
 
 
-def test_occupancy_quiet_takes_owner_when_manual_window_would_expire():
+def test_occupancy_stale_detection_fails_safe_to_empty():
     import occupancy
-    from quiet_mode import QUIET_MODE_ENTITY, QUIET_REASON_ENTITY, QUIET_UNTIL_ENTITY, iso_utc
 
     class FakeConn:
         def __init__(self):
             self.inserts = []
 
-        async def fetch(self, *args, **kwargs):
-            raise AssertionError("active quiet should not fetch restore params")
-
         async def execute(self, _sql, *args):
             self.inserts.append(args)
 
     conn = FakeConn()
-    manual_until = iso_utc(datetime.now(UTC) + timedelta(minutes=1))
-    state = {
-        QUIET_MODE_ENTITY: "on",
-        QUIET_UNTIL_ENTITY: manual_until,
-        QUIET_REASON_ENTITY: "manual:recording",
-    }
+    observed_at = datetime.now(UTC) - timedelta(minutes=occupancy.OCCUPANCY_LATCH_MIN + 1)
 
-    until = asyncio.run(occupancy._enable_occupancy_quiet(conn, state, "test"))
+    effective, until = asyncio.run(occupancy._record_occupancy_observation(conn, True, "test", observed_at))
 
-    assert until > manual_until
-    assert (QUIET_REASON_ENTITY, "occupancy:test") in conn.inserts
-    assert ("recording_quiet_occupancy_active", "on") in conn.inserts
+    assert effective is False
+    assert until <= datetime.now(UTC)
+    assert (occupancy.OCCUPANCY_ENTITY, "empty") in conn.inserts
+    assert (occupancy.OCCUPANCY_TIMEOUT_REASON_ENTITY, "stale_detection:test") in conn.inserts
 
 
-def test_quiet_overlay_band_params_are_not_tagged_as_crop_band():
+def test_recording_quiet_mode_no_longer_writes_band_or_target_overlays():
+    from quiet_mode import QUIET_MODE_SETPOINTS
+
+    assert QUIET_MODE_SETPOINTS == {}
+    assert not (set(QUIET_MODE_SETPOINTS) & set(CROP_BAND_REG))
+
+
+def test_manual_overlay_source_classification_still_precedes_band_source():
     import tasks
 
     assert tasks._dispatch_source("temp_low", {}, {"temp_low"}) == "manual"
-    assert tasks._dispatch_source("temp_high", {}, {"temp_high"}) == "manual"
-    assert tasks._dispatch_source("vpd_low", {}, {"vpd_low"}) == "manual"
-    assert tasks._dispatch_source("vpd_high", {}, {"vpd_high"}) == "manual"
     assert tasks._dispatch_source("temp_low", {}, set()) == "band"
     assert tasks._dispatch_source("mister_all_kpa", {}, {"mister_all_kpa"}) == "manual"
 

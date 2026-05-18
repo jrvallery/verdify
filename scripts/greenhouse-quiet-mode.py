@@ -1,9 +1,9 @@
 #!/usr/bin/env /srv/greenhouse/.venv/bin/python3
-"""Operator recording quiet mode for the greenhouse.
+"""Operator recording quiet mode metadata for the greenhouse.
 
-This is not a safety override. It writes a timed manual overlay to the normal
-setpoint path so routine fans, mist, fog, grow-light automation, and irrigation
-stay quiet for recording. Firmware safety heat/cool rails remain in charge.
+This command no longer writes target/band overlays. Routine quiet behavior is
+handled by firmware occupancy inhibit; this helper keeps the timed recording
+metadata and optional one-shot light-off request.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import asyncpg
-from pydantic import ValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INGESTOR_DIR = REPO_ROOT / "ingestor"
@@ -28,7 +27,6 @@ for path in (REPO_ROOT, INGESTOR_DIR):
 
 from quiet_mode import (  # noqa: E402
     QUIET_MODE_ENTITY,
-    QUIET_MODE_SETPOINTS,
     QUIET_REASON_ENTITY,
     QUIET_RESTORE_ENTITY,
     QUIET_UNTIL_ENTITY,
@@ -37,8 +35,6 @@ from quiet_mode import (  # noqa: E402
     parse_restore_payload,
     quiet_is_active,
 )
-
-from verdify_schemas import SetpointChange  # noqa: E402
 
 SETPOINT_SERVER = "http://127.0.0.1:8200"
 SYSTEM_STATE_ENTITIES = (
@@ -89,43 +85,6 @@ async def insert_system_state(conn: asyncpg.Connection, entity: str, value: str)
     )
 
 
-async def fetch_effective_params(conn: asyncpg.Connection) -> dict[str, float]:
-    rows = await conn.fetch(
-        """
-        SELECT parameter, value
-        FROM (
-          SELECT DISTINCT ON (parameter) parameter, value
-          FROM setpoint_changes
-          ORDER BY parameter, ts DESC
-        ) latest
-        """
-    )
-    params = {row["parameter"]: float(row["value"]) for row in rows}
-
-    # The dispatcher overlays v_active_plan on top of recent manual/band rows;
-    # capture the same effective values so restore returns to the pre-quiet path.
-    rows = await conn.fetch("SELECT parameter, value FROM v_active_plan")
-    for row in rows:
-        params[row["parameter"]] = float(row["value"])
-    return params
-
-
-async def insert_setpoints(conn: asyncpg.Connection, setpoints: dict[str, float]) -> int:
-    rows: list[tuple[str, float, str]] = []
-    for param, value in setpoints.items():
-        try:
-            SetpointChange(ts=datetime.now(UTC), parameter=param, value=float(value), source="manual")
-        except ValidationError as exc:
-            raise ValueError(f"invalid quiet-mode setpoint {param}={value}: {exc}") from exc
-        rows.append((param, float(value), "manual"))
-
-    await conn.executemany(
-        "INSERT INTO setpoint_changes (ts, parameter, value, source) VALUES (now(), $1, $2, $3)",
-        rows,
-    )
-    return len(rows)
-
-
 def lights_off() -> None:
     for light in ("main", "grow"):
         url = f"{SETPOINT_SERVER}/lights/{light}/off"
@@ -150,38 +109,33 @@ async def enable(minutes: int, reason: str, lights_off_requested: bool) -> None:
             state = await fetch_system_state(conn)
             active = quiet_is_active(state.get(QUIET_MODE_ENTITY), state.get(QUIET_UNTIL_ENTITY))
             if not active:
-                effective = await fetch_effective_params(conn)
-                await insert_system_state(conn, QUIET_RESTORE_ENTITY, build_restore_payload(effective))
+                await insert_system_state(conn, QUIET_RESTORE_ENTITY, build_restore_payload({}))
             await insert_system_state(conn, QUIET_UNTIL_ENTITY, iso_utc(until))
             await insert_system_state(conn, QUIET_REASON_ENTITY, reason)
             await insert_system_state(conn, QUIET_MODE_ENTITY, "on")
-            count = await insert_setpoints(conn, QUIET_MODE_SETPOINTS)
 
     if lights_off_requested:
         lights_off()
     print(f"Recording quiet mode ON until {iso_utc(until)} ({minutes} min).")
-    print(f"Wrote {count} manual quiet setpoints.")
+    print("Wrote 0 manual quiet setpoints.")
     if lights_off_requested:
         print("Requested grow lights off.")
     else:
-        print("Grow-light automation is disabled, but current light state was left unchanged.")
-    print("Firmware safety heat/cool rails remain active.")
+        print("Current light state was left unchanged.")
+    print("Targets and bands were not changed.")
 
 
 async def disable() -> None:
     async with asyncpg.create_pool(get_db_url(), min_size=1, max_size=2) as pool:
         async with pool.acquire() as conn:
             state = await fetch_system_state(conn)
-            restore = parse_restore_payload(state.get(QUIET_RESTORE_ENTITY))
-            restored = 0
-            if restore:
-                restored = await insert_setpoints(conn, restore)
+            legacy_restore_count = len(parse_restore_payload(state.get(QUIET_RESTORE_ENTITY)))
             await insert_system_state(conn, QUIET_MODE_ENTITY, "off")
             await insert_system_state(conn, QUIET_UNTIL_ENTITY, iso_utc(datetime.now(UTC)))
 
     print("Recording quiet mode OFF.")
-    if restored:
-        print(f"Restored {restored} captured setpoints.")
+    if legacy_restore_count:
+        print(f"Ignored {legacy_restore_count} legacy restore setpoints; quiet mode no longer changes setpoints.")
     else:
         print("No captured restore payload was present.")
 

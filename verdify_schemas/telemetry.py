@@ -23,7 +23,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 OVERRIDE_EVENT_TYPES: frozenset[str] = frozenset(
     {
-        "occupancy_blocks_moisture",
+        "occupancy_blocks_equipment",
         "fog_gate_rh",
         "fog_gate_temp",
         "fog_gate_window",
@@ -227,6 +227,7 @@ EquipmentId = Literal[
     "fan_burst_active",
     "fog_burst_active",
     "vent_bypass_active",
+    "occupancy_quiet_override_active",
     # Firmware gates / health (ESP32 BinarySensor)
     "mister_budget_exceeded",
     "economiser_blocked",

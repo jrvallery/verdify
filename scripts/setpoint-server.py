@@ -42,8 +42,6 @@ if str(REPO_ROOT) not in sys.path:
 if str(INGESTOR_DIR) not in sys.path:
     sys.path.insert(0, str(INGESTOR_DIR))
 
-from quiet_mode import QUIET_MODE_ENTITY, QUIET_MODE_SETPOINTS, QUIET_UNTIL_ENTITY, quiet_is_active  # noqa: E402
-
 from verdify_schemas.tunable_registry import BAND_OWNED_REG, CROP_BAND_REG, SETPOINT_MAP_REG  # noqa: E402
 
 # --- Configuration ---
@@ -298,30 +296,6 @@ def get_setpoint_text_sync() -> str:
             k, v = line.split("=", 1)
             if k.strip() not in plan_params:
                 params[k.strip()] = v.strip()
-
-    # Step 2c: Operator recording quiet mode. The dispatcher maintains this
-    # overlay during normal cycles; the ESP32 pull endpoint must honor it too
-    # so an active plan cannot undo quiet mode between dispatcher runs.
-    result = subprocess.run(
-        db_cmd
-        + [
-            "SELECT entity, value FROM ("
-            "SELECT DISTINCT ON (entity) entity, value FROM system_state "
-            "WHERE entity IN ('recording_quiet_mode','recording_quiet_until') "
-            "ORDER BY entity, ts DESC"
-            ") latest"
-        ],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    quiet_state = {}
-    for line in result.stdout.strip().split("\n"):
-        if "=" in line:
-            k, v = line.split("=", 1)
-            quiet_state[k.strip()] = v.strip()
-    if quiet_is_active(quiet_state.get(QUIET_MODE_ENTITY), quiet_state.get(QUIET_UNTIL_ENTITY)):
-        params.update({param: str(value) for param, value in QUIET_MODE_SETPOINTS.items()})
 
     # Step 3: Keep this ESP32 endpoint small and numeric. Metadata such as
     # source/next_* used to bloat the response and triggered malformed parses.

@@ -1,8 +1,9 @@
-"""Recording quiet-mode helpers.
+"""Recording quiet-mode metadata helpers.
 
-This is intentionally not firmware. Quiet mode is an operator overlay in the
-dispatcher/setpoint layer: suppress routine noisy equipment while preserving
-firmware safety heat/cool rails.
+Quiet mode no longer changes target bands or dispatcher setpoints. Frigate
+occupancy is enforced by firmware through the greenhouse_occupied switch; this
+module remains only for the timed operator metadata used by the recording
+helper script and status displays.
 """
 
 from __future__ import annotations
@@ -15,40 +16,9 @@ QUIET_UNTIL_ENTITY = "recording_quiet_until"
 QUIET_RESTORE_ENTITY = "recording_quiet_restore"
 QUIET_REASON_ENTITY = "recording_quiet_reason"
 
-# Values chosen to keep routine automation quiet without disabling safety:
-# - wide temp/VPD bands avoid routine vent/fog/mist actions;
-# - safety heat/cool still preempts through firmware;
-# - lights and irrigation are disabled at their normal operator switches.
-QUIET_MODE_SETPOINTS: dict[str, float] = {
-    "temp_low": 35.0,
-    "temp_high": 90.0,
-    "vpd_low": 0.10,
-    "vpd_high": 3.00,
-    "vpd_target_south": 3.00,
-    "vpd_target_west": 3.00,
-    "vpd_target_east": 3.00,
-    "vpd_target_center": 3.00,
-    "safety_vpd_min": 0.10,
-    "safety_vpd_max": 3.00,
-    "heat_hysteresis": 0.0,
-    "sw_gl_auto_mode": 0.0,
-    "sw_irrigation_enabled": 0.0,
-    "sw_irrigation_wall_enabled": 0.0,
-    "sw_irrigation_center_enabled": 0.0,
-    "sw_irrigation_weather_skip": 1.0,
-    "sw_occupancy_inhibit": 1.0,
-    "sw_summer_vent_enabled": 0.0,
-    "sw_mister_closes_vent": 1.0,
-    "mister_engage_delay_s": 900.0,
-    "mister_all_delay_s": 900.0,
-    "vpd_watch_dwell_s": 120.0,
-    "fog_escalation_kpa": 1.0,
-    "mister_pulse_on_s": 30.0,
-    "mister_pulse_gap_s": 60.0,
-    "mist_max_closed_vent_s": 120.0,
-    "mist_backoff_s": 3600.0,
-    "max_relief_cycles": 1.0,
-}
+# Setpoint overlays are intentionally retired. Do not add target, band, safety,
+# irrigation, or lighting params here; quiet behavior belongs in firmware.
+QUIET_MODE_SETPOINTS: dict[str, float] = {}
 
 QUIET_RESTORE_PARAMS: tuple[str, ...] = tuple(QUIET_MODE_SETPOINTS)
 

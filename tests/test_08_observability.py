@@ -766,7 +766,7 @@ class TestOverrideEventsWiring:
         body = self._read(self.TYPES_PATH)
         assert "struct OverrideFlags" in body, "OverrideFlags struct missing"
         required = [
-            "occupancy_blocks_moisture",
+            "occupancy_blocks_equipment",
             "fog_gate_rh",
             "fog_gate_temp",
             "fog_gate_window",
