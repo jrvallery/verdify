@@ -558,6 +558,39 @@ interval:
             const bool west_wet_allowed = direct_wet_allowed(2);
             const bool center_wet_allowed = direct_wet_allowed(3);
             const bool any_mister_wet_allowed = south_wet_allowed || west_wet_allowed || center_wet_allowed;
+            auto direct_wet_relay_watchdog = [&]() {
+              if(!id(direct_wet_gate_enabled)) return;
+              bool closed_any = false;
+              if(!south_wet_allowed) {
+                id(south_wall_mister).turn_off();
+                id(south_wall_mister_fertilized).turn_off();
+                id(wall_drips).turn_off();
+                id(wall_drips_fertilized).turn_off();
+                closed_any = true;
+              }
+              if(!west_wet_allowed) {
+                id(west_wall_mister).turn_off();
+                id(west_wall_mister_fertilized).turn_off();
+                closed_any = true;
+              }
+              if(!center_wet_allowed) {
+                id(center_mister).turn_off();
+                id(center_drips).turn_off();
+                id(center_drips_fertilized).turn_off();
+                closed_any = true;
+              }
+              if(!id(south_wall_mister_fertilized).state &&
+                 !id(west_wall_mister_fertilized).state &&
+                 !id(wall_drips_fertilized).state &&
+                 !id(center_drips_fertilized).state) {
+                id(fertilizer_master_valve).turn_off();
+              }
+              if(closed_any && id(mister_pulse_zone) > 0) {
+                id(mister_pulse_zone) = 0;
+                id(mister_pulse_timer_ms) = 0;
+              }
+            };
+            direct_wet_relay_watchdog();
             auto first_allowed_mister_zone = [&]() -> int {
               if(south_wet_allowed) return 1;
               if(west_wet_allowed) return 2;
@@ -569,7 +602,9 @@ interval:
             // drivers immediately so we don't wait for the pulse timer.
             if (!mister_vent_ok && id(mister_pulse_zone) > 0) {
                 id(south_wall_mister).turn_off();
+                id(south_wall_mister_fertilized).turn_off();
                 id(west_wall_mister).turn_off();
+                id(west_wall_mister_fertilized).turn_off();
                 id(center_mister).turn_off();
                 id(mister_pulse_zone) = 0;
                 id(mister_pulse_timer_ms) = 0;
@@ -618,7 +653,9 @@ interval:
                        id(mister_water_today), id(mister_water_budget_gal),
                        humidity_demand, any_zone_stressed, occupancy_blocks);
               id(south_wall_mister).turn_off();
+              id(south_wall_mister_fertilized).turn_off();
               id(west_wall_mister).turn_off();
+              id(west_wall_mister_fertilized).turn_off();
               id(center_mister).turn_off();
               id(mister_state) = 0;
               id(mister_selected_zone) = 0;
@@ -708,7 +745,9 @@ interval:
 
               auto turn_on_zone = [&](int zone) {
                 id(south_wall_mister).turn_off();
+                id(south_wall_mister_fertilized).turn_off();
                 id(west_wall_mister).turn_off();
+                id(west_wall_mister_fertilized).turn_off();
                 id(center_mister).turn_off();
                 if(zone == 1 && !south_wet_allowed) zone = first_allowed_mister_zone();
                 if(zone == 2 && !west_wet_allowed) zone = first_allowed_mister_zone();
@@ -727,7 +766,9 @@ interval:
 
               auto turn_off_all_misters = [&]() {
                 id(south_wall_mister).turn_off();
+                id(south_wall_mister_fertilized).turn_off();
                 id(west_wall_mister).turn_off();
+                id(west_wall_mister_fertilized).turn_off();
                 id(center_mister).turn_off();
                 id(mister_pulse_zone) = 0;
               };
