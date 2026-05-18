@@ -731,6 +731,7 @@ def test_firmware_lighting_telemetry_fails_closed_when_time_invalid():
     controls = Path("firmware/greenhouse/controls.yaml").read_text()
     greenhouse = Path("firmware/greenhouse.yaml").read_text()
     hardware = Path("firmware/greenhouse/hardware.yaml").read_text()
+    sensors = Path("firmware/greenhouse/sensors.yaml").read_text()
 
     time_block = greenhouse[greenhouse.index("time:") : greenhouse.index("# ───────────────────── BINARY SENSORS")]
     assert "platform: sntp" in time_block
@@ -745,8 +746,40 @@ def test_firmware_lighting_telemetry_fails_closed_when_time_invalid():
     assert 'id(gl_grow_reason).publish_state("time_invalid")' in controls
     assert "id(grow_light_main).turn_off()" in controls
     assert "id(grow_light_grow).turn_off()" in controls
+    assert 'id(gl_main_decision_epoch).publish_state("invalid")' in controls
+    assert 'id(gl_grow_decision_epoch).publish_state("invalid")' in controls
     lighting_text_block = hardware[hardware.index("id: gl_main_state_text") : hardware.index("id: ts_lead_fan")]
     assert lighting_text_block.count("update_interval: never") == 4
+    assert 'id: controller_time_epoch\n    name: "Controller Time Epoch"' in sensors
+    assert 'id: gl_main_decision_epoch\n    name: "GL Main Decision Epoch"' in sensors
+    assert 'id: gl_grow_decision_epoch\n    name: "GL Grow Decision Epoch"' in sensors
+    assert "return (float)now.timestamp" not in sensors
+    assert "publish_lighting_epoch(id(gl_main_decision_epoch), time.timestamp)" in controls
+    assert "publish_lighting_epoch(id(gl_grow_decision_epoch), time.timestamp)" in controls
+
+
+def test_full_epoch_telemetry_uses_text_sensor_not_float():
+    sensors = Path("firmware/greenhouse/sensors.yaml").read_text()
+    controls = Path("firmware/greenhouse/controls.yaml").read_text()
+    ingestor_src = Path("ingestor/ingestor.py").read_text()
+    entity_map_src = Path("ingestor/entity_map.py").read_text()
+    migration = Path("db/migrations/129-exact-time-text-epochs.sql").read_text()
+
+    assert "Full Unix epochs exceed ESPHome sensor float precision" in sensors
+    assert 'snprintf(buf, sizeof(buf), "%lld", (long long)now.timestamp)' in sensors
+    assert 'snprintf(buf, sizeof(buf), "%lld", (long long)epoch)' in controls
+    assert "INTEGER_DIAGNOSTIC_COLUMNS" in ingestor_src
+    assert "Decimal(str(value).strip())" in ingestor_src
+    assert '"controller_time_epoch": "controller_time_epoch",  # TextSensorInfo exact epoch string' in entity_map_src
+    assert "DROP VIEW IF EXISTS v_lighting_traceability_now" in migration
+    assert "round(decision.value::numeric)::bigint" in migration
+
+
+def test_integer_diagnostic_parser_preserves_epoch_string_precision():
+    assert ingestor._coerce_integer_diagnostic("controller_time_epoch", "1779093872") == 1779093872
+    assert ingestor._coerce_integer_diagnostic("controller_time_epoch", "1779093872.0") == 1779093872
+    assert ingestor._coerce_integer_diagnostic("controller_time_epoch", "1779093872.5") is None
+    assert ingestor._coerce_integer_diagnostic("controller_time_epoch", "invalid") is None
 
 
 def test_firmware_omits_mqtt_and_uses_ingestor_occupancy_push():

@@ -378,6 +378,15 @@ def static_checks(audit: Audit) -> None:
         "state/reason text sensors exist for both circuits",
         "missing per-circuit lighting state/reason text sensors",
     )
+    audit.check(
+        "Full Unix epochs exceed ESPHome sensor float precision" in sensors
+        and "return (float)now.timestamp" not in sensors
+        and "publish_lighting_epoch(id(gl_main_decision_epoch), time.timestamp)" in controls
+        and "publish_lighting_epoch(id(gl_grow_decision_epoch), time.timestamp)" in controls,
+        "firmware exact epoch diagnostics",
+        "full Unix epochs are published as text_sensor strings, not float sensors",
+        "one or more full epoch diagnostics still use ESPHome float sensor publishing",
+    )
 
     entity_map = read(REPO_ROOT / "ingestor" / "entity_map.py")
     audit.check(

@@ -18,6 +18,7 @@ import os
 import sys
 import urllib.request
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -756,6 +757,45 @@ def _accept_outbound_setpoint(param: str, value: float) -> bool:
     return True
 
 
+INTEGER_DIAGNOSTIC_COLUMNS = {
+    "controller_time_epoch",
+    "controller_local_hour",
+    "sntp_valid",
+    "sntp_miss_count",
+    "last_sntp_sync_age_s",
+}
+
+
+def _coerce_integer_diagnostic(col: str, value: Any) -> int | None:
+    try:
+        decimal_value = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        log.warning("diagnostic rejected non-integer: %s=%r", col, value)
+        return None
+    if decimal_value != decimal_value.to_integral_value():
+        log.warning("diagnostic rejected fractional integer: %s=%r", col, value)
+        return None
+    parsed = int(decimal_value)
+    if parsed < 0:
+        log.warning("diagnostic rejected negative integer: %s=%r", col, value)
+        return None
+    return parsed
+
+
+def _record_diagnostic(obj_id: str, value: Any) -> bool:
+    col = DIAGNOSTIC_MAP.get(obj_id)
+    if not col:
+        return False
+    if col in INTEGER_DIAGNOSTIC_COLUMNS:
+        parsed = _coerce_integer_diagnostic(col, value)
+        if parsed is None:
+            return True
+        state.diagnostics[col] = parsed
+    else:
+        state.diagnostics[col] = value
+    return True
+
+
 def _record_cfg_readback(obj_id: str, value: Any) -> bool:
     """Record a firmware cfg_* readback if this entity is part of that contract."""
     cfg_param = CFG_READBACK_MAP.get(obj_id)
@@ -826,9 +866,7 @@ def on_state_change(entity_state) -> None:
             state.climate[col] = val
             return
 
-        col = DIAGNOSTIC_MAP.get(obj_id)
-        if col:
-            state.diagnostics[col] = val
+        if _record_diagnostic(obj_id, val):
             return
 
         col = DAILY_ACCUM_MAP.get(obj_id)
@@ -889,9 +927,7 @@ def on_state_change(entity_state) -> None:
         if not val:
             return
 
-        col = DIAGNOSTIC_MAP.get(obj_id)
-        if col:
-            state.diagnostics[col] = val
+        if _record_diagnostic(obj_id, val):
             return
 
         entity = STATE_MAP.get(obj_id)

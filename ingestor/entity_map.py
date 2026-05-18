@@ -165,10 +165,10 @@ STATE_MAP: dict[str, str] = {
     "mode_reason": "mode_reason",
     "gl_main_state": "gl_main_state",
     "gl_main_reason": "gl_main_reason",
-    "gl_main_decision_epoch": "gl_main_decision_epoch",
+    "gl_main_decision_epoch": "gl_main_decision_epoch",  # TextSensorInfo exact epoch string
     "gl_grow_state": "gl_grow_state",
     "gl_grow_reason": "gl_grow_reason",
-    "gl_grow_decision_epoch": "gl_grow_decision_epoch",
+    "gl_grow_decision_epoch": "gl_grow_decision_epoch",  # TextSensorInfo exact epoch string
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ DIAGNOSTIC_MAP: dict[str, str] = {
     "vpd_watch_timer_s": "vpd_watch_timer_s",
     "mist_backoff_timer_s": "mist_backoff_timer_s",
     "vent_mist_assist_active": "vent_mist_assist_active",
-    "controller_time_epoch": "controller_time_epoch",
+    "controller_time_epoch": "controller_time_epoch",  # TextSensorInfo exact epoch string
     "controller_local_hour": "controller_local_hour",
     "sntp_valid": "sntp_valid",
     "sntp_miss_count": "sntp_miss_count",

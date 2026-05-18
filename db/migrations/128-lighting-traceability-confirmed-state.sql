@@ -250,7 +250,10 @@ SELECT
     desired_auto.value >= 0.5 AS desired_auto_enabled,
     desired_auto.delivery_status AS desired_auto_delivery_status,
     desired_auto.ts AS desired_auto_ts,
-    decision.value AS firmware_decision_epoch,
+    CASE
+        WHEN decision.value ~ '^[0-9]+([.]0+)?$' THEN round(decision.value::numeric)::bigint
+        ELSE NULL
+    END AS firmware_decision_epoch,
     decision.ts AS firmware_decision_ts,
     decision.ts > now() - interval '15 minutes' AS firmware_decision_fresh,
     (

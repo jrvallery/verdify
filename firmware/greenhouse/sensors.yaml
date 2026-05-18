@@ -726,17 +726,6 @@ sensor:
     accuracy_decimals: 0
 
   - platform: template
-    id: controller_time_epoch
-    name: "Controller Time Epoch"
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    update_interval: 60s
-    lambda: |-
-      auto now = id(sntp_time).now();
-      if(!now.is_valid()) return NAN;
-      return (float)now.timestamp;
-
-  - platform: template
     id: controller_local_hour
     name: "Controller Local Hour"
     entity_category: diagnostic
@@ -775,18 +764,6 @@ sensor:
     lambda: |-
       if(id(sntp_last_sync_ms) == 0) return NAN;
       return (float)((millis() - id(sntp_last_sync_ms)) / 1000UL);
-
-  - platform: template
-    id: gl_main_decision_epoch
-    name: "GL Main Decision Epoch"
-    entity_category: diagnostic
-    accuracy_decimals: 0
-
-  - platform: template
-    id: gl_grow_decision_epoch
-    name: "GL Grow Decision Epoch"
-    entity_category: diagnostic
-    accuracy_decimals: 0
 
   # Absolute humidity inside
   - platform: template
@@ -2373,6 +2350,32 @@ sensor:
 # ─────────────────── TEXT SENSORS ──────────────────────────────────────────
 
 text_sensor:
+  # Full Unix epochs exceed ESPHome sensor float precision. Publish them as
+  # strings and let the ingestor parse exact bigint values.
+  - platform: template
+    id: controller_time_epoch
+    name: "Controller Time Epoch"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      auto now = id(sntp_time).now();
+      if(!now.is_valid()) return {};
+      char buf[24];
+      snprintf(buf, sizeof(buf), "%lld", (long long)now.timestamp);
+      return {buf};
+
+  - platform: template
+    id: gl_main_decision_epoch
+    name: "GL Main Decision Epoch"
+    entity_category: diagnostic
+    update_interval: never
+
+  - platform: template
+    id: gl_grow_decision_epoch
+    name: "GL Grow Decision Epoch"
+    entity_category: diagnostic
+    update_interval: never
+
   # A1: State machine transition logging
   - platform: template
     id: ts_last_transition
