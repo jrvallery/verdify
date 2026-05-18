@@ -924,6 +924,7 @@ class TestSetpointConfirmation:
         assert "newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)" in body
         assert "AND NOT EXISTS (" in body
         assert "newer.ts > sc.ts" in body
+        assert "AND COALESCE(newer.source, '') <> 'esp32'" in body
 
     def test_confirmation_loop_backfills_new_readback_history(self):
         ingestor = (REPO_ROOT / "ingestor" / "ingestor.py").read_text()
@@ -931,6 +932,7 @@ class TestSetpointConfirmation:
         assert "interval '7 days'" in ingestor
         assert "delivery_status = 'confirmed'" in ingestor
         assert "newer.value" in ingestor
+        assert "AND COALESCE(newer.source, '') <> 'esp32'" in ingestor
         assert "latest_readback" in migration
         assert "confirmed_at = latest_readback.ts" in migration
         assert "newer.ts <= latest_readback.ts" in migration

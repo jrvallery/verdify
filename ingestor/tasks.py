@@ -5261,6 +5261,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    SELECT 1
                      FROM setpoint_changes newer
                    WHERE newer.parameter = replace(al.sensor_id, 'setpoint.', '')
+                      AND COALESCE(newer.source, '') <> 'esp32'
                       AND newer.ts > COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, al.ts)
                )
             RETURNING al.id
@@ -5275,18 +5276,20 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                SET delivery_status = 'superseded',
                    superseded_by_ts = (
                        SELECT min(newer.ts)
-                         FROM setpoint_changes newer
+                        FROM setpoint_changes newer
                         WHERE newer.parameter = sc.parameter
                           AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                          AND COALESCE(newer.source, '') <> 'esp32'
                           AND newer.ts > sc.ts
                    ),
                    expired_at = COALESCE(
                        sc.expired_at,
                        (
                            SELECT min(newer.ts)
-                             FROM setpoint_changes newer
+                            FROM setpoint_changes newer
                             WHERE newer.parameter = sc.parameter
                               AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                              AND COALESCE(newer.source, '') <> 'esp32'
                               AND newer.ts > sc.ts
                        )
                    )
@@ -5295,9 +5298,10 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                AND COALESCE(sc.delivery_status, 'pending') IN ('pending', 'deferred_heap_pressure')
                AND EXISTS (
                    SELECT 1
-                     FROM setpoint_changes newer
+                    FROM setpoint_changes newer
                     WHERE newer.parameter = sc.parameter
                       AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                      AND COALESCE(newer.source, '') <> 'esp32'
                       AND newer.ts > sc.ts
                )
             RETURNING sc.parameter
@@ -5476,6 +5480,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                      FROM setpoint_changes newer
                     WHERE newer.parameter = sc.parameter
                       AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                      AND COALESCE(newer.source, '') <> 'esp32'
                       AND newer.ts > sc.ts
                )
              ORDER BY sc.ts DESC

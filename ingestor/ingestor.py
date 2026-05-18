@@ -1047,11 +1047,12 @@ async def flush_loop(pool: asyncpg.Pool) -> None:
                                AND NOT EXISTS (
                                    SELECT 1
                                      FROM setpoint_changes newer
-                                    WHERE newer.parameter = sc.parameter
-                                      AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
-                                      AND newer.ts > sc.ts
-                                      AND abs(newer.value - $2::double precision)
-                                            / greatest(abs($2::double precision), 1e-3) >= 0.01
+                                   WHERE newer.parameter = sc.parameter
+                                     AND COALESCE(newer.greenhouse_id, '') = COALESCE(sc.greenhouse_id, '')
+                                     AND COALESCE(newer.source, '') <> 'esp32'
+                                     AND newer.ts > sc.ts
+                                     AND abs(newer.value - $2::double precision)
+                                           / greatest(abs($2::double precision), 1e-3) >= 0.01
                                )
                             """,
                             [(param, val) for param, val in state.cfg_readback.items()],
