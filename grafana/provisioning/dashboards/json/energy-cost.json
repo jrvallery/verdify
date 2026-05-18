@@ -3695,7 +3695,7 @@
           }
         },
         {
-          "rawSql": "SELECT time_bucket_gapfill('1 hour', ts, start => $__timeFrom(), finish => now()) AS time, locf(last(value, ts)) AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND value > 0 AND $__timeFilter(ts) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket_gapfill('1 hour', ts, start => $__timeFrom(), finish => now()) AS time, locf(last(value, ts)) AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND value > 0 AND $__timeFilter(ts) GROUP BY 1 ORDER BY 1",
           "refId": "E",
           "format": "time_series",
           "datasource": {

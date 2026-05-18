@@ -153,6 +153,17 @@ def test_occupancy_quiet_takes_owner_when_manual_window_would_expire():
     assert ("recording_quiet_occupancy_active", "on") in conn.inserts
 
 
+def test_quiet_overlay_band_params_are_not_tagged_as_crop_band():
+    import tasks
+
+    assert tasks._dispatch_source("temp_low", {}, {"temp_low"}) == "manual"
+    assert tasks._dispatch_source("temp_high", {}, {"temp_high"}) == "manual"
+    assert tasks._dispatch_source("vpd_low", {}, {"vpd_low"}) == "manual"
+    assert tasks._dispatch_source("vpd_high", {}, {"vpd_high"}) == "manual"
+    assert tasks._dispatch_source("temp_low", {}, set()) == "band"
+    assert tasks._dispatch_source("mister_all_kpa", {}, {"mister_all_kpa"}) == "manual"
+
+
 def test_live_active_plan_params_are_pushable():
     """The current planner surface should not contain params the dispatcher
     cannot route to ESP32. This catches schema/firmware/entity-map drift using

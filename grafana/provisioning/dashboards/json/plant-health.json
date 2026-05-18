@@ -1530,7 +1530,7 @@
             {
               "refId": "D",
               "format": "time_series",
-              "rawSql": "SELECT $__time(ts), value AS \"VPD Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND $__timeFilter(ts) ORDER BY ts",
+              "rawSql": "SELECT $__time(ts), value AS \"VPD Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
               "datasource": {
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"

@@ -1369,7 +1369,7 @@
         {
           "refId": "B",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1378,7 +1378,7 @@
         {
           "refId": "C",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "datasource": {
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
@@ -1566,7 +1566,7 @@
           }
         },
         {
-          "rawSql": "SELECT time_bucket_gapfill('1 hour', ts, start => $__timeFrom(), finish => now()) AS time, locf(last(value, ts)) AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND value > 0 AND $__timeFilter(ts) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket_gapfill('1 hour', ts, start => $__timeFrom(), finish => now()) AS time, locf(last(value, ts)) AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND value > 0 AND $__timeFilter(ts) GROUP BY 1 ORDER BY 1",
           "refId": "B",
           "format": "time_series",
           "datasource": {
@@ -1575,7 +1575,7 @@
           }
         },
         {
-          "rawSql": "SELECT time_bucket_gapfill('1 hour', ts, start => $__timeFrom(), finish => now()) AS time, locf(last(value, ts)) AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND $__timeFilter(ts) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket_gapfill('1 hour', ts, start => $__timeFrom(), finish => now()) AS time, locf(last(value, ts)) AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) GROUP BY 1 ORDER BY 1",
           "refId": "C",
           "format": "time_series",
           "datasource": {
@@ -2176,7 +2176,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    firmware_temp_low::float AS \"Compliant Low\",\n    firmware_temp_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    projected_temp_low::float AS \"Compliant Low\",\n    projected_temp_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
           "refId": "C",
           "sql": {
             "columns": [
@@ -2788,7 +2788,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time,\n    firmware_vpd_low::float AS \"Compliant Low\",\n    firmware_vpd_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
+          "rawSql": "SELECT ts AS time,\n    projected_vpd_low::float AS \"Compliant Low\",\n    projected_vpd_high::float AS \"Compliant High\"\nFROM fn_band_timeline($__timeFrom(), $__timeTo(), interval '30 minutes', 'vallery')\nORDER BY ts",
           "refId": "C",
           "sql": {
             "columns": [

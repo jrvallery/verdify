@@ -2558,6 +2558,16 @@ QUIET_STATE_ENTITIES = (
     QUIET_RESTORE_ENTITY,
     QUIET_REASON_ENTITY,
 )
+SAFETY_PARAMS = frozenset({"safety_max", "safety_min"})
+MISTER_DEFAULTS = frozenset(
+    {
+        "mister_engage_kpa",
+        "mister_all_kpa",
+        "mister_engage_delay_s",
+        "mister_all_delay_s",
+        "mister_center_penalty",
+    }
+)
 
 
 def _upsert_change(changes: list[tuple[str, float]], param: str, value: float) -> None:
@@ -2577,6 +2587,23 @@ def _apply_manual_overlay(changes: list[tuple[str, float]], overlay: dict[str, f
         _upsert_change(changes, param, value)
         overlay_params.add(param)
     return overlay_params
+
+
+def _dispatch_source(param: str, planner_params: dict[str, float], quiet_params: set[str]) -> str:
+    """Return the setpoint_changes source for a dispatcher write."""
+    if param in quiet_params:
+        return "manual"
+    if param in BAND_DRIVEN_PARAMS:
+        return "band"
+    if param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and param not in planner_params:
+        return "band"
+    if param in SAFETY_PARAMS and param not in planner_params:
+        return "band"
+    if param in MISTER_DEFAULTS and param not in planner_params:
+        return "band"
+    if param in FORCED_ON_SWITCH_PARAMS:
+        return "manual"
+    return "plan"
 
 
 async def _fetch_quiet_state(conn: asyncpg.Connection) -> dict[str, str]:
@@ -3274,14 +3301,6 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             (STATE_DIR / "setpoint-dispatcher.log").touch()
             return
 
-        SAFETY_PARAMS = {"safety_max", "safety_min"}
-        MISTER_DEFAULTS = {
-            "mister_engage_kpa",
-            "mister_all_kpa",
-            "mister_engage_delay_s",
-            "mister_all_delay_s",
-            "mister_center_penalty",
-        }
         heap_guard = await conn.fetchrow(
             """
             SELECT heap_bytes, heap_min_free_kb, heap_largest_free_block_kb
@@ -3318,20 +3337,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         skipped_heap_recovery = 0
         heap_recovery_push_count = 0
         for param, val in changes:
-            if param in BAND_DRIVEN_PARAMS:
-                source = "band"
-            elif param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and param not in planner_params:
-                source = "band"
-            elif param in SAFETY_PARAMS and param not in planner_params:
-                source = "band"
-            elif param in MISTER_DEFAULTS and param not in planner_params:
-                source = "band"
-            elif param in quiet_params:
-                source = "manual"
-            elif param in FORCED_ON_SWITCH_PARAMS:
-                source = "manual"
-            else:
-                source = "plan"
+            source = _dispatch_source(param, planner_params, quiet_params)
 
             requested_val = float(val)
             registry_val, registry_violation = _coerce_registry_value(param, requested_val)

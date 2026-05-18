@@ -379,7 +379,7 @@
           "refId": "F"
         },
         {
-          "rawSql": "SELECT $__time(ts), value AS \"Target Max\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Target Max\" FROM setpoint_changes WHERE parameter = 'temp_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "refId": "SP_HIGH",
           "format": "time_series",
           "datasource": {
@@ -388,7 +388,7 @@
           }
         },
         {
-          "rawSql": "SELECT $__time(ts), value AS \"Target Min\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Target Min\" FROM setpoint_changes WHERE parameter = 'temp_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "refId": "SP_LOW",
           "format": "time_series",
           "datasource": {
@@ -981,7 +981,7 @@
           "refId": "E"
         },
         {
-          "rawSql": "SELECT $__time(ts), value AS \"Target Max\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Target Max\" FROM setpoint_changes WHERE parameter = 'temp_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "refId": "SP_HIGH",
           "format": "time_series",
           "datasource": {
@@ -990,7 +990,7 @@
           }
         },
         {
-          "rawSql": "SELECT $__time(ts), value AS \"Target Min\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"Target Min\" FROM setpoint_changes WHERE parameter = 'temp_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "refId": "SP_LOW",
           "format": "time_series",
           "datasource": {

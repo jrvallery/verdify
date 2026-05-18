@@ -1534,7 +1534,7 @@
           },
           "refId": "G",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT $__time(ts), value AS \"Setpoint High\" FROM setpoint_changes WHERE parameter = 'temp_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts"
         },
         {
           "datasource": {
@@ -1543,7 +1543,7 @@
           },
           "refId": "H",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT $__time(ts), value AS \"Setpoint Low\" FROM setpoint_changes WHERE parameter = 'temp_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts"
         }
       ],
       "fieldConfig": {
@@ -1903,7 +1903,7 @@
           },
           "refId": "G",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT $__time(ts), value AS \"VPD Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts"
         },
         {
           "datasource": {
@@ -1912,7 +1912,7 @@
           },
           "refId": "H",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT $__time(ts), value AS \"VPD High\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts"
         },
         {
           "datasource": {
@@ -2968,7 +2968,7 @@
           "rawSql": "SELECT $__time(es.ts),\n  (SELECT c2.vpd_avg FROM climate c2 WHERE c2.ts <= es.ts ORDER BY c2.ts DESC LIMIT 1)\n  - (SELECT c3.vpd_avg FROM climate c3 WHERE c3.ts <= es.ts - interval '5 minutes' ORDER BY c3.ts DESC LIMIT 1)\n  AS \"VPD Change During Fog\"\nFROM equipment_state es\nWHERE es.equipment = 'fog' AND es.state = false AND $__timeFilter(es.ts)\nORDER BY es.ts"
         },
         {
-          "rawSql": "SELECT $__time(ts), value AS \"VPD Target\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), value AS \"VPD Target\" FROM setpoint_changes WHERE parameter = 'vpd_high' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts",
           "refId": "SP",
           "format": "time_series",
           "datasource": {
@@ -5477,7 +5477,7 @@
           },
           "refId": "B",
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), value AS \"VPD Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT $__time(ts), value AS \"VPD Low\" FROM setpoint_changes WHERE parameter = 'vpd_low' AND source = 'band' AND (expired_at IS NULL OR expired_at > ts) AND $__timeFilter(ts) ORDER BY ts"
         },
         {
           "datasource": {
