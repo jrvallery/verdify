@@ -29,6 +29,31 @@ guard_or_fail() {
     fi
 }
 
+override_reason="${FIRMWARE_OTA_FREEZE_OVERRIDE_REASON:-}"
+override_log="${FIRMWARE_OTA_FREEZE_OVERRIDE_LOG:-/var/local/verdify/state/firmware-ota-freeze-overrides.log}"
+
+require_override_reason() {
+    local gate="$1"
+    if [[ ${#override_reason} -lt 12 ]]; then
+        fail "$gate blocked; set FIRMWARE_OTA_FREEZE_OVERRIDE_REASON with an operator-approved reason to override"
+    fi
+}
+
+record_override() {
+    local gate="$1"
+    local detail="$2"
+    mkdir -p "$(dirname "$override_log")"
+    printf '%s\tgate=%s\treason=%s\tdetail=%s\tworktree=%s\tsha=%s\n' \
+        "$(date -Is)" \
+        "$gate" \
+        "$override_reason" \
+        "$detail" \
+        "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" \
+        "$(git rev-parse HEAD 2>/dev/null || echo unknown)" \
+        >> "$override_log"
+    warn "$gate override accepted: $detail"
+}
+
 open_bad="$("${DB[@]}" "SELECT count(*) FROM alert_log WHERE disposition IN ('open','acknowledged') AND resolved_at IS NULL AND severity IN ('critical','high')" | tr -d '[:space:]')"
 if [[ "${open_bad:-0}" -gt 0 ]]; then
     guard_or_fail "$open_bad unresolved critical/legacy-high alert(s); no firmware OTA while severe alerts are unresolved"
@@ -44,20 +69,16 @@ fi
 
 last_good="firmware/artifacts/last-good.ota.bin"
 if [[ -f "$last_good" ]]; then
-    pass "Rollback artifact available: $last_good"
+    age_s=$(( $(date +%s) - $(stat -c %Y "$last_good") ))
+    if (( age_s < 172800 )); then
+        require_override_reason "48-hour bake"
+        record_override "48-hour bake" "last-good artifact age is ${age_s}s"
+    else
+        pass "48-hour bake check passed for $last_good"
+    fi
 else
     guard_or_fail "No last-good rollback artifact at $last_good; auto-rollback would be unavailable"
 fi
-
-if [[ -f "$last_good" ]]; then
-    last_good_age_s=$(( $(date +%s) - $(stat -c %Y "$last_good") ))
-else
-    last_good_age_s=0
-fi
-if [[ "${last_good_age_s:-0}" -lt 172800 ]]; then
-    guard_or_fail "48-hour bake not satisfied; $last_good mtime age is ${last_good_age_s}s"
-fi
-pass "48-hour bake check passed for $last_good mtime"
 
 week_versions="$("${DB[@]}" \
     "WITH first_seen AS (
@@ -68,9 +89,11 @@ week_versions="$("${DB[@]}" \
      )
      SELECT count(*)
        FROM first_seen
-      WHERE first_ts >= date_trunc('week', now() AT TIME ZONE 'America/Denver') AT TIME ZONE 'America/Denver'" \
+     WHERE first_ts >= date_trunc('week', now() AT TIME ZONE 'America/Denver') AT TIME ZONE 'America/Denver'" \
     | tr -d '[:space:]')"
 if [[ "${week_versions:-0}" -gt 0 ]]; then
-    guard_or_fail "$week_versions firmware version(s) first appeared this calendar week; weekly OTA limit already used"
+    require_override_reason "Weekly OTA limit"
+    record_override "Weekly OTA limit" "$week_versions firmware version(s) first appeared this calendar week"
+else
+    pass "Weekly OTA limit clear"
 fi
-pass "Weekly OTA limit clear"
