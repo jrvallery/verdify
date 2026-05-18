@@ -668,11 +668,11 @@ interval:
                  !id(center_drips_fertilized).state) {
                 id(fertilizer_master_valve).turn_off();
               }
-              bool pulse_zone_closed =
+              bool active_zone_gate_closed =
                   (id(mister_pulse_zone) == 1 && !south_wet_allowed) ||
                   (id(mister_pulse_zone) == 2 && !west_wet_allowed) ||
                   (id(mister_pulse_zone) == 3 && !center_wet_allowed);
-              if(pulse_zone_closed) {
+              if(active_zone_gate_closed) {
                 id(mister_pulse_zone) = 0;
                 id(mister_pulse_timer_ms) = 0;
               }

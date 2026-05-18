@@ -3139,7 +3139,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         lighting_target_minutes_supported = FIRMWARE_HAS_LIGHTING_TARGET_MINUTES or all(
             param in shared.cfg_readback for param in LIGHTING_TARGET_MINUTE_PARAMS
         )
-        direct_wet_policy_supported = _direct_wet_policy_supported()
+        direct_wet_supported = _direct_wet_policy_supported()
         planner_meta = {
             r["parameter"]: {
                 "trigger_id": str(r["trigger_id"]) if r["trigger_id"] else None,
@@ -3315,7 +3315,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         # activity duration intentionally follows the same main-light runtime
         # policy that firmware uses for daily qualified light minutes; zones
         # then narrow the wettable portion with start/drydown offsets.
-        if direct_wet_policy_supported:
+        if direct_wet_supported:
             activity_defaults = _align_activity_defaults_with_planned_lighting(
                 _activity_defaults_from_lighting(lighting_row, lighting_circuit_rows),
                 planner_params,
@@ -3369,7 +3369,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 continue
             if param in ACTIVITY_MIRROR_PARAMS:
                 continue
-            if param in DIRECT_WET_POLICY_PARAMS and not direct_wet_policy_supported:
+            if param in DIRECT_WET_POLICY_PARAMS and not direct_wet_supported:
                 continue
             if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue
