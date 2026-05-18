@@ -70,7 +70,6 @@ FIRMWARE_SETPOINT_PARAMS = {
     "fog_rh_ceiling_pct",
     "fog_time_window_end",
     "fog_time_window_start",
-    "gl_dli_target",
     "gl_grow_dli_target",
     "gl_grow_target_light_minutes",
     "gl_grow_lux_hysteresis",
@@ -79,8 +78,6 @@ FIRMWARE_SETPOINT_PARAMS = {
     "gl_grow_min_on_s",
     "gl_grow_sunrise_hour",
     "gl_grow_sunset_hour",
-    "gl_lux_hysteresis",
-    "gl_lux_threshold",
     "gl_main_dli_target",
     "gl_main_target_light_minutes",
     "gl_main_lux_hysteresis",
@@ -89,8 +86,6 @@ FIRMWARE_SETPOINT_PARAMS = {
     "gl_main_min_on_s",
     "gl_main_sunrise_hour",
     "gl_main_sunset_hour",
-    "gl_sunrise_hour",
-    "gl_sunset_hour",
     "irrig_center_duration_min",
     "irrig_center_fert_duration_min",
     "irrig_center_fert_every_n",
@@ -146,7 +141,6 @@ FIRMWARE_SETPOINT_PARAMS = {
     "sw_economiser_enabled",
     "sw_fog_closes_vent",
     "sw_fsm_controller_enabled",
-    "sw_gl_auto_mode",
     "sw_gl_grow_auto_mode",
     "sw_gl_main_auto_mode",
     "sw_irrigation_center_enabled",
@@ -185,17 +179,6 @@ BAND_OWNED_PARAMS = frozenset(
         "vpd_target_center",
     }
 )
-LIGHTING_POLICY_PARAMS = frozenset(
-    {
-        "gl_dli_target",
-        "gl_lux_hysteresis",
-        "gl_lux_threshold",
-        "gl_sunrise_hour",
-        "gl_sunset_hour",
-        "sw_gl_auto_mode",
-    }
-)
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [setpoint-server] %(levelname)s %(message)s",
@@ -411,33 +394,7 @@ def get_setpoint_text_sync() -> str:
             if k.strip() in BAND_OWNED_PARAMS:
                 params[k.strip()] = v.strip()
 
-    # Step 2b: Overlay crop-driven lighting policy. This mirrors the ingestor
-    # dispatcher so the legacy ESP32 pull path cannot drift from direct pushes.
-    result = subprocess.run(
-        db_cmd
-        + [
-            "SELECT parameter, value FROM fn_lighting_policy(now(), 'vallery') p "
-            "CROSS JOIN LATERAL (SELECT * FROM fn_lighting_minutes_policy(now(), 'vallery') WHERE light_key = 'main') lp "
-            "CROSS JOIN LATERAL (VALUES "
-            "('gl_dli_target', round(p.target_dli::numeric, 1)::text), "
-            "('gl_lux_threshold', round(lp.lux_on_threshold::numeric, 0)::text), "
-            "('gl_lux_hysteresis', round(lp.lux_hysteresis::numeric, 0)::text), "
-            "('gl_sunrise_hour', p.sunrise_hour::text), "
-            "('gl_sunset_hour', p.cutoff_hour::text), "
-            "('sw_gl_auto_mode', '1')"
-            ") AS v(parameter, value)"
-        ],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    for line in result.stdout.strip().split("\n"):
-        if "=" in line:
-            k, v = line.split("=", 1)
-            if k.strip() in LIGHTING_POLICY_PARAMS:
-                params[k.strip()] = v.strip()
-
-    # Step 2b.1: Seed the new per-circuit lighting state-machine params from
+    # Step 2b: Seed the per-circuit lighting state-machine params from
     # crop policy + Tempest threshold evidence, but let active planner rows
     # override them. This keeps the fallback pull endpoint aligned with the
     # dispatcher without taking per-circuit control away from Iris.

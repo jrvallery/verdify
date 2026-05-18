@@ -196,6 +196,10 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  - id: sntp_last_sync_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
 
   # ─── Graduated NaN fallback indoor offset (A6) ───
   - id: indoor_offset_on_nan_f

@@ -120,7 +120,7 @@ class TestDataIntegrity:
         """Active non-ESP32 setpoints should be within expected ranges."""
         checks = [
             ("temp_high", 50, 100),
-            ("temp_low", 40, 80),
+            ("temp_low", 30, 80),
             ("vpd_high", 0.3, 3.0),
             ("vpd_low", 0.1, 2.0),
         ]

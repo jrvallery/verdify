@@ -175,6 +175,11 @@ class Diagnostics(BaseModel):
     vpd_watch_timer_s: int | None = Field(default=None, ge=0)
     mist_backoff_timer_s: int | None = Field(default=None, ge=0)
     vent_mist_assist_active: int | None = Field(default=None, ge=0, le=1)
+    controller_time_epoch: int | None = Field(default=None, ge=0)
+    controller_local_hour: int | None = Field(default=None, ge=0, le=23)
+    sntp_valid: int | None = Field(default=None, ge=0, le=1)
+    sntp_miss_count: int | None = Field(default=None, ge=0)
+    last_sntp_sync_age_s: int | None = Field(default=None, ge=0)
 
 
 # Every equipment_state row asserts one of these. Must cover every value in

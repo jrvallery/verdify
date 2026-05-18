@@ -22,8 +22,8 @@ sudo systemctl enable --now \
 |---|---|---|---|
 | `verdify-ingestor.service` | `simple` (always-on) | ESP32 → TimescaleDB data pipeline, 15 periodic tasks | `enable --now` |
 | `verdify-mcp.service` | `simple` (always-on) | MCP server on localhost:8000; 18 tools for Iris planner | `enable --now` |
-| `verdify-api.service` | `simple` (always-on) | FastAPI crop catalog + ESP32 /setpoints endpoint (port 8300) | `enable --now` |
-| `verdify-setpoint-server.service` | `simple` (always-on) | Grow-light control + setpoint HTTP surface | `enable --now` |
+| `verdify-api.service` | `simple` (always-on) | FastAPI crop/catalog API (port 8300 where systemd-managed) | `enable --now` |
+| `verdify-setpoint-server.service` | `simple` (always-on) | ESP32 text `/setpoints` endpoint and light HA bridge (port 8200) | `enable --now` |
 | `verdify-forecast.service` | `oneshot` | Open-Meteo 72 h forecast sync | invoked by cron via `scripts/forecast-sync.py` |
 | `verdify-forecast-page.timer` | `Timer` | Runs the unified generated-site publisher after forecast refresh cadence | `enable --now` |
 | `verdify-forecast-page.service` | `oneshot` | `scripts/publish-site-content.sh --reason forecast` | triggered by timer |

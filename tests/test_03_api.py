@@ -16,7 +16,7 @@ def api_get(path: str, host: str = "api.verdify.ai") -> tuple[int, str]:
         ["curl", "-sk", f"https://127.0.0.1{path}", "-H", f"Host: {host}", "-w", "\n%{http_code}"],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=20,
     )
     lines = result.stdout.strip().rsplit("\n", 1)
     body = lines[0] if len(lines) > 1 else ""

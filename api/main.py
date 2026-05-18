@@ -168,6 +168,8 @@ WRITE_API_KEY_ENV = "VERDIFY_WRITE_API_KEY"
 ALLOW_UNAUTHENTICATED_WRITES_ENV = "VERDIFY_ALLOW_UNAUTHENTICATED_WRITES"
 PUBLIC_HOME_METRICS_CACHE_TTL_S = 30.0
 _PUBLIC_HOME_METRICS_CACHE: dict[str, tuple[float, PublicHomeMetrics]] = {}
+PUBLIC_BAND_TRACE_CACHE_TTL_S = 30.0
+_PUBLIC_BAND_TRACE_CACHE: dict[str, tuple[float, PublicBandTraceResponse]] = {}
 PUBLIC_GPU_POWER_CACHE_TTL_S = 30.0
 _PUBLIC_GPU_POWER_CACHE: dict[str, tuple[float, dict]] = {}
 CONTACT_ALLOWED_TOPICS = {"build", "control", "data", "press", "collaboration", "correction", "other"}
@@ -1211,15 +1213,14 @@ async def planner_scorecard(scorecard_date: Annotated[date | None, Query(alias="
     return ScorecardResponse.from_metric_rows(rows)
 
 
-@app.get("/api/v1/public/band-trace", response_model=PublicBandTraceResponse)
-async def public_band_trace(
-    greenhouse_id: str = DEFAULT_GREENHOUSE,
-    hours: Annotated[int, Query(ge=1, le=168)] = 24,
-):
-    """Public-safe crop-vs-firmware-vs-readback band trace summary."""
+async def _fetch_public_band_trace_generated_at() -> object:
     async with pool.acquire() as conn:
-        generated_at = await conn.fetchval("SELECT now()")
-        latest = await conn.fetchrow(
+        return await conn.fetchval("SELECT now()")
+
+
+async def _fetch_public_band_trace_latest(greenhouse_id: str) -> asyncpg.Record | None:
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
             """
             SELECT *
               FROM fn_band_trace(now() - interval '2 hours', now(), $1)
@@ -1228,7 +1229,11 @@ async def public_band_trace(
             """,
             greenhouse_id,
         )
-        summary = await conn.fetchrow(
+
+
+async def _fetch_public_band_trace_summary(hours: int, greenhouse_id: str) -> asyncpg.Record | None:
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
             """
             WITH rows AS (
                 SELECT *
@@ -1257,7 +1262,26 @@ async def public_band_trace(
             greenhouse_id,
         )
 
-    return PublicBandTraceResponse(
+
+@app.get("/api/v1/public/band-trace", response_model=PublicBandTraceResponse)
+async def public_band_trace(
+    greenhouse_id: str = DEFAULT_GREENHOUSE,
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
+):
+    """Public-safe crop-vs-firmware-vs-readback band trace summary."""
+    cache_key = f"{greenhouse_id}:{hours}"
+    now_mono = time.monotonic()
+    cached = _PUBLIC_BAND_TRACE_CACHE.get(cache_key)
+    if cached and now_mono - cached[0] < PUBLIC_BAND_TRACE_CACHE_TTL_S:
+        return cached[1]
+
+    generated_at, latest, summary = await asyncio.gather(
+        _fetch_public_band_trace_generated_at(),
+        _fetch_public_band_trace_latest(greenhouse_id),
+        _fetch_public_band_trace_summary(hours, greenhouse_id),
+    )
+
+    response = PublicBandTraceResponse(
         generated_at=generated_at,
         greenhouse_id=greenhouse_id,
         latest=PublicBandTraceLatest.model_validate(dict(latest)) if latest else None,
@@ -1274,6 +1298,8 @@ async def public_band_trace(
             ok_trace_pct=_to_float(summary["ok_trace_pct"]) if summary else None,
         ),
     )
+    _PUBLIC_BAND_TRACE_CACHE[cache_key] = (time.monotonic(), response)
+    return response
 
 
 @app.get("/api/v1/public/data-health", response_model=PublicDataHealthResponse)

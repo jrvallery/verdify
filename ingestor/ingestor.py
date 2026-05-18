@@ -419,9 +419,12 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
                    ts, wifi_rssi, heap_bytes, heap_min_free_kb, heap_largest_free_block_kb,
                    uptime_s, probe_health, reset_reason,
                    firmware_version, active_probe_count, relief_cycle_count, vent_latch_timer_s,
-                   sealed_timer_s, vpd_watch_timer_s, mist_backoff_timer_s, vent_mist_assist_active
+                   sealed_timer_s, vpd_watch_timer_s, mist_backoff_timer_s, vent_mist_assist_active,
+                   controller_time_epoch, controller_local_hour, sntp_valid, sntp_miss_count,
+                   last_sntp_sync_age_s
                )
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)""",
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                       $17, $18, $19, $20, $21)""",
             ts,
             diag.wifi_rssi,
             diag.heap_bytes,
@@ -438,6 +441,11 @@ async def write_diagnostics(pool: asyncpg.Pool, ts: datetime) -> None:
             diag.vpd_watch_timer_s,
             diag.mist_backoff_timer_s,
             diag.vent_mist_assist_active,
+            diag.controller_time_epoch,
+            diag.controller_local_hour,
+            diag.sntp_valid,
+            diag.sntp_miss_count,
+            diag.last_sntp_sync_age_s,
         )
     log.debug("diagnostics row written")
 
@@ -890,9 +898,11 @@ def on_state_change(entity_state) -> None:
         if entity:
             old = state.system.get(entity)
             state.system[entity] = val
-            if old != val:
+            force_refresh = entity in {"gl_main_state", "gl_main_reason", "gl_grow_state", "gl_grow_reason"}
+            if old != val or force_refresh:
                 state.pending_states.append((entity, val))
-                log.info(f"state: {entity} → {val}")
+                if old != val:
+                    log.info(f"state: {entity} → {val}")
                 # OBS-1e (Sprint 16): active_overrides is a comma-separated
                 # list of firmware flags. Diff against last-seen set and
                 # enqueue one override_events row per newly-started flag.

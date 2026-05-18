@@ -291,19 +291,24 @@ FROM fn_lighting_minutes_policy(now(), '${GREENHOUSE_ID}')
 ORDER BY light_key;
 " 2>/dev/null || echo "(per-circuit lighting policy unavailable)"
 echo "You may set gl_main_target_light_minutes/gl_grow_target_light_minutes plus threshold/hysteresis independently when observations support diverging the two circuits."
+echo "Policy rows use confirmed cfg/readback state; latest desired setpoint rows are shown separately below for traceability."
 echo ""
 echo "QUALIFIED LIGHT MINUTES TODAY:"
 $DB -c "
 SELECT light_key,
        target_light_minutes AS target,
+       cfg_target_light_minutes AS cfg_target,
+       desired_target_light_minutes AS desired_target,
        qualified_light_minutes AS qualified,
        natural_qualified_minutes AS natural,
        switch_on_minutes AS switch_on,
        overlap_minutes AS overlap,
        remaining_light_minutes AS remaining,
+       CASE WHEN cfg_auto_enabled THEN 'ON' ELSE 'OFF' END AS cfg_auto,
+       desired_auto_delivery_status AS desired_auto_status,
        CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS actual_switch,
        firmware_reason
-FROM v_lighting_minutes_status_now
+FROM v_lighting_traceability_now
 ORDER BY light_key;
 " 2>/dev/null || echo "(qualified light minutes status unavailable)"
 echo "A qualified minute counts once when natural lux is above the circuit threshold OR the actual switch is ON; overlap is not double-counted."
@@ -321,7 +326,7 @@ SELECT sample_count,
        current_gl_lux_hysteresis
 FROM fn_lighting_lux_threshold_recommendation(now(), '${GREENHOUSE_ID}');
 " 2>/dev/null || echo "(lux threshold recommendation unavailable)"
-echo "current_gl_lux_threshold/current_gl_lux_hysteresis are the current planner/default per-circuit policy values; ESP32 cfg readbacks are excluded from this source-of-truth view."
+echo "current_gl_lux_threshold/current_gl_lux_hysteresis are recommendation evidence; confirmed ESP32 cfg readbacks remain the controller-state source of truth."
 echo "Use Tempest outdoor illuminance as the lighting trigger. Set gl_main_target_light_minutes/gl_grow_target_light_minutes, gl_main_lux_threshold/gl_main_lux_hysteresis, and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence unless you have a stronger observation."
 echo ""
 echo "DLI CORRECTION (estimated actual plant DLI):"

@@ -150,7 +150,7 @@ class TestDispatcherWiring:
         assert "limited heap-recovery push to %d priority lighting setpoint(s)" in body
         assert "_last_pushed.pop(param, None)" in body
         assert "delivery_status = 'deferred_heap_pressure'" in body
-        assert "COALESCE(sc.delivery_status, '') <> 'deferred_heap_pressure'" in body
+        assert "COALESCE(sc.delivery_status, 'pending') = 'pending'" in body
         assert "Keep shared.recently_pushed" in body
         assert "shared.recently_pushed.pop(param, None)" not in body
         assert "shared.recently_pushed_values.pop(param, None)" not in body

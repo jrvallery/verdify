@@ -194,6 +194,12 @@ time:
       - 192.168.10.1
       - pool.ntp.org
     timezone: America/Denver
+    on_time_sync:
+      then:
+        - lambda: |-
+            id(sntp_last_sync_ms) = millis();
+            id(sntp_heartbeat_misses) = 0;
+            id(sntp_failed) = false;
     on_time:
       # 30-minute heartbeat — A3: track consecutive misses for controller time.
       - seconds: 0

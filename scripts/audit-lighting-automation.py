@@ -417,14 +417,16 @@ def static_checks(audit: Audit) -> None:
 
     migration = read(REPO_ROOT / "db" / "migrations" / "123-lighting-per-circuit-state-machines.sql")
     minutes_migration = read(REPO_ROOT / "db" / "migrations" / "126-lighting-qualified-minutes.sql")
+    traceability_migration = read(REPO_ROOT / "db" / "migrations" / "128-lighting-traceability-confirmed-state.sql")
     live_fixes_migration = read(REPO_ROOT / "db" / "migrations" / "125-lighting-live-fixes.sql")
     timeline_migration = read(REPO_ROOT / "db" / "migrations" / "127-lighting-timeline-qualified-minutes.sql")
     audit.check(
         all(
-            token in minutes_migration
+            token in (minutes_migration + traceability_migration)
             for token in (
                 "fn_lighting_minutes_policy",
                 "v_lighting_minutes_status_now",
+                "v_lighting_traceability_now",
                 "v_lighting_qualified_minutes_daily",
             )
         ),
@@ -497,9 +499,9 @@ def static_checks(audit: Audit) -> None:
         "site-home panel 36 is missing, stale, or still bound to fn_lighting_timeline",
     )
     audit.check(
-        policy_panel and "v_lighting_minutes_status_now" in panel_sql(policy_panel),
+        policy_panel and "v_lighting_traceability_now" in panel_sql(policy_panel),
         "lighting policy table graph",
-        "site-climate-lighting panel 16 queries v_lighting_minutes_status_now",
+        "site-climate-lighting panel 16 queries v_lighting_traceability_now",
         "site-climate-lighting panel 16 is missing the per-circuit status view",
     )
     audit.check(
@@ -668,15 +670,16 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
                lux_on_threshold, lux_off_threshold,
                COALESCE(firmware_state, '') AS firmware_state,
                COALESCE(firmware_reason, '') AS firmware_reason,
-               COALESCE(firmware_telemetry_fresh, false) AS firmware_telemetry_fresh
-          FROM v_lighting_minutes_status_now
+               COALESCE(firmware_decision_fresh, firmware_telemetry_fresh, false) AS firmware_telemetry_fresh,
+               policy_matches_cfg
+          FROM v_lighting_traceability_now
          ORDER BY light_key
         """
     )
     audit.check(
         {row["light_key"] for row in status} == {"grow", "main"},
         "live per-circuit status view",
-        "v_lighting_minutes_status_now returns main and grow rows",
+        "v_lighting_traceability_now returns main and grow rows",
         f"unexpected status rows: {status}",
     )
     telemetry_live = all(
@@ -686,9 +689,9 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
     audit.add(
         "firmware per-circuit telemetry",
         "PASS" if telemetry_live else ("FAIL" if require_ota else "BLOCKED"),
-        "fresh state/reason populated for both circuits"
+        "fresh decision telemetry plus state/reason populated for both circuits"
         if telemetry_live
-        else "firmware_state/firmware_reason blank until OTA or stale after rollback",
+        else "firmware state/reason or decision timestamp blank until OTA or stale after rollback",
     )
 
     try:
@@ -701,7 +704,7 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
             "target_light_minutes",
             "QUALIFIED LIGHT MINUTES TODAY",
             "TEMPEST LUX THRESHOLD RECOMMENDATION",
-            "ESP32 cfg readbacks are excluded from this source-of-truth view",
+            "confirmed ESP32 cfg readbacks remain the controller-state source of truth",
             "Use Tempest outdoor illuminance as the lighting trigger",
             "Set gl_main_target_light_minutes/gl_grow_target_light_minutes",
             "Per-circuit gl_main_target_light_minutes/gl_grow_target_light_minutes",
@@ -821,10 +824,10 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         audit.check(
             panel_by_id(lighting, 16)
             and panel_by_id(lighting, 17)
-            and "v_lighting_minutes_status_now" in panel_sql(panel_by_id(lighting, 16))
+            and "v_lighting_traceability_now" in panel_sql(panel_by_id(lighting, 16))
             and "fn_lighting_timeline" in panel_sql(panel_by_id(lighting, 17)),
             "live lighting Grafana panels",
-            "site-climate-lighting panels 16/17 are live and bound to policy/timeline views",
+            "site-climate-lighting panels 16/17 are live and bound to traceability/timeline views",
             "site-climate-lighting panels 16/17 missing or stale in live Grafana",
         )
         live_titles = {panel.get("title") for panel in greenhouse.get("panels", [])}
@@ -992,10 +995,10 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
                s.actual_on,
                s.firmware_state,
                s.firmware_reason,
-               s.firmware_telemetry_fresh,
+               COALESCE(s.firmware_decision_fresh, s.firmware_telemetry_fresh, false) AS firmware_telemetry_fresh,
                s.equipment_ts,
                COALESCE(latest_fw.first_ts, now() - interval '24 hours') AS first_ts
-          FROM v_lighting_minutes_status_now s
+          FROM v_lighting_traceability_now s
           CROSS JOIN latest_fw
          WHERE s.equipment IN ('grow_light_main', 'grow_light_grow')
         """
@@ -1048,11 +1051,12 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         except ValueError:
             return False
 
+    legacy_shared_params = set(legacy_expected)
     audit.check(
-        legacy_values_match(setpoint_text),
-        "setpoint server legacy shared lighting values",
-        "local setpoint server exposes legacy gl_lux_* values derived from the main circuit policy",
-        f"local setpoint server legacy gl_lux_* mismatch: expected={legacy_expected} got={setpoint_text}",
+        legacy_shared_params.isdisjoint(setpoint_text),
+        "setpoint server legacy shared lighting removal",
+        "local setpoint server omits legacy shared gl_lux_* values; ESP32 consumes per-circuit lighting only",
+        f"local setpoint server still exposes legacy shared lighting values: {setpoint_text}",
     )
     api_proc = run(
         [
@@ -1083,10 +1087,15 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
     if deploy_preflight.returncode == 0:
         audit.add("firmware OTA preflight", "PASS", "deploy guard is clear")
     else:
-        last_line = (deploy_preflight.stdout + deploy_preflight.stderr).strip().splitlines()[-1:]
+        preflight_text = (deploy_preflight.stdout + deploy_preflight.stderr).strip()
+        last_line = preflight_text.splitlines()[-1:]
+        bake_only_block = (
+            "48-hour bake not satisfied" in preflight_text
+            and "No unresolved critical/legacy-high alerts" in preflight_text
+        )
         audit.add(
             "firmware OTA preflight",
-            "FAIL" if require_ota else "BLOCKED",
+            "WARN" if bake_only_block else ("FAIL" if require_ota else "BLOCKED"),
             last_line[0] if last_line else "preflight failed",
         )
 

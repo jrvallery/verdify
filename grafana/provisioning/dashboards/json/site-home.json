@@ -4118,7 +4118,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Traceability panel for the qualified-light-minutes controller. Yellow is 10-minute average natural lux; threshold lines show the current per-circuit ON/OFF hysteresis band from fn_lighting_minutes_policy(). The lower lanes are actual Lutron switch state from equipment_state. Right-axis minutes count natural lux above threshold OR actual switch-on time once per bucket, with target lines from gl_main/gl_grow_target_light_minutes.",
+      "description": "Traceability panel for the qualified-light-minutes controller. Natural lux and threshold lines show the confirmed policy band; lower lanes are physical Lutron switch state from equipment_state; right-axis minutes count natural lux above threshold OR actual switch-on time once per bucket. Use the lighting traceability table for desired-vs-cfg-vs-physical status when investigating drift.",
       "fieldConfig": {
         "defaults": {
           "color": {

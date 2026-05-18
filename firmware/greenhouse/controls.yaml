@@ -1028,6 +1028,8 @@ interval:
                 id(gl_main_reason).publish_state("time_invalid");
                 id(gl_grow_state_text).publish_state("OFF");
                 id(gl_grow_reason).publish_state("time_invalid");
+                id(gl_main_decision_epoch).publish_state((float)(millis() / 1000UL));
+                id(gl_grow_decision_epoch).publish_state((float)(millis() / 1000UL));
               } else {
                 float cur_lux = id(tempest_lux);
                 if(isnan(cur_lux)) cur_lux = id(greenhouse_light_lux).state;
@@ -1046,7 +1048,7 @@ interval:
                   .cutoff_hour = id(gl_main_sunset_hour),
                   .min_on_ms = (uint32_t)id(gl_main_min_on_s) * 1000UL,
                   .min_off_ms = (uint32_t)id(gl_main_min_off_s) * 1000UL,
-                  .auto_enabled = id(gl_auto_enabled) && id(gl_main_auto_enabled)
+                  .auto_enabled = id(gl_main_auto_enabled)
                 };
                 LightingSetpoints grow_sp = {
                   .target_light_minutes = (uint32_t)id(gl_grow_target_light_minutes),
@@ -1056,7 +1058,7 @@ interval:
                   .cutoff_hour = id(gl_grow_sunset_hour),
                   .min_on_ms = (uint32_t)id(gl_grow_min_on_s) * 1000UL,
                   .min_off_ms = (uint32_t)id(gl_grow_min_off_s) * 1000UL,
-                  .auto_enabled = id(gl_auto_enabled) && id(gl_grow_auto_enabled)
+                  .auto_enabled = id(gl_grow_auto_enabled)
                 };
 
                 LightingDecision main_dec = evaluate_lighting(
@@ -1082,6 +1084,8 @@ interval:
                 id(gl_main_reason).publish_state(main_dec.reason);
                 id(gl_grow_state_text).publish_state(grow_dec.want_on ? "ON" : "OFF");
                 id(gl_grow_reason).publish_state(grow_dec.reason);
+                id(gl_main_decision_epoch).publish_state((float)time.timestamp);
+                id(gl_grow_decision_epoch).publish_state((float)time.timestamp);
                 }
             }
           }

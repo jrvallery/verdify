@@ -1034,7 +1034,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Per-circuit qualified-light-minutes policy, progress, expected state, and actual Lutron switch state.",
+      "description": "Per-circuit lighting traceability. Policy columns come from confirmed/readback lighting policy, desired columns come from the latest non-ESP32 setpoint row, cfg columns come from ESP32 cfg_* readbacks, and physical switch is the HA/Lutron equipment state.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1083,7 +1083,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT light_key AS \"Circuit\",\n       equipment AS \"Equipment\",\n       target_light_minutes AS \"Target min\",\n       qualified_light_minutes AS \"Qualified min\",\n       natural_qualified_minutes AS \"Natural min\",\n       switch_on_minutes AS \"Switch min\",\n       overlap_minutes AS \"Overlap min\",\n       remaining_light_minutes AS \"Remaining min\",\n       start_hour AS \"Start\",\n       cutoff_hour AS \"Cutoff\",\n       lux_on_threshold AS \"ON Lux\",\n       lux_off_threshold AS \"OFF Lux\",\n       CASE WHEN expected_on THEN 'ON' ELSE 'OFF' END AS \"Expected\",\n       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Actual\",\n       firmware_state AS \"FW State\",\n       firmware_reason AS \"FW Reason\"\nFROM v_lighting_minutes_status_now\nORDER BY light_key",
+          "rawSql": "SELECT light_key AS \"Circuit\",\n       equipment AS \"Equipment\",\n       target_light_minutes AS \"Policy target min\",\n       cfg_target_light_minutes AS \"Cfg target min\",\n       desired_target_light_minutes AS \"Desired target min\",\n       qualified_light_minutes AS \"Qualified min\",\n       natural_qualified_minutes AS \"Natural min\",\n       switch_on_minutes AS \"Switch min\",\n       overlap_minutes AS \"Overlap min\",\n       remaining_light_minutes AS \"Remaining min\",\n       lux_on_threshold AS \"Policy ON Lux\",\n       cfg_lux_on_threshold AS \"Cfg ON Lux\",\n       desired_lux_on_threshold AS \"Desired ON Lux\",\n       lux_off_threshold AS \"Policy OFF Lux\",\n       CASE WHEN auto_enabled THEN 'ON' ELSE 'OFF' END AS \"Policy auto\",\n       CASE WHEN cfg_auto_enabled THEN 'ON' ELSE 'OFF' END AS \"Cfg auto\",\n       CASE WHEN desired_auto_enabled THEN 'ON' ELSE 'OFF' END AS \"Desired auto\",\n       desired_auto_delivery_status AS \"Desired status\",\n       CASE WHEN expected_on THEN 'ON' ELSE 'OFF' END AS \"Policy expected\",\n       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Physical switch\",\n       CASE WHEN policy_matches_cfg THEN 'MATCH' ELSE 'DRIFT' END AS \"Policy vs cfg\",\n       CASE WHEN firmware_decision_fresh THEN 'FRESH' ELSE 'STALE' END AS \"FW decision\",\n       firmware_state AS \"FW State\",\n       firmware_reason AS \"FW Reason\"\nFROM v_lighting_traceability_now\nORDER BY light_key",
           "refId": "A"
         }
       ],

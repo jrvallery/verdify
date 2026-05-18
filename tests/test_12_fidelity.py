@@ -393,12 +393,12 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
         "vpd_target_center",
     ):
         assert f'"{param}"' in script
-    assert "LIGHTING_POLICY_PARAMS" in script
+    assert "LIGHTING_POLICY_PARAMS" not in script
     assert "fn_band_setpoints(now())" in script
     assert "fn_house_vpd_control_band(now())" in script
     assert "fn_zone_vpd_targets(now())" in script
     assert "'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode'" in script
-    assert "fn_lighting_policy(now(), 'vallery')" in script
+    assert "fn_lighting_policy(now(), 'vallery')" not in script
     assert "fn_lighting_minutes_policy(now(), 'vallery')" in script
     assert "if k.strip() not in plan_params" in script
 
@@ -450,7 +450,7 @@ def test_planner_context_surfaces_band_source_trace():
     assert "TEMPEST LUX THRESHOLD RECOMMENDATION" in script
     assert "fn_lighting_lux_threshold_recommendation(now(), '${GREENHOUSE_ID}')" in script
     assert "lux_hysteresis" in script
-    assert "ESP32 cfg readbacks are excluded from this source-of-truth view" in script
+    assert "confirmed ESP32 cfg readbacks remain the controller-state source of truth" in script
     assert (
         "Set gl_main_target_light_minutes/gl_grow_target_light_minutes, gl_main_lux_threshold/gl_main_lux_hysteresis, and gl_grow_lux_threshold/gl_grow_lux_hysteresis from this evidence"
         in script
@@ -717,9 +717,9 @@ def test_lighting_automation_audit_enforces_post_ota_proof():
     assert "post-OTA setpoint confirmations" in src
     assert "post-OTA Lutron state evidence" in src
     assert "confirmed_at IS NOT NULL" in src
-    assert "firmware_state/firmware_reason blank until OTA" in src
+    assert "firmware state/reason or decision timestamp blank until OTA" in src
     assert "firmware_telemetry_fresh" in src
-    assert "v_lighting_minutes_status_now" in src
+    assert "v_lighting_traceability_now" in src
     assert "equipment_ts" in src
     assert "matching firmware telemetry" in src
     assert "per-circuit cfg readbacks are live; firmware supports per-circuit lighting pushes" in src
@@ -831,7 +831,7 @@ def test_lighting_automation_audit_checks_live_public_site():
     assert "live public home page" in src
     assert "live public lighting page" in src
     assert "live public tunables page" in src
-    assert "setpoint server legacy shared lighting values" in src
+    assert "setpoint server legacy shared lighting removal" in src
     assert "api legacy shared lighting values" in src
     assert "Circuit Policy And Forecast Bands" in src
     assert "Firmware state and reason fields appear after the next ESP32 OTA" in src
@@ -917,7 +917,7 @@ def test_lighting_automation_audit_checks_live_planner_context():
     assert "target_light_minutes" in src
     assert "qualified_light_minutes" in src
     assert "TEMPEST LUX THRESHOLD RECOMMENDATION" in src
-    assert "ESP32 cfg readbacks are excluded from this source-of-truth view" in src
+    assert "confirmed ESP32 cfg readbacks remain the controller-state source of truth" in src
     assert "Set gl_main_target_light_minutes/gl_grow_target_light_minutes" in src
 
 

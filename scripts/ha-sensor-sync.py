@@ -4,7 +4,7 @@ ha-sensor-sync.py — Sync HA-managed devices into Verdify TimescaleDB.
 
 Polls HA REST API every 5 minutes via cron. Data sources:
 1. YINMIK water quality tester → climate table hydro columns
-2. Grow lights (Lutron) → equipment_state table
+2. Grow lights (Lutron) → equipment_state table every poll
 3. Config switches → equipment_state table
 4. Frigate occupancy → system_state table
 
@@ -202,7 +202,7 @@ async def sync_once(db_url: str) -> None:
                 await conn.execute(f"INSERT INTO climate ({col_names}) VALUES ({placeholders})", *vals)
                 log.info("Hydro standalone INSERT (no recent ESP32 row)")
 
-        # --- 3. Grow lights → equipment_state (on-change only) ---
+        # --- 3. Grow lights → equipment_state (every poll for traceability) ---
         prev_state = load_state()
         new_state = {}
         for eid, equip_name in LIGHT_ENTITIES.items():
@@ -211,16 +211,14 @@ async def sync_once(db_url: str) -> None:
                 is_on = raw == "on"
                 new_state[eid] = is_on
                 prev = prev_state.get(eid)
+                await conn.execute(
+                    "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
+                    now,
+                    equip_name,
+                    is_on,
+                )
                 if prev is None or prev != is_on:
-                    await conn.execute(
-                        "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)",
-                        now,
-                        equip_name,
-                        is_on,
-                    )
                     log.info("Light state change: %s → %s", equip_name, "ON" if is_on else "OFF")
-
-        save_state(new_state)
 
         # --- 4. Config switches → equipment_state (on-change only) ---
         for eid, equip_name in HA_CONFIG_SWITCHES.items():

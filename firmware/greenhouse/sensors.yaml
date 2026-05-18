@@ -725,6 +725,69 @@ sensor:
     entity_category: diagnostic
     accuracy_decimals: 0
 
+  - platform: template
+    id: controller_time_epoch
+    name: "Controller Time Epoch"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      auto now = id(sntp_time).now();
+      if(!now.is_valid()) return NAN;
+      return (float)now.timestamp;
+
+  - platform: template
+    id: controller_local_hour
+    name: "Controller Local Hour"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      auto now = id(sntp_time).now();
+      if(!now.is_valid()) return NAN;
+      return (float)now.hour;
+
+  - platform: template
+    id: sntp_valid
+    name: "SNTP Valid"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      return id(sntp_time).now().is_valid() && !id(sntp_failed) ? 1.0f : 0.0f;
+
+  - platform: template
+    id: sntp_miss_count
+    name: "SNTP Miss Count"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      return (float)id(sntp_heartbeat_misses);
+
+  - platform: template
+    id: last_sntp_sync_age_s
+    name: "Last SNTP Sync Age s"
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      if(id(sntp_last_sync_ms) == 0) return NAN;
+      return (float)((millis() - id(sntp_last_sync_ms)) / 1000UL);
+
+  - platform: template
+    id: gl_main_decision_epoch
+    name: "GL Main Decision Epoch"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+
+  - platform: template
+    id: gl_grow_decision_epoch
+    name: "GL Grow Decision Epoch"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+
   # Absolute humidity inside
   - platform: template
     id: absolute_humidity

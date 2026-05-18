@@ -966,21 +966,23 @@ async def ha_sensor_sync(pool: asyncpg.Pool) -> None:
                 vals.append(latest)
                 await conn.execute(f"UPDATE climate SET {', '.join(parts)} WHERE ts = ${len(vals)}", *vals)
 
-        # Grow lights → equipment_state (on-change)
+        # Grow lights → equipment_state. Record every HA poll so lighting
+        # traceability can prove physical state after OTA even if a relay held.
         for eid, equip in _LIGHT_ENTITIES.items():
             ha = _ha_state(states, eid)
             if ha is None:
                 continue
             is_on = ha.state == "on"
-            if new_state.get(eid) != is_on:
-                try:
-                    EquipmentStateEvent(ts=now, equipment=equip, state=is_on)
-                except ValidationError as e:
-                    log.error("Light event skipped (validation failed: %s)", e)
-                    continue
-                await conn.execute(
-                    "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)", now, equip, is_on
-                )
+            changed = new_state.get(eid) != is_on
+            try:
+                EquipmentStateEvent(ts=now, equipment=equip, state=is_on)
+            except ValidationError as e:
+                log.error("Light event skipped (validation failed: %s)", e)
+                continue
+            await conn.execute(
+                "INSERT INTO equipment_state (ts, equipment, state) VALUES ($1, $2, $3)", now, equip, is_on
+            )
+            if changed:
                 log.info("Light: %s → %s", equip, "ON" if is_on else "OFF")
             new_state[eid] = is_on
 
@@ -2573,7 +2575,7 @@ async def alert_monitor(pool: asyncpg.Pool) -> None:
 # ═════════════════════════════════════════════════════════════════
 # 8. SETPOINT DISPATCHER (every 300s)
 # ═════════════════════════════════════════════════════════════════
-from entity_map import PARAM_TO_ENTITY, SWITCH_TO_ENTITY
+from entity_map import CFG_READBACK_MAP, EQUIPMENT_SWITCH_MAP, PARAM_TO_ENTITY, SWITCH_TO_ENTITY
 from quiet_mode import (
     QUIET_MODE_ENTITY,
     QUIET_MODE_SETPOINTS,
@@ -2587,6 +2589,15 @@ from quiet_mode import (
 
 # In-memory cache of last pushed values — prevents re-pushing unchanged setpoints
 _last_pushed: dict[str, float] = {}
+
+SWITCH_CONFIRM_EQUIPMENT = {
+    param: EQUIPMENT_SWITCH_MAP[entity_id]
+    for param, entity_id in SWITCH_TO_ENTITY.items()
+    if entity_id in EQUIPMENT_SWITCH_MAP
+}
+FIRMWARE_READBACK_PARAMS = frozenset(CFG_READBACK_MAP.values())
+FIRMWARE_HAS_PER_CIRCUIT_LIGHTING = LIGHTING_CIRCUIT_SUPPORT_SENTINELS <= FIRMWARE_READBACK_PARAMS
+FIRMWARE_HAS_LIGHTING_TARGET_MINUTES = LIGHTING_TARGET_MINUTE_PARAMS <= FIRMWARE_READBACK_PARAMS
 
 # Direct ESP32 pushes are heap-expensive, but an open heap alert can also be
 # stale after the controller has rebooted and current fragmentation is healthy.
@@ -3029,6 +3040,24 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                 continue
             _last_pushed[param] = float(val)
             seeded += 1
+        if SWITCH_CONFIRM_EQUIPMENT:
+            async with pool.acquire() as seed_conn:
+                equipment_rows = await seed_conn.fetch(
+                    """
+                    SELECT DISTINCT ON (equipment) equipment, state
+                      FROM equipment_state
+                     WHERE equipment = ANY($1::text[])
+                     ORDER BY equipment, ts DESC
+                    """,
+                    list(SWITCH_CONFIRM_EQUIPMENT.values()),
+                )
+            equipment_state = {row["equipment"]: bool(row["state"]) for row in equipment_rows}
+            for param, equipment in SWITCH_CONFIRM_EQUIPMENT.items():
+                if param in shared.cfg_readback:
+                    continue
+                if equipment in equipment_state:
+                    _last_pushed[param] = 1.0 if equipment_state[equipment] else 0.0
+                    seeded += 1
         log.info(
             "Dispatcher: reconnect reconcile — seeded %d cfg readbacks; forcing %d band setpoint(s)",
             seeded,
@@ -3052,10 +3081,12 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             "SELECT parameter, value, ts, plan_id, reason, trigger_id, planner_instance FROM v_active_plan"
         )
         raw_planner_params = {r["parameter"]: r["value"] for r in (planned or [])}
-        lighting_circuit_supported = any(
+        lighting_circuit_supported = FIRMWARE_HAS_PER_CIRCUIT_LIGHTING or any(
             param in shared.cfg_readback or param in _last_pushed for param in LIGHTING_CIRCUIT_SUPPORT_SENTINELS
         )
-        lighting_target_minutes_supported = all(param in shared.cfg_readback for param in LIGHTING_TARGET_MINUTE_PARAMS)
+        lighting_target_minutes_supported = FIRMWARE_HAS_LIGHTING_TARGET_MINUTES or all(
+            param in shared.cfg_readback for param in LIGHTING_TARGET_MINUTE_PARAMS
+        )
         planner_meta = {
             r["parameter"]: {
                 "trigger_id": str(r["trigger_id"]) if r["trigger_id"] else None,
@@ -3180,13 +3211,17 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         # target photoperiod. Firmware owns enforcement once these values are
         # pushed, so this remains reliable without the planner VM online.
         if lighting_row:
-            lighting_defaults = {
-                "gl_dli_target": round(float(lighting_row["target_dli"]), 1),
-                "gl_sunrise_hour": float(int(lighting_row["sunrise_hour"])),
-                "gl_sunset_hour": float(int(lighting_row["cutoff_hour"])),
-                "sw_gl_auto_mode": 1.0,
-            }
-            if lighting_circuit_rows:
+            lighting_defaults = {}
+            if not lighting_circuit_supported:
+                lighting_defaults.update(
+                    {
+                        "gl_dli_target": round(float(lighting_row["target_dli"]), 1),
+                        "gl_sunrise_hour": float(int(lighting_row["sunrise_hour"])),
+                        "gl_sunset_hour": float(int(lighting_row["cutoff_hour"])),
+                        "sw_gl_auto_mode": 1.0,
+                    }
+                )
+            if lighting_circuit_rows and not lighting_circuit_supported:
                 main_lighting = next((row for row in lighting_circuit_rows if row["light_key"] == "main"), None)
                 if main_lighting:
                     lighting_defaults["gl_lux_threshold"] = round(float(main_lighting["lux_on_threshold"]), 0)
@@ -5254,8 +5289,6 @@ async def planning_heartbeat(pool: asyncpg.Pool) -> None:
 # remains perpetually NULL by design. The 52-param readback gap is
 # tracked as a Sprint 21 firmware follow-up.
 # ═════════════════════════════════════════════════════════════════
-from entity_map import CFG_READBACK_MAP  # noqa: E402
-
 _READBACKABLE_PARAMS: list[str] = sorted(set(CFG_READBACK_MAP.values()))
 
 
@@ -5363,6 +5396,157 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
         if superseded_rows:
             log.info("setpoint_unconfirmed: marked %d stale pending row(s) superseded", len(superseded_rows))
 
+        if FIRMWARE_HAS_PER_CIRCUIT_LIGHTING:
+            stale_lighting_rows = await conn.fetch(
+                """
+                WITH policy AS MATERIALIZED (
+                    SELECT * FROM fn_lighting_minutes_policy(now(), 'vallery')
+                ),
+                current_policy(parameter, value) AS (
+                    SELECT 'gl_' || light_key || '_dli_target', legacy_dli_target::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_target_light_minutes', target_light_minutes::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_sunrise_hour', start_hour::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_sunset_hour', cutoff_hour::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_lux_threshold', lux_on_threshold::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_lux_hysteresis', lux_hysteresis::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_min_on_s', min_on_s::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'gl_' || light_key || '_min_off_s', min_off_s::double precision
+                      FROM policy
+                    UNION ALL
+                    SELECT 'sw_gl_' || light_key || '_auto_mode',
+                           CASE WHEN auto_enabled THEN 1.0 ELSE 0.0 END
+                      FROM policy
+                ),
+                latest_snapshot AS (
+                    SELECT DISTINCT ON (parameter) parameter, value, ts
+                      FROM setpoint_snapshot
+                     WHERE parameter IN (SELECT parameter FROM current_policy)
+                     ORDER BY parameter, ts DESC
+                )
+                UPDATE setpoint_changes sc
+                   SET delivery_status = 'superseded',
+                       superseded_by_ts = COALESCE(sc.superseded_by_ts, now()),
+                       expired_at = COALESCE(sc.expired_at, now())
+                  FROM current_policy cp
+                  JOIN latest_snapshot ls ON ls.parameter = cp.parameter
+                 WHERE sc.parameter = cp.parameter
+                   AND sc.confirmed_at IS NULL
+                   AND COALESCE(sc.source, '') <> 'esp32'
+                   AND COALESCE(sc.delivery_status, 'pending') IN ('pending', 'deferred_heap_pressure')
+                   AND sc.ts > now() - interval '1 day'
+                   AND abs(sc.value - cp.value) > 0.001
+                   AND abs(ls.value - cp.value) <= 0.001
+                RETURNING sc.parameter
+                """
+            )
+            if stale_lighting_rows:
+                log.info(
+                    "setpoint_unconfirmed: marked %d stale lighting row(s) superseded by current cfg policy",
+                    len(stale_lighting_rows),
+                )
+
+            legacy_lighting_rows = await conn.fetch(
+                """
+                UPDATE setpoint_changes sc
+                   SET delivery_status = 'superseded',
+                       superseded_by_ts = COALESCE(sc.superseded_by_ts, now()),
+                       expired_at = COALESCE(sc.expired_at, now())
+                 WHERE sc.parameter = ANY($1::text[])
+                   AND sc.confirmed_at IS NULL
+                   AND COALESCE(sc.source, '') <> 'esp32'
+                   AND COALESCE(sc.delivery_status, 'pending') IN ('pending', 'deferred_heap_pressure')
+                   AND sc.ts > now() - interval '1 day'
+                RETURNING sc.parameter
+                """,
+                list(LIGHTING_POLICY_PARAMS),
+            )
+            if legacy_lighting_rows:
+                log.info(
+                    "setpoint_unconfirmed: marked %d legacy shared lighting row(s) superseded",
+                    len(legacy_lighting_rows),
+                )
+
+        if SWITCH_CONFIRM_EQUIPMENT:
+            switch_values_sql = ", ".join(
+                f"('{param}', '{equipment}')"
+                for param, equipment in sorted(SWITCH_CONFIRM_EQUIPMENT.items())
+                if param not in _READBACKABLE_PARAMS
+            )
+            if switch_values_sql:
+                switch_confirmed = await conn.fetch(
+                    f"""
+                    WITH switch_map(parameter, equipment) AS (
+                        VALUES {switch_values_sql}
+                    ),
+                    latest_equipment AS (
+                        SELECT DISTINCT ON (equipment) equipment, state, ts
+                          FROM equipment_state
+                         WHERE equipment IN (SELECT equipment FROM switch_map)
+                         ORDER BY equipment, ts DESC
+                    )
+                    UPDATE setpoint_changes sc
+                       SET confirmed_at = COALESCE(sc.confirmed_at, now()),
+                           delivery_status = 'confirmed'
+                      FROM switch_map sm
+                      JOIN latest_equipment le ON le.equipment = sm.equipment
+                     WHERE sc.parameter = sm.parameter
+                       AND sc.confirmed_at IS NULL
+                       AND COALESCE(sc.source, '') <> 'esp32'
+                       AND COALESCE(sc.delivery_status, 'pending') IN ('pending', 'deferred_heap_pressure')
+                       AND sc.ts > now() - interval '1 hour'
+                       AND (sc.value >= 0.5) = le.state
+                    RETURNING sc.parameter
+                    """
+                )
+                if switch_confirmed:
+                    log.info(
+                        "setpoint_unconfirmed: confirmed %d switch-only row(s) from equipment_state",
+                        len(switch_confirmed),
+                    )
+
+        terminal = await conn.fetch(
+            """
+            UPDATE alert_log al
+               SET disposition = 'resolved',
+                   resolved_at = now(),
+                   resolved_by = 'system',
+                   resolution = 'auto-resolved: setpoint row is terminal'
+             WHERE al.alert_type = 'setpoint_unconfirmed'
+               AND al.resolved_at IS NULL
+               AND al.disposition IN ('open', 'acknowledged')
+               AND al.source = 'ingestor'
+               AND EXISTS (
+                   SELECT 1
+                     FROM setpoint_changes sc
+                    WHERE sc.parameter = replace(al.sensor_id, 'setpoint.', '')
+                      AND sc.ts = COALESCE(NULLIF(al.details->>'pushed_at', '')::timestamptz, sc.ts)
+                      AND (
+                          sc.confirmed_at IS NOT NULL
+                          OR sc.superseded_by_ts IS NOT NULL
+                          OR sc.expired_at IS NOT NULL
+                          OR COALESCE(sc.delivery_status, '') IN ('confirmed', 'superseded')
+                      )
+               )
+            RETURNING al.id
+            """
+        )
+        if terminal:
+            log.info("setpoint_unconfirmed: auto-resolved %d terminal alert(s)", len(terminal))
+
         # Pass 2: scan for still-unconfirmed rows that need alerting.
         rows = await conn.fetch(
             """
@@ -5373,7 +5557,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
              FROM setpoint_changes sc
              WHERE sc.confirmed_at IS NULL
                AND COALESCE(sc.source, '') <> 'esp32'
-               AND COALESCE(sc.delivery_status, '') <> 'deferred_heap_pressure'
+               AND COALESCE(sc.delivery_status, 'pending') = 'pending'
                AND sc.ts < now() - interval '5 minutes'
                AND sc.ts > now() - interval '1 hour'
                AND sc.parameter = ANY($1::text[])
