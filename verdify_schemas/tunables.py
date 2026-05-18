@@ -110,6 +110,8 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "activity_start_minute",
         "activity_duration_min",
         "direct_wet_min_temp_f",
+        "direct_wet_wall_start_offset_min",
+        "direct_wet_wall_drydown_before_off_min",
         "direct_wet_south_start_offset_min",
         "direct_wet_south_drydown_before_off_min",
         "direct_wet_west_start_offset_min",

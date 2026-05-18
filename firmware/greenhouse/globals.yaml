@@ -273,6 +273,16 @@ globals:
     restore_value: no
     initial_value: 'true'
 
+  - id: direct_wet_wall_start_offset_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: direct_wet_wall_drydown_before_off_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
   - id: direct_wet_south_start_offset_min
     type: int
     restore_value: no

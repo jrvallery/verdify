@@ -1762,6 +1762,8 @@ ACTIVITY_MIRROR_PARAMS = frozenset(
 )
 DIRECT_WET_DEFAULTS = {
     "direct_wet_min_temp_f": 65,
+    "direct_wet_wall_start_offset_min": 60,
+    "direct_wet_wall_drydown_before_off_min": 120,
     "direct_wet_south_start_offset_min": 60,
     "direct_wet_south_drydown_before_off_min": 120,
     "direct_wet_west_start_offset_min": 60,
@@ -1779,6 +1781,7 @@ DIRECT_WET_REQUIRED_OBJECT_IDS = frozenset(
     {
         "activity_duration__min_",
         "direct_wet_gate_enabled",
+        "direct_wet_wall_drydown_before_off__min_",
         "direct_wet_center_drydown_before_off__min_",
     }
 )

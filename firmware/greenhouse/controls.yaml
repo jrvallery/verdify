@@ -534,6 +534,15 @@ interval:
                   id(direct_wet_south_start_offset_min),
                   id(direct_wet_south_drydown_before_off_min));
               }
+              if(zone == 4) {
+                return direct_wet_window_open(
+                  wet_now_minute,
+                  id(activity_start_hour),
+                  id(activity_start_minute),
+                  id(activity_duration_min),
+                  id(direct_wet_wall_start_offset_min),
+                  id(direct_wet_wall_drydown_before_off_min));
+              }
               if(zone == 2) {
                 return direct_wet_window_open(
                   wet_now_minute,
@@ -557,27 +566,26 @@ interval:
             const bool south_wet_allowed = direct_wet_allowed(1);
             const bool west_wet_allowed = direct_wet_allowed(2);
             const bool center_wet_allowed = direct_wet_allowed(3);
+            const bool wall_wet_allowed = direct_wet_allowed(4);
             const bool any_mister_wet_allowed = south_wet_allowed || west_wet_allowed || center_wet_allowed;
             auto direct_wet_relay_watchdog = [&]() {
               if(!id(direct_wet_gate_enabled)) return;
-              bool closed_any = false;
               if(!south_wet_allowed) {
                 id(south_wall_mister).turn_off();
                 id(south_wall_mister_fertilized).turn_off();
-                id(wall_drips).turn_off();
-                id(wall_drips_fertilized).turn_off();
-                closed_any = true;
               }
               if(!west_wet_allowed) {
                 id(west_wall_mister).turn_off();
                 id(west_wall_mister_fertilized).turn_off();
-                closed_any = true;
+              }
+              if(!wall_wet_allowed) {
+                id(wall_drips).turn_off();
+                id(wall_drips_fertilized).turn_off();
               }
               if(!center_wet_allowed) {
                 id(center_mister).turn_off();
                 id(center_drips).turn_off();
                 id(center_drips_fertilized).turn_off();
-                closed_any = true;
               }
               if(!id(south_wall_mister_fertilized).state &&
                  !id(west_wall_mister_fertilized).state &&
@@ -585,7 +593,11 @@ interval:
                  !id(center_drips_fertilized).state) {
                 id(fertilizer_master_valve).turn_off();
               }
-              if(closed_any && id(mister_pulse_zone) > 0) {
+              bool pulse_zone_closed =
+                  (id(mister_pulse_zone) == 1 && !south_wet_allowed) ||
+                  (id(mister_pulse_zone) == 2 && !west_wet_allowed) ||
+                  (id(mister_pulse_zone) == 3 && !center_wet_allowed);
+              if(pulse_zone_closed) {
                 id(mister_pulse_zone) = 0;
                 id(mister_pulse_timer_ms) = 0;
               }
@@ -1336,8 +1348,8 @@ interval:
                 id(activity_start_hour),
                 id(activity_start_minute),
                 id(activity_duration_min),
-                id(direct_wet_south_start_offset_min),
-                id(direct_wet_south_drydown_before_off_min));
+                id(direct_wet_wall_start_offset_min),
+                id(direct_wet_wall_drydown_before_off_min));
             }
             return direct_wet_window_open(
               wet_now_minute,

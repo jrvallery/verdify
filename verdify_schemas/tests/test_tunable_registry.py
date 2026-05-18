@@ -252,6 +252,8 @@ class TestActivityDirectWetGuards:
     }
     DIRECT_WET_NUMERIC = {
         "direct_wet_min_temp_f",
+        "direct_wet_wall_start_offset_min",
+        "direct_wet_wall_drydown_before_off_min",
         "direct_wet_south_start_offset_min",
         "direct_wet_south_drydown_before_off_min",
         "direct_wet_west_start_offset_min",
@@ -285,6 +287,7 @@ class TestActivityDirectWetGuards:
             "south_wet_allowed = direct_wet_allowed(1)",
             "west_wet_allowed = direct_wet_allowed(2)",
             "center_wet_allowed = direct_wet_allowed(3)",
+            "wall_wet_allowed = direct_wet_allowed(4)",
             "direct_wet_relay_watchdog",
             "id(south_wall_mister_fertilized).turn_off();",
             "id(west_wall_mister_fertilized).turn_off();",
@@ -310,6 +313,8 @@ class TestActivityDirectWetGuards:
             "id(center_drips_fertilized).turn_off();",
             "id(fertilizer_master_valve).turn_off();",
             "direct_wet_relay_watchdog",
+            "direct_wet_wall_start_offset_min",
+            "direct_wet_wall_drydown_before_off_min",
             'ESP_LOGW("irrig","DROP QUEUED %s job (direct-wet gate)"',
             'ESP_LOGW("irrig","Wall SKIPPED (direct-wet gate) doy=%d"',
             'ESP_LOGW("irrig","Center SKIPPED (direct-wet gate) doy=%d"',

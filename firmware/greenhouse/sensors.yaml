@@ -2135,6 +2135,30 @@ sensor:
       return id(direct_wet_min_temp_f);
 
   - platform: template
+    id: cfg_direct_wet_wall_start_offset_min
+    name: "Cfg • Direct Wet Wall Start Offset (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_wall_start_offset_min);
+
+  - platform: template
+    id: cfg_direct_wet_wall_drydown_before_off_min
+    name: "Cfg • Direct Wet Wall Drydown Before Off (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_wall_drydown_before_off_min);
+
+  - platform: template
     id: cfg_direct_wet_south_start_offset_min
     name: "Cfg • Direct Wet South Start Offset (min)"
     unit_of_measurement: "min"

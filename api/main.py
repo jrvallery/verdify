@@ -78,6 +78,8 @@ from verdify_schemas.mcp_responses import ScorecardResponse  # noqa: E402
 ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_minute", "activity_duration_min"})
 DIRECT_WET_DEFAULTS = {
     "direct_wet_min_temp_f": 65,
+    "direct_wet_wall_start_offset_min": 60,
+    "direct_wet_wall_drydown_before_off_min": 120,
     "direct_wet_south_start_offset_min": 60,
     "direct_wet_south_drydown_before_off_min": 120,
     "direct_wet_west_start_offset_min": 60,
@@ -540,6 +542,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold',
                 'activity_start_hour','activity_start_minute','activity_duration_min',
                 'direct_wet_min_temp_f',
+                'direct_wet_wall_start_offset_min','direct_wet_wall_drydown_before_off_min',
                 'direct_wet_south_start_offset_min','direct_wet_south_drydown_before_off_min',
                 'direct_wet_west_start_offset_min','direct_wet_west_drydown_before_off_min',
                 'direct_wet_center_start_offset_min','direct_wet_center_drydown_before_off_min',
