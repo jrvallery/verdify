@@ -32,6 +32,12 @@ def controls_yaml() -> str:
 
 
 @pytest.fixture(scope="module")
+def hardware_yaml() -> str:
+    path = REPO_ROOT / "firmware" / "greenhouse" / "hardware.yaml"
+    return path.read_text()
+
+
+@pytest.fixture(scope="module")
 def tunables_yaml() -> str:
     path = REPO_ROOT / "firmware" / "greenhouse" / "tunables.yaml"
     return path.read_text()
@@ -321,6 +327,37 @@ class TestActivityDirectWetGuards:
         ]
         missing = [needle for needle in required if needle not in controls_yaml]
         assert not missing, f"Irrigation direct-wet gate coverage missing: {missing}"
+
+    def test_direct_wet_watchdog_covers_physical_wet_relays(self, controls_yaml: str, hardware_yaml: str) -> None:
+        wet_relays = {
+            "south_wall_mister",
+            "south_wall_mister_fertilized",
+            "west_wall_mister",
+            "west_wall_mister_fertilized",
+            "wall_drips",
+            "wall_drips_fertilized",
+            "center_mister",
+            "center_drips",
+            "center_drips_fertilized",
+        }
+        missing_hardware = [relay for relay in wet_relays if f"id: {relay}" not in hardware_yaml]
+        assert not missing_hardware, f"Expected wet relay missing from hardware.yaml: {missing_hardware}"
+
+        watchdog = controls_yaml.split("auto direct_wet_relay_watchdog", 1)[1].split("};", 1)[0]
+        missing_watchdog = [relay for relay in wet_relays if f"id({relay}).turn_off();" not in watchdog]
+        assert not missing_watchdog, f"Direct-wet watchdog does not close relays: {missing_watchdog}"
+
+        fert_relays = {
+            "south_wall_mister_fertilized",
+            "west_wall_mister_fertilized",
+            "wall_drips_fertilized",
+            "center_drips_fertilized",
+        }
+        missing_fert_master_guard = [relay for relay in fert_relays if f"!id({relay}).state" not in watchdog]
+        assert not missing_fert_master_guard, (
+            f"Fert master guard does not observe fert relays: {missing_fert_master_guard}"
+        )
+        assert "id(fertilizer_master_valve).turn_off();" in watchdog
 
     def test_fert_day_masks_supersede_every_n_fallback(self, controls_yaml: str) -> None:
         required = [
