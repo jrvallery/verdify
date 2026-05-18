@@ -20,12 +20,44 @@ import pathlib
 import re
 import runpy
 import sys
+import types
 
 import pytest
 
 from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, REGISTRY, TIER1_REG, registry_value_error
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+
+
+def _install_mcp_runtime_import_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let registry drift guards execute mcp/server.py in schema-only CI."""
+
+    class _FastMCP:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def tool(self, *_args, **_kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def run(self, *_args, **_kwargs) -> None:
+            pass
+
+    asyncpg_stub = types.SimpleNamespace(
+        Connection=object,
+        ReadOnlySQLTransactionError=type("ReadOnlySQLTransactionError", (Exception,), {}),
+        connect=lambda *_args, **_kwargs: None,
+    )
+    fastmcp_stub = types.SimpleNamespace(FastMCP=_FastMCP)
+    mcp_server_stub = types.SimpleNamespace(fastmcp=fastmcp_stub)
+    mcp_stub = types.SimpleNamespace(server=mcp_server_stub)
+
+    monkeypatch.setitem(sys.modules, "asyncpg", asyncpg_stub)
+    monkeypatch.setitem(sys.modules, "mcp", mcp_stub)
+    monkeypatch.setitem(sys.modules, "mcp.server", mcp_server_stub)
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp_stub)
 
 
 @pytest.fixture(scope="module")
@@ -248,8 +280,9 @@ class TestDriftGuard:
             f"{sorted(extras)}. Add to tunables.py first (Phase-1b flips this)."
         )
 
-    def test_registry_tier1_is_subset_of_mcp_tier1(self) -> None:
+    def test_registry_tier1_is_subset_of_mcp_tier1(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """MCP's mandatory Tier 1 surface must come from the registry."""
+        _install_mcp_runtime_import_stubs(monkeypatch)
         mcp_path = REPO_ROOT / "mcp" / "server.py"
         module = runpy.run_path(str(mcp_path), run_name="_test_mcp_server_registry")
         assert set(module["TIER1_TUNABLES"]) == set(TIER1_REG)
