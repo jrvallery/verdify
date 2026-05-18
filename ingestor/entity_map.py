@@ -15,6 +15,21 @@ Structure:
   DAILY_ACCUM_MAP:    object_id → column name in `daily_summary` table
 """
 
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from verdify_schemas.tunable_registry import (  # noqa: E402
+    CFG_READBACK_ALIASES_REG,
+    CFG_READBACK_MAP_REG,
+    SETPOINT_MAP_REG,
+)
+
 # ──────────────────────────────────────────────────────────────
 # Climate sensor columns (SensorInfo)
 # ──────────────────────────────────────────────────────────────
@@ -174,147 +189,7 @@ STATE_MAP: dict[str, str] = {
 # ──────────────────────────────────────────────────────────────
 # Setpoints (NumberInfo — write on change)
 # ──────────────────────────────────────────────────────────────
-SETPOINT_MAP: dict[str, str] = {
-    # Temperature band
-    "set_temp_low__f": "temp_low",
-    "set_temp_high__f": "temp_high",
-    "__heat_stage_2__f": "d_heat_stage_2",
-    "__cool_stage_2__f": "d_cool_stage_2",
-    "temp_hysteresis__f": "temp_hysteresis",
-    "heat_hysteresis__f": "heat_hysteresis",
-    "bias_heat__f": "bias_heat",
-    "bias_cool__f": "bias_cool",
-    # VPD band
-    "set_vpd_low_kpa": "vpd_low",
-    "set_vpd_high_kpa": "vpd_high",
-    "vpd_hysteresis_kpa": "vpd_hysteresis",
-    # Safety rails
-    "safety_min__f": "safety_min",
-    "safety_max__f": "safety_max",
-    "safety_seal_margin__f": "safety_max_seal_margin_f",
-    "safety_vpd_min_kpa": "safety_vpd_min",
-    "safety_vpd_max_kpa": "safety_vpd_max",
-    # Mister
-    "vpd_mister_engage_kpa": "mister_engage_kpa",
-    "vpd_mister_all_kpa": "mister_all_kpa",
-    "mister_engage_delay__s_": "mister_engage_delay_s",
-    "mister_all_delay__s_": "mister_all_delay_s",
-    "mister_on__s_": "mister_on_s",
-    "mister_off__s_": "mister_off_s",
-    "mister_all_on__s_": "mister_all_on_s",
-    "mister_all_off__s_": "mister_all_off_s",
-    "mister_water_budget__gal_": "mister_water_budget_gal",
-    "mister_max_runtime__min_": "mister_max_runtime_min",
-    "max_relief_cycles": "max_relief_cycles",
-    "dehum_aggressive_kpa": "dehum_aggressive_kpa",
-    "vent_latch_timeout__ms_": "vent_latch_timeout_ms",
-    # Equipment timing
-    "min_heat_on__s_": "min_heat_on_s",
-    "min_heat_off__s_": "min_heat_off_s",
-    "min_fan_on__s_": "min_fan_on_s",
-    "min_fan_off__s_": "min_fan_off_s",
-    "min_vent_on__s_": "min_vent_on_s",
-    "min_vent_off__s_": "min_vent_off_s",
-    "lead_rotate__s_": "lead_rotate_s",
-    "fan_burst__min_": "fan_burst_min",
-    "vent_bypass__min_": "vent_bypass_min",
-    "fog_burst__min_": "fog_burst_min",
-    # Economiser
-    "enthalpy_open__kj_kg_": "enthalpy_open",
-    "enthalpy_close__kj_kg_": "enthalpy_close",
-    "econ_heat_margin__f": "econ_heat_margin_f",
-    "site_pressure__hpa_": "site_pressure_hpa",
-    # Irrigation wall
-    "irrig_wall_start_hour": "irrig_wall_start_hour",
-    "irrig_wall_start_min": "irrig_wall_start_min",
-    "irrig_wall_duration__min_": "irrig_wall_duration_min",
-    "irrig_wall_fert_duration__min_": "irrig_wall_fert_duration_min",
-    "irrig_wall_fert_every_n_cycles": "irrig_wall_fert_every_n",
-    "irrig_wall_flush__min_": "irrig_wall_flush_min",
-    "irrig_wall_interval__days_": "irrig_wall_interval_days",
-    # Irrigation center
-    "irrig_center_start_hour": "irrig_center_start_hour",
-    "irrig_center_start_min": "irrig_center_start_min",
-    "irrig_center_duration__min_": "irrig_center_duration_min",
-    "irrig_center_fert_duration__min_": "irrig_center_fert_duration_min",
-    "irrig_center_fert_every_n_cycles": "irrig_center_fert_every_n",
-    "irrig_center_flush__min_": "irrig_center_flush_min",
-    "irrig_center_interval__days_": "irrig_center_interval_days",
-    # VPD boost
-    "irrig_vpd_boost__": "irrig_vpd_boost_pct",
-    "irrig_vpd_boost_threshold__hrs_": "irrig_vpd_boost_threshold_hrs",
-    # Grow lights
-    "gl_dli_target__mol_": "gl_dli_target",
-    "gl_lux_threshold": "gl_lux_threshold",
-    "gl_lux_hysteresis": "gl_lux_hysteresis",
-    "gl_start_hour": "gl_sunrise_hour",
-    "gl_cutoff_hour": "gl_sunset_hour",
-    "gl_main_dli_target": "gl_main_dli_target",
-    "gl_main_target_light_minutes": "gl_main_target_light_minutes",
-    "gl_main_lux_threshold": "gl_main_lux_threshold",
-    "gl_main_lux_hysteresis": "gl_main_lux_hysteresis",
-    "gl_main_sunrise_hour": "gl_main_sunrise_hour",
-    "gl_main_sunset_hour": "gl_main_sunset_hour",
-    "gl_main_min_on_s": "gl_main_min_on_s",
-    "gl_main_min_off_s": "gl_main_min_off_s",
-    "gl_grow_dli_target": "gl_grow_dli_target",
-    "gl_grow_target_light_minutes": "gl_grow_target_light_minutes",
-    "gl_grow_lux_threshold": "gl_grow_lux_threshold",
-    "gl_grow_lux_hysteresis": "gl_grow_lux_hysteresis",
-    "gl_grow_sunrise_hour": "gl_grow_sunrise_hour",
-    "gl_grow_sunset_hour": "gl_grow_sunset_hour",
-    "gl_grow_min_on_s": "gl_grow_min_on_s",
-    "gl_grow_min_off_s": "gl_grow_min_off_s",
-    # Switches (boolean, tracked as 0.0/1.0)
-    "economiser_enabled": "sw_economiser_enabled",
-    "fog_closes_vent": "sw_fog_closes_vent",
-    "mister_closes_vent": "sw_mister_closes_vent",  # sprint-15.1 fix 7: closes sprint-21 follow-up routing gap
-    "gl_auto_mode": "sw_gl_auto_mode",
-    "gl_main_auto_mode": "sw_gl_main_auto_mode",
-    "gl_grow_auto_mode": "sw_gl_grow_auto_mode",
-    "irrigation_enabled": "sw_irrigation_enabled",
-    "irrigation_wall_enabled": "sw_irrigation_wall_enabled",
-    "irrigation_center_enabled": "sw_irrigation_center_enabled",
-    "irrigation_weather_skip": "sw_irrigation_weather_skip",
-    "occupancy_mist_inhibit": "sw_occupancy_inhibit",
-    # Mister pulse model
-    "mister_pulse_on__s_": "mister_pulse_on_s",
-    "mister_pulse_gap__s_": "mister_pulse_gap_s",
-    "mister_vpd_weight": "mister_vpd_weight",
-    # Per-zone VPD targets (pushed by dispatcher from crop band)
-    "vpd_target_south__kpa_": "vpd_target_south",
-    "vpd_target_west__kpa_": "vpd_target_west",
-    "vpd_target_east__kpa_": "vpd_target_east",
-    "vpd_target_center__kpa_": "vpd_target_center",
-    "mister_center_penalty": "mister_center_penalty",
-    "east_adjacency_factor": "east_adjacency_factor",
-    "min_fog_on__s_": "min_fog_on_s",
-    "min_fog_off__s_": "min_fog_off_s",
-    # VPD-primary state machine (Phase 1)
-    "vpd_watch_dwell__s_": "vpd_watch_dwell_s",
-    "mist_vent_close_lead__s_": "mist_vent_close_lead_s",
-    "mist_max_closed_vent__s_": "mist_max_closed_vent_s",
-    "fog_escalation__kpa_": "fog_escalation_kpa",
-    "mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
-    "mist_thermal_relief__s_": "mist_thermal_relief_s",
-    "fog_rh_ceiling____": "fog_rh_ceiling_pct",
-    "fog_min_temp__f_": "fog_min_temp_f",
-    "fog_window_start__hr_": "fog_time_window_start",
-    "fog_window_end__hr_": "fog_time_window_end",
-    # Sprint-15: summer thermal-driven vent preference gate.
-    # 4 numerics + 1 switch. See docs/firmware-sprint-15-summer-vent-spec.md.
-    "vent_prefer_temp_delta__f_": "vent_prefer_temp_delta_f",
-    "vent_prefer_dp_delta__f_": "vent_prefer_dp_delta_f",
-    "outdoor_staleness_max__s_": "outdoor_staleness_max_s",
-    "summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
-    "summer_vent_enabled": "sw_summer_vent_enabled",
-    # Phase-2 dwell gate (plan firmware stabilization).
-    "dwell_gate__ms_": "dwell_gate_ms",
-    "dwell_gate_enabled": "sw_dwell_gate_enabled",
-    # Band-first controller.
-    "fsm_controller_enabled": "sw_fsm_controller_enabled",
-    "mist_backoff__s_": "mist_backoff_s",
-}
+SETPOINT_MAP: dict[str, str] = dict(SETPOINT_MAP_REG)
 
 # ──────────────────────────────────────────────────────────────
 # Diagnostics (SensorInfo + TextSensorInfo)
@@ -393,127 +268,7 @@ DAILY_ACCUM_MAP: dict[str, str] = {
 # Maps ESP32 object_id → canonical DB parameter name
 # Written to setpoint_snapshot table for ground-truth tracking
 # ──────────────────────────────────────────────────────────────
-CFG_READBACK_MAP: dict[str, str] = {
-    "cfg___temp_low___f_": "temp_low",
-    "cfg___temp_high___f_": "temp_high",
-    "cfg_____heat_s2___f_": "d_heat_stage_2",
-    "cfg___d_heat_stage_2___f_": "d_heat_stage_2",
-    "cfg_d_heat_stage_2_f": "d_heat_stage_2",
-    "cfg_____cool_s2___f_": "d_cool_stage_2",
-    "cfg___d_cool_stage_2___f_": "d_cool_stage_2",
-    "cfg_d_cool_stage_2_f": "d_cool_stage_2",
-    "cfg___temp_hyst___f_": "temp_hysteresis",
-    "cfg___heat_hyst___f_": "heat_hysteresis",
-    "cfg___vpd_low__kpa_": "vpd_low",
-    "cfg___vpd_high__kpa_": "vpd_high",
-    "cfg___vpd_hyst__kpa_": "vpd_hysteresis",
-    "cfg___bias_heat___f_": "bias_heat",
-    "cfg___bias_cool___f_": "bias_cool",
-    "cfg___safety_min___f_": "safety_min",
-    "cfg___safety_max___f_": "safety_max",
-    "cfg___safety_seal_margin___f_": "safety_max_seal_margin_f",
-    "cfg___safety_vpd_min__kpa_": "safety_vpd_min",
-    "cfg___safety_vpd_max__kpa_": "safety_vpd_max",
-    "cfg___site_pressure__hpa_": "site_pressure_hpa",
-    "cfg___enthalpy_open__kj_kg___": "enthalpy_open",
-    "cfg___enthalpy_close__kj_kg___": "enthalpy_close",
-    "cfg___econ_heat_margin___f_": "econ_heat_margin_f",
-    "cfg___fan_burst__min_": "fan_burst_min",
-    "cfg___vent_bypass__min_": "vent_bypass_min",
-    "cfg___fog_burst__min_": "fog_burst_min",
-    "cfg___lead_rotate_timeout__s_": "lead_rotate_s",
-    "cfg___fallback_window__s_": "fallback_window_s",
-    "cfg___min_heat_on__s_": "min_heat_on_s",
-    "cfg___min_heat_off__s_": "min_heat_off_s",
-    "cfg___min_fan_on__s_": "min_fan_on_s",
-    "cfg___min_fan_off__s_": "min_fan_off_s",
-    "cfg___min_vent_on__s_": "min_vent_on_s",
-    "cfg___min_vent_off__s_": "min_vent_off_s",
-    "cfg_mister_engage__kpa_": "mister_engage_kpa",
-    "cfg_mister_all__kpa_": "mister_all_kpa",
-    # Sprint-3 (firmware): per-zone VPD targets + mister scoring readbacks.
-    # The dispatcher pushes these six every planner cycle; before firmware
-    # sprint-3 there was no cfg_* readback, so alert_monitor fired
-    # setpoint_unconfirmed every cycle. Firmware sensor names use the
-    # "Cfg • Foo Bar (unit)" pattern, which slugifies to cfg___foo_bar__unit_.
-    "cfg___vpd_target_south__kpa_": "vpd_target_south",
-    "cfg___vpd_target_west__kpa_": "vpd_target_west",
-    "cfg___vpd_target_east__kpa_": "vpd_target_east",
-    "cfg___vpd_target_center__kpa_": "vpd_target_center",
-    "cfg___mister_center_penalty": "mister_center_penalty",
-    "cfg___east_adjacency_factor": "east_adjacency_factor",
-    # Per-zone VPD targets (from crop band, pushed by dispatcher)
-    "vpd_target_south__kpa_": "vpd_target_south",
-    "vpd_target_west__kpa_": "vpd_target_west",
-    "vpd_target_east__kpa_": "vpd_target_east",
-    "vpd_target_center__kpa_": "vpd_target_center",
-    "mister_center_penalty": "mister_center_penalty",
-    # Mister vent coordination
-    "fog_closes_vent": "sw_fog_closes_vent",
-    "sw_mister_closes_vent": "sw_mister_closes_vent",
-    "mister_closes_vent": "sw_mister_closes_vent",
-    # Sprint-15: summer thermal-driven vent readbacks.
-    # 5 tunable readbacks (matching SETPOINT_MAP above) + 2 live outdoor
-    # readings (firmware exposes the Tempest-sourced values it's comparing).
-    # See docs/firmware-sprint-15-summer-vent-spec.md.
-    "cfg___vent_prefer_temp_delta__f_": "vent_prefer_temp_delta_f",
-    "cfg___vent_prefer_dp_delta__f_": "vent_prefer_dp_delta_f",
-    "cfg___outdoor_staleness_max__s_": "outdoor_staleness_max_s",
-    "cfg___summer_vent_min_runtime__s_": "summer_vent_min_runtime_s",
-    "cfg_summer_vent_enabled": "sw_summer_vent_enabled",
-    "cfg___outdoor_temp___f_": "outdoor_temp_f",
-    "cfg___outdoor_dewpoint___f_": "outdoor_dewpoint_f",
-    # Phase 1c: 10 fire-and-forget tunable readbacks. Dispatcher pushed
-    # these but firmware never echoed — alert_monitor couldn't verify
-    # landings. Same "Cfg • Foo Bar (unit)" → cfg___foo_bar__unit_
-    # slug pattern as sprint-15 block above.
-    "cfg_fsm_controller_enabled": "sw_fsm_controller_enabled",
-    "cfg___mist_backoff__s_": "mist_backoff_s",
-    "cfg___mister_pulse_on__s_": "mister_pulse_on_s",
-    "cfg___mister_pulse_gap__s_": "mister_pulse_gap_s",
-    "cfg___mister_water_budget__gal_": "mister_water_budget_gal",
-    "cfg___mister_vpd_weight": "mister_vpd_weight",
-    "cfg___vpd_watch_dwell__s_": "vpd_watch_dwell_s",
-    "cfg___mister_engage_delay__s_": "mister_engage_delay_s",
-    "cfg___mister_all_delay__s_": "mister_all_delay_s",
-    "cfg___min_fog_on__s_": "min_fog_on_s",
-    "cfg___min_fog_off__s_": "min_fog_off_s",
-    "cfg_dwell_gate_enabled": "sw_dwell_gate_enabled",
-    "cfg_dwell_gate_ms": "dwell_gate_ms",
-    "cfg___mist_vent_close_lead__s_": "mist_vent_close_lead_s",
-    "cfg___mist_max_closed_vent__s_": "mist_max_closed_vent_s",
-    "cfg___mist_vent_reopen_delay__s_": "mist_vent_reopen_delay_s",
-    "cfg___mist_thermal_relief__s_": "mist_thermal_relief_s",
-    "cfg___fog_escalation__kpa_": "fog_escalation_kpa",
-    "cfg___fog_rh_ceiling____": "fog_rh_ceiling_pct",
-    "cfg_fog_rh_ceiling_pct": "fog_rh_ceiling_pct",
-    "cfg___fog_min_temp___f_": "fog_min_temp_f",
-    "cfg_fog_min_temp_f": "fog_min_temp_f",
-    "cfg___fog_window_start__hour_": "fog_time_window_start",
-    "cfg___fog_window_end__hour_": "fog_time_window_end",
-    "cfg___max_relief_cycles": "max_relief_cycles",
-    "cfg___dehum_aggressive__kpa_": "dehum_aggressive_kpa",
-    "cfg___vent_latch_timeout__ms_": "vent_latch_timeout_ms",
-    "cfg___gl_lux_hysteresis": "gl_lux_hysteresis",
-    "cfg_gl_main_dli_target": "gl_main_dli_target",
-    "cfg_gl_main_target_light_minutes": "gl_main_target_light_minutes",
-    "cfg_gl_main_lux_threshold": "gl_main_lux_threshold",
-    "cfg_gl_main_lux_hysteresis": "gl_main_lux_hysteresis",
-    "cfg_gl_main_sunrise_hour": "gl_main_sunrise_hour",
-    "cfg_gl_main_sunset_hour": "gl_main_sunset_hour",
-    "cfg_gl_main_min_on_s": "gl_main_min_on_s",
-    "cfg_gl_main_min_off_s": "gl_main_min_off_s",
-    "cfg_gl_main_auto_mode": "sw_gl_main_auto_mode",
-    "cfg_gl_grow_dli_target": "gl_grow_dli_target",
-    "cfg_gl_grow_target_light_minutes": "gl_grow_target_light_minutes",
-    "cfg_gl_grow_lux_threshold": "gl_grow_lux_threshold",
-    "cfg_gl_grow_lux_hysteresis": "gl_grow_lux_hysteresis",
-    "cfg_gl_grow_sunrise_hour": "gl_grow_sunrise_hour",
-    "cfg_gl_grow_sunset_hour": "gl_grow_sunset_hour",
-    "cfg_gl_grow_min_on_s": "gl_grow_min_on_s",
-    "cfg_gl_grow_min_off_s": "gl_grow_min_off_s",
-    "cfg_gl_grow_auto_mode": "sw_gl_grow_auto_mode",
-}
+CFG_READBACK_MAP: dict[str, str] = {**CFG_READBACK_MAP_REG, **CFG_READBACK_ALIASES_REG}
 
 # ──────────────────────────────────────────────────────────────
 # Inverse maps: DB parameter name → ESP32 object_id

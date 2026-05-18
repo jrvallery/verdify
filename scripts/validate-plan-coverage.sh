@@ -29,6 +29,7 @@ PY
 CORE="${REGISTRY_LINES[0]}"
 BAND_OWNED="${REGISTRY_LINES[1]}"
 CORE_COUNT="${REGISTRY_LINES[2]}"
+LEGACY_BIAS_PARAMS="'bias_heat_f','bias_cool_f'"
 
 # 1. Get latest plan_id
 LATEST=$($DB "SELECT plan_id FROM setpoint_plan WHERE is_active = true ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
@@ -85,7 +86,7 @@ if [ -n "$BAND_PRESENT" ]; then
 fi
 
 # Check if plan uses old param names (bias_heat_f vs bias_heat)
-HAS_OLD=$($DB "SELECT count(*) FROM setpoint_plan WHERE plan_id = '$LATEST' AND parameter IN ('bias_heat_f','bias_cool_f');" 2>/dev/null | tr -d ' ')
+HAS_OLD=$($DB "SELECT count(*) FROM setpoint_plan WHERE plan_id = '$LATEST' AND parameter IN ($LEGACY_BIAS_PARAMS);" 2>/dev/null | tr -d ' ')
 if [ "${HAS_OLD:-0}" -gt 0 ] && [ -n "$MISSING_LIST" ]; then
     echo "Plan uses pre-Tier-1 naming (bias_heat_f). Coverage validation applies to new schema plans only."
     exit 0

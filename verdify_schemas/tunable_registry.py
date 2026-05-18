@@ -2083,6 +2083,29 @@ def _cfg_readback_map() -> dict[str, str]:
     return {d.cfg_readback_object_id: n for n, d in REGISTRY.items() if d.cfg_readback_object_id}
 
 
+def _cfg_readback_aliases() -> dict[str, str]:
+    """Legacy/alternate firmware readback slugs accepted by the ingestor.
+
+    These aliases are intentionally centralized here rather than in
+    `ingestor/entity_map.py` so old entity names remain visible in the same
+    contract as the canonical `cfg_readback_object_id` route.
+    """
+    return {
+        "cfg_____cool_s2___f_": "d_cool_stage_2",
+        "cfg_____heat_s2___f_": "d_heat_stage_2",
+        "cfg_d_cool_stage_2_f": "d_cool_stage_2",
+        "cfg_d_heat_stage_2_f": "d_heat_stage_2",
+        "cfg_fog_min_temp_f": "fog_min_temp_f",
+        "cfg_fog_rh_ceiling_pct": "fog_rh_ceiling_pct",
+        "mister_center_penalty": "mister_center_penalty",
+        "sw_mister_closes_vent": "sw_mister_closes_vent",
+        "vpd_target_center__kpa_": "vpd_target_center",
+        "vpd_target_east__kpa_": "vpd_target_east",
+        "vpd_target_south__kpa_": "vpd_target_south",
+        "vpd_target_west__kpa_": "vpd_target_west",
+    }
+
+
 # Phase 1b.2: expose as module attributes for consumers that already import
 # computed-view style. `ALL_TUNABLES_REG` etc. coexist with the legacy
 # `ALL_TUNABLES` in `tunables.py` during migration; Phase 1d flips the legacy
@@ -2097,6 +2120,7 @@ BAND_OWNED_REG: frozenset[str] = CROP_BAND_REG | LEGACY_SHARED_LIGHTING_REG
 LIGHTING_CIRCUIT_DEFAULT_REG: frozenset[str] = _lighting_circuit_defaults()
 SETPOINT_MAP_REG: dict[str, str] = _setpoint_map()
 CFG_READBACK_MAP_REG: dict[str, str] = _cfg_readback_map()
+CFG_READBACK_ALIASES_REG: dict[str, str] = _cfg_readback_aliases()
 
 
 def get(name: str) -> TunableDef | None:

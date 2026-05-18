@@ -15,6 +15,8 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from verdify_schemas.tunable_registry import CROP_BAND_REG
+
 INGESTOR_PATH = str(Path(__file__).resolve().parent.parent / "ingestor")
 if INGESTOR_PATH not in sys.path:
     sys.path.insert(0, INGESTOR_PATH)
@@ -190,6 +192,10 @@ def test_live_active_plan_has_no_band_owned_rows():
     Query setpoint_plan directly rather than v_active_plan so stale active rows
     from older plans cannot hide behind a newer clean plan.
     """
+    band_sql = ",".join(
+        "'" + param.replace("'", "''") + "'"
+        for param in sorted(p for p in CROP_BAND_REG if p.startswith("temp_") or p in {"vpd_low", "vpd_high"})
+    )
     result = subprocess.run(
         [
             "docker",
@@ -204,12 +210,12 @@ def test_live_active_plan_has_no_band_owned_rows():
             "-t",
             "-A",
             "-c",
-            """
+            f"""
             COPY (
                 SELECT parameter || ':' || coalesce(plan_id, '<null>') || ':' || coalesce(source, '<null>')
                   FROM setpoint_plan
                  WHERE is_active = true
-                   AND parameter IN ('temp_low', 'temp_high', 'vpd_low', 'vpd_high')
+                   AND parameter IN ({band_sql})
                  ORDER BY 1
             ) TO STDOUT
             """,

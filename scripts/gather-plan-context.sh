@@ -17,6 +17,31 @@ HA_URL="http://192.168.30.107:8123"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON:-/srv/greenhouse/.venv/bin/python}"
 
+mapfile -t REGISTRY_SQL < <("$PYTHON_BIN" - "$SCRIPT_ROOT/.." <<'PY'
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1]).resolve()
+sys.path.insert(0, str(repo))
+
+from verdify_schemas.tunable_registry import BAND_OWNED_REG, LIGHTING_CIRCUIT_DEFAULT_REG, TIER1_REG  # noqa: E402
+
+
+def sql_list(values: set[str] | frozenset[str]) -> str:
+    return ",".join("'" + value.replace("'", "''") + "'" for value in sorted(values))
+
+
+active_context = TIER1_REG | BAND_OWNED_REG | LIGHTING_CIRCUIT_DEFAULT_REG
+plan_compare_excluded = BAND_OWNED_REG | frozenset(
+    {"mister_engage_delay_s", "mister_all_delay_s", "mister_center_penalty"}
+)
+print(sql_list(active_context))
+print(sql_list(plan_compare_excluded))
+PY
+)
+ACTIVE_CONTEXT_PARAMS_SQL="${REGISTRY_SQL[0]}"
+PLAN_COMPARE_EXCLUDED_SQL="${REGISTRY_SQL[1]}"
+
 echo "=== GREENHOUSE PLANNING CONTEXT ==="
 echo "Greenhouse: $GREENHOUSE_ID"
 echo "Generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ($(date '+%Y-%m-%d %H:%M %Z'))"
@@ -648,15 +673,7 @@ echo "--- CURRENT ACTIVE SETPOINTS ---"
 $DB -c "
 SELECT parameter, value
 FROM (SELECT DISTINCT ON (parameter) parameter, value FROM setpoint_changes ORDER BY parameter, ts DESC) sub
-WHERE parameter IN (
-  'temp_high','temp_low','vpd_high','vpd_low','vpd_hysteresis',
-  'mister_engage_kpa','mister_all_kpa','mister_pulse_on_s','mister_pulse_gap_s',
-  'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','sw_gl_auto_mode',
-  'gl_main_dli_target','gl_main_target_light_minutes','gl_main_sunrise_hour','gl_main_sunset_hour',
-  'gl_main_lux_threshold','gl_main_lux_hysteresis','gl_main_min_on_s','gl_main_min_off_s','sw_gl_main_auto_mode',
-  'gl_grow_dli_target','gl_grow_target_light_minutes','gl_grow_sunrise_hour','gl_grow_sunset_hour',
-  'gl_grow_lux_threshold','gl_grow_lux_hysteresis','gl_grow_min_on_s','gl_grow_min_off_s','sw_gl_grow_auto_mode'
-)
+WHERE parameter IN (${ACTIVE_CONTEXT_PARAMS_SQL})
 ORDER BY parameter;
 " 2>/dev/null
 echo "Band-driven values above reflect current diurnal crop profiles and shift throughout the day."
@@ -868,9 +885,7 @@ SELECT DISTINCT ON (parameter)
   parameter, round(cur_avg::numeric,2), round(prev_avg::numeric,2), round(delta_avg::numeric,2)
 FROM v_plan_comparison
 WHERE abs(delta_avg) > 0.01
-  AND parameter NOT IN ('temp_high','temp_low','vpd_high','vpd_low',
-    'vpd_target_south','vpd_target_west','vpd_target_east','vpd_target_center',
-    'mister_engage_delay_s','mister_all_delay_s','mister_center_penalty')
+  AND parameter NOT IN (${PLAN_COMPARE_EXCLUDED_SQL})
 ORDER BY parameter, plan_created DESC;
 " 2>/dev/null || echo "(not available)"
 echo ""

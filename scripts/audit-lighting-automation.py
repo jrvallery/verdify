@@ -388,15 +388,18 @@ def static_checks(audit: Audit) -> None:
         "one or more full epoch diagnostics still use ESPHome float sensor publishing",
     )
 
-    entity_map = read(REPO_ROOT / "ingestor" / "entity_map.py")
+    ingestor_path = str(REPO_ROOT / "ingestor")
+    if ingestor_path not in sys.path:
+        sys.path.insert(0, ingestor_path)
+    from entity_map import CFG_READBACK_MAP, SETPOINT_MAP, STATE_MAP
+
     audit.check(
-        all(param in entity_map for param in PER_CIRCUIT_PARAMS)
-        and all(
-            token in entity_map for token in ("gl_main_state", "gl_main_reason", "gl_grow_state", "gl_grow_reason")
-        ),
+        all(param in set(SETPOINT_MAP.values()) for param in PER_CIRCUIT_PARAMS)
+        and all(param in set(CFG_READBACK_MAP.values()) for param in CFG_READBACK_PARAMS)
+        and {"gl_main_state", "gl_main_reason", "gl_grow_state", "gl_grow_reason"} <= set(STATE_MAP),
         "ingestor entity map",
         "setpoint, readback, and state routes are mapped",
-        "entity_map.py is missing per-circuit lighting routes",
+        "entity_map runtime maps are missing per-circuit lighting routes",
     )
     setpoint_server = read(REPO_ROOT / "scripts" / "setpoint-server.py")
     ha_sync = read(REPO_ROOT / "scripts" / "ha-sensor-sync.py")
@@ -496,15 +499,13 @@ def static_checks(audit: Audit) -> None:
     forecast_panel = panel_by_id(site_climate_lighting, 17)
     audit.check(
         home_panel
-        and home_panel.get("title") == "Lighting Trace: Qualified Minutes"
+        and home_panel.get("title") == "Lighting: Lux, Thresholds & Switch State"
         and "fn_lighting_minutes_policy" in panel_sql(home_panel)
+        and "Natural Lux (10m avg)" in panel_sql(home_panel)
         and "equipment_state" in panel_sql(home_panel)
-        and "plan_delivery_log" in panel_sql(home_panel)
-        and "Main qualified light minutes" in panel_sql(home_panel)
-        and "Main target gl_main_target_light_minutes" in panel_sql(home_panel)
         and "fn_lighting_timeline" not in panel_sql(home_panel),
         "home lighting state graph",
-        "site-home panel 36 renders natural lux, policy thresholds, actual switch ON windows, qualified minutes, switch minutes, and target-minute lines without fn_lighting_timeline",
+        "site-home panel 36 renders natural lux, policy thresholds, and actual switch ON windows without fn_lighting_timeline",
         "site-home panel 36 is missing, stale, or still bound to fn_lighting_timeline",
     )
     audit.check(
@@ -525,19 +526,11 @@ def static_checks(audit: Audit) -> None:
         "Natural Lux (10m avg)",
         "Main/Grow ON Threshold",
         "Main/Grow OFF Threshold",
-        "Actual switch.greenhouse_main ON",
-        "Actual switch.greenhouse_grow ON",
-        "switch.greenhouse_main actual",
-        "switch.greenhouse_grow actual",
-        "Main qualified light minutes",
-        "Grow qualified light minutes",
-        "Main switch-on minutes",
-        "Grow switch-on minutes",
-        "Latest plan",
-        "Main target gl_main_target_light_minutes",
-        "Grow target gl_grow_target_light_minutes",
+        "switch.greenhouse_main ON",
+        "switch.greenhouse_grow ON",
+        "Solar",
+        "Solar Forecast",
         "fn_lighting_minutes_policy",
-        "plan_delivery_log",
         "equipment_state",
         "custom.axisPlacement",
         "custom.fillBelowTo",
@@ -558,7 +551,7 @@ def static_checks(audit: Audit) -> None:
         and all(token in home_panel_contract for token in home_state_tokens)
         and all(token in forecast_panel_contract for token in forecast_label_tokens),
         "lighting state graph labels and fills",
-        "home graph labels natural lux, ON/OFF bands, actual switch ON windows, qualified/switch minutes, target-minute lines, and shaded hysteresis/state fills",
+        "home graph labels natural lux, ON/OFF bands, actual switch ON windows, solar context, and shaded hysteresis/state fills",
         "lighting state or forecast graphs are missing user-facing labels or shaded band fill configuration",
     )
 
@@ -819,15 +812,13 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         home_live_sql = panel_sql(home_live_panel) if home_live_panel else ""
         audit.check(
             home_live_panel
-            and home_live_panel.get("title") == "Lighting Trace: Qualified Minutes"
+            and home_live_panel.get("title") == "Lighting: Lux, Thresholds & Switch State"
             and "fn_lighting_minutes_policy" in home_live_sql
+            and "Natural Lux (10m avg)" in home_live_sql
             and "equipment_state" in home_live_sql
-            and "plan_delivery_log" in home_live_sql
-            and "Main qualified light minutes" in home_live_sql
-            and "Main target gl_main_target_light_minutes" in home_live_sql
             and "fn_lighting_timeline" not in home_live_sql,
             "live home Grafana panel",
-            "site-home panel 36 is live and bound to natural lux, thresholds, actual switch state, qualified minutes, plan, and target-minute sources",
+            "site-home panel 36 is live and bound to natural lux, thresholds, and actual switch state",
             "site-home panel 36 missing or stale in live Grafana",
         )
         audit.check(

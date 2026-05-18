@@ -18,7 +18,14 @@ sys.path.insert(0, str(REPO_ROOT / "ingestor"))
 
 from entity_map import CFG_READBACK_MAP, SETPOINT_MAP  # noqa: E402
 
-from verdify_schemas.tunable_registry import PLANNER_PUSHABLE_REG, REGISTRY, SETPOINT_MAP_REG, TIER1_REG  # noqa: E402
+from verdify_schemas.tunable_registry import (  # noqa: E402
+    CFG_READBACK_ALIASES_REG,
+    CFG_READBACK_MAP_REG,
+    PLANNER_PUSHABLE_REG,
+    REGISTRY,
+    SETPOINT_MAP_REG,
+    TIER1_REG,
+)
 from verdify_schemas.tunables import ALL_TUNABLES  # noqa: E402
 
 RESERVED_NO_EFFECT = {
@@ -50,6 +57,7 @@ def main() -> int:
     planner_policy = set(PLANNER_PUSHABLE_REG)
     registry_planner_policy = {name for name, spec in REGISTRY.items() if spec.control_class == "planner_policy"}
     registry_setpoint_params = set(SETPOINT_MAP_REG.values())
+    registry_readback_map = {**CFG_READBACK_MAP_REG, **CFG_READBACK_ALIASES_REG}
     setpoint_params = set(SETPOINT_MAP.values())
     readback_params = set(CFG_READBACK_MAP.values())
     api_setpoint_params = set(api_globals["FIRMWARE_SETPOINT_PARAMS"])
@@ -75,6 +83,12 @@ def main() -> int:
         failures.append(
             "entity_map SETPOINT_MAP differs from registry setpoint routes: "
             f"missing={sorted(registry_setpoint_params - setpoint_params)} extra={sorted(setpoint_params - registry_setpoint_params)}"
+        )
+    if CFG_READBACK_MAP != registry_readback_map:
+        failures.append(
+            "entity_map CFG_READBACK_MAP differs from registry cfg readback routes/aliases: "
+            f"missing={sorted(set(registry_readback_map) - set(CFG_READBACK_MAP))} "
+            f"extra={sorted(set(CFG_READBACK_MAP) - set(registry_readback_map))}"
         )
     if api_setpoint_params != registry_setpoint_params:
         failures.append(
@@ -125,6 +139,8 @@ def main() -> int:
     print(f"planner_policy={len(planner_policy)}")
     print(f"planner_policy_optional={len(planner_policy - registry_tier1)}")
     print(f"setpoint_routes={len(registry_setpoint_params)}")
+    print(f"cfg_readback_routes={len(CFG_READBACK_MAP_REG)}")
+    print(f"cfg_readback_aliases={len(CFG_READBACK_ALIASES_REG)}")
     print(f"api_setpoint_allowlist={len(api_setpoint_params)}")
     print(f"fallback_setpoint_allowlist={len(fallback_setpoint_params)}")
     print(f"tier1_with_readback={len(plan_required & readback_params)}")
