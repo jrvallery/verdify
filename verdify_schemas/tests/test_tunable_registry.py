@@ -46,6 +46,18 @@ def greenhouse_yaml() -> str:
     return path.read_text()
 
 
+@pytest.fixture(scope="module")
+def tasks_py() -> str:
+    path = REPO_ROOT / "ingestor" / "tasks.py"
+    return path.read_text()
+
+
+@pytest.fixture(scope="module")
+def api_main_py() -> str:
+    path = REPO_ROOT / "api" / "main.py"
+    return path.read_text()
+
+
 # ─── Drift Guard #1 — firmware clamps match registry ─────────────────────
 
 _SETPOINT_LITERAL_RE = re.compile(
@@ -275,3 +287,96 @@ class TestDriftGuard:
         text = mcp_path.read_text()
         assert "registry_value_error(parameter, value)" in text
         assert "Tunable value outside registry bounds" in text
+
+
+class TestActivityDirectWetGuards:
+    ACTIVITY_MIRROR = {
+        "activity_start_hour",
+        "activity_start_minute",
+        "activity_duration_min",
+    }
+    DIRECT_WET_NUMERIC = {
+        "direct_wet_min_temp_f",
+        "direct_wet_south_start_offset_min",
+        "direct_wet_south_drydown_before_off_min",
+        "direct_wet_west_start_offset_min",
+        "direct_wet_west_drydown_before_off_min",
+        "direct_wet_center_start_offset_min",
+        "direct_wet_center_drydown_before_off_min",
+        "irrig_wall_days_mask",
+        "irrig_wall_fert_days_mask",
+        "irrig_center_days_mask",
+        "irrig_center_fert_days_mask",
+    }
+
+    def test_activity_mirror_is_dispatcher_owned(self) -> None:
+        for name in self.ACTIVITY_MIRROR:
+            row = REGISTRY[name]
+            assert row.push_owner == "dispatcher_default"
+            assert not row.planner_pushable
+            assert row.cfg_readback_object_id
+
+    def test_direct_wet_policy_is_tunable_and_readbacked(self) -> None:
+        for name in self.DIRECT_WET_NUMERIC:
+            row = REGISTRY[name]
+            assert row.planner_pushable
+            assert row.cfg_readback_object_id
+        assert REGISTRY["sw_direct_wet_gate_enabled"].kind == "switch"
+        assert REGISTRY["sw_direct_wet_gate_enabled"].planner_pushable
+        assert REGISTRY["sw_direct_wet_gate_enabled"].cfg_readback_object_id
+
+    def test_mister_state_machine_gates_each_wet_zone(self, controls_yaml: str) -> None:
+        required = [
+            "south_wet_allowed = direct_wet_allowed(1)",
+            "west_wet_allowed = direct_wet_allowed(2)",
+            "center_wet_allowed = direct_wet_allowed(3)",
+            "|| !any_mister_wet_allowed",
+            "active_zone_gate_closed",
+            "if(zone == 1 && !south_wet_allowed)",
+            "if(zone == 2 && !west_wet_allowed)",
+            "if(zone == 3 && !center_wet_allowed)",
+            "direct_wet_south_drydown_before_off_min",
+            "direct_wet_west_drydown_before_off_min",
+            "direct_wet_center_drydown_before_off_min",
+        ]
+        missing = [needle for needle in required if needle not in controls_yaml]
+        assert not missing, f"Mister direct-wet gate coverage missing: {missing}"
+
+    def test_irrigation_state_machine_gates_clean_fert_and_flush(self, controls_yaml: str) -> None:
+        required = [
+            "active_wall = id(irrig_state) == 1 || id(irrig_state) == 2 || id(irrig_state) == 5",
+            "active_center = id(irrig_state) == 3 || id(irrig_state) == 4 || id(irrig_state) == 6",
+            "id(wall_drips).turn_off();",
+            "id(wall_drips_fertilized).turn_off();",
+            "id(center_drips).turn_off();",
+            "id(center_drips_fertilized).turn_off();",
+            "id(fertilizer_master_valve).turn_off();",
+            'ESP_LOGW("irrig","DROP QUEUED %s job (direct-wet gate)"',
+            'ESP_LOGW("irrig","Wall SKIPPED (direct-wet gate) doy=%d"',
+            'ESP_LOGW("irrig","Center SKIPPED (direct-wet gate) doy=%d"',
+        ]
+        missing = [needle for needle in required if needle not in controls_yaml]
+        assert not missing, f"Irrigation direct-wet gate coverage missing: {missing}"
+
+    def test_fert_day_masks_supersede_every_n_fallback(self, controls_yaml: str) -> None:
+        required = [
+            "id(irrig_wall_fert_days_mask) > 0",
+            "day_mask_allows(id(irrig_wall_fert_days_mask), cur_dow0)",
+            "id(irrig_wall_fert_every_n) > 0",
+            "id(irrig_center_fert_days_mask) > 0",
+            "day_mask_allows(id(irrig_center_fert_days_mask), cur_dow0)",
+            "id(irrig_center_fert_every_n) > 0",
+        ]
+        missing = [needle for needle in required if needle not in controls_yaml]
+        assert not missing, f"Fert day-mask scheduler fallback missing: {missing}"
+
+    def test_dispatcher_and_api_derive_activity_from_light_window(self, tasks_py: str, api_main_py: str) -> None:
+        for text in (tasks_py, api_main_py):
+            assert "gl_sunrise_hour" in text
+            assert "gl_sunset_hour" in text
+            assert "activity_start_hour" in text
+            assert "activity_duration_min" in text
+        assert "_activity_defaults_from_lighting" in tasks_py
+        assert "DIRECT_WET_REQUIRED_OBJECT_IDS" in tasks_py
+        assert "direct_wet_supported" in tasks_py
+        assert "_activity_policy_values" in api_main_py
