@@ -1053,10 +1053,10 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
 
     legacy_shared_params = set(legacy_expected)
     audit.check(
-        legacy_shared_params.isdisjoint(setpoint_text),
-        "setpoint server legacy shared lighting removal",
-        "local setpoint server omits legacy shared gl_lux_* values; ESP32 consumes per-circuit lighting only",
-        f"local setpoint server still exposes legacy shared lighting values: {setpoint_text}",
+        legacy_values_match(setpoint_text),
+        "setpoint server legacy shared lighting values",
+        "local setpoint server exposes compatibility gl_lux_* values derived from the main circuit policy",
+        f"setpoint server legacy gl_lux_* mismatch: expected={legacy_expected} got={setpoint_text}",
     )
     api_proc = run(
         [

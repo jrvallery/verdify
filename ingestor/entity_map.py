@@ -123,7 +123,6 @@ EQUIPMENT_BINARY_MAP: dict[str, str] = {
     "fan_burst_active": "fan_burst_active",
     "fog_burst_active": "fog_burst_active",
     "vent_bypass_active": "vent_bypass_active",
-    "sntp_status": "sntp_status",
 }
 
 # ──────────────────────────────────────────────────────────────

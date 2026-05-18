@@ -888,7 +888,7 @@ def test_lighting_automation_audit_checks_live_public_site():
     assert "live public home page" in src
     assert "live public lighting page" in src
     assert "live public tunables page" in src
-    assert "setpoint server legacy shared lighting removal" in src
+    assert "setpoint server legacy shared lighting values" in src
     assert "api legacy shared lighting values" in src
     assert "Circuit Policy And Forecast Bands" in src
     assert "Firmware state and reason fields appear after the next ESP32 OTA" in src

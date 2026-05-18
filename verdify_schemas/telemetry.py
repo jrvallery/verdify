@@ -232,7 +232,6 @@ EquipmentId = Literal[
     "economiser_blocked",
     "heap_pressure_warning",
     "heap_pressure_critical",
-    "sntp_status",
     # Config switches (ESP32 Switch / HA switch sync)
     "economiser_enabled",
     "fog_closes_vent",

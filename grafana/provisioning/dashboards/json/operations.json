@@ -5897,7 +5897,7 @@
                 "uid": "verdify-tsdb",
                 "type": "grafana-postgresql-datasource"
               },
-              "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1 ELSE 0 END AS \"SNTP\"\nFROM equipment_state\nWHERE equipment = 'sntp_status' AND $__timeFilter(ts)\nORDER BY ts",
+              "rawSql": "SELECT $__time(ts), sntp_valid AS \"SNTP\"\nFROM diagnostics\nWHERE sntp_valid IS NOT NULL AND $__timeFilter(ts)\nORDER BY ts",
               "format": "time_series",
               "refId": "A"
             }
