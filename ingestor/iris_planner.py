@@ -280,6 +280,13 @@ Use tactical knobs below to shift behavior instead.
 **Controller v2 gate:**
 - `sw_fsm_controller_enabled` — controller v2 is the live band-first FSM and is locked ON by the dispatcher/MCP guardrail. Do not request OFF; fallback to the legacy cascade now requires an operator/firmware rollback.
 
+**Greenhouse activity / direct wetting (all clean/fert misters and drips):**
+- Global biological activity is mirrored from the grow-light policy: `gl_sunrise_hour` + `gl_sunset_hour` define the on/off window, and dispatcher owns `activity_start_hour`, `activity_start_minute`, `activity_duration_min`. Do not push the activity mirror directly; tune the light window when the global on/off window should move.
+- `sw_direct_wet_gate_enabled` is the master direct-wet gate. When enabled, misters and scheduled clean/fert irrigation are blocked outside the activity window and during each zone drydown hold.
+- Zone offsets: `direct_wet_south_start_offset_min`, `direct_wet_west_start_offset_min`, `direct_wet_center_start_offset_min` delay wetting after global on. `direct_wet_*_drydown_before_off_min` blocks direct wetting before global off. Use these per zone rather than crop-specific logic.
+- `direct_wet_min_temp_f` blocks automated wetting when the house is too cold.
+- Fertigation scheduling can use day masks: `irrig_wall_fert_days_mask`, `irrig_center_fert_days_mask` (bit0=Sunday ... bit6=Saturday). Nonzero masks supersede the legacy every-N fert cadence; zero preserves existing every-N behavior.
+
 ### Tier 2 escape hatch
 
 If diagnosis calls for a tier-2 param (per-zone VPD rebalance, irrigation

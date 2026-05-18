@@ -1753,6 +1753,35 @@ _last_pushed: dict[str, float] = {}
 # non-OTA rollback surface, but prevent accidental planner/manual drift back
 # to the legacy cascade.
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+ACTIVITY_MIRROR_PARAMS = frozenset(
+    {
+        "activity_start_hour",
+        "activity_start_minute",
+        "activity_duration_min",
+    }
+)
+DIRECT_WET_DEFAULTS = {
+    "direct_wet_min_temp_f": 65,
+    "direct_wet_south_start_offset_min": 60,
+    "direct_wet_south_drydown_before_off_min": 120,
+    "direct_wet_west_start_offset_min": 60,
+    "direct_wet_west_drydown_before_off_min": 120,
+    "direct_wet_center_start_offset_min": 120,
+    "direct_wet_center_drydown_before_off_min": 180,
+    "irrig_wall_days_mask": 127,
+    "irrig_wall_fert_days_mask": 0,
+    "irrig_center_days_mask": 127,
+    "irrig_center_fert_days_mask": 0,
+    "sw_direct_wet_gate_enabled": 1,
+}
+DIRECT_WET_POLICY_PARAMS = ACTIVITY_MIRROR_PARAMS | frozenset(DIRECT_WET_DEFAULTS)
+DIRECT_WET_REQUIRED_OBJECT_IDS = frozenset(
+    {
+        "activity_duration__min_",
+        "direct_wet_gate_enabled",
+        "direct_wet_center_drydown_before_off__min_",
+    }
+)
 
 QUIET_STATE_ENTITIES = (
     QUIET_MODE_ENTITY,
@@ -1760,6 +1789,26 @@ QUIET_STATE_ENTITIES = (
     QUIET_RESTORE_ENTITY,
     QUIET_REASON_ENTITY,
 )
+
+
+def _direct_wet_policy_supported() -> bool:
+    keys = shared.esp32.get("keys") or {}
+    if keys:
+        return DIRECT_WET_REQUIRED_OBJECT_IDS.issubset(set(keys))
+    return any(param in shared.cfg_readback for param in DIRECT_WET_POLICY_PARAMS)
+
+
+def _activity_defaults_from_lighting(planner_params: dict[str, float]) -> dict[str, float]:
+    start_hour = int(planner_params.get("gl_sunrise_hour", 7))
+    cutoff_hour = int(planner_params.get("gl_sunset_hour", 19))
+    start_hour = max(0, min(23, start_hour))
+    cutoff_hour = max(0, min(23, cutoff_hour))
+    duration_min = max(0, (cutoff_hour - start_hour) * 60)
+    return {
+        "activity_start_hour": float(start_hour),
+        "activity_start_minute": 0.0,
+        "activity_duration_min": float(max(0, min(1440, duration_min))),
+    }
 
 
 def _upsert_change(changes: list[tuple[str, float]], param: str, value: float) -> None:
@@ -2077,10 +2126,27 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     continue
                 changes.append((param, val))
 
+        direct_wet_supported = _direct_wet_policy_supported()
+        if direct_wet_supported:
+            direct_wet_defaults = {
+                **_activity_defaults_from_lighting(planner_params),
+                **DIRECT_WET_DEFAULTS,
+            }
+            for param, val in direct_wet_defaults.items():
+                if param not in ACTIVITY_MIRROR_PARAMS and param in planner_params:
+                    continue
+                if _should_skip(_last_pushed.get(param), float(val)):
+                    continue
+                changes.append((param, float(val)))
+
         # Process planner setpoints (tactical knobs — skip band params already handled)
         for row in planned or []:
             param, planned_val = row["parameter"], row["value"]
             if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
+                continue
+            if param in ACTIVITY_MIRROR_PARAMS:
+                continue
+            if param in DIRECT_WET_POLICY_PARAMS and not direct_wet_supported:
                 continue
 
             if param in FORCED_ON_SWITCH_PARAMS:
@@ -2139,6 +2205,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             "mister_all_delay_s",
             "mister_center_penalty",
         }
+        DIRECT_WET_DISPATCHER_DEFAULTS = ACTIVITY_MIRROR_PARAMS | frozenset(DIRECT_WET_DEFAULTS)
         dispatchable_changes: list[tuple[str, float, str]] = []
         for param, val in changes:
             if param in BAND_DRIVEN_PARAMS:
@@ -2146,6 +2213,10 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             elif param in SAFETY_PARAMS and param not in planner_params:
                 source = "band"
             elif param in MISTER_DEFAULTS and param not in planner_params:
+                source = "band"
+            elif param in DIRECT_WET_DISPATCHER_DEFAULTS and (
+                param in ACTIVITY_MIRROR_PARAMS or param not in planner_params
+            ):
                 source = "band"
             elif param in quiet_params:
                 source = "manual"

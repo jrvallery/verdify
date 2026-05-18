@@ -75,6 +75,36 @@ from verdify_schemas import (  # noqa: E402
 )
 from verdify_schemas.mcp_responses import ScorecardResponse  # noqa: E402
 
+ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_minute", "activity_duration_min"})
+DIRECT_WET_DEFAULTS = {
+    "direct_wet_min_temp_f": 65,
+    "direct_wet_south_start_offset_min": 60,
+    "direct_wet_south_drydown_before_off_min": 120,
+    "direct_wet_west_start_offset_min": 60,
+    "direct_wet_west_drydown_before_off_min": 120,
+    "direct_wet_center_start_offset_min": 120,
+    "direct_wet_center_drydown_before_off_min": 180,
+    "irrig_wall_days_mask": 127,
+    "irrig_wall_fert_days_mask": 0,
+    "irrig_center_days_mask": 127,
+    "irrig_center_fert_days_mask": 0,
+    "sw_direct_wet_gate_enabled": 1,
+}
+
+
+def _activity_policy_values(params: dict[str, float]) -> dict[str, float]:
+    start_hour = int(float(params.get("gl_sunrise_hour", 7)))
+    cutoff_hour = int(float(params.get("gl_sunset_hour", 19)))
+    start_hour = max(0, min(23, start_hour))
+    cutoff_hour = max(0, min(23, cutoff_hour))
+    duration_min = max(0, (cutoff_hour - start_hour) * 60)
+    return {
+        "activity_start_hour": float(start_hour),
+        "activity_start_minute": 0.0,
+        "activity_duration_min": float(max(0, min(1440, duration_min))),
+    }
+
+
 # ── DB Connection ──
 
 
@@ -508,6 +538,14 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 'east_adjacency_factor','irrig_vpd_boost_pct','irrig_vpd_boost_threshold_hrs',
                 'fog_rh_ceiling_pct','fog_min_temp_f','fog_time_window_start','fog_time_window_end',
                 'gl_dli_target','gl_sunrise_hour','gl_sunset_hour','gl_lux_threshold',
+                'activity_start_hour','activity_start_minute','activity_duration_min',
+                'direct_wet_min_temp_f',
+                'direct_wet_south_start_offset_min','direct_wet_south_drydown_before_off_min',
+                'direct_wet_west_start_offset_min','direct_wet_west_drydown_before_off_min',
+                'direct_wet_center_start_offset_min','direct_wet_center_drydown_before_off_min',
+                'irrig_wall_days_mask','irrig_wall_fert_days_mask',
+                'irrig_center_days_mask','irrig_center_fert_days_mask',
+                'sw_direct_wet_gate_enabled',
                 'safety_min','safety_max','safety_vpd_min','safety_vpd_max',
                 'site_pressure_hpa','fog_burst_min','fan_burst_min','vent_bypass_min',
                 'sw_fsm_controller_enabled','mist_backoff_s'
@@ -555,9 +593,15 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             )
         plan_rows = await conn.fetch("SELECT parameter, value FROM v_active_plan")
         params = {r["parameter"]: r["value"] for r in rows}
+        plan_params = {r["parameter"] for r in plan_rows}
         # Planner overrides for all params (band params will be clamped below)
         for r in plan_rows:
             params[r["parameter"]] = r["value"]
+        for param, value in _activity_policy_values(params).items():
+            params[param] = value
+        for param, value in DIRECT_WET_DEFAULTS.items():
+            if param not in plan_params:
+                params.setdefault(param, value)
         # Band-driven params: always use fn_band_setpoints as the authoritative source.
         # If a planner value exists and is tighter than the band, use it (clamped).
         # Otherwise, use the band value directly.

@@ -225,6 +225,8 @@ SETPOINT_MAP: dict[str, str] = {
     "irrig_wall_fert_every_n_cycles": "irrig_wall_fert_every_n",
     "irrig_wall_flush__min_": "irrig_wall_flush_min",
     "irrig_wall_interval__days_": "irrig_wall_interval_days",
+    "irrig_wall_days_mask": "irrig_wall_days_mask",
+    "irrig_wall_fert_days_mask": "irrig_wall_fert_days_mask",
     # Irrigation center
     "irrig_center_start_hour": "irrig_center_start_hour",
     "irrig_center_start_min": "irrig_center_start_min",
@@ -233,6 +235,8 @@ SETPOINT_MAP: dict[str, str] = {
     "irrig_center_fert_every_n_cycles": "irrig_center_fert_every_n",
     "irrig_center_flush__min_": "irrig_center_flush_min",
     "irrig_center_interval__days_": "irrig_center_interval_days",
+    "irrig_center_days_mask": "irrig_center_days_mask",
+    "irrig_center_fert_days_mask": "irrig_center_fert_days_mask",
     # VPD boost
     "irrig_vpd_boost__": "irrig_vpd_boost_pct",
     "irrig_vpd_boost_threshold__hrs_": "irrig_vpd_boost_threshold_hrs",
@@ -242,10 +246,22 @@ SETPOINT_MAP: dict[str, str] = {
     "gl_lux_hysteresis": "gl_lux_hysteresis",
     "gl_start_hour": "gl_sunrise_hour",
     "gl_cutoff_hour": "gl_sunset_hour",
+    # Shared activity/direct-wet policy
+    "activity_start_hour": "activity_start_hour",
+    "activity_start_minute": "activity_start_minute",
+    "activity_duration__min_": "activity_duration_min",
+    "direct_wet_min_temp__f_": "direct_wet_min_temp_f",
+    "direct_wet_south_start_offset__min_": "direct_wet_south_start_offset_min",
+    "direct_wet_south_drydown_before_off__min_": "direct_wet_south_drydown_before_off_min",
+    "direct_wet_west_start_offset__min_": "direct_wet_west_start_offset_min",
+    "direct_wet_west_drydown_before_off__min_": "direct_wet_west_drydown_before_off_min",
+    "direct_wet_center_start_offset__min_": "direct_wet_center_start_offset_min",
+    "direct_wet_center_drydown_before_off__min_": "direct_wet_center_drydown_before_off_min",
     # Switches (boolean, tracked as 0.0/1.0)
     "economiser_enabled": "sw_economiser_enabled",
     "fog_closes_vent": "sw_fog_closes_vent",
     "mister_closes_vent": "sw_mister_closes_vent",  # sprint-15.1 fix 7: closes sprint-21 follow-up routing gap
+    "direct_wet_gate_enabled": "sw_direct_wet_gate_enabled",
     "gl_auto_mode": "sw_gl_auto_mode",
     "irrigation_enabled": "sw_irrigation_enabled",
     "irrigation_wall_enabled": "sw_irrigation_wall_enabled",
@@ -464,6 +480,22 @@ CFG_READBACK_MAP: dict[str, str] = {
     "cfg___dehum_aggressive__kpa_": "dehum_aggressive_kpa",
     "cfg___vent_latch_timeout__ms_": "vent_latch_timeout_ms",
     "cfg___gl_lux_hysteresis": "gl_lux_hysteresis",
+    # Shared activity/direct-wet policy readbacks.
+    "cfg___activity_start_hour": "activity_start_hour",
+    "cfg___activity_start_minute": "activity_start_minute",
+    "cfg___activity_duration__min_": "activity_duration_min",
+    "cfg___direct_wet_min_temp__f_": "direct_wet_min_temp_f",
+    "cfg___direct_wet_south_start_offset__min_": "direct_wet_south_start_offset_min",
+    "cfg___direct_wet_south_drydown_before_off__min_": "direct_wet_south_drydown_before_off_min",
+    "cfg___direct_wet_west_start_offset__min_": "direct_wet_west_start_offset_min",
+    "cfg___direct_wet_west_drydown_before_off__min_": "direct_wet_west_drydown_before_off_min",
+    "cfg___direct_wet_center_start_offset__min_": "direct_wet_center_start_offset_min",
+    "cfg___direct_wet_center_drydown_before_off__min_": "direct_wet_center_drydown_before_off_min",
+    "cfg___irrig_wall_days_mask": "irrig_wall_days_mask",
+    "cfg___irrig_wall_fert_days_mask": "irrig_wall_fert_days_mask",
+    "cfg___irrig_center_days_mask": "irrig_center_days_mask",
+    "cfg___irrig_center_fert_days_mask": "irrig_center_fert_days_mask",
+    "cfg_direct_wet_gate_enabled": "sw_direct_wet_gate_enabled",
 }
 
 # ──────────────────────────────────────────────────────────────

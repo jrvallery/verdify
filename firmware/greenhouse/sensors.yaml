@@ -2088,6 +2088,179 @@ sensor:
       if (!id(cfg_first_pull_ok)) return NAN;
       return id(gl_lux_hysteresis);
 
+  - platform: template
+    id: cfg_activity_start_hour
+    name: "Cfg • Activity Start Hour"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(activity_start_hour);
+
+  - platform: template
+    id: cfg_activity_start_minute
+    name: "Cfg • Activity Start Minute"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(activity_start_minute);
+
+  - platform: template
+    id: cfg_activity_duration_min
+    name: "Cfg • Activity Duration (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(activity_duration_min);
+
+  - platform: template
+    id: cfg_direct_wet_min_temp_f
+    name: "Cfg • Direct Wet Min Temp (F)"
+    unit_of_measurement: "°F"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(direct_wet_min_temp_f);
+
+  - platform: template
+    id: cfg_direct_wet_south_start_offset_min
+    name: "Cfg • Direct Wet South Start Offset (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_south_start_offset_min);
+
+  - platform: template
+    id: cfg_direct_wet_south_drydown_before_off_min
+    name: "Cfg • Direct Wet South Drydown Before Off (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_south_drydown_before_off_min);
+
+  - platform: template
+    id: cfg_direct_wet_west_start_offset_min
+    name: "Cfg • Direct Wet West Start Offset (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_west_start_offset_min);
+
+  - platform: template
+    id: cfg_direct_wet_west_drydown_before_off_min
+    name: "Cfg • Direct Wet West Drydown Before Off (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_west_drydown_before_off_min);
+
+  - platform: template
+    id: cfg_direct_wet_center_start_offset_min
+    name: "Cfg • Direct Wet Center Start Offset (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_center_start_offset_min);
+
+  - platform: template
+    id: cfg_direct_wet_center_drydown_before_off_min
+    name: "Cfg • Direct Wet Center Drydown Before Off (min)"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(direct_wet_center_drydown_before_off_min);
+
+  - platform: template
+    id: cfg_irrig_wall_days_mask
+    name: "Cfg • Irrig Wall Days Mask"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_days_mask);
+
+  - platform: template
+    id: cfg_irrig_wall_fert_days_mask
+    name: "Cfg • Irrig Wall Fert Days Mask"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_fert_days_mask);
+
+  - platform: template
+    id: cfg_irrig_center_days_mask
+    name: "Cfg • Irrig Center Days Mask"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_days_mask);
+
+  - platform: template
+    id: cfg_irrig_center_fert_days_mask
+    name: "Cfg • Irrig Center Fert Days Mask"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_fert_days_mask);
+
+  - platform: template
+    id: cfg_direct_wet_gate_enabled
+    name: "Cfg Direct Wet Gate Enabled"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return id(direct_wet_gate_enabled) ? 1.0f : 0.0f;
+
   # Mister pulse VPD effectiveness (updated by controls.yaml after each pulse)
   - platform: template
     id: mister_vpd_delta

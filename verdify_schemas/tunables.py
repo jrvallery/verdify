@@ -84,6 +84,8 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "irrig_wall_fert_every_n",
         "irrig_wall_flush_min",
         "irrig_wall_interval_days",
+        "irrig_wall_days_mask",
+        "irrig_wall_fert_days_mask",
         # Irrigation center
         "irrig_center_start_hour",
         "irrig_center_start_min",
@@ -92,6 +94,8 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "irrig_center_fert_every_n",
         "irrig_center_flush_min",
         "irrig_center_interval_days",
+        "irrig_center_days_mask",
+        "irrig_center_fert_days_mask",
         # VPD boost
         "irrig_vpd_boost_pct",
         "irrig_vpd_boost_threshold_hrs",
@@ -101,6 +105,17 @@ NUMERIC_TUNABLES: frozenset[str] = frozenset(
         "gl_lux_hysteresis",
         "gl_sunrise_hour",
         "gl_sunset_hour",
+        # Shared greenhouse activity/direct-wet policy
+        "activity_start_hour",
+        "activity_start_minute",
+        "activity_duration_min",
+        "direct_wet_min_temp_f",
+        "direct_wet_south_start_offset_min",
+        "direct_wet_south_drydown_before_off_min",
+        "direct_wet_west_start_offset_min",
+        "direct_wet_west_drydown_before_off_min",
+        "direct_wet_center_start_offset_min",
+        "direct_wet_center_drydown_before_off_min",
         # Mister pulse model
         "mister_pulse_on_s",
         "mister_pulse_gap_s",
@@ -161,6 +176,7 @@ SWITCH_TUNABLES: frozenset[str] = frozenset(
         # (tunables.yaml sw_mister_closes_vent); operator can push
         # per-greenhouse via dispatcher.
         "sw_mister_closes_vent",
+        "sw_direct_wet_gate_enabled",
         # Phase-2 dwell gate master switch.
         "sw_dwell_gate_enabled",
         # Controller v2 master switch.

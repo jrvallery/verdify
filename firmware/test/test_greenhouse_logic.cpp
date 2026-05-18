@@ -2111,6 +2111,28 @@ TEST(obs1e_fog_heat_assist_flag_fires) {
     PASS();
 }
 
+TEST(minute_window_wraps_midnight) {
+    ASSERT_TRUE(minute_in_window(local_minute_of_day(23, 30), local_minute_of_day(22, 0), 180));
+    ASSERT_TRUE(minute_in_window(local_minute_of_day(0, 30), local_minute_of_day(22, 0), 180));
+    ASSERT_FALSE(minute_in_window(local_minute_of_day(2, 0), local_minute_of_day(22, 0), 180));
+    PASS();
+}
+
+TEST(direct_wet_window_uses_activity_offsets) {
+    ASSERT_FALSE(direct_wet_window_open(local_minute_of_day(8, 0), 7, 0, 720, 120, 180));
+    ASSERT_TRUE(direct_wet_window_open(local_minute_of_day(9, 0), 7, 0, 720, 120, 180));
+    ASSERT_FALSE(direct_wet_window_open(local_minute_of_day(16, 0), 7, 0, 720, 120, 180));
+    PASS();
+}
+
+TEST(day_mask_allows_zero_sunday) {
+    ASSERT_TRUE(day_mask_allows(0, 3));
+    ASSERT_TRUE(day_mask_allows(1, 0));
+    ASSERT_FALSE(day_mask_allows(1, 1));
+    ASSERT_TRUE(day_mask_allows(127, 6));
+    PASS();
+}
+
 int main() {
     printf("═══════════════════════════════════════════════════════\n");
     printf("  Greenhouse Logic Tests — 11-fix review synthesis + OBS-1e\n");

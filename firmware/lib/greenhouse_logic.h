@@ -63,6 +63,63 @@ inline bool fog_hour_in_window(int hour, int start, int end) noexcept {
                           : (hour >= start || hour < end);
 }
 
+inline int local_minute_of_day(int hour, int minute) noexcept {
+    hour = std::max(0, std::min(23, hour));
+    minute = std::max(0, std::min(59, minute));
+    return hour * 60 + minute;
+}
+
+inline int clamp_day_minutes(int minutes) noexcept {
+    return std::max(0, std::min(1440, minutes));
+}
+
+// Minute-of-day window check. start <= end => [start, end). When start > end,
+// the window wraps midnight. A duration of 1440 minutes means always open;
+// a collapsed or negative duration means closed.
+inline bool minute_in_window(int now_minute, int start_minute, int duration_min) noexcept {
+    now_minute = clamp_day_minutes(now_minute);
+    if (now_minute == 1440) now_minute = 0;
+    start_minute = clamp_day_minutes(start_minute);
+    if (start_minute == 1440) start_minute = 0;
+    duration_min = clamp_day_minutes(duration_min);
+    if (duration_min <= 0) return false;
+    if (duration_min >= 1440) return true;
+    const int end_minute = (start_minute + duration_min) % 1440;
+    return (start_minute < end_minute)
+        ? (now_minute >= start_minute && now_minute < end_minute)
+        : (now_minute >= start_minute || now_minute < end_minute);
+}
+
+inline bool direct_wet_window_open(
+    int now_minute,
+    int activity_start_hour,
+    int activity_start_minute,
+    int activity_duration_min,
+    int wet_start_offset_min,
+    int drydown_before_off_min
+) noexcept {
+    const int activity_start =
+        local_minute_of_day(activity_start_hour, activity_start_minute);
+    const int duration = clamp_day_minutes(activity_duration_min);
+    if (duration <= 0) return false;
+
+    const int wet_offset = std::max(0, wet_start_offset_min);
+    const int drydown = std::max(0, drydown_before_off_min);
+    const int wet_duration = duration - wet_offset - drydown;
+    if (wet_duration <= 0) return false;
+
+    const int wet_start = (activity_start + wet_offset) % 1440;
+    return minute_in_window(now_minute, wet_start, wet_duration);
+}
+
+// Day mask bit 0 is Sunday, bit 6 is Saturday. A zero mask means "legacy
+// schedule owns the decision" so existing interval/every-N behavior survives.
+inline bool day_mask_allows(int mask, int dow0) noexcept {
+    if (mask <= 0) return true;
+    dow0 = std::max(0, std::min(6, dow0));
+    return (mask & (1 << dow0)) != 0;
+}
+
 // True iff all of RH, temp, and hour-of-day permit fogging. Occupancy is
 // NOT checked here — see moisture_blocked_by_occupancy().
 inline bool fog_permitted(const SensorInputs& in, const Setpoints& sp) noexcept {
