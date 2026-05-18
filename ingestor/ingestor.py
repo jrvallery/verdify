@@ -49,6 +49,7 @@ from entity_map import (
     SWITCH_TO_ENTITY,
 )
 from esp32_push import push_to_esp32
+from occupancy import refresh_latest_occupancy_state, sync_occupancy_state
 from pydantic import ValidationError
 from tasks import (
     BAND_DRIVEN_PARAMS,
@@ -1142,6 +1143,11 @@ async def esp32_loop(pool: asyncpg.Pool = None) -> None:
             shared.force_setpoint_push.set()
             shared.esp32_connected_at = _time_mod.time()
             log.info("Force-push flag set — dispatcher will re-push all setpoints")
+            if pool is not None:
+                try:
+                    await refresh_latest_occupancy_state(pool, "esp32_reconnect")
+                except Exception as e:
+                    log.warning("Occupancy reconnect refresh failed: %s", e)
 
             tracked = sum(
                 1
@@ -1293,28 +1299,18 @@ async def task_loop(pool: asyncpg.Pool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────
-# MQTT loop — occupancy from Sentinel (replaces occupancy-bridge)
+# MQTT loop — occupancy from Frigate/Sentinel (replaces occupancy-bridge)
 # ──────────────────────────────────────────────────────────────
 async def mqtt_loop(pool: asyncpg.Pool) -> None:
-    """Subscribe to Sentinel MQTT for greenhouse occupancy."""
+    """Subscribe to Frigate/Sentinel MQTT for greenhouse occupancy."""
     from config import MQTT_HOST, MQTT_PASS, MQTT_PORT, MQTT_USER
 
     TOPIC = "sentinel/occupancy/greenhouse_zone"
 
-    last_state = None
     event_loop = asyncio.get_event_loop()
 
     async def _write_occupancy(val: str) -> None:
-        async with pool.acquire() as conn:
-            await conn.execute("INSERT INTO system_state (ts, entity, value) VALUES (now(), 'occupancy', $1)", val)
-        # Direct push to ESP32 — occupancy_mist_inhibit switch
-        occupied = val == "occupied"
-        try:
-            pushed = await push_to_esp32([("occupancy_mist_inhibit", 1.0 if occupied else 0.0, "switch")])
-            if pushed:
-                log.info("Occupancy: pushed %s to ESP32 (<1s)", val)
-        except Exception as e:
-            log.debug("Occupancy ESP32 push skipped: %s", e)
+        await sync_occupancy_state(pool, val == "occupied", "mqtt")
 
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
@@ -1324,14 +1320,11 @@ async def mqtt_loop(pool: asyncpg.Pool) -> None:
             log.error("MQTT: connect failed rc=%d", rc)
 
     def on_message(client, userdata, msg):
-        nonlocal last_state
         payload = msg.payload.decode().strip().upper()
         occupied = payload == "ON"
-        if occupied != last_state:
-            last_state = occupied
-            val = "occupied" if occupied else "empty"
-            log.info("Occupancy: %s (via MQTT)", val)
-            asyncio.run_coroutine_threadsafe(_write_occupancy(val), event_loop)
+        val = "occupied" if occupied else "empty"
+        log.info("Occupancy: %s (via MQTT)", val)
+        asyncio.run_coroutine_threadsafe(_write_occupancy(val), event_loop)
 
     client = paho_mqtt.Client(client_id="verdify-ingestor-occupancy")
     client.on_connect = on_connect

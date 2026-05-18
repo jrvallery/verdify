@@ -82,3 +82,19 @@ async def push_to_esp32(changes: list[tuple[str, float, str]]) -> int:
                 break
 
     return pushed
+
+
+async def push_occupancy_to_esp32(occupied: bool, source: str) -> int:
+    """Push greenhouse occupancy state through the native ESPHome API."""
+    label = "occupied" if occupied else "empty"
+    if "greenhouse_occupied" not in shared.esp32["keys"]:
+        log.debug("Occupancy ESP32 push skipped via %s: greenhouse_occupied API switch unavailable", source)
+        return 0
+    try:
+        pushed = await push_to_esp32([("greenhouse_occupied", 1.0 if occupied else 0.0, "switch")])
+        if pushed:
+            log.info("Occupancy: pushed %s to ESP32 via %s", label, source)
+        return pushed
+    except Exception as e:
+        log.debug("Occupancy ESP32 push skipped via %s: %s", source, e)
+        return 0

@@ -733,9 +733,10 @@ def test_firmware_lighting_telemetry_fails_closed_when_time_invalid():
     hardware = Path("firmware/greenhouse/hardware.yaml").read_text()
 
     time_block = greenhouse[greenhouse.index("time:") : greenhouse.index("# ───────────────────── BINARY SENSORS")]
-    assert "platform: homeassistant" in time_block
+    assert "platform: sntp" in time_block
     assert "id: sntp_time" in time_block
-    assert "platform: sntp" not in time_block
+    assert "platform: homeassistant" not in time_block
+    assert "192.168.10.1" in time_block
     assert 'name: "Controller Time Status"' in greenhouse
     assert 'name: "SNTP Status"' not in greenhouse
     assert 'ESP_LOGW("grow_light","main OFF: time_invalid")' in controls
@@ -746,6 +747,52 @@ def test_firmware_lighting_telemetry_fails_closed_when_time_invalid():
     assert "id(grow_light_grow).turn_off()" in controls
     lighting_text_block = hardware[hardware.index("id: gl_main_state_text") : hardware.index("id: ts_lead_fan")]
     assert lighting_text_block.count("update_interval: never") == 4
+
+
+def test_firmware_omits_mqtt_and_uses_ingestor_occupancy_push():
+    greenhouse = Path("firmware/greenhouse.yaml").read_text()
+    hardware = Path("firmware/greenhouse/hardware.yaml").read_text()
+    ingestor_src = Path("ingestor/ingestor.py").read_text()
+    tasks_src = Path("ingestor/tasks.py").read_text()
+    push_src = Path("ingestor/esp32_push.py").read_text()
+    occupancy_src = Path("ingestor/occupancy.py").read_text()
+    entity_map_src = Path("ingestor/entity_map.py").read_text()
+
+    api_block = greenhouse[greenhouse.index("\napi:\n") : greenhouse.index("\nota:\n")]
+    assert "\nmqtt:" not in greenhouse
+    assert "sentinel/occupancy/greenhouse_zone" not in greenhouse
+    assert "id: sw_greenhouse_occupied" in hardware
+    assert 'name: "Greenhouse Occupied"' in hardware
+    assert '"greenhouse_occupied": "occupancy"' in entity_map_src
+    assert "sync_occupancy_state(pool" in ingestor_src
+    assert "refresh_latest_occupancy_state(pool" in ingestor_src
+    assert "sync_occupancy_state(pool" in tasks_src
+    assert "recording_quiet_occupancy_active" in occupancy_src
+    assert "quiet mode held" in occupancy_src
+    assert "occupancy_mist_inhibit" not in push_src
+    assert "greenhouse_occupied API switch unavailable" in push_src
+    assert 'push_to_esp32([("greenhouse_occupied"' in push_src
+    assert "encryption:" in api_block
+
+
+def test_firmware_heap_churn_sources_stay_removed():
+    external = Path("firmware/greenhouse/external_sensors.yaml").read_text()
+    controls = Path("firmware/greenhouse/controls.yaml").read_text()
+    hardware = Path("firmware/greenhouse/hardware.yaml").read_text()
+    sensors = Path("firmware/greenhouse/sensors.yaml").read_text()
+
+    assert '"rapid_wind"' not in external
+    assert "std::string payload(data.begin(), data.end());" in external
+    assert "bool is_obs_st" in external
+    assert "ctl_snapshot_json" not in hardware
+    assert "ctl_snapshot_json" not in controls
+    probe_block = sensors[
+        sensors.index("id: probe_health") : sensors.rindex(
+            "###############################################################################"
+        )
+    ]
+    assert "char result[96]" in probe_block
+    assert "result += " not in probe_block
 
 
 def test_lighting_automation_audit_renders_public_panels():

@@ -119,11 +119,6 @@ text_sensor:
     lambda: |-
       return { id(fan_lead_is_fan1) ? "Fan 1" : "Fan 2" };
 
-  - platform: template
-    id: ctl_snapshot_json
-    name: "Greenhouse Snapshot (JSON)"
-    internal: true
-
 # ───────────────────── I²C / UART / Modbus ─────────────────────
 i2c:
   sda: GPIO16
@@ -193,6 +188,26 @@ modbus_controller:
 
 # ───────────────────── SWITCHES (relays & templates) ─────────────────────
 switch:
+  # Ingestor-owned presence input. This replaces the ESP32 MQTT subscription:
+  # Frigate/Sentinel occupancy is written to DB by ingestor, then pushed here
+  # over the native ESPHome API so controller decisions remain traceable.
+  - platform: template
+    id: sw_greenhouse_occupied
+    name: "Greenhouse Occupied"
+    icon: "mdi:account"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: "return id(greenhouse_occupied);"
+    turn_on_action:
+      - lambda: |
+          id(greenhouse_occupied) = true;
+          id(sw_greenhouse_occupied).publish_state(true);
+          ESP_LOGI("occupancy","Greenhouse OCCUPIED (API)");
+    turn_off_action:
+      - lambda: |
+          id(greenhouse_occupied) = false;
+          id(sw_greenhouse_occupied).publish_state(false);
+          ESP_LOGI("occupancy","Greenhouse EMPTY (API)");
+
   # --- Internal climate relays (hidden from HA) ---
   - platform: gpio
     id: fan1_rly

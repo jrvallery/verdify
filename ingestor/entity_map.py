@@ -115,6 +115,7 @@ EQUIPMENT_BINARY_MAP: dict[str, str] = {
 # Equipment relay states — Switch entities
 # ──────────────────────────────────────────────────────────────
 EQUIPMENT_SWITCH_MAP: dict[str, str] = {
+    "greenhouse_occupied": "occupancy",
     "mister___south_wall": "mister_south",
     "mister___south_wall__fert__": "mister_south_fert",
     "mister___west_wall": "mister_west",
