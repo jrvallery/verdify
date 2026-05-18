@@ -153,8 +153,8 @@ dispatcher caps conservative planner values near
 profiles set the band, dispatcher derives the house band, planner tunes
 intensity, and firmware executes `VENTILATE` plus moisture assist without letting
 dry outside air hold temperature at the cost of VPD compliance.
-| `mister_engage_delay_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_engage_delay_s` | ESPHome global `mister_engage_delay_s` | S1 dwell before first mister pulse | `cfg_mister_engage_delay_s` | 30s | [5, 300] | planner | immediate |
-| `mister_all_delay_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_all_delay_s` | `Setpoints.mist_s2_delay_ms` + ESPHome global | S2/all-zone dwell before escalation | `cfg_mister_all_delay_s` | 60s | [10, 600] | planner | immediate |
+| `mister_engage_delay_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_engage_delay_s` | ESPHome global `mister_engage_delay_s` | S1 dwell before first mister pulse | `cfg_mister_engage_delay_s` | 30s | [30, 900] | planner | immediate |
+| `mister_all_delay_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_all_delay_s` | `Setpoints.mist_s2_delay_ms` + ESPHome global | S2/all-zone dwell before escalation | `cfg_mister_all_delay_s` | 60s | [60, 900] | planner | immediate |
 | `mister_pulse_on_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_pulse_on_s` | ESPHome global `mister_pulse_on_s` | per-zone pulse duration | `cfg_mister_pulse_on_s` | 45s | [10, 120] | planner | immediate |
 | `mister_pulse_gap_s` | num | `PlanTransition.params`, `SetpointChange` | `setpoint_changes` | `target_mister_pulse_gap_s` | ESPHome global `mister_pulse_gap_s` | gap between mister pulses | `cfg_mister_pulse_gap_s` | 60s | [10, 300] | planner | immediate |
 

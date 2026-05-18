@@ -2679,8 +2679,8 @@ _PHYSICS_INVARIANTS: dict[str, tuple[float | None, float | None]] = {
     "gl_main_target_light_minutes": (0, 1080),
     "gl_grow_target_light_minutes": (0, 1080),
     # Integer counters (seconds)
-    "mister_engage_delay_s": (5, 300),
-    "mister_all_delay_s": (10, 600),
+    "mister_engage_delay_s": (30, 900),
+    "mister_all_delay_s": (60, 900),
     "vpd_watch_dwell_s": (10, 600),
     # Resource budgets
     "mister_water_budget_gal": (100, 5000),
@@ -5382,7 +5382,7 @@ async def setpoint_confirmation_monitor(pool: asyncpg.Pool) -> None:
                    )
              WHERE sc.confirmed_at IS NULL
                AND COALESCE(sc.source, '') <> 'esp32'
-               AND COALESCE(sc.delivery_status, 'pending') = 'pending'
+               AND COALESCE(sc.delivery_status, 'pending') IN ('pending', 'deferred_heap_pressure')
                AND EXISTS (
                    SELECT 1
                      FROM setpoint_changes newer

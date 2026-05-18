@@ -1993,7 +1993,7 @@ sensor:
     update_interval: 30s
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
-      return id(pulled_outdoor_temp_f);
+      return id(ha_outdoor_temp).state;
 
   - platform: template
     id: cfg_outdoor_dewpoint_f
@@ -2006,10 +2006,10 @@ sensor:
     update_interval: 30s
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
-      // Recompute outdoor DP here from pulled_outdoor_temp_f + RH so
+      // Recompute outdoor DP here from the Tempest-primary outdoor inputs so
       // the readback reflects the same value SensorInputs uses.
-      float Tf = id(pulled_outdoor_temp_f);
-      float RH = id(pulled_outdoor_rh_pct);
+      float Tf = id(ha_outdoor_temp).state;
+      float RH = id(ha_outdoor_rh).state;
       if (isnan(Tf) || isnan(RH) || RH <= 0.0f) return NAN;
       float Tc = (Tf - 32.0f) * (5.0f / 9.0f);
       float gamma = (17.27f * Tc) / (237.7f + Tc) + log(RH / 100.0f);

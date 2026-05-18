@@ -150,7 +150,7 @@ class TestDispatcherWiring:
         assert "limited heap-recovery push to %d priority lighting setpoint(s)" in body
         assert "_last_pushed.pop(param, None)" in body
         assert "delivery_status = 'deferred_heap_pressure'" in body
-        assert "COALESCE(sc.delivery_status, 'pending') = 'pending'" in body
+        assert "COALESCE(sc.delivery_status, 'pending') IN ('pending', 'deferred_heap_pressure')" in body
         assert "Keep shared.recently_pushed" in body
         assert "shared.recently_pushed.pop(param, None)" not in body
         assert "shared.recently_pushed_values.pop(param, None)" not in body
@@ -624,6 +624,13 @@ class TestSprint18Wiring:
         assert "_validate_physics" in body, "FW-3 _validate_physics() helper must exist"
         assert "invariant_violation" in body, "FW-3 must tag violations with invariant_violation prefix"
 
+    def test_mister_delay_invariants_match_firmware_registry_bounds(self):
+        sys.modules.pop("tasks", None)
+        import tasks
+
+        assert tasks._PHYSICS_INVARIANTS["mister_engage_delay_s"] == (30, 900)
+        assert tasks._PHYSICS_INVARIANTS["mister_all_delay_s"] == (60, 900)
+
     # ── OBS-3: relief-cycle state to DB ──
     def test_obs3_migration_082_applied(self):
         from conftest import db_query
@@ -881,6 +888,15 @@ class TestSetpointConfirmation:
         assert expected <= set(entity_map.CFG_READBACK_MAP.values())
         for param in expected:
             assert param in sensors_source
+
+    def test_outdoor_cfg_readbacks_use_tempest_primary_inputs(self):
+        sensors_source = (REPO_ROOT / "firmware" / "greenhouse" / "sensors.yaml").read_text()
+        cfg_temp = sensors_source.split("id: cfg_outdoor_temp_f", 1)[1].split("id: cfg_outdoor_dewpoint_f", 1)[0]
+        cfg_dewpoint = sensors_source.split("id: cfg_outdoor_dewpoint_f", 1)[1].split("Phase 1c", 1)[0]
+        assert "return id(ha_outdoor_temp).state;" in cfg_temp
+        assert "return id(pulled_outdoor_temp_f);" not in cfg_temp
+        assert "float Tf = id(ha_outdoor_temp).state;" in cfg_dewpoint
+        assert "float RH = id(ha_outdoor_rh).state;" in cfg_dewpoint
 
     def test_dwell_gate_direct_push_uses_number_slug(self):
         entity_map = _repo_entity_map()
