@@ -102,6 +102,55 @@ HOUSE_BAND_COMPUTED_PARAMS = frozenset(
 )
 ZONE_VPD_TARGET_PARAMS = frozenset(name for name in CROP_BAND_REG if name.startswith("vpd_target_"))
 LEGACY_LIGHTING_COMPUTED_PARAMS = LEGACY_SHARED_LIGHTING_REG & FIRMWARE_SETPOINT_PARAMS
+ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_min", "activity_duration_min"})
+
+
+def _activity_policy_values(lighting_row, lighting_circuit_rows) -> dict[str, float | int]:
+    """Derive greenhouse biological activity from the main-light runtime policy."""
+    main_lighting = next((row for row in lighting_circuit_rows or [] if row["light_key"] == "main"), None)
+    if main_lighting:
+        activity_start_hour = int(main_lighting["start_hour"])
+        activity_duration_min = int(main_lighting["target_light_minutes"])
+    elif lighting_row:
+        activity_start_hour = int(lighting_row["sunrise_hour"])
+        activity_duration_min = int(lighting_row["target_light_hours"]) * 60
+    else:
+        return {}
+
+    activity_duration_min = max(0, min(1440, activity_duration_min))
+    return {
+        "activity_start_hour": max(0, min(23, activity_start_hour)),
+        "activity_start_min": 0,
+        "activity_duration_min": activity_duration_min,
+        "direct_wet_min_temp_f": 65,
+        "direct_wet_south_start_offset_min": 60,
+        "direct_wet_south_drydown_before_off_min": 120,
+        "direct_wet_west_start_offset_min": 60,
+        "direct_wet_west_drydown_before_off_min": 120,
+        "direct_wet_center_start_offset_min": 120,
+        "direct_wet_center_drydown_before_off_min": 180,
+        "irrig_wall_days_mask": 127,
+        "irrig_wall_fert_days_mask": 0,
+        "irrig_center_days_mask": 127,
+        "irrig_center_fert_days_mask": 0,
+        "sw_direct_wet_gate_enabled": 1,
+    }
+
+
+def _align_activity_policy_with_plan(
+    activity_values: dict[str, float | int],
+    plan_values: dict[str, float],
+) -> dict[str, float | int]:
+    """Keep pull-fallback activity defaults tied to active main-light overrides."""
+    if not activity_values:
+        return activity_values
+    aligned = dict(activity_values)
+    if "gl_main_sunrise_hour" in plan_values:
+        aligned["activity_start_hour"] = max(0, min(23, int(plan_values["gl_main_sunrise_hour"])))
+    if "gl_main_target_light_minutes" in plan_values:
+        aligned["activity_duration_min"] = max(0, min(1440, int(plan_values["gl_main_target_light_minutes"])))
+    return aligned
+
 
 # ── DB Connection ──
 
@@ -599,7 +648,8 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             )
         plan_rows = await conn.fetch("SELECT parameter, value FROM v_active_plan")
         params = {r["parameter"]: r["value"] for r in rows}
-        plan_params = {r["parameter"] for r in plan_rows}
+        plan_values = {r["parameter"]: r["value"] for r in plan_rows}
+        plan_params = set(plan_values)
         # Planner overrides for all params. Band params are overwritten below by
         # the same crop/house-band functions used by the dispatcher.
         for r in plan_rows:
@@ -648,6 +698,13 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             for param, value in lighting_values.items():
                 if param not in plan_params:
                     params[param] = value
+        activity_values = _align_activity_policy_with_plan(
+            _activity_policy_values(lighting_row, lighting_circuit_rows),
+            plan_values,
+        )
+        for param, value in activity_values.items():
+            if param not in plan_params or param in ACTIVITY_MIRROR_PARAMS:
+                params[param] = value
         # Per-zone VPD targets (from crop data per zone)
         if zone_row:
             for param in ZONE_VPD_TARGET_PARAMS:

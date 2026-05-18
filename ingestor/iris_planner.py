@@ -307,6 +307,13 @@ Use tactical knobs below to shift behavior instead.
 - `sw_fog_closes_vent` — when ON, suppresses fog while the vent is physically open except vent-mist assist
 - `sw_mister_closes_vent` — when ON, suppresses normal physical mister pulses while the vent is open; explicit VENTILATE vent-mist assist bypasses it
 
+**Direct-wet activity windows (optional planner-policy knobs):**
+- `activity_start_hour`, `activity_start_min`, `activity_duration_min` are dispatcher-owned mirrors of the main-light runtime policy. Do not set them directly; tune the shared biological activity day through `gl_main_sunrise_hour` and `gl_main_target_light_minutes`.
+- `sw_direct_wet_gate_enabled` — master gate for automated direct wetting. Keep ON unless executing an explicit rollback.
+- `direct_wet_min_temp_f` °F, [0-90], dispatcher default 65 — cold lockout for automated misters, fert paths, and drips.
+- `direct_wet_<south|west|center>_start_offset_min`, `direct_wet_<south|west|center>_drydown_before_off_min` min, [0-720] — zone wettable window inside the global activity window. Increase drydown when late wetting or disease risk appears; center can be stricter without Vanda-specific logic.
+- `irrig_wall_days_mask`, `irrig_center_days_mask`, `irrig_wall_fert_days_mask`, `irrig_center_fert_days_mask` — bit masks, bit0=Sunday through bit6=Saturday. Nonzero fert masks replace legacy every-N fert cadence; zero preserves the existing every-N fallback.
+
 **Phase-2 dwell gate (whipsaw reduction):**
 - `sw_dwell_gate_enabled` — master switch; firmware default OFF, planner may enable for oscillation control. THERMAL_RELIEF, SAFETY_COOL, SAFETY_HEAT, SENSOR_FAULT, dehum→humidify overshoot, and sealed-mist temp preemption bypass the gate.
 - `dwell_gate_ms` ms, [60000-1800000], def 300000 — hold duration for ordinary non-safety mode transitions only. Revert if it hides real stress or increases relief cycling.
@@ -316,7 +323,7 @@ Use tactical knobs below to shift behavior instead.
 
 ### Non-Policy Tunables
 
-Per-zone VPD rebalance, irrigation schedule changes, safety rail adjustments,
+Per-zone VPD rebalance, legacy irrigation start/duration changes, safety rail adjustments,
 occupancy inhibit, fog window shifts, economiser site pressure, fan-lead
 rotation, crop bands, readbacks, and retired aliases are not planner write
 targets. Treat them as explanatory context. If one must become planner-writable,

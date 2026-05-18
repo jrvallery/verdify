@@ -88,6 +88,20 @@ HEAP_RECOVERY_PRIORITY_PARAMS = frozenset(
     for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS
     if name.endswith(("_target_light_minutes", "_sunrise_hour", "_sunset_hour", "_lux_threshold", "_lux_hysteresis"))
     or name.startswith(("sw_gl_main_", "sw_gl_grow_"))
+) | frozenset(
+    {
+        "activity_start_hour",
+        "activity_start_min",
+        "activity_duration_min",
+        "direct_wet_min_temp_f",
+        "direct_wet_south_start_offset_min",
+        "direct_wet_south_drydown_before_off_min",
+        "direct_wet_west_start_offset_min",
+        "direct_wet_west_drydown_before_off_min",
+        "direct_wet_center_start_offset_min",
+        "direct_wet_center_drydown_before_off_min",
+        "sw_direct_wet_gate_enabled",
+    }
 )
 HOUSE_BAND_PARAMS = frozenset(
     name for name in CROP_BAND_REG if name.startswith("temp_") or name in {"vpd_low", "vpd_high"}
@@ -2570,6 +2584,27 @@ MISTER_DEFAULTS = frozenset(
         "mister_center_penalty",
     }
 )
+ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_min", "activity_duration_min"})
+DIRECT_WET_POLICY_PARAMS = frozenset(
+    {
+        "activity_start_hour",
+        "activity_start_min",
+        "activity_duration_min",
+        "direct_wet_min_temp_f",
+        "direct_wet_south_start_offset_min",
+        "direct_wet_south_drydown_before_off_min",
+        "direct_wet_west_start_offset_min",
+        "direct_wet_west_drydown_before_off_min",
+        "direct_wet_center_start_offset_min",
+        "direct_wet_center_drydown_before_off_min",
+        "irrig_wall_days_mask",
+        "irrig_wall_fert_days_mask",
+        "irrig_center_days_mask",
+        "irrig_center_fert_days_mask",
+        "sw_direct_wet_gate_enabled",
+    }
+)
+DIRECT_WET_SUPPORT_OBJECT_IDS = frozenset({"direct_wet_gate_enabled", "activity_start_hour"})
 
 
 def _upsert_change(changes: list[tuple[str, float]], param: str, value: float) -> None:
@@ -2591,6 +2626,63 @@ def _apply_manual_overlay(changes: list[tuple[str, float]], overlay: dict[str, f
     return overlay_params
 
 
+def _direct_wet_policy_supported() -> bool:
+    """Return true once the connected firmware exposes the direct-wet contract."""
+    keys = shared.esp32.get("keys") or {}
+    return (
+        bool(DIRECT_WET_SUPPORT_OBJECT_IDS & set(keys))
+        or any(param in shared.cfg_readback for param in DIRECT_WET_POLICY_PARAMS)
+        or any(param in _last_pushed for param in DIRECT_WET_POLICY_PARAMS)
+    )
+
+
+def _activity_defaults_from_lighting(lighting_row, lighting_circuit_rows) -> dict[str, float]:
+    """Derive biological activity from the same main-light runtime policy."""
+    main_lighting = next((row for row in lighting_circuit_rows or [] if row["light_key"] == "main"), None)
+    if main_lighting:
+        activity_start_hour = int(main_lighting["start_hour"])
+        activity_duration_min = int(main_lighting["target_light_minutes"])
+    elif lighting_row:
+        activity_start_hour = int(lighting_row["sunrise_hour"])
+        activity_duration_min = int(lighting_row["target_light_hours"]) * 60
+    else:
+        return {}
+
+    activity_duration_min = max(0, min(1440, activity_duration_min))
+    return {
+        "activity_start_hour": float(max(0, min(23, activity_start_hour))),
+        "activity_start_min": 0.0,
+        "activity_duration_min": float(activity_duration_min),
+        "direct_wet_min_temp_f": 65.0,
+        "direct_wet_south_start_offset_min": 60.0,
+        "direct_wet_south_drydown_before_off_min": 120.0,
+        "direct_wet_west_start_offset_min": 60.0,
+        "direct_wet_west_drydown_before_off_min": 120.0,
+        "direct_wet_center_start_offset_min": 120.0,
+        "direct_wet_center_drydown_before_off_min": 180.0,
+        "irrig_wall_days_mask": 127.0,
+        "irrig_wall_fert_days_mask": 0.0,
+        "irrig_center_days_mask": 127.0,
+        "irrig_center_fert_days_mask": 0.0,
+        "sw_direct_wet_gate_enabled": 1.0,
+    }
+
+
+def _align_activity_defaults_with_planned_lighting(
+    defaults: dict[str, float],
+    planner_params: dict[str, float],
+) -> dict[str, float]:
+    """Keep activity defaults tied to active main-light plan overrides."""
+    if not defaults:
+        return defaults
+    aligned = dict(defaults)
+    if "gl_main_sunrise_hour" in planner_params:
+        aligned["activity_start_hour"] = float(max(0, min(23, int(planner_params["gl_main_sunrise_hour"]))))
+    if "gl_main_target_light_minutes" in planner_params:
+        aligned["activity_duration_min"] = float(max(0, min(1440, int(planner_params["gl_main_target_light_minutes"]))))
+    return aligned
+
+
 def _dispatch_source(param: str, planner_params: dict[str, float], quiet_params: set[str]) -> str:
     """Return the setpoint_changes source for a dispatcher write."""
     if param in quiet_params:
@@ -2598,6 +2690,10 @@ def _dispatch_source(param: str, planner_params: dict[str, float], quiet_params:
     if param in BAND_DRIVEN_PARAMS:
         return "band"
     if param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and param not in planner_params:
+        return "band"
+    if param in ACTIVITY_MIRROR_PARAMS:
+        return "band"
+    if param in DIRECT_WET_POLICY_PARAMS and param not in planner_params:
         return "band"
     if param in SAFETY_PARAMS and param not in planner_params:
         return "band"
@@ -3026,6 +3122,7 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
         lighting_target_minutes_supported = FIRMWARE_HAS_LIGHTING_TARGET_MINUTES or all(
             param in shared.cfg_readback for param in LIGHTING_TARGET_MINUTE_PARAMS
         )
+        direct_wet_policy_supported = _direct_wet_policy_supported()
         planner_meta = {
             r["parameter"]: {
                 "trigger_id": str(r["trigger_id"]) if r["trigger_id"] else None,
@@ -3197,6 +3294,22 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     continue
                 changes.append((param, val))
 
+        # Global biological activity + per-zone direct-wet windows. The global
+        # activity duration intentionally follows the same main-light runtime
+        # policy that firmware uses for daily qualified light minutes; zones
+        # then narrow the wettable portion with start/drydown offsets.
+        if direct_wet_policy_supported:
+            activity_defaults = _align_activity_defaults_with_planned_lighting(
+                _activity_defaults_from_lighting(lighting_row, lighting_circuit_rows),
+                planner_params,
+            )
+            for param, val in activity_defaults.items():
+                if param in planner_params and param not in ACTIVITY_MIRROR_PARAMS:
+                    continue
+                if _should_skip(_last_pushed.get(param), val) and not _readback_drift(param, val):
+                    continue
+                changes.append((param, val))
+
         # Safety limits: always dispatched, planner can override within range
         safety_defaults = {
             "safety_max": 100.0,
@@ -3236,6 +3349,10 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
             if param in LIGHTING_CIRCUIT_DEFAULT_PARAMS and not lighting_circuit_supported:
                 continue
             if param in LIGHTING_TARGET_MINUTE_PARAMS and not lighting_target_minutes_supported:
+                continue
+            if param in ACTIVITY_MIRROR_PARAMS:
+                continue
+            if param in DIRECT_WET_POLICY_PARAMS and not direct_wet_policy_supported:
                 continue
             if param.startswith("plan_") or param in BAND_DRIVEN_PARAMS:
                 continue

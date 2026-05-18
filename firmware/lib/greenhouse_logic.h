@@ -70,6 +70,52 @@ inline bool fog_hour_in_window(int hour, int start, int end) noexcept {
                           : (hour >= start || hour < end);
 }
 
+inline int local_minute_of_day(int hour, int minute) noexcept {
+    hour = std::max(0, std::min(23, hour));
+    minute = std::max(0, std::min(59, minute));
+    return hour * 60 + minute;
+}
+
+inline int clamp_day_minutes(int minutes) noexcept {
+    return std::max(0, std::min(1440, minutes));
+}
+
+inline bool minute_in_window(int now_minute, int start_minute, int duration_minutes) noexcept {
+    now_minute = ((now_minute % 1440) + 1440) % 1440;
+    start_minute = ((start_minute % 1440) + 1440) % 1440;
+    duration_minutes = clamp_day_minutes(duration_minutes);
+    if (duration_minutes <= 0) return false;
+    if (duration_minutes >= 1440) return true;
+    const int end_minute = (start_minute + duration_minutes) % 1440;
+    return (start_minute < end_minute)
+        ? (now_minute >= start_minute && now_minute < end_minute)
+        : (now_minute >= start_minute || now_minute < end_minute);
+}
+
+inline bool direct_wet_window_open(
+    int now_minute,
+    int activity_start_hour,
+    int activity_start_minute,
+    int activity_duration_min,
+    int wet_start_offset_min,
+    int drydown_before_off_min
+) noexcept {
+    const int activity_start = local_minute_of_day(activity_start_hour, activity_start_minute);
+    activity_duration_min = clamp_day_minutes(activity_duration_min);
+    wet_start_offset_min = std::max(0, wet_start_offset_min);
+    drydown_before_off_min = std::max(0, drydown_before_off_min);
+    const int wet_duration = activity_duration_min - wet_start_offset_min - drydown_before_off_min;
+    if (wet_duration <= 0) return false;
+    const int wet_start = (activity_start + wet_start_offset_min) % 1440;
+    return minute_in_window(now_minute, wet_start, wet_duration);
+}
+
+inline bool day_mask_allows(int day_mask, int day_of_week_zero_sunday) noexcept {
+    if (day_mask <= 0) return false;
+    day_of_week_zero_sunday = ((day_of_week_zero_sunday % 7) + 7) % 7;
+    return (day_mask & (1 << day_of_week_zero_sunday)) != 0;
+}
+
 // True iff all of RH, temp, and hour-of-day permit fogging. Occupancy is
 // NOT checked here — see moisture_blocked_by_occupancy().
 inline bool fog_permitted(const SensorInputs& in, const Setpoints& sp) noexcept {

@@ -340,6 +340,65 @@ globals:
     restore_value: no
     initial_value: 'true'
 
+  # ─── Greenhouse biological activity / direct-wet policy ───
+  # Defaults preserve legacy behavior until the dispatcher/AI tunables push a
+  # finite activity day. Misters, fert paths, and drips all use this shared
+  # activity contract once direct_wet_gate_enabled is true.
+  - id: activity_start_hour
+    type: int
+    restore_value: no
+    initial_value: '6'
+
+  - id: activity_start_minute
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: activity_duration_min
+    type: int
+    restore_value: no
+    initial_value: '1440'
+
+  - id: direct_wet_min_temp_f
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  - id: direct_wet_gate_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+
+  - id: direct_wet_south_start_offset_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: direct_wet_south_drydown_before_off_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: direct_wet_west_start_offset_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: direct_wet_west_drydown_before_off_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: direct_wet_center_start_offset_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: direct_wet_center_drydown_before_off_min
+    type: int
+    restore_value: no
+    initial_value: '0'
+
   # ─── Daily ON-cycle counters (reset at midnight) ───
   - id: cnt_fan1_today
     type: int
@@ -678,6 +737,16 @@ globals:
     restore_value: no
     initial_value: '0'
 
+  - id: irrig_wall_days_mask
+    type: int
+    restore_value: no
+    initial_value: '127'
+
+  - id: irrig_wall_fert_days_mask
+    type: int
+    restore_value: no
+    initial_value: '0'
+
   - id: irrig_wall_flush_min
     type: int
     restore_value: no
@@ -709,6 +778,16 @@ globals:
     initial_value: '5'
 
   - id: irrig_center_fert_every_n
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: irrig_center_days_mask
+    type: int
+    restore_value: no
+    initial_value: '127'
+
+  - id: irrig_center_fert_days_mask
     type: int
     restore_value: no
     initial_value: '0'

@@ -99,6 +99,30 @@ TEST(sealed_after_dwell) {
     PASS();
 }
 
+TEST(minute_window_wraps_midnight) {
+    ASSERT_TRUE(minute_in_window(local_minute_of_day(23, 30), local_minute_of_day(22, 0), 480));
+    ASSERT_TRUE(minute_in_window(local_minute_of_day(5, 59), local_minute_of_day(22, 0), 480));
+    ASSERT_FALSE(minute_in_window(local_minute_of_day(6, 0), local_minute_of_day(22, 0), 480));
+    PASS();
+}
+
+TEST(direct_wet_window_uses_activity_offsets) {
+    // Activity 06:00-20:00, wettable after 2h ramp and before 3h drydown.
+    ASSERT_FALSE(direct_wet_window_open(local_minute_of_day(7, 59), 6, 0, 840, 120, 180));
+    ASSERT_TRUE(direct_wet_window_open(local_minute_of_day(8, 0), 6, 0, 840, 120, 180));
+    ASSERT_TRUE(direct_wet_window_open(local_minute_of_day(16, 59), 6, 0, 840, 120, 180));
+    ASSERT_FALSE(direct_wet_window_open(local_minute_of_day(17, 0), 6, 0, 840, 120, 180));
+    PASS();
+}
+
+TEST(day_mask_allows_zero_sunday) {
+    ASSERT_TRUE(day_mask_allows(0b0000001, 0));
+    ASSERT_FALSE(day_mask_allows(0b0000001, 1));
+    ASSERT_TRUE(day_mask_allows(0b0100100, 2));
+    ASSERT_TRUE(day_mask_allows(0b0100100, 5));
+    PASS();
+}
+
 TEST(not_sealed_before_dwell) {
     auto s = initial_state(); s.vpd_watch_timer_ms = 30000;
     ASSERT_EQ(determine_mode(make_inputs(72, 1.5), default_setpoints(), s, 5000), IDLE);
