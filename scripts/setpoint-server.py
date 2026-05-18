@@ -60,6 +60,22 @@ FIRMWARE_SETPOINT_PARAMS = frozenset(SETPOINT_MAP_REG.values())
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
 BAND_OWNED_PARAMS = CROP_BAND_REG
 PLAN_EXCLUDED_PARAMS_SQL = ",".join("'" + param.replace("'", "''") + "'" for param in sorted(BAND_OWNED_REG))
+DIRECT_WET_DEFAULTS = {
+    "direct_wet_min_temp_f": "65",
+    "direct_wet_wall_start_offset_min": "60",
+    "direct_wet_wall_drydown_before_off_min": "120",
+    "direct_wet_south_start_offset_min": "60",
+    "direct_wet_south_drydown_before_off_min": "120",
+    "direct_wet_west_start_offset_min": "60",
+    "direct_wet_west_drydown_before_off_min": "120",
+    "direct_wet_center_start_offset_min": "120",
+    "direct_wet_center_drydown_before_off_min": "180",
+    "irrig_wall_days_mask": "127",
+    "irrig_wall_fert_days_mask": "0",
+    "irrig_center_days_mask": "127",
+    "irrig_center_fert_days_mask": "0",
+    "sw_direct_wet_gate_enabled": "1",
+}
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [setpoint-server] %(levelname)s %(message)s",
@@ -72,6 +88,26 @@ _db_pool = None
 _ha_token = None
 _main_loop: asyncio.AbstractEventLoop | None = None
 _light_state = {"main": None, "grow": None}  # True=on, False=off, None=unknown
+
+
+def _int_param(params: dict[str, str], key: str, default: int) -> int:
+    try:
+        return int(float(params.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _overlay_activity_direct_wet_defaults(params: dict[str, str], plan_params: set[str]) -> None:
+    """Keep ESP32 pull fallback aligned with dispatcher-owned activity policy."""
+    activity_start_hour = max(0, min(23, _int_param(params, "gl_main_sunrise_hour", 6)))
+    activity_duration_min = max(0, min(1440, _int_param(params, "gl_main_target_light_minutes", 960)))
+    params["activity_start_hour"] = str(activity_start_hour)
+    params["activity_start_minute"] = "0"
+    params["activity_duration_min"] = str(activity_duration_min)
+
+    for param, value in DIRECT_WET_DEFAULTS.items():
+        if param not in plan_params:
+            params.setdefault(param, value)
 
 
 def load_token() -> str:
@@ -296,6 +332,8 @@ def get_setpoint_text_sync() -> str:
             k, v = line.split("=", 1)
             if k.strip() not in plan_params:
                 params[k.strip()] = v.strip()
+
+    _overlay_activity_direct_wet_defaults(params, plan_params)
 
     # Step 3: Keep this ESP32 endpoint small and numeric. Metadata such as
     # source/next_* used to bloat the response and triggered malformed parses.
