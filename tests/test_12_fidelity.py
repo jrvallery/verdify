@@ -437,12 +437,16 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
     assert params["safety_max"] == "100"
 
     legacy_params = {
+        "gl_lux_threshold": "40000",
         "gl_lux_hysteresis": "8000",
+        "gl_main_lux_threshold": "40000",
         "gl_main_lux_hysteresis": "8000",
+        "gl_grow_lux_threshold": "40000",
         "gl_grow_lux_hysteresis": "8000",
     }
     module["_overlay_dispatcher_owned_defaults"](legacy_params, set())
-    assert legacy_params["gl_lux_hysteresis"] == "1500"
+    assert legacy_params["gl_lux_threshold"] == "40000"
+    assert legacy_params["gl_lux_hysteresis"] == "8000"
 
 
 def test_setpoint_server_controls_real_lutron_switch_entities_and_confirms_state():

@@ -103,6 +103,15 @@ HOUSE_BAND_COMPUTED_PARAMS = frozenset(
 ZONE_VPD_TARGET_PARAMS = frozenset(name for name in CROP_BAND_REG if name.startswith("vpd_target_"))
 LEGACY_LIGHTING_COMPUTED_PARAMS = LEGACY_SHARED_LIGHTING_REG & FIRMWARE_SETPOINT_PARAMS
 ACTIVITY_MIRROR_PARAMS = frozenset({"activity_start_hour", "activity_start_minute", "activity_duration_min"})
+EQUIPMENT_SWITCH_SETPOINTS = {
+    "sw_economiser_enabled": "economiser_enabled",
+    "sw_fog_closes_vent": "fog_closes_vent",
+    "sw_irrigation_enabled": "irrigation_enabled",
+    "sw_irrigation_wall_enabled": "irrigation_wall_enabled",
+    "sw_irrigation_center_enabled": "irrigation_center_enabled",
+    "sw_irrigation_weather_skip": "irrigation_weather_skip",
+    "sw_gl_auto_mode": "gl_auto_mode",
+}
 DIRECT_WET_DEFAULTS = {
     "direct_wet_min_temp_f": 65,
     "direct_wet_wall_start_offset_min": 60,
@@ -752,6 +761,26 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                 params["outdoor_temp"] = _round_half_up(outdoor["outdoor_temp_f"], 1)
             if outdoor["outdoor_rh_pct"]:
                 params["outdoor_rh"] = _round_half_up(outdoor["outdoor_rh_pct"], 0)
+        switch_rows = await conn.fetch(
+            """
+            WITH switch_map(parameter, equipment) AS (
+                SELECT * FROM unnest($1::text[], $2::text[])
+            ),
+            latest AS (
+                SELECT DISTINCT ON (equipment) equipment, state
+                  FROM equipment_state
+                 WHERE equipment = ANY($2::text[])
+                 ORDER BY equipment, ts DESC
+            )
+            SELECT switch_map.parameter, latest.state
+              FROM switch_map
+              JOIN latest USING (equipment)
+            """,
+            list(EQUIPMENT_SWITCH_SETPOINTS.keys()),
+            list(EQUIPMENT_SWITCH_SETPOINTS.values()),
+        )
+        for row in switch_rows:
+            params[row["parameter"]] = 1 if row["state"] else 0
     lines = [f"{k}={v}" for k, v in sorted(params.items())]
     from fastapi.responses import PlainTextResponse
 

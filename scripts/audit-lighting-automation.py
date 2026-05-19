@@ -869,7 +869,11 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
             and "panelId=16" in lighting_html
             and "panelId=17" in lighting_html
             and "Tempest outdoor illuminance" in lighting_html
-            and "Firmware state and reason fields appear after the next ESP32 OTA" in lighting_html,
+            and (
+                "Firmware state and reason fields show the database, dashboard, dispatcher, ESP32, and Lutron state path."
+                in lighting_html
+                or "Firmware state and reason fields appear after the next ESP32 OTA" in lighting_html
+            ),
             "live public lighting page",
             "lab.verdify.ai/greenhouse/lighting serves the per-circuit policy story and panels 16/17",
             "lab.verdify.ai/greenhouse/lighting is missing the per-circuit lighting story or embeds",

@@ -58,6 +58,15 @@ LIGHTS = {
 FIRMWARE_SETPOINT_PARAMS = frozenset(SETPOINT_MAP_REG.values())
 
 FORCED_ON_SWITCH_PARAMS = frozenset({"sw_fsm_controller_enabled"})
+EQUIPMENT_SWITCH_SETPOINTS = {
+    "sw_economiser_enabled": "economiser_enabled",
+    "sw_fog_closes_vent": "fog_closes_vent",
+    "sw_irrigation_enabled": "irrigation_enabled",
+    "sw_irrigation_wall_enabled": "irrigation_wall_enabled",
+    "sw_irrigation_center_enabled": "irrigation_center_enabled",
+    "sw_irrigation_weather_skip": "irrigation_weather_skip",
+    "sw_gl_auto_mode": "gl_auto_mode",
+}
 BAND_OWNED_PARAMS = CROP_BAND_REG
 PLAN_EXCLUDED_PARAMS_SQL = ",".join("'" + param.replace("'", "''") + "'" for param in sorted(BAND_OWNED_REG))
 DIRECT_WET_DEFAULTS = {
@@ -79,12 +88,6 @@ DIRECT_WET_DEFAULTS = {
 SAFETY_DEFAULTS = {
     "safety_max": "100",
     "safety_min": "40",
-}
-LEGACY_LIGHTING_DEFAULTS = {
-    # Per-circuit gl_main_* / gl_grow_* controls own lighting now. Keep the
-    # retired shared hysteresis at firmware default instead of replaying old
-    # dispatcher rows through the fallback endpoint.
-    "gl_lux_hysteresis": "1500",
 }
 logging.basicConfig(
     level=logging.INFO,
@@ -128,9 +131,10 @@ def _overlay_dispatcher_owned_defaults(params: dict[str, str], plan_params: set[
 
     has_per_circuit_lighting = "gl_main_lux_hysteresis" in params and "gl_grow_lux_hysteresis" in params
     if has_per_circuit_lighting:
-        for param, value in LEGACY_LIGHTING_DEFAULTS.items():
-            if param not in plan_params:
-                params[param] = value
+        if "gl_lux_threshold" not in plan_params and "gl_main_lux_threshold" in params:
+            params["gl_lux_threshold"] = params["gl_main_lux_threshold"]
+        if "gl_lux_hysteresis" not in plan_params and "gl_main_lux_hysteresis" in params:
+            params["gl_lux_hysteresis"] = params["gl_main_lux_hysteresis"]
 
 
 def load_token() -> str:
@@ -391,6 +395,34 @@ def get_setpoint_text_sync() -> str:
         parts = outdoor.split("|")
         params["outdoor_temp"] = parts[0]
         params["outdoor_rh"] = parts[1]
+
+    switch_values_sql = ", ".join(
+        f"('{param}', '{equipment}')" for param, equipment in sorted(EQUIPMENT_SWITCH_SETPOINTS.items())
+    )
+    result = subprocess.run(
+        db_cmd
+        + [
+            f"""
+            WITH switch_map(parameter, equipment) AS (VALUES {switch_values_sql}),
+            latest AS (
+                SELECT DISTINCT ON (equipment) equipment, state
+                  FROM equipment_state
+                 WHERE equipment IN (SELECT equipment FROM switch_map)
+                 ORDER BY equipment, ts DESC
+            )
+            SELECT sm.parameter, CASE WHEN latest.state THEN 1 ELSE 0 END
+              FROM switch_map sm
+              JOIN latest USING (equipment)
+            """
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    for line in result.stdout.strip().split("\n"):
+        if "=" in line:
+            k, v = line.split("=", 1)
+            params[k.strip()] = v.strip()
 
     lines = [f"{k}={v}" for k, v in sorted(params.items())]
     return "\n".join(lines) + "\n"
