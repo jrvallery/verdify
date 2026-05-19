@@ -1376,6 +1376,23 @@ interval:
             if(id(west_wall_mister_fertilized).state)  id(runtime_mister_west_ms)  += irrig_dt;
             if(id(fertilizer_master_valve).state) id(runtime_fert_master_ms) += irrig_dt;
 
+            auto fert_relay_active = [&]() -> bool {
+              return id(south_wall_mister_fertilized).state ||
+                     id(west_wall_mister_fertilized).state ||
+                     id(wall_drips_fertilized).state ||
+                     id(center_drips_fertilized).state;
+            };
+            auto sync_fert_master = [&](const char* reason) {
+              const bool master_needed = fert_relay_active();
+              if(master_needed && !id(fertilizer_master_valve).state) {
+                id(fertilizer_master_valve).turn_on();
+                ESP_LOGW("irrig","FERT MASTER opened by relay interlock (%s)", reason);
+              } else if(!master_needed && id(fertilizer_master_valve).state) {
+                id(fertilizer_master_valve).turn_off();
+                ESP_LOGI("irrig","FERT MASTER closed by relay interlock (%s)", reason);
+              }
+            };
+
             auto wet_now_t = id(sntp_time).now();
             const bool wet_time_valid = wet_now_t.is_valid() && !id(sntp_failed);
             const int wet_now_minute = wet_time_valid
@@ -1427,9 +1444,6 @@ interval:
             auto irrig_direct_wet_allowed = [&](bool is_wall) -> bool {
               return irrig_direct_wet_allowed_zone(is_wall ? 4 : 3);
             };
-            auto queued_fert_jobs = [&]() -> bool {
-              return (id(irrig_queue) & (2 | 8 | 16 | 32)) != 0;
-            };
             auto turn_off_all_irrigation = [&]() {
               id(wall_drips).turn_off();
               id(wall_drips_fertilized).turn_off();
@@ -1456,6 +1470,7 @@ interval:
                 ESP_LOGW("irrig","STOPPED by direct-wet gate");
               }
             }
+            sync_fert_master("watchdog");
 
             // ── Skip if globally disabled ──
             if(!id(irrig_enabled)) return;
@@ -1584,8 +1599,8 @@ interval:
               id(center_drips_fertilized).turn_off();
               id(center_mister).turn_off();
 
-              // Open fert master if fert run
-              if(is_fert) id(fertilizer_master_valve).turn_on();
+              // Open the fert master before any fertilized drip/mister relay.
+              if(is_fert && !id(fertilizer_master_valve).state) id(fertilizer_master_valve).turn_on();
 
               // Turn on drip line. sprint-7: count one cycle per dispatch —
               // matches equipment_state's rising-edge count for the
@@ -1599,6 +1614,7 @@ interval:
                 case 7: id(south_wall_mister_fertilized).turn_on(); id(cnt_mister_south_today) += 1; break;
                 case 8: id(west_wall_mister_fertilized).turn_on();  id(cnt_mister_west_today)  += 1; break;
               }
+              sync_fert_master("job-start");
 
               const char* job_name = (job == 1) ? "WALL_CLEAN" :
                 (job == 2) ? "WALL_FERT" :
@@ -1632,6 +1648,7 @@ interval:
                 case 7: id(south_wall_mister_fertilized).turn_off(); break;
                 case 8: id(west_wall_mister_fertilized).turn_off(); break;
               }
+              sync_fert_master("fert-done-before-flush");
 
               // Fert → flush with clean water
               int flush_min = is_center ? id(irrig_center_flush_min) : id(irrig_wall_flush_min);
@@ -1662,10 +1679,7 @@ interval:
                 } else {
                   ESP_LOGI("irrig","DONE %s_MISTER_FERT", is_south_mister ? "SOUTH" : "WEST");
                 }
-                // Close fert master if no fert queued
-                if(is_fert && !queued_fert_jobs()){
-                  id(fertilizer_master_valve).turn_off();
-                }
+                sync_fert_master("job-done");
                 id(irrig_state) = 0;
               }
             }
@@ -1688,10 +1702,7 @@ interval:
               else if(is_south_mister) id(south_wall_mister).turn_off();
               else if(is_west_mister)  id(west_wall_mister).turn_off();
 
-              // Close fert master if no fert queued
-              if(!queued_fert_jobs()){
-                id(fertilizer_master_valve).turn_off();
-              }
+              sync_fert_master("flush-done");
 
               // Finalize
               if(is_wall){

@@ -1467,6 +1467,40 @@ def test_required_plan_alert_ignores_validation_ack_only_rows():
     assert "event_label NOT ILIKE 'validation%ack-only%'" in body
 
 
+def test_fert_master_valve_is_wired_and_interlocked_with_fert_relays():
+    hardware = Path("firmware/greenhouse/hardware.yaml").read_text()
+    controls = Path("firmware/greenhouse/controls.yaml").read_text()
+    entity_map = Path("ingestor/entity_map.py").read_text()
+
+    assert "id: fertilizer_master_valve" in hardware
+    assert 'name: "Valve • Fert. Master"' in hardware
+    fert_master_block = hardware[hardware.index("id: fertilizer_master_valve") :]
+    assert "pcf8574: pcf_out_2" in fert_master_block
+    assert "number: 1" in fert_master_block
+    assert '"valve___fert__master": "fert_master_valve"' in entity_map
+
+    assert "auto fert_relay_active = [&]() -> bool" in controls
+    for relay_id in (
+        "south_wall_mister_fertilized",
+        "west_wall_mister_fertilized",
+        "wall_drips_fertilized",
+        "center_drips_fertilized",
+    ):
+        assert f"id({relay_id}).state" in controls
+
+    master_on = "if(is_fert && !id(fertilizer_master_valve).state) id(fertilizer_master_valve).turn_on();"
+    assert master_on in controls
+    assert controls.index(master_on) < controls.index("case 2: id(wall_drips_fertilized).turn_on();")
+    assert controls.index(master_on) < controls.index("case 4: id(center_drips_fertilized).turn_on();")
+    assert controls.index(master_on) < controls.index("case 7: id(south_wall_mister_fertilized).turn_on();")
+    assert controls.index(master_on) < controls.index("case 8: id(west_wall_mister_fertilized).turn_on();")
+
+    assert 'sync_fert_master("watchdog")' in controls
+    assert 'sync_fert_master("job-start")' in controls
+    assert 'sync_fert_master("fert-done-before-flush")' in controls
+    assert 'sync_fert_master("flush-done")' in controls
+
+
 # ── S24.9.7 — _deliver_and_log sentinel skip (integration-shape) ───
 
 
