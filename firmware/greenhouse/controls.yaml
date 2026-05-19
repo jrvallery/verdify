@@ -1382,6 +1382,9 @@ interval:
                      id(wall_drips_fertilized).state ||
                      id(center_drips_fertilized).state;
             };
+            auto queued_fert_jobs = [&]() -> bool {
+              return (id(irrig_queue) & (2 | 8 | 16 | 32)) != 0;
+            };
             auto sync_fert_master = [&](const char* reason) {
               const bool master_needed = fert_relay_active();
               if(master_needed && !id(fertilizer_master_valve).state) {
@@ -1547,6 +1550,7 @@ interval:
 
           // ── Dequeue next job (mutual exclusion) ──
           if(id(irrig_state) == 0 && id(irrig_queue) != 0){
+            bool fert_queue_pending = queued_fert_jobs();
             int job = 0;
             int bit = 0;
             if     (id(irrig_queue) & 1){ job = 1; bit = 1; }
@@ -1622,7 +1626,7 @@ interval:
                 (job == 4) ? "CENTER_FERT" :
                 (job == 7) ? "SOUTH_MISTER_FERT" :
                 (job == 8) ? "WEST_MISTER_FERT" : "UNKNOWN";
-              ESP_LOGI("irrig","START %s — %dmin", job_name, base_min);
+              ESP_LOGI("irrig","START %s — %dmin%s", job_name, base_min, fert_queue_pending ? " (fert queue)" : "");
             }
           }
 

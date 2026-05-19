@@ -2342,6 +2342,65 @@ sensor:
       return (float)id(direct_wet_center_drydown_before_off_min);
 
   - platform: template
+    id: cfg_irrig_wall_start_hour
+    name: "Cfg Irrig Wall Start Hour"
+    unit_of_measurement: "h"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_start_hour);
+
+  - platform: template
+    id: cfg_irrig_wall_start_min
+    name: "Cfg Irrig Wall Start Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_start_minute);
+
+  - platform: template
+    id: cfg_irrig_wall_duration_min
+    name: "Cfg Irrig Wall Duration Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_duration_min);
+
+  - platform: template
+    id: cfg_irrig_wall_fert_duration_min
+    name: "Cfg Irrig Wall Fert Duration Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_fert_duration_min);
+
+  - platform: template
+    id: cfg_irrig_wall_fert_every_n
+    name: "Cfg Irrig Wall Fert Every N"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_fert_every_n);
+
+  - platform: template
     id: cfg_irrig_wall_days_mask
     name: "Cfg Irrig Wall Days Mask"
     state_class: measurement
@@ -2364,6 +2423,89 @@ sensor:
       return (float)id(irrig_wall_fert_days_mask);
 
   - platform: template
+    id: cfg_irrig_wall_flush_min
+    name: "Cfg Irrig Wall Flush Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_flush_min);
+
+  - platform: template
+    id: cfg_irrig_wall_interval_days
+    name: "Cfg Irrig Wall Interval Days"
+    unit_of_measurement: "d"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_wall_interval_days);
+
+  - platform: template
+    id: cfg_irrig_center_start_hour
+    name: "Cfg Irrig Center Start Hour"
+    unit_of_measurement: "h"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_start_hour);
+
+  - platform: template
+    id: cfg_irrig_center_start_min
+    name: "Cfg Irrig Center Start Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_start_minute);
+
+  - platform: template
+    id: cfg_irrig_center_duration_min
+    name: "Cfg Irrig Center Duration Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_duration_min);
+
+  - platform: template
+    id: cfg_irrig_center_fert_duration_min
+    name: "Cfg Irrig Center Fert Duration Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_fert_duration_min);
+
+  - platform: template
+    id: cfg_irrig_center_fert_every_n
+    name: "Cfg Irrig Center Fert Every N"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_fert_every_n);
+
+  - platform: template
     id: cfg_irrig_center_days_mask
     name: "Cfg Irrig Center Days Mask"
     state_class: measurement
@@ -2384,6 +2526,30 @@ sensor:
     lambda: |-
       if (!id(cfg_first_pull_ok)) return NAN;
       return (float)id(irrig_center_fert_days_mask);
+
+  - platform: template
+    id: cfg_irrig_center_flush_min
+    name: "Cfg Irrig Center Flush Min"
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_flush_min);
+
+  - platform: template
+    id: cfg_irrig_center_interval_days
+    name: "Cfg Irrig Center Interval Days"
+    unit_of_measurement: "d"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(cfg_first_pull_ok)) return NAN;
+      return (float)id(irrig_center_interval_days);
 
   - platform: template
     id: cfg_gl_main_min_on_s

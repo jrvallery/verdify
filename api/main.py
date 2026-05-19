@@ -123,9 +123,9 @@ DIRECT_WET_DEFAULTS = {
     "direct_wet_center_start_offset_min": 120,
     "direct_wet_center_drydown_before_off_min": 180,
     "irrig_wall_days_mask": 127,
-    "irrig_wall_fert_days_mask": 0,
+    "irrig_wall_fert_days_mask": 127,
     "irrig_center_days_mask": 127,
-    "irrig_center_fert_days_mask": 0,
+    "irrig_center_fert_days_mask": 127,
     "sw_direct_wet_gate_enabled": 1,
 }
 
@@ -157,9 +157,9 @@ def _activity_policy_values(lighting_row, lighting_circuit_rows) -> dict[str, fl
         "direct_wet_center_start_offset_min": 120,
         "direct_wet_center_drydown_before_off_min": 180,
         "irrig_wall_days_mask": 127,
-        "irrig_wall_fert_days_mask": 0,
+        "irrig_wall_fert_days_mask": 127,
         "irrig_center_days_mask": 127,
-        "irrig_center_fert_days_mask": 0,
+        "irrig_center_fert_days_mask": 127,
         "sw_direct_wet_gate_enabled": 1,
     }
 

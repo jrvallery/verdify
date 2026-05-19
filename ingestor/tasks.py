@@ -83,31 +83,55 @@ LIGHTING_CIRCUIT_SUPPORT_SENTINELS = frozenset(
 LIGHTING_TARGET_MINUTE_PARAMS = frozenset(
     name for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS if name.endswith("_target_light_minutes")
 )
-HEAP_RECOVERY_PRIORITY_PARAMS = frozenset(
-    name
-    for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS
-    if name.endswith(("_target_light_minutes", "_sunrise_hour", "_sunset_hour", "_lux_threshold", "_lux_hysteresis"))
-    or name.startswith(("sw_gl_main_", "sw_gl_grow_"))
-) | frozenset(
+IRRIGATION_SCHEDULE_PARAMS = frozenset(
     {
-        "activity_start_hour",
-        "activity_start_minute",
-        "activity_duration_min",
-        "direct_wet_min_temp_f",
-        "direct_wet_wall_start_offset_min",
-        "direct_wet_wall_drydown_before_off_min",
-        "direct_wet_south_start_offset_min",
-        "direct_wet_south_drydown_before_off_min",
-        "direct_wet_west_start_offset_min",
-        "direct_wet_west_drydown_before_off_min",
-        "direct_wet_center_start_offset_min",
-        "direct_wet_center_drydown_before_off_min",
+        "irrig_wall_start_hour",
+        "irrig_wall_start_min",
+        "irrig_wall_duration_min",
+        "irrig_wall_fert_duration_min",
+        "irrig_wall_fert_every_n",
         "irrig_wall_days_mask",
         "irrig_wall_fert_days_mask",
+        "irrig_wall_flush_min",
+        "irrig_wall_interval_days",
+        "irrig_center_start_hour",
+        "irrig_center_start_min",
+        "irrig_center_duration_min",
+        "irrig_center_fert_duration_min",
+        "irrig_center_fert_every_n",
         "irrig_center_days_mask",
         "irrig_center_fert_days_mask",
-        "sw_direct_wet_gate_enabled",
+        "irrig_center_flush_min",
+        "irrig_center_interval_days",
     }
+)
+HEAP_RECOVERY_PRIORITY_PARAMS = (
+    frozenset(
+        name
+        for name in LIGHTING_CIRCUIT_DEFAULT_PARAMS
+        if name.endswith(
+            ("_target_light_minutes", "_sunrise_hour", "_sunset_hour", "_lux_threshold", "_lux_hysteresis")
+        )
+        or name.startswith(("sw_gl_main_", "sw_gl_grow_"))
+    )
+    | frozenset(
+        {
+            "activity_start_hour",
+            "activity_start_minute",
+            "activity_duration_min",
+            "direct_wet_min_temp_f",
+            "direct_wet_wall_start_offset_min",
+            "direct_wet_wall_drydown_before_off_min",
+            "direct_wet_south_start_offset_min",
+            "direct_wet_south_drydown_before_off_min",
+            "direct_wet_west_start_offset_min",
+            "direct_wet_west_drydown_before_off_min",
+            "direct_wet_center_start_offset_min",
+            "direct_wet_center_drydown_before_off_min",
+            "sw_direct_wet_gate_enabled",
+        }
+    )
+    | IRRIGATION_SCHEDULE_PARAMS
 )
 HOUSE_BAND_PARAMS = frozenset(
     name for name in CROP_BAND_REG if name.startswith("temp_") or name in {"vpd_low", "vpd_high"}
@@ -2592,9 +2616,9 @@ DIRECT_WET_DEFAULTS = {
     "direct_wet_center_start_offset_min": 120,
     "direct_wet_center_drydown_before_off_min": 180,
     "irrig_wall_days_mask": 127,
-    "irrig_wall_fert_days_mask": 0,
+    "irrig_wall_fert_days_mask": 127,
     "irrig_center_days_mask": 127,
-    "irrig_center_fert_days_mask": 0,
+    "irrig_center_fert_days_mask": 127,
     "sw_direct_wet_gate_enabled": 1,
 }
 DIRECT_WET_POLICY_PARAMS = ACTIVITY_MIRROR_PARAMS | frozenset(DIRECT_WET_DEFAULTS)
@@ -2678,9 +2702,9 @@ def _activity_defaults_from_lighting(lighting_row, lighting_circuit_rows) -> dic
         "direct_wet_center_start_offset_min": 120.0,
         "direct_wet_center_drydown_before_off_min": 180.0,
         "irrig_wall_days_mask": 127.0,
-        "irrig_wall_fert_days_mask": 0.0,
+        "irrig_wall_fert_days_mask": 127.0,
         "irrig_center_days_mask": 127.0,
-        "irrig_center_fert_days_mask": 0.0,
+        "irrig_center_fert_days_mask": 127.0,
         "sw_direct_wet_gate_enabled": 1.0,
     }
 

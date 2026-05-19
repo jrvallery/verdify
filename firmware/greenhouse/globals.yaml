@@ -1,8 +1,8 @@
 ###############################################################################
 # greenhouse/globals.yaml -- global variables and initial values
 #
-# Variables declared here persist across reboots (restore_value: no) unless
-# otherwise noted.  Daily counters reset at midnight via the time component.
+# Variables declared here reset on reboot unless restore_value is explicitly
+# enabled.  Daily counters reset at midnight via the time component.
 ###############################################################################
 
 globals:
@@ -724,95 +724,96 @@ globals:
     restore_value: no
     initial_value: '0'
 
-  # Scheduling tunables (persisted)
+  # Scheduling tunables (persisted so OTA/reboot does not rewrite the live
+  # irrigation program before the dispatcher reasserts the authoritative plan).
   - id: irrig_wall_start_hour
     type: int
-    restore_value: no
-    initial_value: '6'
+    restore_value: yes
+    initial_value: '10'
 
   - id: irrig_wall_start_minute
     type: int
-    restore_value: no
-    initial_value: '0'
+    restore_value: yes
+    initial_value: '30'
 
   - id: irrig_wall_duration_min
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '10'
 
   - id: irrig_wall_fert_duration_min
     type: int
-    restore_value: no
-    initial_value: '5'
+    restore_value: yes
+    initial_value: '6'
 
   - id: irrig_wall_fert_every_n
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '0'
 
   - id: irrig_wall_days_mask
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '127'
 
   - id: irrig_wall_fert_days_mask
     type: int
-    restore_value: no
-    initial_value: '0'
+    restore_value: yes
+    initial_value: '127'
 
   - id: irrig_wall_flush_min
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '2'
 
   - id: irrig_wall_interval_days
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '1'
 
   - id: irrig_center_start_hour
     type: int
-    restore_value: no
-    initial_value: '6'
+    restore_value: yes
+    initial_value: '10'
 
   - id: irrig_center_start_minute
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '30'
 
   - id: irrig_center_duration_min
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '10'
 
   - id: irrig_center_fert_duration_min
     type: int
-    restore_value: no
-    initial_value: '5'
+    restore_value: yes
+    initial_value: '6'
 
   - id: irrig_center_fert_every_n
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '0'
 
   - id: irrig_center_days_mask
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '127'
 
   - id: irrig_center_fert_days_mask
     type: int
-    restore_value: no
-    initial_value: '0'
+    restore_value: yes
+    initial_value: '127'
 
   - id: irrig_center_flush_min
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '2'
 
   - id: irrig_center_interval_days
     type: int
-    restore_value: no
+    restore_value: yes
     initial_value: '1'
 
   # VPD boost
@@ -829,22 +830,22 @@ globals:
   # Enable switches
   - id: irrig_enabled
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: 'true'
 
   - id: irrig_wall_enabled
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: 'true'
 
   - id: irrig_center_enabled
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: 'true'
 
   - id: irrig_weather_skip
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: 'false'
 
   # VPD stress hours accumulator (local)

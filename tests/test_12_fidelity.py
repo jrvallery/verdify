@@ -26,6 +26,7 @@ import ast
 import asyncio
 import importlib.util
 import os
+import re
 import runpy
 import sys
 from pathlib import Path
@@ -431,7 +432,7 @@ def test_setpoint_server_fallback_does_not_overlay_band_owned_plan_rows():
     assert params["activity_start_minute"] == "0"
     assert params["activity_duration_min"] == "780"
     assert params["direct_wet_wall_start_offset_min"] == "60"
-    assert params["irrig_center_fert_days_mask"] == "0"
+    assert params["irrig_center_fert_days_mask"] == "127"
     assert params["sw_direct_wet_gate_enabled"] == "1"
     assert params["safety_min"] == "40"
     assert params["safety_max"] == "100"
@@ -1508,6 +1509,90 @@ def test_fert_master_valve_is_wired_and_interlocked_with_fert_relays():
     assert 'sync_fert_master("job-start")' in controls
     assert 'sync_fert_master("fert-done-before-flush")' in controls
     assert 'sync_fert_master("flush-done")' in controls
+
+
+def test_irrigation_schedule_persists_and_is_readbacked():
+    greenhouse_yaml = Path("firmware/greenhouse.yaml").read_text()
+    globals_yaml = Path("firmware/greenhouse/globals.yaml").read_text()
+    tunables_yaml = Path("firmware/greenhouse/tunables.yaml").read_text()
+    sensors_yaml = Path("firmware/greenhouse/sensors.yaml").read_text()
+
+    expected = {
+        "irrig_wall_start_hour": ("10", "cfg_irrig_wall_start_hour"),
+        "irrig_wall_start_minute": ("30", "cfg_irrig_wall_start_min"),
+        "irrig_wall_duration_min": ("10", "cfg_irrig_wall_duration_min"),
+        "irrig_wall_fert_duration_min": ("6", "cfg_irrig_wall_fert_duration_min"),
+        "irrig_wall_fert_every_n": ("0", "cfg_irrig_wall_fert_every_n"),
+        "irrig_wall_days_mask": ("127", "cfg_irrig_wall_days_mask"),
+        "irrig_wall_fert_days_mask": ("127", "cfg_irrig_wall_fert_days_mask"),
+        "irrig_wall_flush_min": ("2", "cfg_irrig_wall_flush_min"),
+        "irrig_wall_interval_days": ("1", "cfg_irrig_wall_interval_days"),
+        "irrig_center_start_hour": ("10", "cfg_irrig_center_start_hour"),
+        "irrig_center_start_minute": ("30", "cfg_irrig_center_start_min"),
+        "irrig_center_duration_min": ("10", "cfg_irrig_center_duration_min"),
+        "irrig_center_fert_duration_min": ("6", "cfg_irrig_center_fert_duration_min"),
+        "irrig_center_fert_every_n": ("0", "cfg_irrig_center_fert_every_n"),
+        "irrig_center_days_mask": ("127", "cfg_irrig_center_days_mask"),
+        "irrig_center_fert_days_mask": ("127", "cfg_irrig_center_fert_days_mask"),
+        "irrig_center_flush_min": ("2", "cfg_irrig_center_flush_min"),
+        "irrig_center_interval_days": ("1", "cfg_irrig_center_interval_days"),
+    }
+    for global_id, (default, cfg_id) in expected.items():
+        registry_name = global_id.removesuffix("ute") if global_id.endswith("_minute") else global_id
+        block = re.search(rf"- id: {global_id}\n(?P<body>.*?)(?=\n  - id:|\Z)", globals_yaml, re.S)
+        assert block, f"{global_id} missing from globals.yaml"
+        assert "restore_value: yes" in block.group("body")
+        assert f"initial_value: '{default}'" in block.group("body")
+        assert REGISTRY[registry_name].cfg_readback_object_id == cfg_id
+        assert f"id: {cfg_id}" in sensors_yaml
+        assert f"return (float)id({global_id});" in sensors_yaml or (
+            global_id.endswith("_minute") and f"return (float)id({global_id});" in sensors_yaml
+        )
+        assert f"if(id({global_id}) <" in greenhouse_yaml
+
+    assert "id: sw_irrig_center_enabled" in tunables_yaml
+    center_switch = tunables_yaml[tunables_yaml.index("id: sw_irrig_center_enabled") :]
+    center_switch = center_switch[: center_switch.index("  # Weather skip enable")]
+    assert "restore_mode: RESTORE_DEFAULT_ON" in center_switch
+
+
+def test_irrigation_scheduler_serializes_same_minute_zone_starts():
+    controls = Path("firmware/greenhouse/controls.yaml").read_text()
+    schedule_check = "if(id(irrig_state) == 0 && id(irrig_queue) == 0 &&"
+    dequeue = "if(id(irrig_state) == 0 && id(irrig_queue) != 0){"
+    assert schedule_check in controls
+    assert dequeue in controls
+    assert controls.index(schedule_check) < controls.index(dequeue)
+    assert "id(irrig_queue) |= do_fert ? (2 | 16 | 32) : 1;" in controls
+    assert "id(irrig_queue) |= do_fert ? 8 : 4;" in controls
+    for needle in (
+        "if     (id(irrig_queue) & 1){ job = 1; bit = 1; }",
+        "else if(id(irrig_queue) & 2){ job = 2; bit = 2; }",
+        "else if(id(irrig_queue) & 16){ job = 7; bit = 16; }",
+        "else if(id(irrig_queue) & 32){ job = 8; bit = 32; }",
+        "else if(id(irrig_queue) & 4){ job = 3; bit = 4; }",
+        "else if(id(irrig_queue) & 8){ job = 4; bit = 8; }",
+    ):
+        assert needle in controls
+    assert controls.index("id(center_mister).turn_off();") < controls.index("switch(job){")
+    assert "|| id(irrig_state) > 0" in controls
+
+
+def test_irrigation_schedule_is_heap_recovery_priority():
+    import tasks
+
+    required = {
+        "irrig_wall_start_hour",
+        "irrig_wall_start_min",
+        "irrig_wall_fert_duration_min",
+        "irrig_wall_fert_days_mask",
+        "irrig_center_start_hour",
+        "irrig_center_start_min",
+        "irrig_center_fert_duration_min",
+        "irrig_center_fert_days_mask",
+    }
+    assert required <= tasks.IRRIGATION_SCHEDULE_PARAMS
+    assert required <= tasks.HEAP_RECOVERY_PRIORITY_PARAMS
 
 
 # ── S24.9.7 — _deliver_and_log sentinel skip (integration-shape) ───
