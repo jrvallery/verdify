@@ -301,6 +301,20 @@ switch:
       mode: OUTPUT
       inverted: true
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          if(!id(fertilizer_master_valve).state) {
+            id(fertilizer_master_valve).turn_on();
+            ESP_LOGW("irrig","FERT MASTER opened by west fert-mister relay");
+          }
+    on_turn_off:
+      - lambda: |-
+          if(!id(south_wall_mister_fertilized).state &&
+             !id(west_wall_mister_fertilized).state &&
+             !id(wall_drips_fertilized).state &&
+             !id(center_drips_fertilized).state) {
+            id(fertilizer_master_valve).turn_off();
+          }
 
   - platform: gpio
     id: south_wall_mister_fertilized
@@ -311,6 +325,20 @@ switch:
       mode: OUTPUT
       inverted: true
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          if(!id(fertilizer_master_valve).state) {
+            id(fertilizer_master_valve).turn_on();
+            ESP_LOGW("irrig","FERT MASTER opened by south fert-mister relay");
+          }
+    on_turn_off:
+      - lambda: |-
+          if(!id(south_wall_mister_fertilized).state &&
+             !id(west_wall_mister_fertilized).state &&
+             !id(wall_drips_fertilized).state &&
+             !id(center_drips_fertilized).state) {
+            id(fertilizer_master_valve).turn_off();
+          }
 
   - platform: gpio
     id: south_wall_mister
@@ -351,6 +379,20 @@ switch:
       mode: OUTPUT
       inverted: true
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          if(!id(fertilizer_master_valve).state) {
+            id(fertilizer_master_valve).turn_on();
+            ESP_LOGW("irrig","FERT MASTER opened by center fert-drip relay");
+          }
+    on_turn_off:
+      - lambda: |-
+          if(!id(south_wall_mister_fertilized).state &&
+             !id(west_wall_mister_fertilized).state &&
+             !id(wall_drips_fertilized).state &&
+             !id(center_drips_fertilized).state) {
+            id(fertilizer_master_valve).turn_off();
+          }
 
   - platform: gpio
     id: center_drips
@@ -371,6 +413,20 @@ switch:
       mode: OUTPUT
       inverted: true
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          if(!id(fertilizer_master_valve).state) {
+            id(fertilizer_master_valve).turn_on();
+            ESP_LOGW("irrig","FERT MASTER opened by wall fert-drip relay");
+          }
+    on_turn_off:
+      - lambda: |-
+          if(!id(south_wall_mister_fertilized).state &&
+             !id(west_wall_mister_fertilized).state &&
+             !id(wall_drips_fertilized).state &&
+             !id(center_drips_fertilized).state) {
+            id(fertilizer_master_valve).turn_off();
+          }
 
   - platform: gpio
     id: fertilizer_master_valve
@@ -381,6 +437,15 @@ switch:
       mode: OUTPUT
       inverted: true
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_off:
+      - lambda: |-
+          if(id(south_wall_mister_fertilized).state ||
+             id(west_wall_mister_fertilized).state ||
+             id(wall_drips_fertilized).state ||
+             id(center_drips_fertilized).state) {
+            id(fertilizer_master_valve).turn_on();
+            ESP_LOGW("irrig","FERT MASTER manual-off corrected while fert relay active");
+          }
 
   # --- Grow lights (HA native service calls, no on-device HTTP client) ---
   # HA owns the Lutron bridge; firmware requests Lutron switch changes over the

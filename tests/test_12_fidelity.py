@@ -1477,7 +1477,16 @@ def test_fert_master_valve_is_wired_and_interlocked_with_fert_relays():
     fert_master_block = hardware[hardware.index("id: fertilizer_master_valve") :]
     assert "pcf8574: pcf_out_2" in fert_master_block
     assert "number: 1" in fert_master_block
+    assert "FERT MASTER manual-off corrected while fert relay active" in fert_master_block
     assert '"valve___fert__master": "fert_master_valve"' in entity_map
+
+    for relay_name in (
+        "west fert-mister",
+        "south fert-mister",
+        "center fert-drip",
+        "wall fert-drip",
+    ):
+        assert f"FERT MASTER opened by {relay_name} relay" in hardware
 
     assert "auto fert_relay_active = [&]() -> bool" in controls
     for relay_id in (
