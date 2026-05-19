@@ -6,6 +6,11 @@
 
 Verdify will replace the current Hermes prompt-orchestration layer with a deterministic LangGraph planner service while preserving the existing greenhouse control contract.
 
+Implementation companion docs:
+
+- `docs/planner/langgraph-implementation-approach.md`
+- `docs/planner/langgraph-decisions.md`
+
 Key decisions:
 
 - LangGraph is the planner workflow engine, not the actuator.
