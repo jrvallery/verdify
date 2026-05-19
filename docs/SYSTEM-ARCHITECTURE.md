@@ -12,11 +12,10 @@ Verdify is a greenhouse automation platform running primarily on a single VM. An
 ESP32 (192.168.10.111, IoT VLAN)
   ├─ aioesphomeapi (encrypted, port 6053) ──→ Ingestor ──→ TimescaleDB
   ├─ MQTT (mqtt.verdify.ai:1883) ──→ Mosquitto (state publishing, occupancy)
-  └─ HTTPS GET (api.verdify.ai/setpoints) ──→ API ──→ TimescaleDB
 
 TimescaleDB (44 tables, 54 views, 23 functions, 2.54M+ rows)
   ├─→ Grafana (graphs.verdify.ai, 54 dashboards)
-  ├─→ API (api.verdify.ai, 14 crop endpoints + /setpoints)
+  ├─→ API (api.verdify.ai, crop endpoints + compatibility /setpoints)
   └─→ lab.verdify.ai (Quartz static lab site with embedded Grafana panels)
 
 Iris Planner (Hermes + GPT-5.5, MCP-only tool surface)
@@ -68,18 +67,23 @@ ESP32 ──aioesphomeapi (encrypted, noise PSK)──→ Ingestor (systemd)
     SensorInfo    → CFG_READBACK_MAP (34) → setpoint_snapshot (60s batch)
 ```
 
-### Setpoint Push Path (API → ESP32)
+### Setpoint Push Path (Dispatcher → ESP32)
 
 ```
 fn_band_setpoints(now()) ──→ Setpoint Dispatcher (300s)
   ├─ Compute band: temp_low/high, vpd_low/high from crop profiles
   ├─ Compute zone targets: vpd_target_south/west/east/center
   ├─ Derive mister tuning: engage_kpa = vpd_high, all_kpa = vpd_high + 0.3
+  ├─ Mirror main-light runtime into activity_start_* and activity_duration_min
+  ├─ Overlay generic per-zone direct-wet defaults and irrigation/fert day masks
   ├─ Apply planner overrides (clamped within band)
   ├─ Write to setpoint_changes table (source = 'band' or 'plan')
-  └─ Direct push via aioesphomeapi number_command() (<1s)
+  ├─ Direct push via aioesphomeapi number_command()/switch_command()
+  └─ Confirm landing through cfg_* readbacks in setpoint_snapshot
 
-ESP32 also pulls from https://api.verdify.ai/setpoints every 5 min (fallback)
+/setpoints endpoints still exist as key=value compatibility surfaces for
+diagnostics/recovery, but current production firmware does not run an HTTP
+setpoint poller.
 ```
 
 ## Docker Services (7 containers)
@@ -92,7 +96,7 @@ All managed via `/srv/verdify/docker-compose.yml`:
 | verdify-timescaledb | timescaledb:latest-pg16 | 127.0.0.1:5432 | internal | Primary database (PG16 + hypertables) |
 | verdify-grafana | grafana-oss:latest | 3000 (internal) | proxy + internal | 54 dashboards, anonymous Viewer access |
 | verdify-grafana-proxy | nginx:alpine | 80 (internal) | proxy + internal | CSS injection to hide Grafana branding |
-| verdify-api | verdify-api (local build) | 8080 (internal) | proxy + internal | Crop API + /setpoints for ESP32 |
+| verdify-api | verdify-api (local build) | 8080 (internal) | proxy + internal | Crop API + compatibility /setpoints |
 | verdify-mqtt | eclipse-mosquitto:2 | 0.0.0.0:1883 | internal | MQTT broker for ESP32 + Sentinel |
 | verdify-site | nginx:alpine | 80 (internal) | proxy | Quartz static lab site (lab.verdify.ai) |
 
@@ -116,7 +120,7 @@ All managed via `/srv/verdify/docker-compose.yml`:
 | Service | Purpose | Port | Restart |
 |---------|---------|------|---------|
 | verdify-ingestor | ESP32 data ingestor + 12 periodic tasks | — | always (30s delay) |
-| verdify-setpoint-server | HTTP endpoint for grow light control via HA | 8200 | always (10s delay) |
+| verdify-setpoint-server | Compatibility `/setpoints` export + Lutron light helper | 8200 | always (10s delay) |
 
 ## Ingestor Architecture
 
@@ -167,7 +171,7 @@ The ingestor (`/srv/verdify/ingestor/ingestor.py`, 945 lines) is the core data e
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | /setpoints | ESP32 setpoint delivery (key=value, band-driven) |
+| GET | /setpoints | Compatibility setpoint export (key=value, band-driven) |
 | GET | /health | DB health + latest climate timestamp |
 | GET | /api/v1/status | System status (crop count, observation count) |
 | GET | /api/v1/crops | List active crops (filter: zone, stage, active) |
@@ -182,15 +186,16 @@ The ingestor (`/srv/verdify/ingestor/ingestor.py`, 945 lines) is the core data e
 | GET | /api/v1/zones | Zone summary with crop counts |
 | GET | /api/v1/zones/{zone} | Zone detail + crops |
 
-### /setpoints Band Logic
+### /setpoints Compatibility Logic
 
-The `/setpoints` endpoint computes values in this order (later overrides earlier):
+The `/setpoints` endpoint is kept aligned with the live dispatcher. It computes values in this order (later overrides earlier):
 1. Latest per-parameter from `setpoint_changes` table
 2. Planner overrides from `v_active_plan`
 3. Band values from `fn_band_setpoints(now())` — authoritative for temp/vpd
 4. Zone VPD targets from `fn_zone_vpd_targets(now())`
-5. Mister tuning derived from band ceiling (engage = vpd_high, all = vpd_high + 0.3)
-6. Outdoor conditions from latest `climate` row
+5. Per-circuit lighting policy and activity/direct-wet defaults
+6. Mister tuning derived from band ceiling (engage = vpd_high, all = vpd_high + 0.3)
+7. Outdoor conditions from latest `climate` row
 
 ## Database Schema
 

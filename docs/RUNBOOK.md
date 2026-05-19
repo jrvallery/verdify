@@ -154,12 +154,12 @@ Expected: 22/22 passing, HEALTHY.
    docker exec verdify-grafana curl -s -u "admin:${GRAFANA_PW}" -X POST http://localhost:3000/api/admin/provisioning/dashboards/reload
    ```
 
-### Setpoint server unreachable
-**Symptoms:** ESP32 can't pull /setpoints, enthalpy goes NaN.
+### Setpoint compatibility server unreachable
+**Symptoms:** `curl http://127.0.0.1:8200/setpoints` fails, lighting diagnostics or recovery tooling cannot inspect the key=value export. Current firmware setpoint delivery should still work through the ingestor's ESPHome push/readback path.
 **Fix:**
 1. Check: `curl -s http://127.0.0.1:8200/setpoints | head -3`
 2. Restart: `sudo systemctl restart verdify-setpoint-server`
-3. Verify UFW allows ESP32: `sudo ufw status | grep 8200`
+3. Verify the ingestor dispatcher is healthy: `systemctl status verdify-ingestor`
 
 ### Grow lights don't toggle
 **Symptoms:** gl_auto_mode is ON but lights don't turn on/off.
@@ -291,8 +291,8 @@ sudo systemctl start verdify-ingestor verdify-setpoint-server
 ```
 Internet → Cloudflare → Nexus Traefik → Iris Traefik (443) → Grafana (3000)
 
-ESP32 (192.168.10.111) ←→ Ingestor (aioesphomeapi, port 6053)
-                        ←  Setpoint server (HTTP pull, port 8200)
+ESP32 (192.168.10.111) ←→ Ingestor (aioesphomeapi, port 6053; telemetry + setpoint push/readback)
+Setpoint server (port 8200) → compatibility `/setpoints` and light-control helper endpoints
 
 Ingestor (PID 1, systemd) runs:
   - esp32_loop: persistent aioesphomeapi subscription

@@ -5,7 +5,7 @@
 - 367 sq ft, elongated hexagon, 3,614 cu ft volume, peak 143" ceiling
 - Elevation: 5,090 ft (Longmont, CO, 40.17°N). 17% less air density than sea level.
 - Glazing: 6mm opal polycarbonate, SHGC 0.66, diffuses all direct light
-- Glazed surface area: ~1,050 ft² (walls + roof, surface-to-floor ratio ~3.0)
+- Glazed surface area: ~785-810 ft² (walls + roof, surface-to-floor ratio ~2.1)
 - Solar gain: ~87,000 BTU/hr peak (validated — conservative, roof alone ~81K)
 - Fan cooling (actual): ~34,000-39,000 BTU/hr (altitude-derated + intake-restricted)
 - Fan cooling (nameplate): 52,900 BTU/hr — overstated ~40% due to altitude + vent restriction
@@ -16,10 +16,10 @@
 
 | Zone | Character | Crops | Mister | Notes |
 |------|-----------|-------|--------|-------|
-| South | Hottest, exhaust fans, hex taper | Canna lilies (floor) | 6 heads, 30 nozzles, 0.23 kPa drop/pulse | Primary misting zone |
-| West | Longest wall (22'5"), afternoon sun | Shelves (herbs, starts) | 3 heads, 15 nozzles, 0.15 kPa drop/pulse | Secondary misting |
+| South | Hottest, exhaust fans, hex taper | Canna lilies (floor) | 6 heads, 30 nozzles, strongest response | Primary misting zone; direct-wet gated |
+| West | Longest wall (22'5"), afternoon sun | Shelves (herbs, starts) | 3 heads, 15 nozzles, moderate response | Secondary misting; direct-wet gated |
 | East | Coolest, tree shade until 10:18 AM | Hydro NFT (lettuce, pepper, strawberry) | NONE | Stress boosts south/center via 0.3x adjacency |
-| Center | Mixing zone, fog machine location | Vanda orchids (hanging) | 5 heads, 0.04 kPa drop/pulse (weak) | Deprioritized (penalty 0.8) |
+| Center | Mixing zone, fog machine location | Vanda orchids (hanging) | 5 heads, 25 nozzles, weakest mister response | Active crop target with derived sensing; direct-wet gated |
 | North | Equipment buffer, thermally stable | None | None | Manifold, sink, controller, heater |
 
 ## Equipment
@@ -34,6 +34,15 @@
 | Intake vent (north) | 24"x24" (4 sq ft) — critically undersized, needs 2-3x more area | Economiser logic (enthalpy gate) |
 | Grow lights (main) | 630W, 15x4FT LED | DLI-based automation |
 | Grow lights (shelf) | 816W, 15x2FT LED | DLI-based automation |
+
+## Activity, Lighting, And Direct Wetting
+
+- Main-light policy currently sets a 06:00 start and 960 qualified light minutes, so global biological activity is 06:00-22:00.
+- Direct wetting is blocked outside the activity window and below `direct_wet_min_temp_f` (65°F default).
+- Wall/south/west wetting defaults: activity +60 min through activity off -120 min.
+- Center wetting defaults: activity +120 min through activity off -180 min.
+- The gate applies generically to misters, drips, fert paths, and irrigation flushes. There is no Vanda-specific firmware branch.
+- Fertigation day masks (`irrig_*_fert_days_mask`) are scheduler-style; when nonzero they supersede the older every-N fert counters.
 
 ## Mode Controller (7 priority-ordered modes)
 

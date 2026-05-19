@@ -108,7 +108,7 @@ def _int_param(params: dict[str, str], key: str, default: int) -> int:
 
 
 def _overlay_activity_direct_wet_defaults(params: dict[str, str], plan_params: set[str]) -> None:
-    """Keep ESP32 pull fallback aligned with dispatcher-owned activity policy."""
+    """Keep the compatibility endpoint aligned with dispatcher-owned activity policy."""
     activity_start_hour = max(0, min(23, _int_param(params, "gl_main_sunrise_hour", 6)))
     activity_duration_min = max(0, min(1440, _int_param(params, "gl_main_target_light_minutes", 960)))
     params["activity_start_hour"] = str(activity_start_hour)
@@ -257,10 +257,10 @@ def get_setpoint_text_sync() -> str:
         "-c",
     ]
 
-    # Planner/dispatcher param names → ESP32 firmware param names
-    # The ESP32 pull lambda reads specific key names from this endpoint.
-    # Some DB sources use different names (e.g. dispatcher uses ESPHome object_ids,
-    # planner uses its own naming). This map ensures the ESP32 always sees the right key.
+    # Planner/dispatcher param names → firmware-compatible param names.
+    # The current ESP32 firmware receives values through ESPHome native API
+    # pushes; this key=value endpoint remains aligned for diagnostics and
+    # recovery tooling.
     # DB trigger (migration 058) normalizes all param names at INSERT — no aliases needed
     # Step 1: ALL current setpoints as baseline
     params = {}
@@ -297,7 +297,7 @@ def get_setpoint_text_sync() -> str:
             params[k.strip()] = v.strip()
 
     # Step 2a: Overlay crop/house band policy. This mirrors the ingestor
-    # dispatcher so the legacy ESP32 pull path cannot serve stale temp/VPD or
+    # dispatcher so the compatibility endpoint cannot serve stale temp/VPD or
     # zone VPD targets after policy functions change.
     result = subprocess.run(
         db_cmd
@@ -328,7 +328,7 @@ def get_setpoint_text_sync() -> str:
 
     # Step 2b: Seed the per-circuit lighting state-machine params from
     # crop policy + Tempest threshold evidence, but let active planner rows
-    # override them. This keeps the fallback pull endpoint aligned with the
+    # override them. This keeps the compatibility endpoint aligned with the
     # dispatcher without taking per-circuit control away from Iris.
     result = subprocess.run(
         db_cmd
@@ -422,8 +422,8 @@ class LutronHandler(BaseHTTPRequestHandler):
             self._respond(200, {"status": "ok", "lights": dict(_light_state)})
 
         elif self.path == "/setpoints":
-            # Serve current+next planned setpoints as key=value text
-            # ESP32 fetches this every 5 minutes for pull-based schedule tracking
+            # Serve current+next planned setpoints as key=value text for
+            # diagnostics and recovery tooling.
             try:
                 text = get_setpoint_text_sync()
                 self.send_response(200)

@@ -33,7 +33,7 @@ All source-of-truth content lives on NFS (`/mnt/iris/` or `/mnt/jason/`). Three 
 │   ├── ai_config.py               AI model selection for planner, vision, embeddings
 │   └── requirements.txt
 │
-├── api/                        FastAPI crop catalog + ESP32 /setpoints endpoint
+├── api/                        FastAPI crop catalog + compatibility /setpoints export
 │   ├── main.py                    builds Docker image verdify-api
 │   └── Dockerfile
 │

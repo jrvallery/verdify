@@ -728,6 +728,7 @@ interval:
                   (id(mister_water_today) >= id(mister_water_budget_gal) && !vpd_emergency)
                   || !zone_mister_demand
                   || !any_mister_wet_allowed
+                  || id(irrig_state) > 0
                   || occupancy_blocks;
 
             if(mister_blocked && id(mister_state) > 0){
@@ -1327,11 +1328,14 @@ interval:
   # 14b — IRRIGATION STATE MACHINE
   #
   # Autonomous drip irrigation with mutual exclusion, fert cycling, VPD boost,
-  # weather skip, and manual triggers.  Runs independently of WiFi/HA.
+  # optional weather skip, and manual triggers.  Runs independently of WiFi/HA.
   #
   # States: 0=idle, 1=wall_clean, 2=wall_fert, 3=center_clean, 4=center_fert,
-  #         5=wall_flush, 6=center_flush
-  # Queue bitmask: bit0=wall_clean, bit1=wall_fert, bit2=center_clean, bit3=center_fert
+  #         5=wall_flush, 6=center_flush, 7=south_mister_fert,
+  #         8=west_mister_fert, 9=south_mister_flush, 10=west_mister_flush
+  # Queue bitmask: bit0=wall_clean, bit1=wall_fert, bit2=center_clean,
+  #                bit3=center_fert, bit4=south_mister_fert,
+  #                bit5=west_mister_fert
   ################################################################################
   - interval: 5s
     then:
@@ -1368,6 +1372,8 @@ interval:
             // ── Runtime tracking ──
             if(id(wall_drips).state)              id(runtime_wall_drip_ms)   += irrig_dt;
             if(id(center_drips).state)            id(runtime_center_drip_ms) += irrig_dt;
+            if(id(south_wall_mister_fertilized).state) id(runtime_mister_south_ms) += irrig_dt;
+            if(id(west_wall_mister_fertilized).state)  id(runtime_mister_west_ms)  += irrig_dt;
             if(id(fertilizer_master_valve).state) id(runtime_fert_master_ms) += irrig_dt;
 
             auto wet_now_t = id(sntp_time).now();
@@ -1375,12 +1381,30 @@ interval:
             const int wet_now_minute = wet_time_valid
               ? local_minute_of_day(wet_now_t.hour, wet_now_t.minute)
               : 0;
-            auto irrig_direct_wet_allowed = [&](bool is_wall) -> bool {
+            auto irrig_direct_wet_allowed_zone = [&](int zone) -> bool {
               if(!id(direct_wet_gate_enabled)) return true;
               if(!wet_time_valid) return false;
               float t = id(average_temperature).state;
               if(id(direct_wet_min_temp_f) > 0.0f && (isnan(t) || t < id(direct_wet_min_temp_f))) return false;
-              if(is_wall) {
+              if(zone == 1) {
+                return direct_wet_window_open(
+                  wet_now_minute,
+                  id(activity_start_hour),
+                  id(activity_start_minute),
+                  id(activity_duration_min),
+                  id(direct_wet_south_start_offset_min),
+                  id(direct_wet_south_drydown_before_off_min));
+              }
+              if(zone == 2) {
+                return direct_wet_window_open(
+                  wet_now_minute,
+                  id(activity_start_hour),
+                  id(activity_start_minute),
+                  id(activity_duration_min),
+                  id(direct_wet_west_start_offset_min),
+                  id(direct_wet_west_drydown_before_off_min));
+              }
+              if(zone == 4) {
                 return direct_wet_window_open(
                   wet_now_minute,
                   id(activity_start_hour),
@@ -1389,25 +1413,42 @@ interval:
                   id(direct_wet_wall_start_offset_min),
                   id(direct_wet_wall_drydown_before_off_min));
               }
-              return direct_wet_window_open(
-                wet_now_minute,
-                id(activity_start_hour),
-                id(activity_start_minute),
-                id(activity_duration_min),
-                id(direct_wet_center_start_offset_min),
-                id(direct_wet_center_drydown_before_off_min));
+              if(zone == 3) {
+                return direct_wet_window_open(
+                  wet_now_minute,
+                  id(activity_start_hour),
+                  id(activity_start_minute),
+                  id(activity_duration_min),
+                  id(direct_wet_center_start_offset_min),
+                  id(direct_wet_center_drydown_before_off_min));
+              }
+              return false;
+            };
+            auto irrig_direct_wet_allowed = [&](bool is_wall) -> bool {
+              return irrig_direct_wet_allowed_zone(is_wall ? 4 : 3);
+            };
+            auto queued_fert_jobs = [&]() -> bool {
+              return (id(irrig_queue) & (2 | 8 | 16 | 32)) != 0;
             };
             auto turn_off_all_irrigation = [&]() {
               id(wall_drips).turn_off();
               id(wall_drips_fertilized).turn_off();
+              id(south_wall_mister).turn_off();
+              id(south_wall_mister_fertilized).turn_off();
+              id(west_wall_mister).turn_off();
+              id(west_wall_mister_fertilized).turn_off();
               id(center_drips).turn_off();
               id(center_drips_fertilized).turn_off();
               id(fertilizer_master_valve).turn_off();
             };
             if(id(direct_wet_gate_enabled) && id(irrig_state) > 0) {
               bool active_wall = id(irrig_state) == 1 || id(irrig_state) == 2 || id(irrig_state) == 5;
+              bool active_south = id(irrig_state) == 7 || id(irrig_state) == 9;
+              bool active_west = id(irrig_state) == 8 || id(irrig_state) == 10;
               bool active_center = id(irrig_state) == 3 || id(irrig_state) == 4 || id(irrig_state) == 6;
               if((active_wall && !irrig_direct_wet_allowed(true)) ||
+                 (active_south && !irrig_direct_wet_allowed_zone(1)) ||
+                 (active_west && !irrig_direct_wet_allowed_zone(2)) ||
                  (active_center && !irrig_direct_wet_allowed(false))) {
                 turn_off_all_irrigation();
                 id(irrig_state) = 0;
@@ -1454,7 +1495,7 @@ interval:
                     ? day_mask_allows(id(irrig_wall_fert_days_mask), cur_dow0)
                     : ((id(irrig_wall_fert_every_n) > 0) &&
                       ((id(irrig_wall_cycle_count) % id(irrig_wall_fert_every_n)) == 0));
-                  id(irrig_queue) |= do_fert ? 2 : 1;
+                  id(irrig_queue) |= do_fert ? (2 | 16 | 32) : 1;
                   ESP_LOGI("irrig","Wall SCHEDULED (%s) doy=%d",
                          do_fert ? "FERT" : "CLEAN", cur_doy);
               } else {
@@ -1495,14 +1536,17 @@ interval:
             int bit = 0;
             if     (id(irrig_queue) & 1){ job = 1; bit = 1; }
             else if(id(irrig_queue) & 2){ job = 2; bit = 2; }
+            else if(id(irrig_queue) & 16){ job = 7; bit = 16; }
+            else if(id(irrig_queue) & 32){ job = 8; bit = 32; }
             else if(id(irrig_queue) & 4){ job = 3; bit = 4; }
             else if(id(irrig_queue) & 8){ job = 4; bit = 8; }
 
             if(job > 0){
               id(irrig_queue) &= ~bit;
-              bool is_wall = (job <= 2);
-              if(!irrig_direct_wet_allowed(is_wall)){
-                ESP_LOGW("irrig","DROP QUEUED %s job (direct-wet gate)", is_wall ? "WALL" : "CENTER");
+              int job_zone = (job == 7) ? 1 : (job == 8) ? 2 : (job == 3 || job == 4) ? 3 : 4;
+              if(!irrig_direct_wet_allowed_zone(job_zone)){
+                const char* drop_zone = (job_zone == 1) ? "SOUTH" : (job_zone == 2) ? "WEST" : (job_zone == 3) ? "CENTER" : "WALL";
+                ESP_LOGW("irrig","DROP QUEUED %s job (direct-wet gate)", drop_zone);
                 job = 0;
               }
             }
@@ -1510,11 +1554,14 @@ interval:
             if(job > 0){
               id(irrig_state) = job;
 
-              bool is_wall = (job <= 2);
-              bool is_fert = (job == 2 || job == 4);
+              bool is_wall = (job == 1 || job == 2);
+              bool is_center = (job == 3 || job == 4);
+              bool is_south_mister = (job == 7);
+              bool is_west_mister = (job == 8);
+              bool is_fert = (job == 2 || job == 4 || is_south_mister || is_west_mister);
               int base_min = is_fert
-                ? (is_wall ? id(irrig_wall_fert_duration_min) : id(irrig_center_fert_duration_min))
-                : (is_wall ? id(irrig_wall_duration_min) : id(irrig_center_duration_min));
+                ? (is_center ? id(irrig_center_fert_duration_min) : id(irrig_wall_fert_duration_min))
+                : (is_center ? id(irrig_center_duration_min) : id(irrig_wall_duration_min));
 
               // VPD boost
               float stress_hrs = float(id(irrig_vpd_stress_ms)) / 3600000.0f;
@@ -1527,14 +1574,15 @@ interval:
 
               id(irrig_timer_ms) = uint32_t(base_min) * 60000UL;
 
-              // Safety: turn off opposite zone
-              if(is_wall){
-                id(center_drips).turn_off();
-                id(center_drips_fertilized).turn_off();
-              } else {
-                id(wall_drips).turn_off();
-                id(wall_drips_fertilized).turn_off();
-              }
+              id(wall_drips).turn_off();
+              id(wall_drips_fertilized).turn_off();
+              id(south_wall_mister).turn_off();
+              id(south_wall_mister_fertilized).turn_off();
+              id(west_wall_mister).turn_off();
+              id(west_wall_mister_fertilized).turn_off();
+              id(center_drips).turn_off();
+              id(center_drips_fertilized).turn_off();
+              id(center_mister).turn_off();
 
               // Open fert master if fert run
               if(is_fert) id(fertilizer_master_valve).turn_on();
@@ -1548,22 +1596,32 @@ interval:
                 case 2: id(wall_drips_fertilized).turn_on();   id(cnt_drip_wall_today)   += 1; break;
                 case 3: id(center_drips).turn_on();            id(cnt_drip_center_today) += 1; break;
                 case 4: id(center_drips_fertilized).turn_on(); id(cnt_drip_center_today) += 1; break;
+                case 7: id(south_wall_mister_fertilized).turn_on(); id(cnt_mister_south_today) += 1; break;
+                case 8: id(west_wall_mister_fertilized).turn_on();  id(cnt_mister_west_today)  += 1; break;
               }
 
-              const char* names[] = {"","WALL_CLEAN","WALL_FERT","CENTER_CLEAN","CENTER_FERT"};
-              ESP_LOGI("irrig","START %s — %dmin", names[job], base_min);
+              const char* job_name = (job == 1) ? "WALL_CLEAN" :
+                (job == 2) ? "WALL_FERT" :
+                (job == 3) ? "CENTER_CLEAN" :
+                (job == 4) ? "CENTER_FERT" :
+                (job == 7) ? "SOUTH_MISTER_FERT" :
+                (job == 8) ? "WEST_MISTER_FERT" : "UNKNOWN";
+              ESP_LOGI("irrig","START %s — %dmin", job_name, base_min);
             }
           }
 
-          // ── Active irrigation countdown (states 1-4) ──
-          if(id(irrig_state) >= 1 && id(irrig_state) <= 4){
+          // ── Active irrigation/fert-mister countdown (states 1-4, 7-8) ──
+          if((id(irrig_state) >= 1 && id(irrig_state) <= 4) || id(irrig_state) == 7 || id(irrig_state) == 8){
             if(irrig_dt >= id(irrig_timer_ms)) id(irrig_timer_ms) = 0;
             else id(irrig_timer_ms) -= irrig_dt;
 
             if(id(irrig_timer_ms) == 0){
               int job = id(irrig_state);
-              bool is_wall = (job <= 2);
-              bool is_fert = (job == 2 || job == 4);
+              bool is_wall = (job == 1 || job == 2);
+              bool is_center = (job == 3 || job == 4);
+              bool is_south_mister = (job == 7);
+              bool is_west_mister = (job == 8);
+              bool is_fert = (job == 2 || job == 4 || is_south_mister || is_west_mister);
 
               // Turn off active line
               switch(job){
@@ -1571,21 +1629,24 @@ interval:
                 case 2: id(wall_drips_fertilized).turn_off(); break;
                 case 3: id(center_drips).turn_off(); break;
                 case 4: id(center_drips_fertilized).turn_off(); break;
+                case 7: id(south_wall_mister_fertilized).turn_off(); break;
+                case 8: id(west_wall_mister_fertilized).turn_off(); break;
               }
 
               // Fert → flush with clean water
-              int flush_min = is_wall ? id(irrig_wall_flush_min) : id(irrig_center_flush_min);
+              int flush_min = is_center ? id(irrig_center_flush_min) : id(irrig_wall_flush_min);
               if(is_fert && flush_min > 0){
                 flush_origin = job;
-                id(irrig_state) = is_wall ? 5 : 6;
+                id(irrig_state) = is_center ? 6 : is_south_mister ? 9 : is_west_mister ? 10 : 5;
                 id(irrig_timer_ms) = uint32_t(flush_min) * 60000UL;
-                // sprint-7: flush is a separate rising edge on wall_drips /
-                // center_drips (the non-fert relay) — ingestor's
-                // equipment_state sees it as a new cycle, so firmware
-                // must count it to stay consistent.
-                if(is_wall) { id(wall_drips).turn_on();   id(cnt_drip_wall_today)   += 1; }
-                else        { id(center_drips).turn_on(); id(cnt_drip_center_today) += 1; }
-                ESP_LOGI("irrig","FLUSH %s — %dmin", is_wall ? "WALL" : "CENTER", flush_min);
+                // Flush is a separate rising edge on the matching clean relay,
+                // so equipment_state and firmware cycle counters stay aligned.
+                if(is_south_mister)      { id(south_wall_mister).turn_on(); id(cnt_mister_south_today) += 1; }
+                else if(is_west_mister)  { id(west_wall_mister).turn_on();  id(cnt_mister_west_today)  += 1; }
+                else if(is_center)       { id(center_drips).turn_on();      id(cnt_drip_center_today)  += 1; }
+                else                     { id(wall_drips).turn_on();        id(cnt_drip_wall_today)    += 1; }
+                const char* flush_name = is_south_mister ? "SOUTH_MISTER" : is_west_mister ? "WEST_MISTER" : is_center ? "CENTER" : "WALL";
+                ESP_LOGI("irrig","FLUSH %s — %dmin", flush_name, flush_min);
               } else {
                 // Done — finalize
                 if(is_wall){
@@ -1593,14 +1654,16 @@ interval:
                   if(id(sntp_time).now().is_valid())
                     id(irrig_last_wall_doy) = id(sntp_time).now().day_of_year;
                   ESP_LOGI("irrig","DONE WALL (cycle #%d)", id(irrig_wall_cycle_count));
-                } else {
+                } else if(is_center) {
                   id(irrig_center_cycle_count) += 1;
                   if(id(sntp_time).now().is_valid())
                     id(irrig_last_center_doy) = id(sntp_time).now().day_of_year;
                   ESP_LOGI("irrig","DONE CENTER (cycle #%d)", id(irrig_center_cycle_count));
+                } else {
+                  ESP_LOGI("irrig","DONE %s_MISTER_FERT", is_south_mister ? "SOUTH" : "WEST");
                 }
                 // Close fert master if no fert queued
-                if(is_fert && !(id(irrig_queue) & 2) && !(id(irrig_queue) & 8)){
+                if(is_fert && !queued_fert_jobs()){
                   id(fertilizer_master_valve).turn_off();
                 }
                 id(irrig_state) = 0;
@@ -1608,20 +1671,25 @@ interval:
             }
           }
 
-          // ── Flush countdown (states 5-6) ──
-          if(id(irrig_state) == 5 || id(irrig_state) == 6){
+          // ── Flush countdown (states 5-6 drip, 9-10 mister) ──
+          if(id(irrig_state) == 5 || id(irrig_state) == 6 || id(irrig_state) == 9 || id(irrig_state) == 10){
             if(irrig_dt >= id(irrig_timer_ms)) id(irrig_timer_ms) = 0;
             else id(irrig_timer_ms) -= irrig_dt;
 
             if(id(irrig_timer_ms) == 0){
               bool is_wall = (id(irrig_state) == 5);
+              bool is_center = (id(irrig_state) == 6);
+              bool is_south_mister = (id(irrig_state) == 9);
+              bool is_west_mister = (id(irrig_state) == 10);
 
               // Turn off flush line
-              if(is_wall) id(wall_drips).turn_off();
-              else        id(center_drips).turn_off();
+              if(is_wall)             id(wall_drips).turn_off();
+              else if(is_center)      id(center_drips).turn_off();
+              else if(is_south_mister) id(south_wall_mister).turn_off();
+              else if(is_west_mister)  id(west_wall_mister).turn_off();
 
               // Close fert master if no fert queued
-              if(!(id(irrig_queue) & 2) && !(id(irrig_queue) & 8)){
+              if(!queued_fert_jobs()){
                 id(fertilizer_master_valve).turn_off();
               }
 
@@ -1631,11 +1699,13 @@ interval:
                 if(id(sntp_time).now().is_valid())
                   id(irrig_last_wall_doy) = id(sntp_time).now().day_of_year;
                 ESP_LOGI("irrig","DONE WALL+FLUSH (cycle #%d)", id(irrig_wall_cycle_count));
-              } else {
+              } else if(is_center) {
                 id(irrig_center_cycle_count) += 1;
                 if(id(sntp_time).now().is_valid())
                   id(irrig_last_center_doy) = id(sntp_time).now().day_of_year;
                 ESP_LOGI("irrig","DONE CENTER+FLUSH (cycle #%d)", id(irrig_center_cycle_count));
+              } else {
+                ESP_LOGI("irrig","DONE %s_MISTER+FLUSH", is_south_mister ? "SOUTH" : "WEST");
               }
 
               id(irrig_state) = 0;

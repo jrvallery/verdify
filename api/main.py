@@ -598,13 +598,18 @@ async def _parse_contact_submission(request: Request) -> tuple[PublicContactSubm
         raise HTTPException(status_code=422, detail="Invalid contact submission") from exc
 
 
-# ── Setpoints (ESP32 pulls this every 5 min) ──
+# ── Setpoints compatibility endpoint ──
 
 
 @app.get("/setpoints")
 @app.get("/api/v1/greenhouses/{greenhouse_id}/setpoints")
 async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
-    """Return setpoints in key=value format for ESP32 consumption."""
+    """Return current effective setpoints in legacy key=value format.
+
+    Production firmware receives tunables through ESPHome native API pushes and
+    cfg_* readbacks. This endpoint is kept aligned for diagnostics, recovery
+    tooling, and any future explicitly-enabled pull client.
+    """
     # Dispatcher-owned params: temperature uses crop profile envelope directly,
     # VPD uses the DB-owned house control band, and lighting uses the highest
     # active crop DLI to set the photoperiod window firmware enforces.
@@ -630,9 +635,9 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
             greenhouse_id,
         )
         # Tier 1 #3: fail loud if band computation returned NULL.
-        # Without band, ESP32 receives no temp/VPD band params and silently
-        # runs whatever it cached last, which can be hours stale. Better to
-        # 503 and let ESP32 retry in 5 min than return a partial response.
+        # Without a computed band, recovery tooling would receive partial
+        # temp/VPD policy and could mask a dispatcher problem. Better to 503
+        # than return a response that looks authoritative but is incomplete.
         if band_row is None or zone_row is None or house_row is None or lighting_row is None:
             existing = await conn.fetchval(
                 "SELECT id FROM alert_log WHERE alert_type = 'band_fn_null' AND disposition = 'open' LIMIT 1"
@@ -644,7 +649,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                         "severity": "critical",
                         "category": "system",
                         "message": (
-                            "band or lighting policy function returned NULL — ESP32 cannot refresh policy setpoints"
+                            "band or lighting policy function returned NULL — compatibility setpoints unavailable"
                         ),
                         "details": {
                             "band_row_null": band_row is None,
@@ -673,7 +678,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
         for r in plan_rows:
             params[r["parameter"]] = r["value"]
         # Band-driven params: use the same source as the live dispatcher so the
-        # legacy ESP32 polling fallback cannot diverge from direct pushes.
+        # compatibility endpoint cannot diverge from direct pushes.
         if band_row and house_row:
             for param in HOUSE_BAND_COMPUTED_PARAMS:
                 if param.startswith("temp"):
@@ -684,7 +689,7 @@ async def get_setpoints(greenhouse_id: str = DEFAULT_GREENHOUSE):
                     band_val = float(house_row[key])
                     precision = 2
                 params[param] = _round_half_up(band_val, precision)
-        # Lighting policy params: keep the pull fallback identical to the live
+        # Lighting policy params: keep the compatibility endpoint identical to the live
         # dispatcher so stale active plans cannot shorten crop photoperiod.
         if lighting_row:
             lighting_values = {
@@ -1250,7 +1255,6 @@ async def status():
             WHERE greenhouse_id = $1
               AND is_occupied
               AND crop_catalog_slug IS NOT NULL
-              AND zone_slug <> 'center'
             """,
             DEFAULT_GREENHOUSE,
         )
@@ -1944,7 +1948,6 @@ async def public_home_metrics(greenhouse_id: str = DEFAULT_GREENHOUSE):
             WHERE greenhouse_id = $1
               AND is_occupied
               AND crop_catalog_slug IS NOT NULL
-              AND zone_slug <> 'center'
             """,
             greenhouse_id,
         )
@@ -2139,7 +2142,6 @@ async def public_evidence_snapshot(greenhouse_id: str = DEFAULT_GREENHOUSE):
             WHERE greenhouse_id = $1
               AND is_occupied
               AND crop_catalog_slug IS NOT NULL
-              AND zone_slug <> 'center'
             """,
             greenhouse_id,
         )

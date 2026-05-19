@@ -1912,13 +1912,13 @@ REGISTRY: dict[str, TunableDef] = {
     "sw_irrigation_weather_skip": TunableDef(
         name="sw_irrigation_weather_skip",
         kind="switch",
-        default=1,
+        default=0,
         esp_object_id="irrigation_weather_skip",
         cfg_readback_object_id=None,
         push_owner="operator",
         planner_pushable=False,
         tier=2,
-        notes="Skip irrigation on rainy-day forecast.",
+        notes="Operator-only legacy outdoor weather skip; default off for greenhouse irrigation.",
     ),
     "sw_occupancy_inhibit": TunableDef(
         name="sw_occupancy_inhibit",

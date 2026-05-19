@@ -1910,11 +1910,27 @@ button:
 
   - platform: template
     id: btn_wall_fert
-    name: "Wall Drips - RUN FERT"
+    name: "Wall Fert - RUN ALL"
     on_press:
       - lambda: |-
-          id(irrig_queue) |= 2;
-          ESP_LOGI("irrig","Manual: WALL FERT queued");
+          id(irrig_queue) |= (2 | 16 | 32);
+          ESP_LOGI("irrig","Manual: WALL FERT + SOUTH/WEST MISTER FERT queued");
+
+  - platform: template
+    id: btn_south_mister_fert
+    name: "South Wall Mister - RUN FERT"
+    on_press:
+      - lambda: |-
+          id(irrig_queue) |= 16;
+          ESP_LOGI("irrig","Manual: SOUTH MISTER FERT queued");
+
+  - platform: template
+    id: btn_west_mister_fert
+    name: "West Wall Mister - RUN FERT"
+    on_press:
+      - lambda: |-
+          id(irrig_queue) |= 32;
+          ESP_LOGI("irrig","Manual: WEST MISTER FERT queued");
 
   - platform: template
     id: btn_center_clean

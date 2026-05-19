@@ -66,6 +66,7 @@ run_step() {
   run_step "$PYTHON" "$SCRIPT_ROOT/generate-lessons-page.py"
   run_step "$PYTHON" "$SCRIPT_ROOT/generate-ai-tunables-page.py"
   run_step "$PYTHON" "$SCRIPT_ROOT/generate-baseline-vs-iris-page.py"
+  run_step "$PYTHON" "$SCRIPT_ROOT/update-evidence-snapshots.py"
   run_step "$PYTHON" "$SCRIPT_ROOT/render-equipment-page.py"
   run_step "$PYTHON" "$SCRIPT_ROOT/render-zone-pages.py"
   run_step "$PYTHON" "$SCRIPT_ROOT/render-crop-profiles.py"

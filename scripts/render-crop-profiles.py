@@ -35,7 +35,7 @@ DSN = os.environ.get(
     "VERDIFY_DSN",
     f"postgresql://verdify:{os.environ.get('POSTGRES_PASSWORD', 'verdify_tsdb_2026')}@127.0.0.1:5432/verdify",
 )
-ACTIVE_CONTROL_SLUGS = {"canna", "lettuce", "peppers", "strawberries"}
+ACTIVE_CONTROL_SLUGS = {"canna", "lettuce", "orchid", "peppers", "strawberries"}
 CROP_TAXONOMY = {
     "basil": (
         "Planned/Retired",
@@ -58,8 +58,8 @@ CROP_TAXONOMY = {
         "Occupied east-zone record in <code>v_position_current</code>; heat-sensitive profile constrains the active band.",
     ),
     "orchid": (
-        "Observed/Reference",
-        "Observed Vanda reference only: center-zone page is OFFLINE and says no active planting.",
+        "Active Control",
+        "Occupied center hanging record in <code>v_position_current</code>; Vanda VPD tolerance participates in active crop and zone policy.",
     ),
     "peppers": (
         "Active Control",
@@ -288,23 +288,14 @@ async def _check_crop_consistency(conn: asyncpg.Connection) -> int:
         """
     )
     occupied_by_zone = {(r["zone_slug"], r["crop_catalog_slug"]) for r in rows}
-    active_from_db = {slug for zone, slug in occupied_by_zone if zone != "center"}
-    observed_center = {slug for zone, slug in occupied_by_zone if zone == "center"}
+    active_from_db = {slug for _, slug in occupied_by_zone}
     ok = True
     if active_from_db != ACTIVE_CONTROL_SLUGS:
         ok = False
         print(
             "ERROR active-control taxonomy mismatch: "
-            f"taxonomy={sorted(ACTIVE_CONTROL_SLUGS)} db_non_center={sorted(active_from_db)}"
+            f"taxonomy={sorted(ACTIVE_CONTROL_SLUGS)} db={sorted(active_from_db)}"
         )
-    for slug in sorted(observed_center & ACTIVE_CONTROL_SLUGS):
-        ok = False
-        print(f"ERROR center-zone crop {slug} is marked Active Control while center is offline")
-    for slug in sorted(observed_center - ACTIVE_CONTROL_SLUGS):
-        status = CROP_TAXONOMY.get(slug, ("Observed/Reference", ""))[0]
-        if status != "Observed/Reference":
-            ok = False
-            print(f"ERROR center-zone crop {slug} should be Observed/Reference, got {status}")
     print(f"Active-control crop count: {len(ACTIVE_CONTROL_SLUGS)} ({', '.join(sorted(ACTIVE_CONTROL_SLUGS))})")
     return 0 if ok else 1
 

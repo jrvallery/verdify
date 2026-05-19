@@ -65,7 +65,7 @@ Fixes now enforced across firmware and monitoring:
 
 The live ESPHome Setpoints builder no longer assigns controller policy fields
 from literals. These params now have the full schema → DB → dispatcher → ESPHome
-Number → `/setpoints` handler → `Setpoints` field → cfg readback path:
+Number/switch entity → firmware global or `Setpoints` field → cfg readback path:
 
 - `heat_hysteresis`
 - `max_relief_cycles`
@@ -198,20 +198,32 @@ data.
 ### Economiser (3 tunables)
 - `enthalpy_open`, `enthalpy_close`, `site_pressure_hpa`
 
-### Irrigation — wall (7 tunables)
-- `irrig_wall_start_hour`, `irrig_wall_start_min`, `irrig_wall_duration_min`, `irrig_wall_fert_duration_min`, `irrig_wall_fert_every_n`, `irrig_wall_flush_min`, `irrig_wall_interval_days`
+### Activity and direct wetting
+- Dispatcher-owned activity mirror: `activity_start_hour`, `activity_start_minute`, `activity_duration_min`
+- Direct-wet gate: `sw_direct_wet_gate_enabled`, `direct_wet_min_temp_f`
+- Per-zone wet start/drydown: `direct_wet_wall_*`, `direct_wet_south_*`, `direct_wet_west_*`, `direct_wet_center_*`
+- Firmware blocks misters, drips, fert paths, and flush paths outside the active zone window or below the minimum direct-wet temperature.
 
-### Irrigation — center (7 tunables)
-- `irrig_center_start_hour`, `irrig_center_start_min`, `irrig_center_duration_min`, `irrig_center_fert_duration_min`, `irrig_center_fert_every_n`, `irrig_center_flush_min`, `irrig_center_interval_days`
+### Irrigation — wall
+- Schedule/runtime: `irrig_wall_start_hour`, `irrig_wall_start_min`, `irrig_wall_duration_min`, `irrig_wall_fert_duration_min`, `irrig_wall_flush_min`, `irrig_wall_interval_days`
+- Day masks: `irrig_wall_days_mask`, `irrig_wall_fert_days_mask`
+- Compatibility fallback: `irrig_wall_fert_every_n` only applies when `irrig_wall_fert_days_mask` is zero.
+
+### Irrigation — center
+- Schedule/runtime: `irrig_center_start_hour`, `irrig_center_start_min`, `irrig_center_duration_min`, `irrig_center_fert_duration_min`, `irrig_center_flush_min`, `irrig_center_interval_days`
+- Day masks: `irrig_center_days_mask`, `irrig_center_fert_days_mask`
+- Compatibility fallback: `irrig_center_fert_every_n` only applies when `irrig_center_fert_days_mask` is zero.
 
 ### VPD boost (2 tunables)
 - `irrig_vpd_boost_pct`, `irrig_vpd_boost_threshold_hrs`
 
-### Grow lights (5 tunables)
-- `gl_dli_target`, `gl_lux_threshold`, `gl_lux_hysteresis`, `gl_sunrise_hour`, `gl_sunset_hour`
+### Grow lights
+- Legacy/readback context: `gl_dli_target`, `gl_lux_threshold`, `gl_lux_hysteresis`, `gl_sunrise_hour`, `gl_sunset_hour`
+- Per-circuit policy: `gl_main_*`, `gl_grow_*`, `sw_gl_main_auto_mode`, `sw_gl_grow_auto_mode`
+- The main circuit runtime policy feeds the global activity window consumed by direct-wet gates.
 
-### Switches (12 tunables, 0.0/1.0)
-- `sw_economiser_enabled`, `sw_fog_closes_vent`, `sw_mister_closes_vent`, `sw_gl_auto_mode`, `sw_irrigation_enabled`, `sw_irrigation_wall_enabled`, `sw_irrigation_center_enabled`, `sw_irrigation_weather_skip`, `sw_occupancy_inhibit`, `sw_summer_vent_enabled`, `sw_dwell_gate_enabled`, `sw_fsm_controller_enabled`
+### Switches
+- `sw_economiser_enabled`, `sw_fog_closes_vent`, `sw_mister_closes_vent`, `sw_gl_auto_mode`, `sw_gl_main_auto_mode`, `sw_gl_grow_auto_mode`, `sw_direct_wet_gate_enabled`, `sw_irrigation_enabled`, `sw_irrigation_wall_enabled`, `sw_irrigation_center_enabled`, `sw_irrigation_weather_skip`, `sw_occupancy_inhibit`, `sw_summer_vent_enabled`, `sw_dwell_gate_enabled`, `sw_fsm_controller_enabled`
 
 ### Reserved/no-op firmware globals
 - `mist_vent_close_lead_s` and `mist_vent_reopen_delay_s` have ESPHome numbers and cfg readbacks, but current firmware does not consume them. They are not planner-pushable until a firmware PR implements their semantics.
@@ -233,7 +245,8 @@ data.
 - `ingestor/tasks.py::setpoint_dispatcher` — per-cycle push logic (lines 1080-1314)
 - `firmware/lib/greenhouse_types.h` — `Setpoints` struct + `defaults_setpoints()` + `validate_setpoints()`
 - `firmware/lib/greenhouse_logic.h` — mode controller, use sites for every tunable
-- `firmware/greenhouse/controls.yaml:1210-1351` — HTTP pull handler that writes ESP32 globals
+- `firmware/greenhouse/tunables.yaml` — ESPHome number/switch set actions that write ESP32 globals
+- `api/main.py::get_setpoints()` and `scripts/setpoint-server.py` — legacy key=value compatibility endpoints kept aligned with dispatcher policy
 - `firmware/greenhouse/sensors.yaml` — cfg_* readback sensor definitions
 
 ## Related incidents this spec would have prevented

@@ -53,7 +53,7 @@ struct SensorInputs {
     // outdoor_temp_f + outdoor_dewpoint_f drive the cooler+drier comparator.
     // outdoor_data_age_s is the staleness check (when source goes silent we
     // fall back to the existing decision cascade).
-    float    outdoor_temp_f;        // outdoor air temperature (°F, from Tempest via /setpoints)
+    float    outdoor_temp_f;        // outdoor air temperature (°F, Tempest primary; legacy pulled fallback if present)
     float    outdoor_dewpoint_f;    // outdoor dewpoint (°F, computed from temp+RH at caller)
     uint32_t outdoor_data_age_s;    // seconds since last outdoor reading update
 };

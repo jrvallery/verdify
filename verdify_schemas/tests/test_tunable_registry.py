@@ -449,6 +449,33 @@ class TestActivityDirectWetGuards:
         missing = [needle for needle in required if needle not in controls_yaml]
         assert not missing, f"Fert day-mask scheduler fallback missing: {missing}"
 
+    def test_irrigation_weather_skip_defaults_off(self) -> None:
+        row = REGISTRY["sw_irrigation_weather_skip"]
+        assert row.default == 0
+        assert not row.planner_pushable
+        assert row.push_owner == "operator"
+
+    def test_wall_fert_schedule_queues_fertilized_misters(self, controls_yaml: str, tunables_yaml: str) -> None:
+        required = [
+            "do_fert ? (2 | 16 | 32) : 1",
+            "case 7: id(south_wall_mister_fertilized).turn_on();",
+            "case 8: id(west_wall_mister_fertilized).turn_on();",
+            "id(irrig_state) = is_center ? 6 : is_south_mister ? 9 : is_west_mister ? 10 : 5;",
+            "id(south_wall_mister).turn_on(); id(cnt_mister_south_today) += 1;",
+            "id(west_wall_mister).turn_on();  id(cnt_mister_west_today)  += 1;",
+            "queued_fert_jobs()",
+        ]
+        missing = [needle for needle in required if needle not in controls_yaml]
+        assert not missing, f"Wall fert-mister scheduling missing from controls.yaml: {missing}"
+
+        button_required = [
+            "id(irrig_queue) |= (2 | 16 | 32);",
+            "id(irrig_queue) |= 16;",
+            "id(irrig_queue) |= 32;",
+        ]
+        missing_buttons = [needle for needle in button_required if needle not in tunables_yaml]
+        assert not missing_buttons, f"Manual fert-mister queue buttons missing from tunables.yaml: {missing_buttons}"
+
     def test_dispatcher_and_api_derive_activity_from_light_window(self, tasks_py: str, api_main_py: str) -> None:
         for text in (tasks_py, api_main_py):
             assert "gl_sunrise_hour" in text

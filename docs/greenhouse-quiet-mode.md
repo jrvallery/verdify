@@ -42,4 +42,4 @@ The tool stores state in `system_state`:
 
 The ingestor dispatcher checks those rows every cycle. While active, it keeps the quiet overlay from being undone by normal planner or crop-band refreshes. When expired, it restores the captured values once and marks the mode `expired_restored`.
 
-The ESP32 `/setpoints` pull endpoint also applies the quiet overlay while the mode is active, so firmware polling cannot reintroduce active-plan values between dispatcher cycles.
+The compatibility `/setpoints` endpoints also apply the quiet overlay while the mode is active. Current production firmware receives quiet-mode changes through direct ESPHome pushes and readbacks, but the compatibility surface stays aligned for diagnostics and recovery.

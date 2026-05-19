@@ -198,6 +198,8 @@ def _category(name: str, spec: TunableDef) -> str:
         return "Safety rails"
     if name.startswith("mister_") or name.startswith("mist_") or name == "sw_mister_closes_vent":
         return "Misting and sealed-humidification"
+    if name.startswith("activity_") or name.startswith("direct_wet_") or name == "sw_direct_wet_gate_enabled":
+        return "Activity and direct-wet gates"
     if name in {
         "min_heat_on_s",
         "min_heat_off_s",
@@ -236,6 +238,8 @@ def _why_it_matters(name: str, category: str) -> str:
         return "These are hard guardrails. They protect the greenhouse when normal planning or sensors are wrong."
     if category == "Misting and sealed-humidification":
         return "Misting trades water and heat retention against VPD stress. Bad settings either waste water or leave plants dry."
+    if category == "Activity and direct-wet gates":
+        return "The activity window aligns lights, wetting, fert paths, and drydown timing so direct plant wetting happens only during the biological day."
     if category == "Relay dwell and rotation":
         return "Dwell limits protect relays and reduce churn while still letting safety paths preempt."
     if category == "Fog gates":
@@ -271,6 +275,10 @@ def _planner_guidance(name: str, spec: TunableDef, plan_required: set[str]) -> s
         return "Planner-policy tunable. During VPD-high or near-edge `VENTILATE` stress with healthy dew margin, use shorter delays/gaps so ventilation can cool while misting protects VPD."
     if name in RESERVED_NO_EFFECT:
         return "Do not plan with this value until firmware consumes it. Treat existing readbacks as exposure evidence only."
+    if name.startswith("activity_"):
+        return "Dispatcher-owned mirror of the main lighting runtime policy. Do not set directly; adjust the main light schedule when the biological day should move."
+    if name.startswith("direct_wet_") or name == "sw_direct_wet_gate_enabled":
+        return "Planner-policy gate for direct plant wetting. Tune per zone to move morning wet start or pre-off drydown without adding crop-specific firmware logic."
     if name in plan_required:
         return "Include this in every routine `set_plan` waypoint. Change it only with a forecast-backed hypothesis and validate the next scorecard."
     if control_class == "planner_policy":

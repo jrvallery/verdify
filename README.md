@@ -34,7 +34,7 @@ The greenhouse control core runs on a single VM. Local GPU inference handles rou
 | Directory | What |
 |-----------|------|
 | `ingestor/` | Python async service — ESP32 data capture, 15 periodic tasks, entity routing |
-| `api/` | FastAPI crop catalog + ESP32 setpoint endpoint |
+| `api/` | FastAPI crop catalog + compatibility `/setpoints` export |
 | `firmware/` | ESPHome YAML + C++ headers — 8-state climate controller (greenhouse_logic.h) |
 | `mcp/` | FastMCP server — typed tools for Iris agent (climate, scorecard, set_tunable, etc.) |
 | `scripts/` | Operational scripts — planner, vision analysis, forecast sync, monitoring |
