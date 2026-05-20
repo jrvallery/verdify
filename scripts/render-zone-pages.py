@@ -45,6 +45,7 @@ AUTO_BLOCK_RE = re.compile(
     r'<div class="auto-render-marker" data-auto-render="end [-a-z0-9_]+"></div>))',
     re.DOTALL,
 )
+STALE_SEEDLING_AFTER_DAYS = 35
 
 
 class ZoneFrontmatter(VaultFrontmatter):
@@ -139,10 +140,16 @@ def _render_current_crops_table(crops: list[dict]) -> str:
         if not c.get("is_occupied"):
             continue
         crop_name = f"{c['crop_name']}{' (' + c['crop_variety'] + ')' if c.get('crop_variety') else ''}"
+        stage_label = _planting_stage_label(c.get("crop_stage"), c.get("crop_days_in_place"))
+        age_note = _planting_age_note(
+            c.get("crop_planted_date"),
+            c.get("crop_days_in_place"),
+            c.get("crop_stage"),
+        )
         lines.append(
             f'  <div class="data-row"><strong><code>{c["position_label"]}</code></strong>'
-            f"<span>{crop_name} · {c.get('crop_stage') or '—'}</span>"
-            f"<p>Planted {c.get('crop_planted_date') or '—'}; {c.get('crop_days_in_place') or 0} days in place.</p></div>"
+            f"<span>{crop_name} · {stage_label}</span>"
+            f"<p>{age_note}</p></div>"
         )
     if len(lines) == 1:
         return _empty_card("No active crops", "No active crops in this zone.")
@@ -156,6 +163,36 @@ def _metric_card(title: str | None, body: str) -> str:
 
 def _empty_card(title: str, body: str) -> str:
     return f'<div class="metric-grid">\n  <div class="metric-card"><strong>{title}</strong><p>{body}</p></div>\n</div>'
+
+
+def _coerce_days(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_stale_seedling(stage: object, days: int | None) -> bool:
+    if days is None:
+        return False
+    return str(stage or "").strip().lower() == "seedling" and days > STALE_SEEDLING_AFTER_DAYS
+
+
+def _planting_stage_label(stage: object, days_value: object) -> str:
+    stage_text = str(stage or "—")
+    days = _coerce_days(days_value)
+    if _is_stale_seedling(stage, days):
+        return f"reported {stage_text} stage · review needed"
+    return stage_text
+
+
+def _planting_age_note(planted_date: object, days_value: object, stage: object) -> str:
+    days = _coerce_days(days_value)
+    days_text = f"{days} days in place" if days is not None else "age not recorded"
+    note = f"Planted {planted_date or '—'}; {days_text}."
+    if _is_stale_seedling(stage, days):
+        note += " Stage review needed: the database still reports seedling beyond the expected seedling window."
+    return note
 
 
 def _render_zone_profile_cards(d: dict, zone_slug: str, status: str, position_scheme: str | None) -> str:

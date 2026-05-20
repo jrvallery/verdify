@@ -23,6 +23,12 @@ export type CSSResource = {
   spaPreserve?: boolean
 }
 
+const cssSourceMapCommentRegex = /\/\*#\s*sourceMappingURL=[\s\S]*?\*\//g
+
+function stripCssSourceMapComments(content: string): string {
+  return content.replace(cssSourceMapCommentRegex, "").trimEnd()
+}
+
 export function JSResourceToScriptElement(resource: JSResource, preserve?: boolean): JSX.Element {
   const scriptType = resource.moduleType ?? "application/javascript"
   const spaPreserve = preserve ?? resource.spaPreserve
@@ -47,7 +53,7 @@ export function JSResourceToScriptElement(resource: JSResource, preserve?: boole
 export function CSSResourceToStyleElement(resource: CSSResource, preserve?: boolean): JSX.Element {
   const spaPreserve = preserve ?? resource.spaPreserve
   if (resource.inline ?? false) {
-    return <style>{resource.content}</style>
+    return <style>{stripCssSourceMapComments(resource.content)}</style>
   } else {
     return (
       <link

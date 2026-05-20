@@ -36,6 +36,7 @@ DSN = os.environ.get(
     f"postgresql://verdify:{os.environ.get('POSTGRES_PASSWORD', 'verdify_tsdb_2026')}@127.0.0.1:5432/verdify",
 )
 ACTIVE_CONTROL_SLUGS = {"canna", "lettuce", "orchid", "peppers", "strawberries"}
+STALE_SEEDLING_AFTER_DAYS = 35
 CROP_TAXONOMY = {
     "basil": (
         "Planned/Retired",
@@ -130,13 +131,49 @@ def _render_current_plantings(current: list[dict]) -> str:
         )
     lines = ['<div class="data-table">']
     for c in sorted(current, key=lambda x: x["position_label"] or ""):
+        stage_label = _planting_stage_label(c.get("crop_stage"), c.get("crop_days_in_place"))
+        age_note = _planting_age_note(
+            c.get("crop_planted_date"),
+            c.get("crop_days_in_place"),
+            c.get("crop_stage"),
+        )
         lines.append(
             f'  <div class="data-row"><strong><code>{c["position_label"]}</code></strong>'
-            f"<span>{c['crop_stage']}</span>"
-            f"<p>Planted {c['crop_planted_date']}; {c['crop_days_in_place']} days in place.</p></div>"
+            f"<span>{stage_label}</span>"
+            f"<p>{age_note}</p></div>"
         )
     lines.append("</div>")
     return "\n".join(lines)
+
+
+def _coerce_days(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_stale_seedling(stage: object, days: int | None) -> bool:
+    if days is None:
+        return False
+    return str(stage or "").strip().lower() == "seedling" and days > STALE_SEEDLING_AFTER_DAYS
+
+
+def _planting_stage_label(stage: object, days_value: object) -> str:
+    stage_text = str(stage or "—")
+    days = _coerce_days(days_value)
+    if _is_stale_seedling(stage, days):
+        return f"reported {stage_text} stage · review needed"
+    return stage_text
+
+
+def _planting_age_note(planted_date: object, days_value: object, stage: object) -> str:
+    days = _coerce_days(days_value)
+    days_text = f"{days} days in place" if days is not None else "age not recorded"
+    note = f"Planted {planted_date or '—'}; {days_text}."
+    if _is_stale_seedling(stage, days):
+        note += " Stage review needed: the database still reports seedling beyond the expected seedling window."
+    return note
 
 
 def _render_history(history: list[dict]) -> str:

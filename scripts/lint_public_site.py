@@ -41,6 +41,11 @@ LEGACY_CANONICAL_LINK_RE = re.compile(
     r")(?:#[^)]+)?)\)",
     re.IGNORECASE,
 )
+SOURCE_MAP_COMMENT_RE = re.compile(r"sourceMappingURL=", re.IGNORECASE)
+LOCAL_FILESYSTEM_PATH_RE = re.compile(r"/mnt/[A-Za-z0-9_./-]+")
+HIDDEN_FOLDER_LISTING_RE = re.compile(r"\b0 items under this folder\b", re.IGNORECASE)
+STALE_LETTUCE_SEEDLING_RE = re.compile(r"lettuce\s+.\s+seedling", re.IGNORECASE)
+LONG_PLANTING_AGE_RE = re.compile(r"\b(?:[89]\d|\d{3,}) days in place\b", re.IGNORECASE)
 ROUTE_SMOKE = [
     "/",
     "/ai-greenhouse",
@@ -325,6 +330,45 @@ def check_routes(vault_root: Path, public_root: Path, skip_public: bool) -> list
     return findings
 
 
+def check_public_rendered(public_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    if not public_root.exists():
+        return findings
+
+    for page in sorted(public_root.rglob("*.html")):
+        rel = page.relative_to(public_root).as_posix()
+        text = read_text(page)
+
+        if SOURCE_MAP_COMMENT_RE.search(text):
+            findings.append(Finding("error", "public-source-map-comment", f"{rel} contains a sourceMappingURL comment"))
+
+        match = LOCAL_FILESYSTEM_PATH_RE.search(text)
+        if match:
+            findings.append(
+                Finding("error", "public-local-path", f"{rel} exposes local-looking filesystem path {match.group(0)}")
+            )
+
+        if HIDDEN_FOLDER_LISTING_RE.search(text):
+            findings.append(
+                Finding(
+                    "error",
+                    "public-hidden-folder-listing",
+                    f"{rel} renders hidden Quartz folder-listing text",
+                )
+            )
+
+        if STALE_LETTUCE_SEEDLING_RE.search(text) and LONG_PLANTING_AGE_RE.search(text):
+            findings.append(
+                Finding(
+                    "error",
+                    "public-stale-crop-stage",
+                    f"{rel} renders lettuce as seedling after an implausibly long planting age",
+                )
+            )
+
+    return findings
+
+
 def check_csvs(vault_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     refs: set[str] = set()
@@ -378,6 +422,8 @@ def main() -> int:
     findings: list[Finding] = []
     findings.extend(check_content(args.vault_root))
     findings.extend(check_routes(args.vault_root, args.public_root, args.skip_public))
+    if not args.skip_public:
+        findings.extend(check_public_rendered(args.public_root))
     findings.extend(check_csvs(args.vault_root))
 
     if args.json_report:
