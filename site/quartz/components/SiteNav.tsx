@@ -10,6 +10,7 @@ type SiteNavItem = {
     href?: string;
     slug?: string;
     aliases?: string[];
+    activePrefixes?: string[];
     exact?: boolean;
     children?: SiteNavItem[];
 };
@@ -19,292 +20,165 @@ type SiteNavGroup = {
     links: SiteNavItem[];
 };
 
-const primaryLinks: SiteNavItem[] = [
-    { label: "Home", href: "/", slug: "index", exact: true },
-    {
-        label: "AI Greenhouse",
-        href: "/start/ai-greenhouse",
-        slug: "start/ai-greenhouse",
-    },
-    { label: "Climate", href: "/start/climate", slug: "start/climate" },
-    { label: "Evidence", href: "/start/evidence", slug: "start/evidence" },
-    {
-        label: "Resource Use",
-        href: "/start/resource-use",
-        slug: "start/resource-use",
-    },
-    { label: "Operations", href: "/data/operations", slug: "data/operations" },
-    {
-        label: "Plans",
-        href: "/data/plans",
-        slug: "data/plans",
-        aliases: ["plans"],
-        exact: true,
-    },
-    {
-        label: "About",
-        href: "/start/about",
-        slug: "start/about",
-        exact: true,
-    },
-    {
-        label: "Contact",
-        href: "/start/contact",
-        slug: "start/contact",
-        exact: true,
-    },
-];
+type SiteNavModel = {
+    groups: SiteNavGroup[];
+};
 
-const groups: SiteNavGroup[] = [
-    {
-        title: "Greenhouse",
-        links: [
-            {
-                label: "Overview",
-                href: "/greenhouse",
-                slug: "greenhouse",
-                exact: true,
-            },
-            {
-                label: "Crops",
-                children: [
-                    {
-                        label: "Crop Overview",
-                        href: "/greenhouse/crops",
-                        slug: "greenhouse/crops",
-                        exact: true,
-                    },
-                    {
-                        label: "Lettuce",
-                        href: "/greenhouse/crops/lettuce",
-                        slug: "greenhouse/crops/lettuce",
-                    },
-                    {
-                        label: "Strawberries",
-                        href: "/greenhouse/crops/strawberries",
-                        slug: "greenhouse/crops/strawberries",
-                    },
-                    {
-                        label: "Peppers",
-                        href: "/greenhouse/crops/peppers",
-                        slug: "greenhouse/crops/peppers",
-                    },
-                    {
-                        label: "Basil",
-                        href: "/greenhouse/crops/basil",
-                        slug: "greenhouse/crops/basil",
-                    },
-                    {
-                        label: "Herbs",
-                        href: "/greenhouse/crops/herbs",
-                        slug: "greenhouse/crops/herbs",
-                    },
-                    {
-                        label: "Tomatoes",
-                        href: "/greenhouse/crops/tomatoes",
-                        slug: "greenhouse/crops/tomatoes",
-                    },
-                    {
-                        label: "Cucumbers",
-                        href: "/greenhouse/crops/cucumbers",
-                        slug: "greenhouse/crops/cucumbers",
-                    },
-                    {
-                        label: "Canna",
-                        href: "/greenhouse/crops/canna",
-                        slug: "greenhouse/crops/canna",
-                    },
-                    {
-                        label: "Orchids",
-                        href: "/greenhouse/crops/orchid",
-                        slug: "greenhouse/crops/orchid",
-                    },
-                ],
-            },
-            {
-                label: "Zones",
-                children: [
-                    {
-                        label: "Zone Overview",
-                        href: "/greenhouse/zones",
-                        slug: "greenhouse/zones",
-                        exact: true,
-                    },
-                    {
-                        label: "East",
-                        href: "/greenhouse/zones/east",
-                        slug: "greenhouse/zones/east",
-                    },
-                    {
-                        label: "South",
-                        href: "/greenhouse/zones/south",
-                        slug: "greenhouse/zones/south",
-                    },
-                    {
-                        label: "West",
-                        href: "/greenhouse/zones/west",
-                        slug: "greenhouse/zones/west",
-                    },
-                    {
-                        label: "North",
-                        href: "/greenhouse/zones/north",
-                        slug: "greenhouse/zones/north",
-                    },
-                    {
-                        label: "Center",
-                        href: "/greenhouse/zones/center",
-                        slug: "greenhouse/zones/center",
-                    },
-                ],
-            },
-            {
-                label: "Equipment",
-                href: "/greenhouse/equipment",
-                slug: "greenhouse/equipment",
-            },
-            {
-                label: "Hydroponics",
-                href: "/greenhouse/hydroponics",
-                slug: "greenhouse/hydroponics",
-            },
-            {
-                label: "Lighting",
-                href: "/greenhouse/lighting",
-                slug: "greenhouse/lighting",
-            },
-            {
-                label: "Soil",
-                href: "/greenhouse/soil",
-                slug: "greenhouse/soil",
-            },
-            {
-                label: "Cameras",
-                href: "/greenhouse/cameras",
-                slug: "greenhouse/cameras",
-            },
-            {
-                label: "Structure",
-                href: "/greenhouse/structure",
-                slug: "greenhouse/structure",
-            },
-        ],
-    },
-    {
-        title: "Data",
-        links: [
-            {
-                label: "Planning Quality",
-                href: "/data/planning-quality",
-                slug: "data/planning-quality",
-            },
-            {
-                label: "Baseline vs Iris",
-                href: "/data/baseline-vs-iris",
-                slug: "data/baseline-vs-iris",
-            },
-            {
-                label: "Economics",
-                href: "/data/economics",
-                slug: "data/economics",
-            },
-            {
-                label: "Forecast",
-                href: "/data/forecast",
-                slug: "data/forecast",
-                exact: true,
-            },
-            {
-                label: "Slack Ops",
-                href: "/start/slack-ops",
-                slug: "start/slack-ops",
-                exact: true,
-            },
-        ],
-    },
-    {
-        title: "Reference",
-        links: [
-            {
-                label: "Intelligence",
-                href: "/reference/intelligence",
-                slug: "reference/intelligence",
-                exact: true,
-            },
-            {
-                label: "Planning Loop",
-                href: "/reference/planning-loop",
-                slug: "reference/planning-loop",
-            },
-            {
-                label: "AI Tunables",
-                href: "/reference/ai-tunables",
-                slug: "reference/ai-tunables",
-            },
-            {
-                label: "Context Window",
-                href: "/reference/context-window",
-                slug: "reference/context-window",
-            },
-            {
-                label: "Inference",
-                href: "/reference/inference",
-                slug: "reference/inference",
-            },
-            {
-                label: "Agent Fleet",
-                href: "/reference/openclaw",
-                slug: "reference/openclaw",
-            },
-            {
-                label: "Architecture",
-                href: "/reference/architecture",
-                slug: "reference/architecture",
-            },
-            {
-                label: "Safety",
-                href: "/reference/safety",
-                slug: "reference/safety",
-            },
-            {
-                label: "Data Model",
-                href: "/reference/data-model",
-                slug: "reference/data-model",
-            },
-            {
-                label: "Known Limits",
-                href: "/reference/known-limits",
-                slug: "reference/known-limits",
-            },
-            {
-                label: "GitHub",
-                href: "https://github.com/jrvallery/verdify",
-            },
-            { label: "FAQ", href: "/reference/faq", slug: "reference/faq" },
-        ],
-    },
-];
+type SiteNavItemOptions = Pick<
+    SiteNavItem,
+    "activePrefixes" | "aliases" | "exact"
+>;
 
 function normalizeSlug(slug: string | undefined) {
     return (slug ?? "").replace(/\/index$/, "").replace(/^\//, "");
 }
 
+function routeForSlug(slug: string) {
+    const normalized = normalizeSlug(slug);
+    return normalized === "index" || normalized === "" ? "/" : `/${normalized}`;
+}
+
+function pageLink(
+    label: string,
+    slug: string,
+    options: SiteNavItemOptions = {},
+): SiteNavItem {
+    return {
+        label,
+        href: routeForSlug(slug),
+        slug: normalizeSlug(slug),
+        ...options,
+    };
+}
+
+function latestPlanLink(
+    allFiles: QuartzComponentProps["allFiles"],
+): SiteNavItem {
+    const slug = allFiles
+        .map((file) => normalizeSlug(file.slug))
+        .filter((fileSlug) => /^plans\/\d{4}-\d{2}-\d{2}$/.test(fileSlug))
+        .sort((a, b) => b.localeCompare(a))[0];
+
+    if (!slug) {
+        return pageLink("Latest Plan", "data/plans", { exact: true });
+    }
+
+    return {
+        label: "Latest Plan",
+        href: routeForSlug(slug),
+        slug,
+        exact: true,
+    };
+}
+
+function buildNav(allFiles: QuartzComponentProps["allFiles"]): SiteNavModel {
+    return {
+        groups: [
+            {
+                title: "Overview",
+                links: [
+                    pageLink("Home", "index", { exact: true }),
+                    latestPlanLink(allFiles),
+                    pageLink("AI Greenhouse", "start/ai-greenhouse"),
+                    pageLink("Evidence", "start/evidence"),
+                    pageLink("Architecture", "reference/architecture"),
+                    pageLink("Resource Use", "start/resource-use"),
+                    pageLink("Lighting", "greenhouse/lighting"),
+                    pageLink("Hydroponics", "greenhouse/hydroponics"),
+                    pageLink("Soil Sensors", "greenhouse/soil"),
+                    pageLink("About", "start/about", { exact: true }),
+                    pageLink("Contact", "start/contact", { exact: true }),
+                    {
+                        label: "Verdify Consulting",
+                        href: "https://www.verdify.ai/",
+                    },
+                ],
+            },
+            {
+                title: "Live Evidence",
+                links: [
+                    pageLink("Operations", "data/operations"),
+                    pageLink("Climate", "start/climate"),
+                    pageLink("Planning Quality", "data/planning-quality"),
+                    pageLink(
+                        "Baseline vs AI Planning Agent",
+                        "data/baseline-vs-iris",
+                    ),
+                    pageLink("Forecast", "data/forecast", { exact: true }),
+                ],
+            },
+            {
+                title: "Planner",
+                links: [
+                    pageLink("Planning Archive", "data/plans", {
+                        aliases: ["plans"],
+                        exact: true,
+                    }),
+                    pageLink("Planning Loop", "reference/planning-loop"),
+                    pageLink(
+                        "Planner Contract and AI Tunables",
+                        "reference/ai-tunables",
+                        { aliases: ["reference/planner-contract"] },
+                    ),
+                    pageLink("Lessons", "reference/lessons"),
+                ],
+            },
+            {
+                title: "Greenhouse",
+                links: [
+                    pageLink("Greenhouse Tour", "greenhouse", { exact: true }),
+                    pageLink("Equipment", "greenhouse/equipment"),
+                    pageLink("Structure", "greenhouse/structure"),
+                    pageLink("Crops", "greenhouse/crops"),
+                    pageLink("Zones", "greenhouse/zones"),
+                ],
+            },
+            {
+                title: "Reference",
+                links: [
+                    pageLink("Safety", "reference/safety"),
+                    pageLink("Data Model", "reference/data-model"),
+                    pageLink("Related Work", "reference/related-work"),
+                    {
+                        label: "GitHub",
+                        href: "https://github.com/jrvallery/verdify",
+                    },
+                ],
+            },
+        ],
+    };
+}
+
+function normalizeTargets(targets: string[] | undefined) {
+    return (targets ?? []).map(normalizeSlug).filter(Boolean);
+}
+
+function isActiveTarget(current: string, target: string) {
+    if (target === "index") {
+        return current === "" || current === "index";
+    }
+    return current === target || current.startsWith(`${target}/`);
+}
+
 function isActiveItem(currentSlug: string, item: SiteNavItem): boolean {
     if (!item.slug) return false;
     const current = normalizeSlug(currentSlug);
-    const targets = [item.slug, ...(item.aliases ?? [])].map(normalizeSlug);
+    const targets = normalizeTargets([item.slug, ...(item.aliases ?? [])]);
+    const activePrefixes = normalizeTargets(item.activePrefixes);
+
     if (targets.includes("index")) {
         return current === "" || current === "index";
     }
-    if (item.exact) {
-        return targets.some(
-            (target) =>
-                current === target ||
-                (target === "plans" && current.startsWith("plans/")),
-        );
+    if (targets.some((target) => current === target)) {
+        return true;
     }
-    return targets.some(
-        (target) => current === target || current.startsWith(`${target}/`),
-    );
+    if (activePrefixes.some((target) => isActiveTarget(current, target))) {
+        return true;
+    }
+    if (item.exact) {
+        return false;
+    }
+    return targets.some((target) => isActiveTarget(current, target));
 }
 
 function isActiveBranch(currentSlug: string, item: SiteNavItem): boolean {
@@ -316,11 +190,9 @@ function isActiveBranch(currentSlug: string, item: SiteNavItem): boolean {
     );
 }
 
-function activeSectionLabel(currentSlug: string) {
-    if (primaryLinks.some((link) => isActiveItem(currentSlug, link)))
-        return "Primary";
+function activeSectionLabel(currentSlug: string, model: SiteNavModel) {
     return (
-        groups.find((group) =>
+        model.groups.find((group) =>
             group.links.some((link) => isActiveBranch(currentSlug, link)),
         )?.title ?? "Menu"
     );
@@ -366,23 +238,15 @@ function renderItem(currentSlug: string, item: SiteNavItem, child = false) {
     );
 }
 
-function renderNavPanel(currentSlug: string, idPrefix: string) {
+function renderNavPanel(
+    currentSlug: string,
+    _idPrefix: string,
+    model: SiteNavModel,
+) {
     return (
         <div class="site-nav__panel">
-            <section
-                class="site-nav__primary"
-                aria-labelledby={`${idPrefix}-primary`}
-            >
-                <h2 id={`${idPrefix}-primary`}>Primary</h2>
-                <ul>
-                    {primaryLinks.map((link) => renderItem(currentSlug, link))}
-                </ul>
-            </section>
-            {groups.map((group) => (
-                <details
-                    class="site-nav__group"
-                    open
-                >
+            {model.groups.map((group) => (
+                <details class="site-nav__group" open>
                     <summary>
                         <span>{group.title}</span>
                         <span
@@ -401,14 +265,18 @@ function renderNavPanel(currentSlug: string, idPrefix: string) {
     );
 }
 
-const SiteNav: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
+const SiteNav: QuartzComponent = ({
+    fileData,
+    allFiles,
+}: QuartzComponentProps) => {
     const currentSlug = fileData.slug ?? "";
-    const label = activeSectionLabel(currentSlug);
+    const model = buildNav(allFiles);
+    const label = activeSectionLabel(currentSlug, model);
 
     return (
         <nav class="site-nav" aria-label="Site navigation">
             <div class="site-nav__desktop">
-                {renderNavPanel(currentSlug, "site-nav-desktop")}
+                {renderNavPanel(currentSlug, "site-nav-desktop", model)}
             </div>
             <details class="site-nav__mobile">
                 <summary>
@@ -416,7 +284,7 @@ const SiteNav: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
                     <span class="site-nav__menu-current">{label}</span>
                     <span class="site-nav__chevron" aria-hidden="true"></span>
                 </summary>
-                {renderNavPanel(currentSlug, "site-nav-mobile")}
+                {renderNavPanel(currentSlug, "site-nav-mobile", model)}
             </details>
         </nav>
     );

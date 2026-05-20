@@ -52,19 +52,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 30
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 60
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -99,19 +99,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 30
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 60
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -144,15 +144,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 4
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 8
               }
             ]
@@ -188,15 +188,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 4
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 8
               }
             ]
@@ -826,5 +826,6 @@
   },
   "annotations": {
     "list": []
-  }
+  },
+  "style": "light"
 }

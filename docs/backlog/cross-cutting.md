@@ -61,6 +61,8 @@ shared contract and schema pieces; genai and ingestor own their code slices.
 
 Currently handled as ephemeral coordinator-dispatched work (see `CLAUDE.md` open question 2). If this queue grows past ~5 items, revisit whether a persistent `observability` agent is warranted.
 
+- [ ] **C-M20 Planning Quality and Resource Cost Data Integrity.** Canonical research backlog: [`lab-site-refactor-2026-05-20.md`](lab-site-refactor-2026-05-20.md), `RP-001` through `RP-005`. Covers no-data Planning Quality Grafana panels, the water-cost historical anomaly, cost graph definition standardization, outlined-bar rendering, and the Climate page information-design/panel-placement pass.
+
 ## Data trust / data science audit — 2026-05-01
 
 Read-only multi-axis audit covered climate/weather, HVAC/control, water/soil/nutrients, crop outcomes, planner/forecast, and owner storytelling. Core finding: Verdify has strong telemetry for what happened in the greenhouse, but weaker proof for what it produced. Prioritize trust fixes first, then outcome closure.

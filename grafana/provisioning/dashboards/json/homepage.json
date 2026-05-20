@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Hero view — temperature forecast, VPD/humidity, and solar correlation",
+  "description": "Hero view \u2014 temperature forecast, VPD/humidity, and solar correlation",
   "editable": false,
   "id": 2692728458375168,
   "panels": [
@@ -12,7 +12,7 @@
           "custom": {
             "spanNulls": true,
             "lineWidth": 2,
-            "axisLabel": "°F"
+            "axisLabel": "\u00b0F"
           },
           "unit": "fahrenheit"
         },
@@ -611,30 +611,30 @@
               },
               {
                 "id": "unit",
-                "value": "watt/m²"
+                "value": "watt/m\u00b2"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Solar (W/m²)"
+              "options": "Solar (W/m\u00b2)"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1.5
+                "value": 0
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 10
+                "value": 85
               },
               {
                 "id": "custom.axisPlacement",
@@ -642,11 +642,15 @@
               },
               {
                 "id": "unit",
-                "value": "watt/m²"
+                "value": "watt/m\u00b2"
               },
               {
                 "id": "custom.axisLabel",
-                "value": "W/m²"
+                "value": "W/m\u00b2"
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -708,7 +712,7 @@
           },
           "format": "time_series",
           "intervalMs": 300000,
-          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Solar (W/m²)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT $__time(ts), solar_irradiance_w_m2 AS \"Solar (W/m\u00b2)\" FROM climate WHERE $__timeFilter(ts) AND solar_irradiance_w_m2 IS NOT NULL ORDER BY ts",
           "refId": "B"
         }
       ],
@@ -733,5 +737,6 @@
   "timezone": "America/Denver",
   "title": "Greenhouse: Homepage",
   "uid": "greenhouse-homepage",
-  "version": 20
+  "version": 20,
+  "style": "light"
 }

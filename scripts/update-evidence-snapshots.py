@@ -193,7 +193,7 @@ def operations_block(data: dict) -> str:
 <div class="data-table">
   <div class="data-row"><strong>Active relays</strong><span>{esc(relay_span)}</span><p>Relay state is a point-in-time snapshot of physical outputs only; Grafana below shows the full transition history.</p></div>
   <div class="data-row"><strong>Active plan</strong><span>{esc(active_plan_id)} · {esc(active_plan_status)}</span><p>Written {esc(active_plan_created)}; age {esc(plan_age)} at snapshot time. The ESP32 continues enforcing bounded setpoints while the plan awaits scorecard validation.</p></div>
-  <div class="data-row"><strong>Panic check</strong><span>{esc(ops.get("open_critical_high_alerts") if ops.get("open_critical_high_alerts") is not None else data.get("open_critical_high_alerts"))} open critical/high alerts</span><p>Launch-visible panic condition is clear at snapshot time; firmware reset and component-health panels below remain the live diagnostic path.</p></div>
+  <div class="data-row"><strong>Panic check</strong><span>{esc(ops.get("open_critical_high_alerts") if ops.get("open_critical_high_alerts") is not None else data.get("open_critical_high_alerts"))} open critical/high alerts</span><p>Public panic condition is clear at snapshot time; firmware reset and component-health panels below remain the live diagnostic path.</p></div>
   <div class="data-row"><strong>Water status</strong><span>{esc(water_today)} today · {esc(mister_water)} mister water</span><p>{esc(water_note)}</p></div>
 </div>"""
 

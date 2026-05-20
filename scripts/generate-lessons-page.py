@@ -137,7 +137,7 @@ CURATED_SECTIONS = [
         "lesson_ids": [5, 7, 8, 94, 97],
         "rules": [
             "Use canonical DB parameter names; ESP32 object IDs create duplicate active-plan rows.",
-            "Never set timer parameters to zero. Firmware minimums exist to avoid 5-second relay chatter.",
+            "Never set timer parameters to zero. Firmware minimums exist to avoid relay chatter.",
             "Do not push unconfirmed zone-specific VPD targets. Use firmware-confirmed global misting tunables instead.",
             "Replace stale plans when the forecast regime changes, even if the original plan window has not expired.",
         ],
@@ -327,7 +327,7 @@ def lesson_topic(lesson: dict) -> str | None:
 
 
 def canonicalize_lessons(lessons: list[dict], limit: int = 20) -> list[dict]:
-    """Collapse near-duplicate active lessons into launch-readable canonical rows."""
+    """Collapse near-duplicate active lessons into public-readable canonical rows."""
     groups: dict[str, list[dict]] = {}
     for lesson in lessons:
         groups.setdefault(lesson_signature(lesson), []).append(lesson)
@@ -482,11 +482,11 @@ def group_lessons(lessons: list[dict]) -> list[dict]:
 
 
 def render_operational_playbook(active: list[dict]) -> list[str]:
-    """Render curated launch-facing knowledge before any machine audit material."""
+    """Render curated operating knowledge before any machine audit material."""
     by_id = {lesson["id"]: lesson for lesson in active}
     lines = ["## Operational Playbook", ""]
     lines.append(
-        "These are the launch-facing operating rules Iris should read first. "
+        "These are the operating rules the AI planning agent should read first. "
         "They are curated from validated lessons; machine extraction details are intentionally pushed into audit tables."
     )
     lines.append("")
@@ -555,6 +555,22 @@ def render_audit_trail(all_groups: list[dict], all_lessons: list[dict]) -> list[
     return lines
 
 
+def render_audit_boundary(all_groups: list[dict], all_lessons: list[dict]) -> list[str]:
+    """Summarize raw lesson audit coverage without publishing the row dump."""
+    return [
+        "## Audit Boundary",
+        "",
+        '<div class="data-table">',
+        (
+            '  <div class="data-row"><strong>Raw lesson stream</strong>'
+            f"<span>{len(all_lessons)} rows collapsed into {len(all_groups)} signals</span>"
+            "<p>The generator still writes the row-level audit file for operations, but this public page keeps the reading path to curated rules and validated signals.</p></div>"
+        ),
+        "</div>",
+        "",
+    ]
+
+
 def build_lesson_sets() -> tuple[list[dict], list[dict], list[dict], list[dict], list[dict]]:
     """Fetch and group lesson rows once for both public and raw pages."""
     active = fetch_lessons(active=True)
@@ -590,7 +606,7 @@ def generate_page() -> str:
     yaml_block = re.sub(r"^title: .*$", "title: AI Greenhouse Lessons Learned", yaml_block, flags=re.MULTILINE)
     yaml_block += (
         "description: \"Generated and validated lessons from Verdify's AI greenhouse planning cycles: "
-        'what worked, what failed, and what Iris reads before future plans."\n'
+        'what worked, what failed, and what the AI planning agent reads before future plans."\n'
     )
     parts.append("---")
     parts.append(yaml_block.rstrip())
@@ -604,12 +620,17 @@ def generate_page() -> str:
     parts.append("")
     parts.append(
         "A curated operations playbook distilled from Verdify's planner lesson table. "
-        "The public page leads with durable greenhouse knowledge; noisy machine extraction rows are collapsed below "
-        "for auditability."
+        "The public page leads with durable greenhouse knowledge; noisy machine extraction rows stay out of the reading path."
     )
     parts.append("")
+    parts.append('<div class="data-table">')
+    parts.append(
+        '  <div class="data-row"><strong>Related evidence</strong><span><a href="/data/planning-quality/">Planning Quality</a> · <a href="/reference/planning-loop/">Planning Loop</a> · <a href="/reference/ai-tunables/">AI Tunables Traceability</a></span><p>This generated page owns durable lesson wording. Scorecards, plan mechanics, and per-parameter evidence stay on their canonical pages.</p></div>'
+    )
+    parts.append("</div>")
+    parts.append("")
 
-    parts.append("## Launch Priorities")
+    parts.append("## Operating Priorities")
     parts.append("")
     parts.append("- Gas heat is 3.9x cheaper per BTU than electric for sustained cold.")
     parts.append("- Direct relay control stays in firmware.")
@@ -634,7 +655,7 @@ def generate_page() -> str:
         parts.append("*No active lessons yet.*")
         parts.append("")
 
-    parts.extend(render_audit_trail(all_groups, all_lessons))
+    parts.extend(render_audit_boundary(all_groups, all_lessons))
 
     # Lesson Lifecycle
     parts.append("## Lesson Lifecycle")

@@ -9,11 +9,11 @@
           "thresholds": {
             "steps": [
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 50
               }
             ]
@@ -47,15 +47,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1500
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 3000
               }
             ]
@@ -90,15 +90,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1000
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2000
               }
             ]
@@ -133,15 +133,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 8
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 15
               }
             ]
@@ -179,15 +179,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 80
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 100
               }
             ]
@@ -221,15 +221,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 400
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 700
               }
             ]
@@ -321,17 +321,17 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 0
+                "value": 85
               },
               {
                 "id": "custom.lineWidth",
-                "value": 3
+                "value": 0
               },
               {
                 "id": "custom.lineStyle",
@@ -346,6 +346,10 @@
               {
                 "id": "custom.axisLabel",
                 "value": "W/m\u00b2"
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -609,5 +613,6 @@
   },
   "timezone": "browser",
   "title": "Greenhouse: Solar & Energy",
-  "uid": "greenhouse-solar"
+  "uid": "greenhouse-solar",
+  "style": "light"
 }

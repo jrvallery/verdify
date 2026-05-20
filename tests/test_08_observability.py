@@ -944,7 +944,7 @@ class TestSetpointConfirmation:
 class TestForecastPageGeneration:
     """Phase 7 (Sprint 20): forecast website page exists + non-empty."""
 
-    PAGE_PATH = "/mnt/iris/verdify-vault/website/forecast/index.md"
+    PAGE_PATH = "/mnt/iris/verdify-vault/website/data/forecast/index.md"
 
     def test_forecast_page_exists(self):
         import os
@@ -958,6 +958,13 @@ class TestForecastPageGeneration:
             body = f.read()
         for section in ("# Greenhouse Weather Forecast", "## Hourly — next 72 h", "## Days 4\u20137 outlook"):
             assert section in body, f"forecast page missing section: {section!r}"
+
+    def test_forecast_page_has_short_route_alias(self):
+        with open(self.PAGE_PATH) as f:
+            body = f.read()
+        assert "aliases:" in body
+        assert ("  - forecast" in body) or ("- forecast" in body) or ("aliases: [forecast]" in body)
+        assert "## Hourly — next 72 h" in body
 
 
 class TestEntityMapCoverage:

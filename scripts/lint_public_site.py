@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Pragmatic launch lint for Verdify public-site content.
+"""Pragmatic lint for Verdify public-site content.
 
 This is intentionally cheaper and more opinionated than site-doctor: it checks
-launch-facing content smells in the vault and, when available, built public
-routes. It does not query Grafana.
+public-facing content smells in the vault and, when available, built public routes.
+It does not query Grafana.
 """
 
 from __future__ import annotations
@@ -22,11 +22,36 @@ DEFAULT_PUBLIC = Path("/srv/verdify/verdify-site/public")
 IMAGE_EXT_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#][^)\s\"']*)?$", re.IGNORECASE)
 RAW_WIKI_RE = re.compile(r"\[\[([^\]]+)\]\]")
 EMPTY_HEADING_RE = re.compile(r"^#{1,6}\s*$", re.MULTILINE)
+HOME_PANEL_CARD_RE = re.compile(
+    r"<figure\b[^>]*class=[\"'][^\"']*\bhome-panel-card\b[^\"']*[\"'][^>]*>(.*?)</figure>",
+    re.IGNORECASE | re.DOTALL,
+)
+HOME_IFRAME_RE = re.compile(r"<iframe\b", re.IGNORECASE)
 STALE_SNAPSHOT_RE = re.compile(
     r"(?:Static public proof snapshot|Static public API snapshot|Last public proof snapshot):\s*\*{0,2}(\d{4}-\d{2}-\d{2})",
     re.IGNORECASE,
 )
 BLANK_DAILY_LABEL_RE = re.compile(r"\b(?:high|low|vpd_h|hyst|d_cool|engage|all|pulse|gap|wt)\s+·(?=;|,|<|$)")
+STALE_CROP_STATUS_RE = re.compile(
+    r"\bLaunch Taxonomy\b|For launch,\s+Verdify separates crop pages|No explicit launch taxonomy",
+    re.IGNORECASE,
+)
+STALE_LAUNCH_FRAMING_RE = re.compile(
+    r"\blaunch-(?:safe|facing|readable)\b|"
+    r"\blaunch\s+(?:traffic|readers|proof|claim|question|thread)\b|"
+    r"\bFor launch\b",
+    re.IGNORECASE,
+)
+STALE_TUNABLES_LABEL_RE = re.compile(
+    r"AI-[Ww]ritable Tunables|\[AI Tunables\]\(/reference/ai-tunables/?\)",
+    re.IGNORECASE,
+)
+STALE_DATA_MODEL_RE = re.compile(
+    r"maps 172 entities|Twelve periodic tasks|tables:\s*47|views:\s*56|functions:\s*100|"
+    r"221K\+|39K\+|516K\+|weather_forecast`\s*\|\s*Hypertable\s*\|\s*28K\+|"
+    r"2026-05-02 18:09 MDT|all 33 equipment items",
+    re.IGNORECASE,
+)
 LEGACY_CANONICAL_LINK_RE = re.compile(
     r"\]\((/(?:"
     r"intelligence(?:/[^)#\s]*)?|"
@@ -50,9 +75,15 @@ ROUTE_SMOKE = [
     "/",
     "/ai-greenhouse",
     "/greenhouse",
+    "/greenhouse/cameras",
+    "/greenhouse/growing",
+    "/greenhouse/operations",
+    "/crops",
+    "/growing",
     "/climate",
     "/intelligence",
     "/intelligence/faq",
+    "/faq",
     "/evidence",
     "/plans",
     "/forecast",
@@ -276,6 +307,42 @@ def check_content(vault_root: Path) -> list[Finding]:
                 )
             )
 
+        for match in STALE_CROP_STATUS_RE.finditer(text):
+            findings.append(
+                Finding(
+                    "error",
+                    "stale-crop-status-language",
+                    f"{rel}:{line_number(text, match.start())} uses obsolete crop-control launch language",
+                )
+            )
+
+        for match in STALE_LAUNCH_FRAMING_RE.finditer(text):
+            findings.append(
+                Finding(
+                    "error",
+                    "stale-launch-framing",
+                    f"{rel}:{line_number(text, match.start())} uses temporal launch framing on an evergreen page",
+                )
+            )
+
+        for match in STALE_TUNABLES_LABEL_RE.finditer(text):
+            findings.append(
+                Finding(
+                    "error",
+                    "stale-tunables-label",
+                    f"{rel}:{line_number(text, match.start())} should link as AI Tunables Traceability",
+                )
+            )
+
+        for match in STALE_DATA_MODEL_RE.finditer(text):
+            findings.append(
+                Finding(
+                    "error",
+                    "stale-data-model-count",
+                    f"{rel}:{line_number(text, match.start())} uses a stale data-model count or sample export marker",
+                )
+            )
+
         if rel.startswith("plans/") and rel != "plans/index.md":
             for match in BLANK_DAILY_LABEL_RE.finditer(text):
                 findings.append(
@@ -313,19 +380,57 @@ def check_content(vault_root: Path) -> list[Finding]:
     return findings
 
 
+def check_homepage_panel_cards(vault_root: Path) -> list[Finding]:
+    path = vault_root / "index.md"
+    if not path.exists():
+        return [Finding("error", "homepage-missing", "index.md is missing")]
+
+    text = read_text(path)
+    findings: list[Finding] = []
+    cards = list(HOME_PANEL_CARD_RE.finditer(text))
+    iframes = list(HOME_IFRAME_RE.finditer(text))
+
+    if len(cards) != len(iframes):
+        findings.append(
+            Finding(
+                "error",
+                "homepage-panel-card-count",
+                f"index.md has {len(iframes)} iframe(s) but {len(cards)} home-panel-card container(s)",
+            )
+        )
+
+    for card in cards:
+        block = card.group(1)
+        line_no = line_number(text, card.start())
+        if 'class="home-panel-card__visual"' not in block:
+            findings.append(
+                Finding("error", "homepage-panel-visual-missing", f"index.md:{line_no} panel card has no visual well")
+            )
+        if not HOME_IFRAME_RE.search(block):
+            findings.append(
+                Finding("error", "homepage-panel-iframe-missing", f"index.md:{line_no} panel card has no iframe")
+            )
+        if 'class="home-panel-card__callout"' not in block:
+            findings.append(
+                Finding("error", "homepage-panel-callout-missing", f"index.md:{line_no} panel card has no text callout")
+            )
+
+    return findings
+
+
 def check_routes(vault_root: Path, public_root: Path, skip_public: bool) -> list[Finding]:
     findings: list[Finding] = []
     for route in ROUTE_SMOKE:
         source = route_to_source(vault_root, route)
         if source is None:
             findings.append(
-                Finding("error", "route-source-missing", f"required launch route has no source page: {route}")
+                Finding("error", "route-source-missing", f"required public route has no source page: {route}")
             )
             continue
         if not skip_public and public_root.exists():
             if not any(candidate.exists() for candidate in route_to_public_candidates(public_root, route)):
                 findings.append(
-                    Finding("warn", "route-public-missing", f"required launch route has no built HTML: {route}")
+                    Finding("warn", "route-public-missing", f"required public route has no built HTML: {route}")
                 )
     return findings
 
@@ -397,7 +502,7 @@ def check_csvs(vault_root: Path) -> list[Finding]:
 def print_summary(findings: list[Finding]) -> None:
     errors = sum(1 for finding in findings if finding.severity == "error")
     warnings = sum(1 for finding in findings if finding.severity == "warn")
-    print(f"Verdify public-site launch lint: {len(findings)} findings ({errors} errors, {warnings} warnings)")
+    print(f"Verdify public-site lint: {len(findings)} findings ({errors} errors, {warnings} warnings)")
     for finding in sorted(findings, key=lambda f: (f.severity != "error", f.code, f.message)):
         print(f"  [{finding.severity}] {finding.code}: {finding.message}")
 
@@ -421,6 +526,7 @@ def main() -> int:
 
     findings: list[Finding] = []
     findings.extend(check_content(args.vault_root))
+    findings.extend(check_homepage_panel_cards(args.vault_root))
     findings.extend(check_routes(args.vault_root, args.public_root, args.skip_public))
     if not args.skip_public:
         findings.extend(check_public_rendered(args.public_root))

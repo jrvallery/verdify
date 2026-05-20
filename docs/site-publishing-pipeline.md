@@ -16,11 +16,11 @@ Quartz reads that same tree through:
 /srv/verdify/verdify-site/content -> /mnt/iris/verdify-vault/website
 ```
 
-Generated pages, such as `/forecast`, `/data/forecast`, `/plans/YYYY-MM-DD`,
-`/plans/index`, `/data/plans`, `/reference/lessons`, crop profiles, zone pages,
-equipment blocks, and public sample datasets are written into the same website
-tree by generator scripts. Do not hand-edit generated blocks or pages unless you
-expect the generator to overwrite them later.
+Generated pages, such as `/data/forecast`, `/data/plans`, `/plans/index`,
+`/plans/YYYY-MM-DD`, `/reference/lessons`, crop profiles, zone pages, equipment
+blocks, and public sample datasets are written into the same website tree by
+generator scripts. Do not hand-edit generated blocks or pages unless you expect
+the generator to overwrite them later.
 
 Production refreshes use one entry point:
 
@@ -33,22 +33,22 @@ that script. It regenerates the daily plan, forecast page, plan indexes,
 lessons, Baseline vs Iris, equipment blocks, zone pages, crop profiles, public
 sample CSVs, and planner static context before rebuilding the site.
 
-Some public routes are aliases that must stay byte-identical because the nav and
-story pages link to the `/data/...` route while older canonical pages still
-exist:
+Some public routes are aliases because the nav and story pages link to the
+`/data/...` route while older URLs still exist:
 
 ```text
-forecast/index.md              == data/forecast/index.md
-plans/index.md                 == data/plans/index.md
-evidence/baseline-vs-iris.md   == data/baseline-vs-iris.md
+/evidence/baseline-vs-iris      -> data/baseline-vs-iris frontmatter alias
+/forecast                       -> data/forecast frontmatter alias
+/plans and /plans/              -> plans/index.md noindex compatibility stub
 ```
 
-`make site-doctor` enforces those alias pairs, checks forecast freshness from
-`last_updated`, verifies that both plan indexes list the newest
-`plans/YYYY-MM-DD.md` page first, rejects duplicate route owners, and rejects
-retired source paths such as the old `intelligence/`, `slack/`, and duplicate
-top-level article copies. A stale generated route is a release-blocking
-site-doctor error, not a visual cleanup task.
+`make site-doctor` checks forecast freshness from `last_updated`, verifies that
+the canonical plan index lists the newest `plans/YYYY-MM-DD.md` page first,
+verifies the `/plans/` stub does not duplicate the archive table, rejects
+duplicate route owners, and rejects retired source paths such as the old
+`intelligence/`, `slack/`, `/forecast/index.md`, and duplicate top-level article
+copies. A stale generated route is a release-blocking site-doctor error, not a
+visual cleanup task.
 
 ## Publish Flow
 

@@ -187,11 +187,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 70
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 90
               }
             ]
@@ -207,7 +207,7 @@
           "values": false
         },
         "graphMode": "none",
-        "colorMode": "background_solid",
+        "colorMode": "value",
         "textMode": "value_and_name",
         "justifyMode": "auto"
       },
@@ -222,7 +222,8 @@
           "refId": "A"
         }
       ],
-      "description": "Summarizes overall equipment health across the major controlled devices."
+      "description": "Summarizes overall equipment health across the major controlled devices.",
+      "transparent": true
     },
     {
       "id": 901,
@@ -253,11 +254,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -323,11 +324,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 0.4
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1.5
               },
               {
@@ -395,7 +396,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -452,11 +453,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -522,11 +523,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 10
               }
             ]
@@ -584,7 +585,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
@@ -718,15 +719,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -801,15 +802,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -884,15 +885,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -967,15 +968,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1050,15 +1051,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1133,15 +1134,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1216,15 +1217,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1299,15 +1300,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1382,15 +1383,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1465,15 +1466,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1548,15 +1549,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1631,15 +1632,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1711,15 +1712,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -1880,7 +1881,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -2288,7 +2289,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -3028,7 +3029,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -3105,11 +3106,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 25
               },
               {
@@ -3277,7 +3278,13 @@
                   "mode": "normal"
                 },
                 "spanNulls": false,
-                "axisLabel": "Hours"
+                "axisLabel": "Hours",
+                "axisColorMode": "text",
+                "axisPlacement": "auto",
+                "thresholdsStyle": {
+                  "mode": "off"
+                },
+                "showPoints": "never"
               }
             },
             "overrides": [
@@ -3320,7 +3327,7 @@
                   {
                     "id": "color",
                     "value": {
-                      "fixedColor": "#26A69A",
+                      "fixedColor": "#4DB6AC",
                       "mode": "fixed"
                     }
                   }
@@ -3350,7 +3357,7 @@
                   {
                     "id": "color",
                     "value": {
-                      "fixedColor": "#00ACC1",
+                      "fixedColor": "#4FC3F7",
                       "mode": "fixed"
                     }
                   }
@@ -3365,7 +3372,7 @@
                   {
                     "id": "color",
                     "value": {
-                      "fixedColor": "#FFCA28",
+                      "fixedColor": "#42A5F5",
                       "mode": "fixed"
                     }
                   }
@@ -3440,10 +3447,13 @@
             },
             "legend": {
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
             }
           },
-          "timeFrom": "30d"
+          "timeFrom": "30d",
+          "transparent": true
         }
       ]
     },
@@ -3499,13 +3509,120 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
           "unit": "h"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#42A5F5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Misters"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -3515,9 +3632,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
+          "calcs": [],
+          "showLegend": true
         }
       },
       "targets": [
@@ -3586,7 +3702,8 @@
         }
       ],
       "description": "Daily runtime mix for the last 30 days independent of the selected time range. Good for spotting seasonal shifts and runaway equipment. Panel overrides dashboard time range to 30d.",
-      "timeFrom": "30d"
+      "timeFrom": "30d",
+      "transparent": true
     },
     {
       "id": 18,
@@ -3760,7 +3877,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "#73BF69",
                     "value": null
                   }
                 ]
@@ -3816,7 +3933,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "#73BF69",
                     "value": null
                   }
                 ]
@@ -3891,7 +4008,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -3977,7 +4094,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -4081,7 +4198,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -4224,7 +4341,7 @@
           "targets": [
             {
               "refId": "A",
-              "rawSql": "SELECT $__time(ts), water_total_gal AS \"value\"\nFROM climate\nWHERE $__timeFilter(ts) AND water_total_gal IS NOT NULL\nORDER BY ts",
+              "rawSql": "SELECT\n  $__time(ts),\n  water_total_gal AS \"Water Used (gal)\"\nFROM climate\nWHERE $__timeFilter(ts)\n  AND water_total_gal IS NOT NULL\nORDER BY ts",
               "format": "time_series",
               "datasource": {
                 "uid": "verdify-tsdb",
@@ -4243,12 +4360,43 @@
                 "lineWidth": 1,
                 "pointSize": 5,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisColorMode": "text",
+                "axisPlacement": "auto",
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
               },
               "color": {
                 "mode": "palette-classic"
+              },
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Water Used (gal)"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#2196F3",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 80
+                  }
+                ]
               }
-            }
+            ]
           },
           "options": {
             "tooltip": {
@@ -4257,9 +4405,12 @@
             },
             "legend": {
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
             }
-          }
+          },
+          "transparent": true
         },
         {
           "id": 26,
@@ -4278,7 +4429,7 @@
           "targets": [
             {
               "refId": "A",
-              "rawSql": "SELECT $__time(ts), flow_gpm AS \"value\"\nFROM climate\nWHERE $__timeFilter(ts) AND flow_gpm IS NOT NULL\nORDER BY ts",
+              "rawSql": "SELECT\n  $__time(ts),\n  flow_gpm AS \"Flow (gal/min)\"\nFROM climate\nWHERE $__timeFilter(ts)\n  AND flow_gpm IS NOT NULL\nORDER BY ts",
               "format": "time_series",
               "datasource": {
                 "uid": "verdify-tsdb",
@@ -4296,7 +4447,12 @@
                 "lineWidth": 1,
                 "pointSize": 5,
                 "showPoints": "never",
-                "spanNulls": true
+                "spanNulls": true,
+                "axisColorMode": "text",
+                "axisPlacement": "auto",
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
               },
               "color": {
                 "mode": "palette-classic"
@@ -4305,12 +4461,38 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "#73BF69",
                     "value": null
                   }
                 ]
+              },
+              "decimals": 1
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Flow (gal/min)"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#2196F3"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 2
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 8
+                  }
+                ]
               }
-            }
+            ]
           },
           "options": {
             "tooltip": {
@@ -4319,9 +4501,12 @@
             },
             "legend": {
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
             }
-          }
+          },
+          "transparent": true
         }
       ]
     },
@@ -4603,12 +4788,68 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Flow GPM"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2196F3"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "gal/min"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "gal/min"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total gal"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2196F3"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "gal"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "gal"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -4618,9 +4859,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
+          "calcs": [],
+          "showLegend": true
         }
       },
       "targets": [
@@ -4643,7 +4883,8 @@
           "refId": "B"
         }
       ],
-      "description": "Water meter live flow and cumulative totalizer. Use with valve timeline to verify commanded irrigation actually moved water."
+      "description": "Water meter live flow and cumulative totalizer. Use with valve timeline to verify commanded irrigation actually moved water.",
+      "transparent": true
     },
     {
       "id": 26,
@@ -4668,14 +4909,62 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
           "decimals": 2,
-          "unit": "h"
-        }
+          "unit": "h",
+          "custom": {}
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "South"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "West"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#26A69A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#26A69A"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -4689,7 +4978,9 @@
         "displayMode": "gradient",
         "showUnfilled": true,
         "minVizWidth": 0,
-        "minVizHeight": 10
+        "minVizHeight": 10,
+        "legend": {},
+        "tooltip": {}
       },
       "targets": [
         {
@@ -4720,7 +5011,8 @@
           "refId": "C"
         }
       ],
-      "description": "Mister runtime by zone; useful for confirming south-first/west-second prioritization and center underperformance."
+      "description": "Mister runtime by zone; useful for confirming south-first/west-second prioritization and center underperformance.",
+      "transparent": true
     },
     {
       "id": 910,
@@ -4737,7 +5029,16 @@
         "type": "grafana-postgresql-datasource"
       },
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -4750,7 +5051,19 @@
           "refId": "A"
         }
       ],
-      "description": "Shows the current on/off state of major greenhouse equipment."
+      "description": "Shows the current on/off state of major greenhouse equipment.",
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        }
+      }
     }
   ],
   "annotations": {
@@ -4768,5 +5081,6 @@
         "type": "dashboard"
       }
     ]
-  }
+  },
+  "style": "light"
 }

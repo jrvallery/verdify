@@ -54,11 +54,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 70
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 90
               }
             ]
@@ -120,11 +120,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -190,11 +190,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 0.4
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1.5
               },
               {
@@ -254,23 +254,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "dark-red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 1
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 2
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 12
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 24
               }
             ]
@@ -437,11 +437,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -507,11 +507,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 10
               }
             ]
@@ -569,7 +569,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
@@ -2324,7 +2324,36 @@
             "mode": "fixed",
             "fixedColor": "yellow"
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast Solar (W/m\u00b2)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFE66D",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -2811,11 +2840,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -3181,11 +3210,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -3259,13 +3288,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -3273,7 +3302,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -3282,6 +3311,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -3294,13 +3327,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -3309,6 +3342,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -3839,11 +3880,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -3917,13 +3958,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -3931,7 +3972,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -3940,6 +3981,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -3952,13 +3997,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -3967,6 +4012,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -4381,5 +4434,6 @@
       "type": "timeseries",
       "description": "Indoor VPD against the green firmware compliance band, with only the dehumidify/fan entry and fog entry thresholds rendered. Crop/planner provenance, dispatcher math, cfg readbacks, and padding details remain in the band traceability SQL contract."
     }
-  ]
+  ],
+  "style": "light"
 }

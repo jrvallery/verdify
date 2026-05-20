@@ -9,6 +9,7 @@ panel IDs are stale.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import subprocess
@@ -19,7 +20,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 DEFAULT_VAULT = Path("/mnt/iris/verdify-vault/website")
@@ -33,14 +34,43 @@ REBUILD_RETRY_SLEEP_SEC = 2
 BOX_DRAWING_RE = re.compile(r"[│┌└├─═╔]")
 DENVER_TZ = ZoneInfo("America/Denver")
 FORECAST_MAX_AGE_SECONDS = 2 * 60 * 60
+STATIC_SNAPSHOT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 PLAN_INDEX_ROW_RE = re.compile(r"^\| \[(\d{4}-\d{2}-\d{2})\]\(/plans/\1\)")
+PLAN_PREVIOUS_HYPOTHESIS_RE = re.compile(r"^\*\*Previous hypothesis:\*\*\s*(.+)$", re.MULTILINE)
+PLAN_RESULT_RE = re.compile(r"^(?:>\s*)?\*\*Result:\*\*\s*(.+)$", re.MULTILINE)
+NAV_BLOCK_RE = re.compile(
+    r"<nav\b[^>]*class=[\"'][^\"']*\bsite-nav\b[^\"']*[\"'][^>]*>.*?</nav>",
+    re.IGNORECASE | re.DOTALL,
+)
+HREF_RE = re.compile(r"<a\b[^>]*\bhref=[\"']([^\"']+)[\"']", re.IGNORECASE)
+STATIC_SNAPSHOT_RE = re.compile(
+    r"(?:Static public API snapshot|Snapshot from the live database).*?\*\*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) MDT\*\*",
+    re.IGNORECASE,
+)
+LONG_PARAGRAPH_MIN_CHARS = 180
+LONG_SENTENCE_MIN_CHARS = 140
+CANONICAL_FACT_OWNERS: tuple[tuple[str, re.Pattern[str], set[str]], ...] = (
+    (
+        "greenhouse-footprint",
+        re.compile(r"\b367\s+(?:sq\s*ft|square feet)\b", re.IGNORECASE),
+        {"greenhouse/structure.md"},
+    ),
+    (
+        "greenhouse-elevation",
+        re.compile(r"\b(?:5,090|5090|5,000|5000|4,979|4979)\s*(?:ft|feet)\b", re.IGNORECASE),
+        {"greenhouse/structure.md"},
+    ),
+    (
+        "relay-loop-cadence",
+        re.compile(r"(?<!\d)5[- ]second|every\s+5\s+seconds", re.IGNORECASE),
+        {"reference/safety.md"},
+    ),
+)
 
 GENERATED_PAGES = {
     "data/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
     "data/forecast/index.md": "scripts/generate-forecast-page.py",
     "data/plans/index.md": "scripts/generate-plans-index.py",
-    "evidence/baseline-vs-iris.md": "scripts/generate-baseline-vs-iris-page.py",
-    "forecast/index.md": "scripts/generate-forecast-page.py",
     "reference/ai-tunables.md": "scripts/generate-ai-tunables-page.py",
     "plans/index.md": "scripts/generate-plans-index.py",
     "reference/lessons.md": "scripts/generate-lessons-page.py",
@@ -60,19 +90,9 @@ GENERATED_PARTIALS = {
 }
 GENERATED_ROUTE_ALIASES = (
     (
-        "forecast/index.md",
-        "data/forecast/index.md",
-        "scripts/generate-forecast-page.py",
-    ),
-    (
         "plans/index.md",
         "data/plans/index.md",
         "scripts/generate-plans-index.py",
-    ),
-    (
-        "evidence/baseline-vs-iris.md",
-        "data/baseline-vs-iris.md",
-        "scripts/generate-baseline-vs-iris-page.py",
     ),
 )
 RETIRED_SOURCE_PATHS = (
@@ -84,9 +104,16 @@ RETIRED_SOURCE_PATHS = (
     "evidence/index.md",
     "evidence/operations.md",
     "evidence/planning-quality.md",
+    "forecast/index.md",
+    "greenhouse/cameras.md",
+    "greenhouse/operations.md",
     "greenhouse/lessons.md",
     "greenhouse/lessons/raw.md",
     "intelligence",
+    "reference/faq.md",
+    "reference/inference.md",
+    "reference/openclaw.md",
+    "start/slack-ops/index.md",
     "slack",
 )
 RETIRED_EMPTY_DIRS = ("press", "project", "updates")
@@ -197,6 +224,11 @@ def parse_simple_yaml(raw: str) -> dict[str, object]:
 def is_draft_page(path: Path) -> bool:
     fm, _body = frontmatter(read_text(path))
     return str(fm.get("draft", "")).strip().lower() == "true"
+
+
+def is_noindex_page(path: Path) -> bool:
+    fm, _body = frontmatter(read_text(path))
+    return str(fm.get("noindex", "")).strip().lower() == "true"
 
 
 def generated_source(rel_path: str) -> str | None:
@@ -402,20 +434,28 @@ def check_generated_route_aliases(vault_root: Path) -> list[Finding]:
                 Finding("error", "generated-alias-missing", f"{source} expected {right_rel}, but it is missing")
             )
             continue
-        if read_text(left) != read_text(right):
+        left_text = read_text(left)
+        right_text = read_text(right)
+        if any(PLAN_INDEX_ROW_RE.match(line) for line in left_text.splitlines()):
             findings.append(
                 Finding(
                     "error",
-                    "generated-route-drift",
-                    f"{left_rel} and {right_rel} differ; regenerate both with {source}",
+                    "generated-alias-duplicates-canonical",
+                    f"{left_rel} contains archive rows; {right_rel} should be the only generated index table",
                 )
             )
+        if "/data/plans/" not in left_text:
+            findings.append(
+                Finding("error", "generated-alias-target-missing", f"{left_rel} does not point readers to /data/plans/")
+            )
+        if first_plan_index_date(right) is None:
+            findings.append(Finding("error", "generated-canonical-empty", f"{right_rel} has no daily plan rows"))
     return findings
 
 
 def check_forecast_freshness(vault_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    for rel in ("forecast/index.md", "data/forecast/index.md"):
+    for rel in ("data/forecast/index.md",):
         path = vault_root / rel
         if not path.exists():
             findings.append(Finding("error", "forecast-page-missing", f"{rel} is missing"))
@@ -444,6 +484,39 @@ def check_forecast_freshness(vault_root: Path) -> list[Finding]:
     return findings
 
 
+def check_static_snapshot_freshness(vault_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    now = datetime.now(DENVER_TZ)
+    for path in sorted(vault_root.rglob("*.md")):
+        rel_path = path.relative_to(vault_root).as_posix()
+        if is_plan_archive_path(rel_path):
+            continue
+        text = read_text(path)
+        for match in STATIC_SNAPSHOT_RE.finditer(text):
+            raw = match.group(1)
+            try:
+                snapshot_at = datetime.strptime(raw, "%Y-%m-%d %H:%M").replace(tzinfo=DENVER_TZ)
+            except ValueError:
+                findings.append(
+                    Finding("error", "static-snapshot-invalid", f"{rel_path} has invalid static snapshot time: {raw}")
+                )
+                continue
+            age_seconds = (now - snapshot_at).total_seconds()
+            if age_seconds < -60 * 60:
+                findings.append(
+                    Finding("error", "static-snapshot-future", f"{rel_path} snapshot time is in the future: {raw} MDT")
+                )
+            elif age_seconds > STATIC_SNAPSHOT_MAX_AGE_SECONDS:
+                findings.append(
+                    Finding(
+                        "error",
+                        "static-snapshot-stale",
+                        f"{rel_path} static snapshot is {int(age_seconds // 3600)}h old; refresh or remove latest/current wording",
+                    )
+                )
+    return findings
+
+
 def first_plan_index_date(path: Path) -> str | None:
     if not path.exists():
         return None
@@ -463,18 +536,187 @@ def check_plan_archive_freshness(vault_root: Path) -> list[Finding]:
 
     findings: list[Finding] = []
     latest_plan = plan_dates[-1]
-    for rel in ("plans/index.md", "data/plans/index.md"):
-        first_date = first_plan_index_date(vault_root / rel)
-        if first_date is None:
-            findings.append(Finding("error", "plans-index-empty", f"{rel} has no daily plan rows"))
-        elif first_date != latest_plan:
+    rel = "data/plans/index.md"
+    first_date = first_plan_index_date(vault_root / rel)
+    if first_date is None:
+        findings.append(Finding("error", "plans-index-empty", f"{rel} has no daily plan rows"))
+    elif first_date != latest_plan:
+        findings.append(
+            Finding(
+                "error",
+                "plans-index-stale",
+                f"{rel} starts at {first_date}, but latest plan page is {latest_plan}; regenerate with scripts/generate-plans-index.py",
+            )
+        )
+    return findings
+
+
+def normalize_plan_result(value: str) -> str:
+    return plain_text_from_html(value)
+
+
+def plain_text_from_html(value: str) -> str:
+    value = html.unescape(re.sub(r"<[^>]+>", " ", value))
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def check_plan_archive_content(vault_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    plan_dir = vault_root / "plans"
+    for path in sorted(plan_dir.glob("*.md")):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", path.stem):
+            continue
+        rel_path = path.relative_to(vault_root).as_posix()
+        _fm, body = frontmatter(read_text(path))
+        if "```json" in body:
             findings.append(
                 Finding(
                     "error",
-                    "plans-index-stale",
-                    f"{rel} starts at {first_date}, but latest plan page is {latest_plan}; regenerate with scripts/generate-plans-index.py",
+                    "plan-raw-json-block",
+                    f"{rel_path} exposes raw structured JSON in the rendered body; regenerate with scripts/generate-daily-plan.py",
                 )
             )
+        seen_hypotheses: dict[str, int] = {}
+        for match in PLAN_PREVIOUS_HYPOTHESIS_RE.finditer(body):
+            normalized = normalize_plan_result(match.group(1))
+            if len(normalized) < 120 or normalized.startswith("shown earlier for"):
+                continue
+            first_line = seen_hypotheses.get(normalized)
+            if first_line is not None:
+                findings.append(
+                    Finding(
+                        "error",
+                        "plan-duplicate-previous-hypothesis",
+                        f"{rel_path} repeats the same previous hypothesis at lines {first_line} and {line_number(body, match.start())}",
+                    )
+                )
+            else:
+                seen_hypotheses[normalized] = line_number(body, match.start())
+        seen_results: dict[str, int] = {}
+        for match in PLAN_RESULT_RE.finditer(body):
+            normalized = normalize_plan_result(match.group(1))
+            if len(normalized) < 120:
+                continue
+            first_line = seen_results.get(normalized)
+            if first_line is not None:
+                findings.append(
+                    Finding(
+                        "error",
+                        "plan-duplicate-result",
+                        f"{rel_path} repeats the same result at lines {first_line} and {line_number(body, match.start())}",
+                    )
+                )
+            else:
+                seen_results[normalized] = line_number(body, match.start())
+    return findings
+
+
+def is_plan_archive_path(rel_path: str) -> bool:
+    return rel_path.startswith("plans/") or rel_path.startswith("data/plans/")
+
+
+def normalized_prose_blocks(text: str) -> tuple[list[str], list[str]]:
+    """Return long public-prose paragraphs and sentences for repetition checks."""
+    _fm, body = frontmatter(text)
+    body = re.sub(r"<iframe\b[^>]*></iframe>", "", body, flags=re.IGNORECASE)
+    body = re.sub(r"<script\b.*?</script>", "", body, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"<style\b.*?</style>", "", body, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"```.*?```", "", body, flags=re.DOTALL)
+    body = re.sub(r"<[^>]+>", " ", body)
+
+    paragraphs: list[str] = []
+    sentences: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", body):
+        normalized = re.sub(r"\s+", " ", paragraph).strip()
+        if not normalized or normalized.startswith("|"):
+            continue
+        if len(normalized) >= LONG_PARAGRAPH_MIN_CHARS:
+            paragraphs.append(normalized.lower())
+        for sentence in re.split(r"(?<=[.!?])\s+", normalized):
+            normalized_sentence = re.sub(r"\s+", " ", sentence).strip()
+            if len(normalized_sentence) >= LONG_SENTENCE_MIN_CHARS and not normalized_sentence.startswith("|"):
+                sentences.append(normalized_sentence.lower())
+    return paragraphs, sentences
+
+
+def check_duplicate_panels(iframes: list[IframeRef]) -> list[Finding]:
+    owners_by_panel: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for iframe in iframes:
+        if is_plan_archive_path(iframe.file):
+            continue
+        owners_by_panel[(iframe.dashboard_uid, iframe.panel_id)].add(iframe.file)
+
+    findings: list[Finding] = []
+    for (dashboard_uid, panel_id), owners in sorted(owners_by_panel.items()):
+        if len(owners) <= 1:
+            continue
+        findings.append(
+            Finding(
+                "error",
+                "duplicate-grafana-panel",
+                f"{dashboard_uid} panelId={panel_id} appears on multiple non-plan pages: {', '.join(sorted(owners))}",
+            )
+        )
+    return findings
+
+
+def check_repeated_public_prose(vault_root: Path) -> list[Finding]:
+    paragraphs_by_text: dict[str, set[str]] = defaultdict(set)
+    sentences_by_text: dict[str, set[str]] = defaultdict(set)
+    for path in sorted(vault_root.rglob("*.md")):
+        rel_path = path.relative_to(vault_root).as_posix()
+        if is_plan_archive_path(rel_path):
+            continue
+        paragraphs, sentences = normalized_prose_blocks(read_text(path))
+        for paragraph in paragraphs:
+            paragraphs_by_text[paragraph].add(rel_path)
+        for sentence in sentences:
+            sentences_by_text[sentence].add(rel_path)
+
+    findings: list[Finding] = []
+    for paragraph, owners in sorted(paragraphs_by_text.items()):
+        if len(owners) <= 1:
+            continue
+        preview = paragraph[:120] + ("..." if len(paragraph) > 120 else "")
+        findings.append(
+            Finding(
+                "error",
+                "repeated-public-paragraph",
+                f"long paragraph is repeated across pages ({', '.join(sorted(owners))}): {preview}",
+            )
+        )
+    for sentence, owners in sorted(sentences_by_text.items()):
+        if len(owners) <= 1:
+            continue
+        preview = sentence[:120] + ("..." if len(sentence) > 120 else "")
+        findings.append(
+            Finding(
+                "error",
+                "repeated-public-sentence",
+                f"long sentence is repeated across pages ({', '.join(sorted(owners))}): {preview}",
+            )
+        )
+    return findings
+
+
+def check_canonical_fact_owners(vault_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    for path in sorted(vault_root.rglob("*.md")):
+        rel_path = path.relative_to(vault_root).as_posix()
+        if is_plan_archive_path(rel_path):
+            continue
+        text = read_text(path)
+        for code, pattern, owners in CANONICAL_FACT_OWNERS:
+            if rel_path in owners:
+                continue
+            for match in pattern.finditer(text):
+                findings.append(
+                    Finding(
+                        "error",
+                        f"{code}-outside-owner",
+                        f"{rel_path}:{line_number(text, match.start())} repeats a canonical fact owned by {', '.join(sorted(owners))}",
+                    )
+                )
     return findings
 
 
@@ -495,6 +737,21 @@ def canonical_paths_for_page(rel_path: str) -> set[str]:
         parent = path.parent.as_posix()
         paths.add(normalize_route(parent if parent != "." else "index"))
     return paths
+
+
+def route_for_source_page(rel_path: str) -> str:
+    path = Path(rel_path)
+    if path.name == "index.md":
+        parent = path.parent.as_posix()
+        return normalize_route(parent if parent != "." else "index")
+    return normalize_route(path.with_suffix("").as_posix())
+
+
+def is_navigation_exempt_page(rel_path: str) -> bool:
+    return rel_path in {
+        "plans/index.md",
+        "reference/planner-contract.md",
+    }
 
 
 def check_duplicate_routes(pages: list[PageInfo]) -> list[Finding]:
@@ -763,7 +1020,11 @@ def collect_semantic_iframes(
         for offset, line in enumerate(text.splitlines(), start=1):
             match = re.match(r"^(#{1,4})\s+(.+)", line)
             if match:
-                headings.append((offset, match.group(2).strip()))
+                headings.append((offset, plain_text_from_html(match.group(2))))
+                continue
+            html_match = re.match(r"^\s*<h[1-4]\b[^>]*>(.*?)</h[1-4]>\s*$", line, flags=re.IGNORECASE)
+            if html_match:
+                headings.append((offset, plain_text_from_html(html_match.group(1))))
         headings_by_file[rel_path] = headings
 
     semantic: list[SemanticIframe] = []
@@ -817,6 +1078,145 @@ def check_public_output(vault_root: Path, public_root: Path) -> list[Finding]:
         time.sleep(REBUILD_RETRY_SLEEP_SEC)
     for rel in missing:
         findings.append(Finding("warn", "public-page-missing", f"source page has no built output: {rel}"))
+    return findings
+
+
+def compact_route_list(routes: list[str], limit: int = 20) -> str:
+    suffix = f", ... (+{len(routes) - limit} more)" if len(routes) > limit else ""
+    return ", ".join(routes[:limit]) + suffix
+
+
+def expected_navigation_routes(vault_root: Path) -> set[str]:
+    return set(source_navigation_routes(vault_root).keys())
+
+
+def source_navigation_routes(vault_root: Path, *, include_exempt: bool = False) -> dict[str, str]:
+    routes: dict[str, str] = {}
+    for path in sorted(vault_root.rglob("*.md")):
+        if is_draft_page(path):
+            continue
+        rel_path = path.relative_to(vault_root).as_posix()
+        route = route_for_source_page(rel_path)
+        if route == "404" or route.startswith("tags/"):
+            continue
+        if not include_exempt and is_navigation_exempt_page(rel_path):
+            continue
+        routes[route] = rel_path
+    return routes
+
+
+def base_path_for_route(route: str, route_sources: dict[str, str]) -> str:
+    rel_path = route_sources.get(route, "")
+    if route == "index":
+        return "/"
+    if rel_path and Path(rel_path).name == "index.md":
+        return f"/{route}/"
+    parent = Path(route).parent.as_posix()
+    return "/" if parent == "." else f"/{parent}/"
+
+
+def route_from_href(raw_href: str, base_route: str, route_sources: dict[str, str]) -> str | None:
+    href = html.unescape(raw_href).strip()
+    if not href or href.startswith(("#", "mailto:", "tel:")):
+        return None
+    parsed = urlparse(href)
+    if parsed.scheme or parsed.netloc:
+        return None
+    if not parsed.path:
+        return None
+
+    if parsed.path.startswith("/"):
+        path = parsed.path
+    else:
+        path = urljoin(base_path_for_route(base_route, route_sources), parsed.path)
+
+    route = normalize_route(path)
+    if route.startswith("static/"):
+        return None
+    return route
+
+
+def public_paths_for_route(public_root: Path, route: str) -> list[Path]:
+    if route == "index":
+        return [public_root / "index.html"]
+    return [public_root / route / "index.html", public_root / f"{route}.html"]
+
+
+def extract_internal_routes(
+    html_text: str,
+    *,
+    base_route: str = "index",
+    nav_only: bool = False,
+    route_sources: dict[str, str] | None = None,
+) -> set[str]:
+    route_sources = route_sources or {}
+    source = html_text
+    if nav_only:
+        nav_match = NAV_BLOCK_RE.search(html_text)
+        if not nav_match:
+            return set()
+        source = nav_match.group(0)
+
+    routes: set[str] = set()
+    for raw_href in HREF_RE.findall(source):
+        route = route_from_href(raw_href, base_route, route_sources)
+        if route:
+            routes.add(route)
+    return routes
+
+
+def extract_navigation_routes(html_text: str) -> set[str]:
+    return extract_internal_routes(html_text, nav_only=True)
+
+
+def linked_routes_from_public_page(public_root: Path, route: str, route_sources: dict[str, str]) -> set[str]:
+    for path in public_paths_for_route(public_root, route):
+        if path.is_file():
+            return extract_internal_routes(read_text(path), base_route=route, route_sources=route_sources)
+    return set()
+
+
+def check_navigation_coverage(vault_root: Path, public_root: Path) -> list[Finding]:
+    index_path = public_root / "index.html"
+    if not index_path.is_file():
+        return [Finding("error", "nav-index-missing", f"cannot inspect site navigation; missing {index_path}")]
+
+    source_routes = source_navigation_routes(vault_root)
+    all_source_routes = source_navigation_routes(vault_root, include_exempt=True)
+    nav_routes = extract_internal_routes(
+        read_text(index_path),
+        nav_only=True,
+        route_sources=all_source_routes,
+    )
+    if not nav_routes:
+        return [Finding("error", "nav-block-missing", f"no site-nav links found in {index_path}")]
+
+    discoverable_routes = set(nav_routes)
+    for route in sorted(nav_routes & set(all_source_routes)):
+        discoverable_routes.update(linked_routes_from_public_page(public_root, route, all_source_routes))
+
+    findings: list[Finding] = []
+    missing = sorted(set(source_routes) - discoverable_routes)
+    if missing:
+        findings.append(
+            Finding(
+                "error",
+                "nav-route-missing",
+                f"{len(missing)} source route(s) not discoverable from site navigation or linked hub pages: {compact_route_list(missing)}",
+            )
+        )
+
+    stale = sorted(
+        route for route in nav_routes - set(all_source_routes) if route != "index" and not route.startswith("tags/")
+    )
+    if stale:
+        findings.append(
+            Finding(
+                "error",
+                "nav-route-stale",
+                f"{len(stale)} internal nav route(s) have no source page: {compact_route_list(stale)}",
+            )
+        )
     return findings
 
 
@@ -1012,7 +1412,12 @@ def main() -> int:
     findings.extend(check_generation_entrypoint())
     findings.extend(check_generated_route_aliases(args.vault_root))
     findings.extend(check_forecast_freshness(args.vault_root))
+    findings.extend(check_static_snapshot_freshness(args.vault_root))
     findings.extend(check_plan_archive_freshness(args.vault_root))
+    findings.extend(check_plan_archive_content(args.vault_root))
+    findings.extend(check_duplicate_panels(iframes))
+    findings.extend(check_repeated_public_prose(args.vault_root))
+    findings.extend(check_canonical_fact_owners(args.vault_root))
     findings.extend(check_images(args.vault_root, images, image_manifest))
     findings.extend(check_links(args.vault_root, links))
     if not args.skip_launch_lint:
@@ -1026,6 +1431,7 @@ def main() -> int:
 
     if not args.skip_public:
         findings.extend(check_public_output(args.vault_root, args.public_root))
+        findings.extend(check_navigation_coverage(args.vault_root, args.public_root))
 
     if not args.skip_site_container:
         findings.extend(check_site_container(args.site_container))

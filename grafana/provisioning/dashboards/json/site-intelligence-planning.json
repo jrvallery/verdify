@@ -47,11 +47,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -76,6 +76,13 @@
               {
                 "id": "custom.lineWidth",
                 "value": 3
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
               }
             ]
           },
@@ -100,6 +107,13 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 20
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -116,7 +130,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -182,7 +197,8 @@
         }
       ],
       "title": "Plan Score Trend & Planning Volume",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
@@ -194,7 +210,16 @@
       },
       "id": 5,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -208,7 +233,19 @@
         }
       ],
       "title": "Last 10 Plans",
-      "type": "table"
+      "type": "table",
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        }
+      }
     },
     {
       "datasource": {
@@ -254,11 +291,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -331,13 +368,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -345,7 +382,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -354,6 +391,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -366,13 +407,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -381,6 +422,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -907,11 +956,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -984,13 +1033,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -998,7 +1047,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -1007,6 +1056,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1019,13 +1072,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -1034,6 +1087,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1453,7 +1514,11 @@
             "showPoints": "never",
             "spanNulls": true
           },
-          "unit": "fahrenheit"
+          "unit": "fahrenheit",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#8C8C8C"
+          }
         }
       },
       "gridPos": {
@@ -1472,7 +1537,9 @@
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
-        }
+        },
+        "colorMode": "value",
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -1486,7 +1553,8 @@
         }
       ],
       "title": "Forecast Bias (temp)",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "description": "Shows hourly write activity alongside oscillation counts.",
@@ -1499,7 +1567,12 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true,
-            "axisLabel": "events/hour"
+            "axisLabel": "events/hour",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "short"
         },
@@ -1513,7 +1586,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "red",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -1540,6 +1613,13 @@
               {
                 "id": "custom.axisLabel",
                 "value": "events/hour"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -1556,7 +1636,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -1584,7 +1665,8 @@
         }
       ],
       "title": "Write Rate + Oscillations",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "id": 115,
@@ -1631,7 +1713,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -1724,15 +1806,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 3
               }
             ]
@@ -1822,7 +1904,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -1878,5 +1960,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

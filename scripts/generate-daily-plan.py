@@ -79,11 +79,30 @@ def public_text(value: object) -> str:
     text = re.sub(r"\bHermes\b", "planning gateway", text)
     text = re.sub(r"\bhermes\b", "planner-gateway", text)
     text = re.sub(r"\bOpenClaw/Iris\b", "planner", text)
+    text = re.sub(r"\bIris\b(?!-)", "AI planning agent", text)
     text = re.sub(r"\bOpenClaw\b", "planner gateway", text)
     text = re.sub(r"\blocal Gemma context overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
     text = re.sub(r"\blocal Gemma overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
     text = re.sub(r"\blocal Gemma\b", "planner", text, flags=re.IGNORECASE)
     return re.sub(r"\$(\d)", r"USD \1", text)
+
+
+def public_summary(value: object, max_chars: int = 900) -> str:
+    """Render stored planner prose without raw structured payloads."""
+    text = public_text(value)
+    text = re.sub(r"```(?:json)?\s*.*?```", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars].rstrip()
+    sentence_end = max(truncated.rfind("."), truncated.rfind("?"), truncated.rfind("!"))
+    if sentence_end >= max_chars * 0.65:
+        truncated = truncated[: sentence_end + 1]
+    return truncated.rstrip(" ,;:.") + "..."
+
+
+def normalized_public_block(value: object) -> str:
+    return re.sub(r"\s+", " ", public_text(value)).strip()
 
 
 def get_daily_summary(d: date) -> dict:
@@ -211,12 +230,18 @@ def get_plan_delivery_for_date(d: date) -> list[dict]:
                    event_label,
                    status,
                    to_char(delivered_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI') AS delivered,
+                   COALESCE(to_char(acked_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI'), '') AS acked,
                    COALESCE(resulting_plan_id, '') AS resulting_plan_id,
-                   COALESCE(to_char(plan_written_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI'), '') AS plan_written
+                   COALESCE(to_char(plan_written_at AT TIME ZONE 'America/Denver', 'YYYY-MM-DD HH24:MI'), '') AS plan_written,
+                   COALESCE(gateway_body, '') AS gateway_body
             FROM plan_delivery_log
             WHERE delivered_at >= '{d} 00:00:00 America/Denver'::timestamptz
               AND delivered_at < '{next_day} 00:00:00 America/Denver'::timestamptz
-              AND event_type IN ('SUNRISE', 'MIDDAY', 'SUNSET', 'TRANSITION', 'FORECAST')
+              AND event_type IN (
+                  'SUNRISE', 'MIDDAY', 'SUNSET', 'MIDNIGHT',
+                  'SOLAR_MAX', 'TRANSITION', 'FORECAST',
+                  'FORECAST_DEVIATION', 'MANUAL'
+              )
             ORDER BY delivered_at
         ) e
     """)
@@ -418,6 +443,33 @@ def status_label(status: object) -> str:
     return status_text
 
 
+def compact_time(local_timestamp: object) -> str:
+    text = str(local_timestamp or "").strip()
+    if len(text) >= 16:
+        return text[11:16]
+    return text or "unknown"
+
+
+def delivery_public_note(event: dict, max_chars: int = 520) -> str:
+    """Extract public prose from a plan_delivery_log gateway body."""
+    body = str(event.get("gateway_body") or "").strip()
+    if not body:
+        return ""
+
+    lines = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("{") and line.endswith("}"):
+            continue
+        lines.append(line)
+
+    text = " ".join(lines)
+    text = re.sub(r"^acknowledged by [^:]+:\s*", "Acknowledged: ", text, flags=re.IGNORECASE)
+    return public_summary(text, max_chars=max_chars)
+
+
 def data_table(rows: list[tuple[str, str, str]]) -> str:
     if not rows:
         return '<div class="metric-grid">\n  <div class="metric-card"><strong>No data</strong><p>No rows available.</p></div>\n</div>'
@@ -450,7 +502,7 @@ def _render_structured_hypothesis(s: dict) -> list[str]:
     conds = s.get("conditions") or {}
     if conds:
         lines.append("")
-        lines.append("**Conditions (structured)**")
+        lines.append("**Conditions**")
         lines.append("")
         lines.append(
             metric_grid(
@@ -594,9 +646,8 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
             lines.extend(["</div>", ""])
 
     # Secondary parameters are noisy when every waypoint repeats the full
-    # controller state. Lead with deltas; keep the raw dump auditable.
+    # controller state. Public pages keep deltas and omit unchanged raw rows.
     changed_non_core_rows = []
-    raw_non_core_rows = []
     last_seen: dict[str, str] = {}
     for t in times:
         vals = by_time[t]
@@ -606,7 +657,6 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
                 continue
             value = vals[param]
             previous = last_seen.get(param)
-            raw_non_core_rows.append((time_str, param, f"Value {value}."))
             if previous != value:
                 change = f"{previous} → {value}" if previous is not None else f"initial {value}"
                 changed_non_core_rows.append((time_str, param, change))
@@ -614,19 +664,6 @@ def format_waypoints_table(waypoints: list[dict]) -> str:
 
     if changed_non_core_rows:
         lines.extend(["", "**Changed secondary parameters:**", "", data_table(changed_non_core_rows)])
-
-    if raw_non_core_rows:
-        lines.extend(
-            [
-                "",
-                "<details>",
-                "<summary>Full secondary parameter dump</summary>",
-                "",
-                data_table(raw_non_core_rows),
-                "",
-                "</details>",
-            ]
-        )
 
     return "\n".join(lines) + "\n"
 
@@ -642,7 +679,31 @@ def _num(val, digits: int = 1):
         return None
 
 
-def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: dict) -> str:
+def get_latest_plan_page_date() -> date | None:
+    rows = db_query_rows("""
+        WITH plan_dates AS (
+            SELECT substring(plan_id FROM 'iris-(\\d{8})')::date AS d
+            FROM plan_journal
+            WHERE plan_id NOT LIKE 'iris-reactive%' AND plan_id NOT LIKE 'iris-fix%'
+        ),
+        summary_dates AS (
+            SELECT date AS d
+            FROM daily_summary
+            WHERE date >= '2026-03-24' AND cost_total IS NOT NULL
+        )
+        SELECT max(d)::text
+        FROM (
+            SELECT d FROM plan_dates WHERE d IS NOT NULL
+            UNION
+            SELECT d FROM summary_dates WHERE d IS NOT NULL
+        ) latest
+    """)
+    if not rows or not rows[0] or not rows[0][0].strip():
+        return None
+    return date.fromisoformat(rows[0][0].strip())
+
+
+def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: dict, *, is_latest: bool = False) -> str:
     """Sprint 22: builds frontmatter via DailyPlanVaultFrontmatter schema.
     yaml.safe_dump emits the block; a schema validation error means the
     renderer gave us a malformed value (not our concern to hide with a
@@ -712,9 +773,9 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
     experiment = None
     if latest_plan:
         experiment = {
-            "hypothesis": public_text(latest_plan.get("hypothesis", "")),
-            "test": public_text(latest_plan.get("experiment", "")),
-            "expected_outcome": public_text(latest_plan.get("expected_outcome", "")),
+            "hypothesis": public_summary(latest_plan.get("hypothesis", ""), max_chars=700),
+            "test": public_summary(latest_plan.get("experiment", ""), max_chars=400),
+            "expected_outcome": public_summary(latest_plan.get("expected_outcome", ""), max_chars=400),
             "outcome_score": latest_plan.get("outcome_score", ""),
             "status": latest_plan.get("status", "pending"),
         }
@@ -748,6 +809,9 @@ def generate_frontmatter(d: date, plans: list[dict], summary: dict, setpoints: d
     )
     yaml_block += f'description: "{_yaml_escape(description)}"\n'
     yaml_block += "noindex: true\n"
+    if is_latest:
+        yaml_block += "aliases:\n"
+        yaml_block += "  - plans/latest\n"
     lines = ["---", yaml_block.rstrip(), "---"]
     return "\n".join(lines)
 
@@ -816,7 +880,13 @@ def get_cycle_label(plan: dict) -> tuple[str, str]:
     return f"{label} ({time_display})", time_display
 
 
-def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[dict]) -> str:
+def generate_cycle_section(
+    plan: dict,
+    prev_plan: dict | None,
+    waypoints: list[dict],
+    seen_validation_results: set[tuple[str, str]],
+    seen_previous_hypotheses: set[str],
+) -> str:
     """Generate a single cycle section with Reflection + Hypothesis + Setpoints.
 
     Each planning cycle is a first-class entry in chronological order.
@@ -829,6 +899,16 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 
     changed_params = [p.strip() for p in plan.get("params_changed", "").split(",") if p.strip()]
     score = plan.get("outcome_score", "")
+    structured_raw = plan.get("hypothesis_structured", "")
+    structured = None
+    if structured_raw:
+        try:
+            structured = json.loads(structured_raw)
+        except (json.JSONDecodeError, TypeError):
+            structured = None
+    structured_context = isinstance(structured, dict) and bool(
+        structured.get("conditions") or structured.get("stress_windows")
+    )
     lines.append(
         metric_grid(
             [
@@ -843,10 +923,6 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
             ]
         )
     )
-    actual = plan.get("actual_outcome", "")
-    if actual:
-        lines.append("")
-        lines.append(f"> **Result:** {public_text(actual)}")
     lines.append("")
 
     # --- Reflection: validates the previous cycle ---
@@ -865,22 +941,34 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
         lines.append("")
 
         prev_hypothesis = prev_plan.get("hypothesis", "")
-        if prev_hypothesis:
-            lines.append(f"**Previous hypothesis:** {public_text(prev_hypothesis)}")
-        else:
-            lines.append("**Previous hypothesis:** *(not recorded)*")
+        prev_hypothesis_normalized = normalized_public_block(prev_hypothesis or "(not recorded)")
+        if prev_hypothesis_normalized not in seen_previous_hypotheses:
+            if prev_hypothesis:
+                lines.append(f"**Previous hypothesis:** {public_summary(prev_hypothesis)}")
+            else:
+                lines.append("**Previous hypothesis:** *(not recorded)*")
+            seen_previous_hypotheses.add(prev_hypothesis_normalized)
 
         # The actual_outcome and score come from THIS plan's validation of the previous one
         actual = plan.get("actual_outcome", "")
         score = plan.get("outcome_score", "")
+        duplicate_validation = False
         if actual:
-            lines.append(f"**Result:** {public_text(actual)}")
-        if score:
+            validation_key = (prev_id, normalized_public_block(actual))
+            duplicate_validation = validation_key in seen_validation_results
+            if duplicate_validation:
+                lines.append(
+                    "_Duplicate validation row: this same previous cycle and result already appeared earlier on this page. The row stays visible for audit continuity._"
+                )
+            else:
+                lines.append(f"**Result:** {public_text(actual)}")
+                seen_validation_results.add(validation_key)
+        if score and not duplicate_validation:
             lines.append(f"**Score:** {score}/10")
         lines.append("")
 
         lesson = plan.get("lesson_extracted", "")
-        if lesson:
+        if lesson and not duplicate_validation:
             lines.append(f"> **New finding:** {public_text(lesson)} → Added to [Lessons Learned](/reference/lessons)")
             lines.append("")
     else:
@@ -893,7 +981,7 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     lines.append("")
 
     conditions = plan.get("conditions_summary", "")
-    if conditions:
+    if conditions and not structured_context:
         lines.append(f"**Conditions:** {public_text(conditions)}")
 
     experiment = plan.get("experiment", "")
@@ -909,16 +997,10 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
     # stress windows / per-parameter rationale) — rendered when the planner
     # emitted the JSON block via the set_plan MCP tool. Legacy rows where
     # hypothesis_structured IS NULL just render the prose above and skip this.
-    structured_raw = plan.get("hypothesis_structured", "")
-    if structured_raw:
-        try:
-            structured = json.loads(structured_raw)
-        except (json.JSONDecodeError, TypeError):
-            structured = None
-        # Only render if it's a dict with the expected shape; tolerate legacy
-        # rows that may have non-object JSON (scalars, arrays).
-        if isinstance(structured, dict):
-            lines.extend(_render_structured_hypothesis(structured))
+    # Only render if it's a dict with the expected shape; tolerate legacy rows
+    # that may have non-object JSON (scalars, arrays).
+    if isinstance(structured, dict):
+        lines.extend(_render_structured_hypothesis(structured))
 
     # --- Setpoints: waypoints for THIS plan_id only ---
     if waypoints:
@@ -934,22 +1016,22 @@ def generate_cycle_section(plan: dict, prev_plan: dict | None, waypoints: list[d
 def generate_no_plan_section(d: date, delivery_events: list[dict]) -> str:
     """Explain a day with no full plan_journal cycles without hiding activity."""
     lines = [
-        "**Planner archive status:** no full `plan_journal` planning cycles were recorded for this day.",
-        "",
-        "Missed cycles are intentionally visible here because planner availability is part of the system being audited. The ESP32 controller continued enforcing the last valid bounded setpoints and hard safety rails; this page still shows the measured climate, equipment runtime, stress hours, and costs for the day.",
+        f"**Planner archive status:** no full `plan_journal` planning cycles were recorded on {d.isoformat()}.",
         "",
     ]
 
     if not delivery_events:
         lines.extend(
             [
-                "No planner delivery-log rows were recorded for this local date.",
+                f"No planner delivery-log rows were recorded for {d.isoformat()}.",
                 "",
             ]
         )
         return "\n".join(lines)
 
-    required_events = [event for event in delivery_events if event.get("event_type") in {"SUNRISE", "MIDDAY", "SUNSET"}]
+    required_events = [
+        event for event in delivery_events if event.get("event_type") in {"SUNRISE", "MIDDAY", "SUNSET", "MIDNIGHT"}
+    ]
     one_shots = [
         event
         for event in delivery_events
@@ -986,8 +1068,69 @@ def generate_no_plan_section(d: date, delivery_events: list[dict]) -> str:
     for event in delivery_events:
         plan_id = event.get("resulting_plan_id") or "-"
         meta = f"{event.get('event_type', '?')} · {event.get('status', '?')}"
+        note = delivery_public_note(event, max_chars=320)
         body = f"Delivered {event.get('delivered', '?')}; resulting plan {plan_id}."
+        if note:
+            body = f"{body} {note}"
         rows.append((event.get("event_label") or event.get("event_type") or "Planner event", meta, body))
+    lines.append(data_table(rows))
+    lines.append("")
+    return "\n".join(lines)
+
+
+def generate_delivery_events_section(d: date, delivery_events: list[dict], public_plan_ids: set[str]) -> str:
+    """Render all planner delivery events, including no-change acknowledgements."""
+    if not delivery_events:
+        return ""
+
+    acknowledged = [event for event in delivery_events if event.get("status") == "acked"]
+    plan_writes = [event for event in delivery_events if event.get("status") == "plan_written"]
+    pending = [event for event in delivery_events if event.get("status") == "pending"]
+
+    lines = [
+        "## Planner Execution Ledger",
+        "",
+        (
+            "Planner checkpoints can acknowledge that the active plan is still suitable without "
+            "writing a new public plan ID. Those no-change decisions are part of the audit trail."
+        ),
+        "",
+        metric_grid(
+            [
+                ("Delivery events", str(len(delivery_events))),
+                ("Plan writes", str(len(plan_writes))),
+                ("No-change acknowledgements", str(len(acknowledged))),
+                ("Pending", str(len(pending))),
+            ]
+        ),
+        "",
+    ]
+
+    rows = []
+    for event in delivery_events:
+        event_type = event.get("event_type", "?")
+        status = event.get("status", "?")
+        plan_id = event.get("resulting_plan_id", "")
+        delivered = compact_time(event.get("delivered"))
+        resolved = compact_time(event.get("acked") or event.get("plan_written"))
+        title = f"{event.get('event_label') or event_type} ({delivered})"
+        meta = f"{event_type} · {status}"
+
+        if status == "plan_written" and plan_id:
+            body = f"Wrote public plan {plan_id}."
+            if plan_id not in public_plan_ids:
+                body = f"Wrote non-archive plan {plan_id}."
+        elif status == "acked":
+            body = delivery_public_note(event) or "Acknowledged with no setpoint or plan change."
+        elif status == "pending":
+            body = "Delivery accepted by the planning gateway; no resolution recorded yet."
+        else:
+            body = "Delivery recorded without a public plan write."
+
+        if resolved != "unknown":
+            body = f"{body} Resolved {resolved} MDT."
+        rows.append((title, meta, body))
+
     lines.append(data_table(rows))
     lines.append("")
     return "\n".join(lines)
@@ -1175,26 +1318,44 @@ def generate_day(d: date) -> str:
     stress_ctx = get_stress_context(d)
 
     # Frontmatter
-    frontmatter = generate_frontmatter(d, plans, summary, setpoints)
+    frontmatter = generate_frontmatter(d, plans, summary, setpoints, is_latest=(d == get_latest_plan_page_date()))
 
     # Title
     body = [
-        "[//]: # (auto-generated by scripts/generate-daily-plan.py; source: daily_summary + plan_journal)",
+        "[//]: # (auto-generated by scripts/generate-daily-plan.py; source: daily_summary + plan_journal + plan_delivery_log)",
         "",
         f"# {title}",
         "",
-        "*Generated lab notebook from `daily_summary`, `plan_journal`, and setpoint audit data. It is intentionally chronological and may include in-progress cycles before validation.*",
+        "*Generated lab notebook from `daily_summary`, `plan_journal`, `plan_delivery_log`, and setpoint audit data. It is intentionally chronological and may include in-progress cycles before validation.*",
         "",
     ]
 
     if not plans:
         body.append(generate_no_plan_section(d, delivery_events))
     else:
+        delivery_section = generate_delivery_events_section(
+            d,
+            delivery_events,
+            {plan.get("plan_id", "") for plan in plans},
+        )
+        if delivery_section:
+            body.append(delivery_section)
+
         # Each plan gets its own cycle section, chronologically
+        seen_validation_results: set[tuple[str, str]] = set()
+        seen_previous_hypotheses: set[str] = set()
         for plan in plans:
             prev_plan = get_previous_plan(plan["created"])
             waypoints = get_waypoints_for_plan(plan["plan_id"])
-            body.append(generate_cycle_section(plan, prev_plan, waypoints))
+            body.append(
+                generate_cycle_section(
+                    plan,
+                    prev_plan,
+                    waypoints,
+                    seen_validation_results,
+                    seen_previous_hypotheses,
+                )
+            )
 
     # End-of-day summary (unchanged)
     if summary:

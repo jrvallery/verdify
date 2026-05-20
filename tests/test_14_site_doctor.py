@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+
+def load_site_doctor():
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "site-doctor.py"
+    spec = importlib.util.spec_from_file_location("site_doctor_under_test", script_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def write_source_page(vault_root: Path, rel_path: str, *, noindex: bool = False) -> None:
+    path = vault_root / rel_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    noindex_line = "noindex: true\n" if noindex else ""
+    path.write_text(f"---\ntitle: Test\n{noindex_line}---\n\nBody\n", encoding="utf-8")
+
+
+def write_public_nav(public_root: Path, hrefs: list[str]) -> None:
+    public_root.mkdir(parents=True, exist_ok=True)
+    links = "\n".join(f'<a href="{href}">{href}</a>' for href in hrefs)
+    (public_root / "index.html").write_text(
+        f'<!doctype html><html><body><nav class="site-nav">{links}</nav></body></html>',
+        encoding="utf-8",
+    )
+
+
+def write_public_page(public_root: Path, route: str, hrefs: list[str]) -> None:
+    if route == "index":
+        path = public_root / "index.html"
+    else:
+        path = public_root / route / "index.html"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    links = "\n".join(f'<a href="{href}">{href}</a>' for href in hrefs)
+    path.write_text(f"<!doctype html><html><body>{links}</body></html>", encoding="utf-8")
+
+
+def test_route_for_source_page_uses_public_index_routes():
+    site_doctor = load_site_doctor()
+
+    assert site_doctor.route_for_source_page("index.md") == "index"
+    assert site_doctor.route_for_source_page("plans/index.md") == "plans"
+    assert site_doctor.route_for_source_page("data/forecast/index.md") == "data/forecast"
+    assert site_doctor.route_for_source_page("plans/2026-05-19.md") == "plans/2026-05-19"
+
+
+def test_navigation_coverage_passes_when_source_routes_are_discoverable_from_hubs(tmp_path: Path):
+    site_doctor = load_site_doctor()
+    vault_root = tmp_path / "vault"
+    public_root = tmp_path / "public"
+    for rel_path in ("index.md", "data/plans/index.md", "plans/2026-05-19.md", "reference/planning-loop.md"):
+        write_source_page(vault_root, rel_path)
+    write_source_page(vault_root, "plans/index.md", noindex=True)
+    write_public_nav(public_root, ["/", "/data/plans", "/reference/planning-loop"])
+    write_public_page(public_root, "data/plans", ["/plans/2026-05-19"])
+    write_public_page(public_root, "reference/planning-loop", [])
+
+    assert site_doctor.check_navigation_coverage(vault_root, public_root) == []
+
+
+def test_navigation_coverage_resolves_relative_hub_links(tmp_path: Path):
+    site_doctor = load_site_doctor()
+    vault_root = tmp_path / "vault"
+    public_root = tmp_path / "public"
+    write_source_page(vault_root, "index.md")
+    write_source_page(vault_root, "greenhouse/crops/index.md")
+    write_source_page(vault_root, "greenhouse/crops/lettuce.md")
+    write_public_nav(public_root, ["/", "/greenhouse/crops"])
+    write_public_page(public_root, "greenhouse/crops", ["lettuce"])
+
+    assert site_doctor.check_navigation_coverage(vault_root, public_root) == []
+
+
+def test_navigation_coverage_flags_missing_and_stale_routes(tmp_path: Path):
+    site_doctor = load_site_doctor()
+    vault_root = tmp_path / "vault"
+    public_root = tmp_path / "public"
+    write_source_page(vault_root, "index.md")
+    write_source_page(vault_root, "plans/2026-05-19.md")
+    write_public_nav(public_root, ["/", "/reference/missing"])
+
+    findings = site_doctor.check_navigation_coverage(vault_root, public_root)
+    codes = {finding.code for finding in findings}
+
+    assert "nav-route-missing" in codes
+    assert "nav-route-stale" in codes

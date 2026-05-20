@@ -64,17 +64,17 @@
           "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#9CCC65"
+            "fixedColor": "#FDD835"
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -88,9 +88,10 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "none"
       },
-      "description": "DLI accumulation from greenhouse light sensing; target comes from the crop-driven lighting policy."
+      "description": "DLI accumulation from greenhouse light sensing; target comes from the crop-driven lighting policy.",
+      "transparent": true
     },
     {
       "id": 2,
@@ -123,17 +124,17 @@
           "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#FFCA28"
+            "fixedColor": "#FDD835"
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -147,9 +148,10 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "none"
       },
-      "description": "Current indoor light level from ESP32 ADC"
+      "description": "Current indoor light level from ESP32 ADC",
+      "transparent": true
     },
     {
       "id": 3,
@@ -188,11 +190,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -241,17 +243,17 @@
           "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#CE93D8"
+            "fixedColor": "#FDD835"
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -265,9 +267,10 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "none"
       },
-      "description": "Indoor lux / outdoor lux \u00d7 100"
+      "description": "Indoor lux / outdoor lux \u00d7 100",
+      "transparent": true
     },
     {
       "id": 5,
@@ -306,11 +309,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -365,11 +368,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -424,11 +427,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -473,11 +476,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "suffix:h",
           "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#C6FF00"
+            "fixedColor": "#26A69A"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -486,11 +489,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -504,9 +507,10 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "none"
       },
-      "description": "Total grow light runtime in selected period"
+      "description": "Total grow light runtime in selected period",
+      "transparent": true
     },
     {
       "type": "row",
@@ -573,7 +577,12 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "lux"
         },
@@ -598,7 +607,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 15
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -607,9 +616,13 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFCA28"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
               }
             ]
           },
@@ -637,6 +650,18 @@
                   "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 55
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -679,8 +704,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -690,6 +715,18 @@
                   "tooltip": false,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           }
@@ -701,16 +738,13 @@
           "sort": "desc"
         },
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 10,
@@ -764,7 +798,12 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
         },
         "overrides": [
@@ -777,7 +816,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -820,7 +859,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "rgba(255,80,80,0.5)"
+                  "fixedColor": "rgba(140,140,140,0.5)"
                 }
               },
               {
@@ -847,16 +886,13 @@
           "sort": "desc"
         },
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         }
-      }
+      },
+      "transparent": true
     },
     {
       "type": "row",
@@ -923,7 +959,12 @@
             "fillOpacity": 10,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "lux"
         },
@@ -948,6 +989,18 @@
               {
                 "id": "custom.axisPlacement",
                 "value": "left"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 55
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -960,8 +1013,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -971,6 +1024,18 @@
               {
                 "id": "custom.axisPlacement",
                 "value": "right"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -983,8 +1048,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#CE93D8"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1000,6 +1065,18 @@
                     4
                   ]
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -1011,16 +1088,13 @@
           "sort": "desc"
         },
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 12,
@@ -1079,8 +1153,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFCA28"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1101,7 +1175,25 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 15
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
               }
             ]
           },
@@ -1215,7 +1307,7 @@
           "max": 50,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#CE93D8"
+            "fixedColor": "#FDD835"
           },
           "custom": {
             "drawStyle": "line",
@@ -1223,9 +1315,31 @@
             "fillOpacity": 15,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Transmission %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -1233,16 +1347,13 @@
           "sort": "desc"
         },
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 14,
@@ -1301,8 +1412,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1320,6 +1431,28 @@
               {
                 "id": "max",
                 "value": 75
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
               }
             ]
           },
@@ -1332,8 +1465,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFCA28"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1346,7 +1479,15 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 15
+                "value": 85
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -1385,7 +1526,7 @@
     {
       "id": 15,
       "type": "state-timeline",
-      "title": "Lutron Circuit State",
+      "title": "Lighting Circuit State",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1430,7 +1571,7 @@
           "thresholds": {
             "steps": [
               {
-                "color": "rgba(100, 100, 100, 0.3)",
+                "color": "rgba(140,140,140,0.3)",
                 "value": null
               },
               {
@@ -1445,22 +1586,22 @@
               "options": {
                 "0": {
                   "text": "Off",
-                  "color": "rgba(100, 100, 100, 0.3)",
+                  "color": "rgba(253,216,53,0.3)",
                   "index": 0
                 },
                 "1": {
                   "text": "On",
-                  "color": "#73BF69",
+                  "color": "#FDD835",
                   "index": 1
                 },
                 "false": {
                   "text": "Off",
-                  "color": "rgba(100, 100, 100, 0.3)",
+                  "color": "rgba(253,216,53,0.3)",
                   "index": 2
                 },
                 "true": {
                   "text": "On",
-                  "color": "#73BF69",
+                  "color": "#FDD835",
                   "index": 3
                 }
               }
@@ -1488,8 +1629,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#9CCC65"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1499,7 +1640,7 @@
                     "type": "value",
                     "options": {
                       "ON": {
-                        "color": "#9CCC65",
+                        "color": "#73BF69",
                         "text": "ON",
                         "index": 0
                       }
@@ -1509,7 +1650,7 @@
                     "type": "value",
                     "options": {
                       "OFF": {
-                        "color": "#37474F",
+                        "color": "rgba(115,191,105,0.18)",
                         "text": "",
                         "index": 1
                       }
@@ -1528,8 +1669,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#C6FF00"
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1539,7 +1680,7 @@
                     "type": "value",
                     "options": {
                       "ON": {
-                        "color": "#C6FF00",
+                        "color": "#2196F3",
                         "text": "ON",
                         "index": 0
                       }
@@ -1549,8 +1690,78 @@
                     "type": "value",
                     "options": {
                       "OFF": {
-                        "color": "#37474F",
+                        "color": "rgba(33,150,243,0.18)",
                         "text": "",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Occupancy"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "occupied": {
+                        "color": "#2196F3",
+                        "text": "Occupied",
+                        "index": 0
+                      },
+                      "empty": {
+                        "color": "rgba(253,216,53,0.30)",
+                        "text": "",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sun"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Day": {
+                        "color": "#FDD835",
+                        "text": "Day",
+                        "index": 0
+                      },
+                      "Night": {
+                        "color": "#112231",
+                        "text": "Night",
                         "index": 1
                       }
                     }
@@ -1567,15 +1778,20 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
         }
       },
-      "description": "Shows grow light state or runtime behavior."
+      "description": "Shows grow light state or runtime behavior.",
+      "transparent": true
     },
     {
       "id": 16,
       "type": "state-timeline",
       "title": "Lighting Decision Context",
-      "description": "Factors affecting per-circuit light decisions: Lutron state, occupancy, and sun position.",
+      "description": "Factors affecting per-circuit light decisions: observed switch state, occupancy, and sun position.",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1638,7 +1854,7 @@
           "thresholds": {
             "steps": [
               {
-                "color": "rgba(100, 100, 100, 0.3)",
+                "color": "rgba(140,140,140,0.3)",
                 "value": null
               },
               {
@@ -1653,22 +1869,22 @@
               "options": {
                 "0": {
                   "text": "Off",
-                  "color": "rgba(100, 100, 100, 0.3)",
+                  "color": "rgba(253,216,53,0.3)",
                   "index": 0
                 },
                 "1": {
                   "text": "On",
-                  "color": "#73BF69",
+                  "color": "#FDD835",
                   "index": 1
                 },
                 "false": {
                   "text": "Off",
-                  "color": "rgba(100, 100, 100, 0.3)",
+                  "color": "rgba(253,216,53,0.3)",
                   "index": 2
                 },
                 "true": {
                   "text": "On",
-                  "color": "#73BF69",
+                  "color": "#FDD835",
                   "index": 3
                 }
               }
@@ -1697,7 +1913,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#9CCC65",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -1708,7 +1924,7 @@
                     "type": "value",
                     "options": {
                       "ON": {
-                        "color": "#C6FF00",
+                        "color": "#73BF69",
                         "text": "ON",
                         "index": 0
                       }
@@ -1718,7 +1934,7 @@
                     "type": "value",
                     "options": {
                       "OFF": {
-                        "color": "#37474F",
+                        "color": "rgba(115,191,105,0.18)",
                         "text": "",
                         "index": 1
                       }
@@ -1741,21 +1957,25 @@
                     "type": "value",
                     "options": {
                       "occupied": {
-                        "color": "#42A5F5",
-                        "text": "Occupied"
-                      }
-                    }
-                  },
-                  {
-                    "type": "value",
-                    "options": {
+                        "color": "#2196F3",
+                        "text": "Occupied",
+                        "index": 0
+                      },
                       "empty": {
-                        "color": "#37474F",
-                        "text": ""
+                        "color": "rgba(253,216,53,0.30)",
+                        "text": "",
+                        "index": 1
                       }
                     }
                   }
                 ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
               }
             ]
           },
@@ -1773,16 +1993,60 @@
                     "options": {
                       "Day": {
                         "color": "#FDD835",
-                        "text": "Day"
+                        "text": "Day",
+                        "index": 0
+                      },
+                      "Night": {
+                        "color": "#112231",
+                        "text": "Night",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light Grow"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ON": {
+                        "color": "#2196F3",
+                        "text": "ON",
+                        "index": 0
                       }
                     }
                   },
                   {
                     "type": "value",
                     "options": {
-                      "Night": {
-                        "color": "#1A237E",
-                        "text": "Night"
+                      "OFF": {
+                        "color": "rgba(33,150,243,0.18)",
+                        "text": "",
+                        "index": 1
                       }
                     }
                   }
@@ -1798,8 +2062,13 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
         }
-      }
+      },
+      "transparent": true
     },
     {
       "type": "row",
@@ -1860,23 +2129,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 0
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 5
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 10
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 15
               }
             ]
@@ -1903,7 +2172,7 @@
     {
       "id": 18,
       "type": "timeseries",
-      "title": "Daily Lutron Circuit Runtime",
+      "title": "Daily Lighting Circuit Runtime",
       "description": "Hours of grow light operation per day from daily_summary",
       "datasource": {
         "uid": "verdify-tsdb",
@@ -1940,7 +2209,7 @@
           "unit": "short",
           "color": {
             "mode": "fixed",
-            "fixedColor": "#C6FF00"
+            "fixedColor": "#FDD835"
           },
           "custom": {
             "drawStyle": "bars",
@@ -1950,9 +2219,46 @@
             "spanNulls": true,
             "lineInterpolation": "linear",
             "showPoints": "never",
-            "axisLabel": "Hours"
+            "axisLabel": "Hours",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Main Light Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -1960,16 +2266,13 @@
           "sort": "desc"
         },
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         }
-      }
+      },
+      "transparent": true
     },
     {
       "type": "row",
@@ -2028,7 +2331,12 @@
             "fillOpacity": 15,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "linear"
+            "lineInterpolation": "linear",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
         },
         "overrides": [
@@ -2041,8 +2349,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFD740"
+                  "fixedColor": "#FFE66D",
+                  "mode": "fixed"
                 }
               },
               {
@@ -2054,6 +2362,18 @@
                     4
                   ]
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -2066,9 +2386,21 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -2080,16 +2412,13 @@
           "sort": "desc"
         },
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         }
-      }
+      },
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -2151,11 +2480,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -2173,7 +2502,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -2193,7 +2522,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "yellow"
+                  "fixedColor": "#73BF69"
                 }
               },
               {
@@ -2242,12 +2571,8 @@
       "id": 21,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2344,10 +2669,12 @@
       ],
       "title": "Daily DLI \u2014 Sensor vs Estimated Actual vs Target",
       "type": "timeseries",
-      "description": "Shows how badly the current lux sensor underreports actual plant light, relative to a corrected estimate and the target DLI line."
+      "description": "Shows how badly the current lux sensor underreports actual plant light, relative to a corrected estimate and the target DLI line.",
+      "transparent": true
     }
   ],
   "templating": {
     "list": []
-  }
+  },
+  "style": "light"
 }

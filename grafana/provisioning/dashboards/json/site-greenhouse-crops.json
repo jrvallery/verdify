@@ -18,24 +18,29 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 2
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 4
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 6
               }
             ]
           },
-          "unit": "short"
+          "unit": "suffix:h",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#AB47BC"
+          },
+          "decimals": 1
         },
         "overrides": [
           {
@@ -47,7 +52,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               }
@@ -87,7 +92,8 @@
         }
       ],
       "title": "VPD Stress Hours",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -104,28 +110,33 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 0
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 3
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 5
               }
             ]
           },
-          "unit": "short"
+          "unit": "suffix:h",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#FF9800"
+          },
+          "decimals": 1
         },
         "overrides": [
           {
@@ -137,7 +148,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               }
@@ -177,7 +188,8 @@
         }
       ],
       "title": "Heat Stress Hours",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -194,24 +206,29 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 2
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 4
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 6
               }
             ]
           },
-          "unit": "short"
+          "unit": "suffix:h",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#42A5F5"
+          },
+          "decimals": 1
         },
         "overrides": [
           {
@@ -223,7 +240,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               }
@@ -263,7 +280,8 @@
         }
       ],
       "title": "Cold Stress Hours",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -309,11 +327,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -330,7 +348,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -349,7 +367,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#AB47BC",
+                  "fixedColor": "#2196F3",
                   "mode": "fixed"
                 }
               },
@@ -368,7 +386,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#66BB6A",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -387,13 +405,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -401,7 +419,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -410,6 +428,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -422,13 +444,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -437,6 +459,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -449,13 +479,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -483,6 +513,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Fog Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -501,7 +551,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -529,6 +579,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Mister South Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -547,7 +617,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -575,6 +645,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Mister West Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -593,7 +683,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -621,6 +711,166 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Mister Center Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
               }
             ]
           }
@@ -637,7 +887,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -748,92 +999,8 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.8 ELSE NULL END AS \"Mister South\" FROM equipment_state WHERE equipment='mister_south' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "WITH bounds AS MATERIALIZED (\n  SELECT\n    $__timeFrom()::timestamptz AS from_ts,\n    LEAST($__timeTo()::timestamptz, now()) AS to_ts,\n    interval '5 minutes' AS step,\n    date_trunc('hour', $__timeFrom()::timestamptz) AS seed_start_ts\n),\nbuckets AS MATERIALIZED (\n  SELECT generate_series(time_bucket(b.step, b.seed_start_ts), b.to_ts, b.step) AS time\n  FROM bounds b\n),\nlane_metrics AS MATERIALIZED (\n  SELECT *\n  FROM (VALUES\n    ('mister_south'::text, 'Mister South'::text, 'Mister South Base'::text, 1.75::double precision, 1.8::double precision),\n    ('mister_west'::text, 'Mister West'::text, 'Mister West Base'::text, 1.85::double precision, 1.9::double precision),\n    ('mister_center'::text, 'Mister Center'::text, 'Mister Center Base'::text, 1.95::double precision, 2.0::double precision),\n    ('fog'::text, 'Fog'::text, 'Fog Base'::text, 2.05::double precision, 2.1::double precision)\n  ) AS m(equipment, top_metric, base_metric, lane_low, lane_high)\n),\nstate_seed AS MATERIALIZED (\n  SELECT bd.seed_start_ts AS time, m.equipment, COALESCE(seed.state, false) AS state\n  FROM bounds bd\n  CROSS JOIN lane_metrics m\n  LEFT JOIN LATERAL (\n    SELECT e.state\n    FROM equipment_state e\n    WHERE e.greenhouse_id = 'vallery'\n      AND e.equipment = m.equipment\n      AND e.ts <= bd.seed_start_ts\n    ORDER BY e.ts DESC\n    LIMIT 1\n  ) seed ON true\n),\nstate_events AS MATERIALIZED (\n  SELECT e.ts AS time, e.equipment, e.state\n  FROM equipment_state e, bounds bd\n  WHERE e.greenhouse_id = 'vallery'\n    AND e.equipment IN ('mister_south', 'mister_west', 'mister_center', 'fog')\n    AND e.ts >= bd.seed_start_ts\n    AND e.ts <= bd.to_ts\n),\nstate_timeline AS MATERIALIZED (\n  SELECT\n    e.time,\n    e.equipment,\n    e.state,\n    lead(e.time, 1, (SELECT to_ts FROM bounds)) OVER (PARTITION BY e.equipment ORDER BY e.time) AS next_time\n  FROM (\n    SELECT time, equipment, state FROM state_seed\n    UNION ALL\n    SELECT time, equipment, state FROM state_events\n  ) e\n),\nstate_segments AS MATERIALIZED (\n  SELECT\n    greatest(st.time, bd.seed_start_ts) AS start_time,\n    least(st.next_time, bd.to_ts) AS end_time,\n    st.equipment\n  FROM state_timeline st\n  CROSS JOIN bounds bd\n  WHERE st.state\n    AND st.time < bd.to_ts\n    AND st.next_time > bd.seed_start_ts\n),\nlanes AS (\n  SELECT\n    b.time,\n    m.top_metric AS metric,\n    CASE WHEN EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = m.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) THEN m.lane_high ELSE NULL::double precision END AS value\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN lane_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n  UNION ALL\n  SELECT b.time, m.base_metric, m.lane_low\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN lane_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n)\nSELECT time, metric, value\nFROM lanes\nORDER BY time, metric",
           "refId": "E",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.9 ELSE NULL END AS \"Mister West\" FROM equipment_state WHERE equipment='mister_west' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "F",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.0 ELSE NULL END AS \"Mister Center\" FROM equipment_state WHERE equipment='mister_center' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "G",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "H",
           "sql": {
             "columns": [
               {
@@ -854,7 +1021,8 @@
         }
       ],
       "title": "VPD Compliance Band",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "description": "Shows current or recent botrytis disease risk based on greenhouse conditions.",
@@ -865,7 +1033,13 @@
             "lineInterpolation": "smooth",
             "showPoints": "never",
             "spanNulls": true,
-            "axisLabel": "Hours"
+            "axisLabel": "Hours",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "fillOpacity": 8
           },
           "unit": "percent"
         },
@@ -883,6 +1057,28 @@
               {
                 "id": "unit",
                 "value": "short"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Botrytis Risk %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -899,7 +1095,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -919,7 +1116,8 @@
         }
       ],
       "title": "Botrytis Risk",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "description": "Shows current soil moisture conditions across the monitored greenhouse zones.",
@@ -937,19 +1135,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -1038,19 +1236,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 200
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 1000
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2000
               }
             ]
@@ -1099,19 +1297,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -1183,11 +1381,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -1434,5 +1632,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

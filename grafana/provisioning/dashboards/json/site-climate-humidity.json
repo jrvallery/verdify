@@ -114,13 +114,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -128,7 +128,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -137,6 +137,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -149,13 +153,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -164,6 +168,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -627,11 +639,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -705,13 +717,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -719,7 +731,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -728,6 +740,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -740,13 +756,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -755,6 +771,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1191,15 +1215,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 0.05
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 0.12
               }
             ]
@@ -1327,5 +1351,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

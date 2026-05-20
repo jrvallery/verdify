@@ -59,11 +59,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -118,11 +118,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -433,23 +433,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "dark-blue",
+                "color": "#42A5F5",
                 "value": null
               },
               {
-                "color": "dark-blue",
+                "color": "#42A5F5",
                 "value": -90
               },
               {
-                "color": "purple",
+                "color": "#AB47BC",
                 "value": 0
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 15
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 40
               },
               {
@@ -508,23 +508,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": null
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 0
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 90
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 180
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 270
               }
             ]
@@ -601,11 +601,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -842,23 +842,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 0
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 5
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 10
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 15
               }
             ]
@@ -939,8 +939,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFD740"
+                  "fixedColor": "#FFE66D",
+                  "mode": "fixed"
                 }
               },
               {
@@ -952,6 +952,18 @@
                     4
                   ]
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -964,9 +976,21 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -1027,11 +1051,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#78909C",
+                "color": "#8C8C8C",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 200
               },
               {
@@ -1039,7 +1063,7 @@
                 "value": 500
               },
               {
-                "color": "#FFD600",
+                "color": "#FDD835",
                 "value": 800
               }
             ]
@@ -1129,8 +1153,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFCA28"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1151,7 +1175,25 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 15
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
               }
             ]
           },
@@ -1452,7 +1494,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "style": "dark",
+  "style": "light",
   "tags": [
     "canonical",
     "lighting-dli",

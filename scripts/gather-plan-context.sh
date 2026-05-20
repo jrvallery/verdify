@@ -16,6 +16,7 @@ HA_TOKEN=$(cat /mnt/agents/shared/credentials/ha_token.txt 2>/dev/null || echo "
 HA_URL="http://192.168.30.107:8123"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON:-/srv/greenhouse/.venv/bin/python}"
+STATIC_CONTEXT_FILE="${VERDIFY_PLANNER_STATIC_CONTEXT:-/srv/verdify/state/planner-static-context.md}"
 
 mapfile -t REGISTRY_SQL < <("$PYTHON_BIN" - "$SCRIPT_ROOT/.." <<'PY'
 import sys
@@ -1035,6 +1036,25 @@ SELECT count(*) FILTER (WHERE both_high AND ventilating) AS hot_dry_vent_samples
 echo "If hot_dry_vent_samples is high but fan2/fog/mister pct is low, prefer plans that keep moisture thresholds band-coupled and escalate cooling assist earlier; do not solve this by widening the compliance band. Sampled at 5-minute cadence over 24h for prompt speed."
 echo ""
 
+# ── 30c. PUBLIC SITE STATIC CONTEXT ───────────────────────────────
+# This file is generated from the same Markdown source tree Quartz renders for
+# lab.verdify.ai. Keeping it inside the planner packet makes the public contract,
+# safety docs, known limits, crop/equipment references, and operating rules part
+# of the same evidence surface readers inspect on the site.
+echo "--- PUBLIC SITE STATIC CONTEXT (same source as lab.verdify.ai) ---"
+if [ -s "$STATIC_CONTEXT_FILE" ]; then
+  echo "source_file=${STATIC_CONTEXT_FILE}"
+  echo "sha256=$(sha256sum "$STATIC_CONTEXT_FILE" | awk '{print $1}')"
+  echo "bytes=$(wc -c < "$STATIC_CONTEXT_FILE" | tr -d ' ')"
+  echo "lines=$(wc -l < "$STATIC_CONTEXT_FILE" | tr -d ' ')"
+  echo ""
+  cat "$STATIC_CONTEXT_FILE"
+else
+  echo "STATIC_CONTEXT_MISSING: ${STATIC_CONTEXT_FILE}"
+  echo "Run scripts/gather-static-context.sh or scripts/publish-site-content.sh before trusting site-context claims."
+fi
+echo ""
+
 # ── 31. CONTEXT COMPLETENESS SUMMARY (G10) ─────────────────────
 # Tests each external dependency this script relies on and reports pass/fail
 # with a one-line explanation of what degrades when that dep is down. If any
@@ -1106,6 +1126,13 @@ if [ -x /srv/verdify/scripts/validate-plan-coverage.sh ]; then
   _check "validate-plan-coverage.sh present" ok "section 28 coverage report is reliable"
 else
   _check "validate-plan-coverage.sh present" fail "plan-coverage section above silently skipped"
+fi
+
+# Static site context: source contract and public planning docs.
+if [ -s "$STATIC_CONTEXT_FILE" ]; then
+  _check "planner static site context" ok "public site Markdown is embedded above from ${STATIC_CONTEXT_FILE}"
+else
+  _check "planner static site context" fail "static site context missing; planner cannot see the same public contract readers see"
 fi
 
 echo ""

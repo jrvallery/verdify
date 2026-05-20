@@ -30,8 +30,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
             "fixedColor": "#FF9800"
@@ -66,7 +66,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 3,
@@ -95,11 +96,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#E65100"
+            "fixedColor": "#F4511E"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -131,7 +132,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 4,
@@ -160,11 +162,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#42A5F5"
+            "fixedColor": "#4DB6AC"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -180,7 +182,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#26A69A",
+                  "fixedColor": "#4DB6AC",
                   "mode": "fixed"
                 }
               }
@@ -196,7 +198,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 5,
@@ -225,11 +228,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#1565C0"
+            "fixedColor": "#5C6BC0"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -261,7 +264,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 6,
@@ -290,11 +294,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#009688"
+            "fixedColor": "#4FC3F7"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -310,7 +314,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               }
@@ -326,7 +330,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 7,
@@ -355,11 +360,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#FFD740"
+            "fixedColor": "#42A5F5"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -375,7 +380,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFCA28",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               }
@@ -391,7 +396,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 8,
@@ -420,11 +426,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
+          "unit": "suffix:h",
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#66BB6A"
+            "fixedColor": "#9CCC65"
           },
           "custom": {
             "axisLabel": "Hours"
@@ -456,7 +462,8 @@
         },
         "colorMode": "value",
         "graphMode": "none"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 10,
@@ -589,7 +596,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -632,7 +639,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E"
                 }
               }
             ]
@@ -651,7 +658,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#4DB6AC"
                 }
               }
             ]
@@ -670,7 +677,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#1565C0"
+                  "fixedColor": "#5C6BC0"
                 }
               }
             ]
@@ -689,7 +696,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#009688"
+                  "fixedColor": "#4FC3F7"
                 }
               }
             ]
@@ -708,7 +715,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#78909C"
+                  "fixedColor": "#42A5F5"
                 }
               }
             ]
@@ -722,7 +729,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#4FC3F7",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               }
@@ -737,7 +744,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#4DB6AC",
+                  "fixedColor": "#2196F3",
                   "mode": "fixed"
                 }
               }
@@ -752,7 +759,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#26A69A",
+                  "fixedColor": "#4DB6AC",
                   "mode": "fixed"
                 }
               }
@@ -782,7 +789,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               }
@@ -887,7 +894,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFCA28",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               }
@@ -907,8 +914,11 @@
         "displayMode": "gradient",
         "showUnfilled": true,
         "minVizWidth": 0,
-        "minVizHeight": 10
-      }
+        "minVizHeight": 10,
+        "legend": {},
+        "tooltip": {}
+      },
+      "transparent": true
     },
     {
       "id": 11,
@@ -996,11 +1006,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
-          }
+          },
+          "custom": {}
         },
         "overrides": [
           {
@@ -1036,7 +1047,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#E65100"
+                  "fixedColor": "#F4511E"
                 }
               }
             ]
@@ -1055,7 +1066,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#4DB6AC"
                 }
               }
             ]
@@ -1074,7 +1085,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#1565C0"
+                  "fixedColor": "#5C6BC0"
                 }
               }
             ]
@@ -1093,7 +1104,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#009688"
+                  "fixedColor": "#4FC3F7"
                 }
               }
             ]
@@ -1112,7 +1123,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#78909C"
+                  "fixedColor": "#42A5F5"
                 }
               }
             ]
@@ -1126,7 +1137,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#26A69A",
+                  "fixedColor": "#4DB6AC",
                   "mode": "fixed"
                 }
               }
@@ -1156,7 +1167,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               }
@@ -1216,7 +1227,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFCA28",
+                  "fixedColor": "#42A5F5",
                   "mode": "fixed"
                 }
               }
@@ -1236,8 +1247,11 @@
         "displayMode": "gradient",
         "showUnfilled": true,
         "minVizWidth": 0,
-        "minVizHeight": 10
-      }
+        "minVizHeight": 10,
+        "legend": {},
+        "tooltip": {}
+      },
+      "transparent": true
     }
   ],
   "annotations": {
@@ -1245,5 +1259,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

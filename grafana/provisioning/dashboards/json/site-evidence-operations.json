@@ -32,15 +32,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#42A5F5",
+                "color": "#2196F3",
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -60,7 +60,7 @@
       },
       "id": 2,
       "options": {
-        "colorMode": "background_solid",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
         "reduceOptions": {
@@ -84,7 +84,8 @@
         }
       ],
       "title": "Indoor Temp",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -95,22 +96,23 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "fixed",
+            "fixedColor": "#AB47BC"
           },
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "#42A5F5",
+                "color": "#2196F3",
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 0.4
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1.5
               },
               {
@@ -130,7 +132,7 @@
       },
       "id": 3,
       "options": {
-        "colorMode": "background_solid",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
         "reduceOptions": {
@@ -154,7 +156,8 @@
         }
       ],
       "title": "Indoor VPD",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "description": "Current ESP32 controller state rendered through numeric value mappings so Grafana static images do not drop string-only stats.",
@@ -164,23 +167,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "dark-red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 1
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 2
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 12
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 24
               }
             ]
@@ -193,103 +196,103 @@
               "options": {
                 "0": {
                   "text": "UNKNOWN",
-                  "color": "dark-red"
+                  "color": "#26A69A"
                 },
                 "1": {
                   "text": "IDLE",
-                  "color": "green"
+                  "color": "#26A69A"
                 },
                 "2": {
                   "text": "VENTILATE",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "3": {
                   "text": "THERMAL_RELIEF",
-                  "color": "blue"
+                  "color": "#F4511E"
                 },
                 "4": {
                   "text": "DEHUM_VENT",
-                  "color": "purple"
+                  "color": "#42A5F5"
                 },
                 "5": {
                   "text": "SEALED_MIST_S1",
-                  "color": "purple"
+                  "color": "#2196F3"
                 },
                 "6": {
                   "text": "SEALED_MIST_S2",
-                  "color": "purple"
+                  "color": "#2196F3"
                 },
                 "7": {
                   "text": "SEALED_MIST_FOG",
-                  "color": "purple"
+                  "color": "#2196F3"
                 },
                 "8": {
                   "text": "SEALED_MIST_WATCH",
-                  "color": "purple"
+                  "color": "#2196F3"
                 },
                 "9": {
                   "text": "TEMP_IDLE_HUM_IDLE",
-                  "color": "green"
+                  "color": "#26A69A"
                 },
                 "10": {
                   "text": "TEMP_IDLE_HUMID_S1",
-                  "color": "green"
+                  "color": "#26A69A"
                 },
                 "11": {
                   "text": "TEMP_IDLE_VPD_WATCH",
-                  "color": "green"
+                  "color": "#AB47BC"
                 },
                 "12": {
                   "text": "HEAT_S1_HUM_IDLE",
-                  "color": "orange"
+                  "color": "#FF9800"
                 },
                 "13": {
                   "text": "HEAT_S1_HUMID_S1",
-                  "color": "orange"
+                  "color": "#FF9800"
                 },
                 "14": {
                   "text": "HEAT_S1_VPD_WATCH",
-                  "color": "orange"
+                  "color": "#FF9800"
                 },
                 "15": {
                   "text": "HEAT_S2_HUM_IDLE",
-                  "color": "orange"
+                  "color": "#FF9800"
                 },
                 "16": {
                   "text": "HEAT_S2_HUMID_S1",
-                  "color": "orange"
+                  "color": "#FF9800"
                 },
                 "17": {
                   "text": "HEAT_S2_VPD_WATCH",
-                  "color": "orange"
+                  "color": "#FF9800"
                 },
                 "18": {
                   "text": "COOL_S1_HUM_IDLE",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "19": {
                   "text": "COOL_S1_HUMID_S1",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "20": {
                   "text": "COOL_S1_HUMID_S2",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "21": {
                   "text": "COOL_S1_VPD_WATCH",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "22": {
                   "text": "COOL_S2_HUMID_S1",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "23": {
                   "text": "COOL_S2_HUMID_S2",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 },
                 "24": {
                   "text": "SAFETY_COOL",
-                  "color": "blue"
+                  "color": "#42A5F5"
                 }
               }
             }
@@ -315,7 +318,7 @@
           "values": false
         },
         "textMode": "value_and_name",
-        "colorMode": "background_solid",
+        "colorMode": "value",
         "graphMode": "none"
       },
       "targets": [
@@ -330,7 +333,8 @@
         }
       ],
       "title": "Current Controller State",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -344,20 +348,24 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": -80
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": -60
               }
             ]
           },
-          "unit": "dBm"
+          "unit": "dBm",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#26A69A"
+          }
         }
       },
       "gridPos": {
@@ -368,8 +376,8 @@
       },
       "id": 5,
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
+        "colorMode": "value",
+        "graphMode": "none",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -388,7 +396,8 @@
         }
       ],
       "title": "WiFi Signal",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -402,20 +411,24 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 50
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 80
               }
             ]
           },
-          "unit": "kbytes"
+          "unit": "suffix:kB",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#26A69A"
+          }
         }
       },
       "gridPos": {
@@ -426,8 +439,8 @@
       },
       "id": 6,
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
+        "colorMode": "value",
+        "graphMode": "none",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -441,12 +454,13 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT $__time(ts), heap_bytes / 1024.0 AS \"Heap kB\" FROM diagnostics WHERE $__timeFilter(ts) AND heap_bytes IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT\n  $__time(ts),\n  heap_bytes AS \"Heap kB\"\nFROM diagnostics\nWHERE $__timeFilter(ts)\n  AND heap_bytes IS NOT NULL\nORDER BY ts",
           "refId": "A"
         }
       ],
       "title": "Free Heap",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {
@@ -464,7 +478,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
@@ -484,7 +498,7 @@
       },
       "id": 7,
       "options": {
-        "colorMode": "background_solid",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
         "reduceOptions": {
@@ -508,7 +522,8 @@
         }
       ],
       "title": "Open Alerts",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "collapsed": false,
@@ -787,11 +802,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -934,15 +949,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 500
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 1000
               }
             ]
@@ -1017,11 +1032,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -1062,20 +1077,25 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 6
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 12
               }
             ]
           },
-          "unit": "short"
+          "unit": "suffix:h",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#AB47BC"
+          },
+          "decimals": 1
         }
       },
       "gridPos": {
@@ -1085,7 +1105,10 @@
         "y": 22
       },
       "id": 15,
-      "options": {},
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "datasource": {
@@ -1098,7 +1121,8 @@
         }
       ],
       "title": "Plan Age",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "description": "Shows planning behavior, compliance, or planning outcomes over time.",
@@ -1170,11 +1194,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -1195,6 +1219,13 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 35
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
               }
             ]
           },
@@ -1211,6 +1242,13 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 35
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F4511E",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -1227,7 +1265,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -1293,7 +1332,8 @@
         }
       ],
       "title": "Reset Reasons Over Time",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1309,7 +1349,16 @@
       },
       "id": 18,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -1318,12 +1367,62 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT component, score_pct, details FROM v_system_health_score",
+          "rawSql": "SELECT\n  initcap(replace(component, '_', ' ')) AS \"Component\",\n  round(score_pct::numeric, 1) AS \"Score %\",\n  CASE\n    WHEN length(details_clean) > 58 THEN left(details_clean, 55) || '...'\n    ELSE details_clean\n  END AS \"Details\"\nFROM (\n  SELECT component, score_pct, regexp_replace(details::text, '\\s+', ' ', 'g') AS details_clean\n  FROM v_system_health_score\n) AS health\nORDER BY component",
           "refId": "A"
         }
       ],
       "title": "Health Components",
-      "type": "table"
+      "type": "table",
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Component"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Score %"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Details"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 520
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "annotations": {
@@ -1331,5 +1430,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

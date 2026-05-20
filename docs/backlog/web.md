@@ -19,6 +19,8 @@ Owned by the [`web`](../agents/web.md) agent.
 
 ## Next up (candidates)
 
+- [ ] **W-M20 Site IA/content refactor.** Canonical task set: [`lab-site-refactor-2026-05-20.md`](lab-site-refactor-2026-05-20.md), `CODEX-001` through `CODEX-012`. Covers nav relabeling/reordering, sitewide AI planning agent terminology, homepage cleanup/camera move, AI Greenhouse rewrite, Contact cleanup, Operations/Climate/Resource Use refocus, Planner Contract + AI Tunables merge, Known Limits removal, responsive table QA, and final generated-site QA.
+- [ ] **W-M21 Live visual/data follow-up from 2026-05-20 review.** Canonical follow-up tasks are in [`lab-site-refactor-2026-05-20.md`](lab-site-refactor-2026-05-20.md): `CODEX-013` lighting graph differentiation + Overview nav promotion; `CODEX-014` individual solar-aligned Resource Use panels; `CODEX-015` architecture SVG connector z-order; `CODEX-016` sitewide Grafana chrome/color/band/relay visual standards; `CODEX-017` Resource Use monthly stacked cost chart + GPU power cleanup; `CODEX-018` Architecture content simplification; `RP-006` electric-cost math mismatch; `RP-007` lux target and exterior-lux alignment review.
 - [x] **W-L1.1 Architecture SVG.** Shareable diagram added at `/static/verdify-architecture.svg` and embedded on `/intelligence/architecture`.
 - [x] **W-L1.2 Bill of materials.** Launch-safe equipment/BOM surface is present on `/greenhouse/equipment` with sensitive addresses withheld.
 - [x] **W-L1.3 Cost callout.** `/evidence/economics` uses defensible solar-aligned/grid/gas wording and USD rendering.

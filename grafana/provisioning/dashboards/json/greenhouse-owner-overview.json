@@ -37,11 +37,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 50
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 80
               }
             ]
@@ -103,11 +103,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 50
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 80
               }
             ]
@@ -169,11 +169,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 0.8
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1.8
               },
               {
@@ -235,11 +235,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -301,11 +301,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1
               },
               {
@@ -371,11 +371,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 10
               }
             ]
@@ -450,11 +450,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -537,11 +537,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -624,11 +624,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -711,11 +711,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -814,11 +814,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -1113,5 +1113,6 @@
   "uid": "greenhouse-owner-overview",
   "tags": [
     "standardized"
-  ]
+  ],
+  "style": "light"
 }

@@ -61,6 +61,13 @@ if [[ "$current_signature" != "$last_signature" ]]; then
         echo "$(date -Is) rebuild lock was busy — leaving signature unchanged for retry"
         exit 0
     elif [[ $rebuild_status -eq 0 ]]; then
+        static_context_output="$(/srv/verdify/scripts/gather-static-context.sh 2>&1)"
+        static_context_status=$?
+        printf '%s\n' "$static_context_output"
+        if [[ $static_context_status -ne 0 ]]; then
+            echo "$(date -Is) static context refresh failed — keeping old signature so the next poll retries"
+            exit 1
+        fi
         printf '%s\n' "$(content_signature)" > "$SIGNATURE"
         # Human-readable marker for status/debugging. The signature file is the
         # actual trigger state; the marker is no longer used for change detection.

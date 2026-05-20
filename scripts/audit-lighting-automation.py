@@ -250,7 +250,7 @@ def render_panel(uid: str, panel_id: int, width: int, height: int, timeout: int 
     url = (
         f"{GRAFANA_RENDER_BASE}/render/d-solo/{quote(uid)}/"
         f"?orgId=1&panelId={panel_id}&from=now-24h&to=now%2B48h"
-        f"&width={width}&height={height}&theme=dark"
+        f"&width={width}&height={height}&theme=light"
     )
     start = time.monotonic()
     request = urllib.request.Request(url, headers={"User-Agent": "verdify-lighting-audit/1.0"})
@@ -501,13 +501,14 @@ def static_checks(audit: Audit) -> None:
     audit.check(
         home_panel
         and home_panel.get("title") == "Lighting: Lux, Thresholds & Switch State"
-        and "fn_lighting_minutes_policy" in panel_sql(home_panel)
-        and "Natural Lux (10m avg)" in panel_sql(home_panel)
+        and "setpoint_snapshot" in panel_sql(home_panel)
+        and "setpoint_changes" in panel_sql(home_panel)
+        and "Solar / Tempest Exterior Lux (10m avg)" in panel_sql(home_panel)
         and "equipment_state" in panel_sql(home_panel)
         and "fn_lighting_timeline" not in panel_sql(home_panel),
         "home lighting state graph",
-        "site-home panel 36 renders natural lux, policy thresholds, and actual switch ON windows without fn_lighting_timeline",
-        "site-home panel 36 is missing, stale, or still bound to fn_lighting_timeline",
+        "site-home panel 36 renders Tempest exterior lux, direct readback thresholds, and actual switch ON windows without fn_lighting_timeline",
+        "site-home panel 36 is missing, stale, or still bound to heavy lighting timeline/function calls",
     )
     audit.check(
         policy_panel and "v_lighting_traceability_now" in panel_sql(policy_panel),
@@ -524,14 +525,13 @@ def static_checks(audit: Audit) -> None:
     home_panel_contract = json.dumps(home_panel)
     forecast_panel_contract = json.dumps(forecast_panel)
     home_state_tokens = (
-        "Natural Lux (10m avg)",
+        "Solar / Tempest Exterior Lux (10m avg)",
         "Main/Grow ON Threshold",
         "Main/Grow OFF Threshold",
         "switch.greenhouse_main ON",
         "switch.greenhouse_grow ON",
-        "Solar",
-        "Solar Forecast",
-        "fn_lighting_minutes_policy",
+        "setpoint_snapshot",
+        "setpoint_changes",
         "equipment_state",
         "custom.axisPlacement",
         "custom.fillBelowTo",
@@ -552,7 +552,7 @@ def static_checks(audit: Audit) -> None:
         and all(token in home_panel_contract for token in home_state_tokens)
         and all(token in forecast_panel_contract for token in forecast_label_tokens),
         "lighting state graph labels and fills",
-        "home graph labels natural lux, ON/OFF bands, actual switch ON windows, solar context, and shaded hysteresis/state fills",
+        "home graph labels exterior lux, ON/OFF bands, actual switch ON windows, solar context, and shaded hysteresis/state fills",
         "lighting state or forecast graphs are missing user-facing labels or shaded band fill configuration",
     )
 
@@ -561,7 +561,7 @@ def static_checks(audit: Audit) -> None:
     )
     titles = {panel.get("title") for panel in greenhouse_lighting.get("panels", [])}
     audit.check(
-        {"Main Light Circuit", "Lutron Circuit State", "Lighting Decision Context", "Daily Lutron Circuit Runtime"}
+        {"Main Light Circuit", "Lighting Circuit State", "Lighting Decision Context", "Daily Lighting Circuit Runtime"}
         <= titles,
         "legacy lighting dashboard labels",
         "greenhouse-lighting dashboard labels are circuit-aware",
@@ -814,12 +814,13 @@ def live_checks(audit: Audit, require_ota: bool) -> None:
         audit.check(
             home_live_panel
             and home_live_panel.get("title") == "Lighting: Lux, Thresholds & Switch State"
-            and "fn_lighting_minutes_policy" in home_live_sql
+            and "setpoint_snapshot" in home_live_sql
+            and "setpoint_changes" in home_live_sql
             and "Natural Lux (10m avg)" in home_live_sql
             and "equipment_state" in home_live_sql
             and "fn_lighting_timeline" not in home_live_sql,
             "live home Grafana panel",
-            "site-home panel 36 is live and bound to natural lux, thresholds, and actual switch state",
+            "site-home panel 36 is live and bound to natural lux, direct readback thresholds, and actual switch state",
             "site-home panel 36 missing or stale in live Grafana",
         )
         audit.check(

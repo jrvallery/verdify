@@ -156,8 +156,16 @@ site-publish-status: ## Trace Obsidian vault -> Quartz build -> nginx publish st
 
 site-doctor: ## Audit lab.verdify.ai source, build output, and Grafana embeds
 	$(PYTHON) scripts/site-doctor.py
+	$(PYTHON) scripts/brand-grafana-embeds.py --check
+	$(PYTHON) scripts/brand-grafana-embeds.py --check --live
 
-site-lint: ## Run cheap launch lint for public-site content and routes
+grafana-brand-check: ## Verify embedded Grafana panels use Verdify Lab styling rules
+	$(PYTHON) scripts/brand-grafana-embeds.py --check
+
+grafana-brand-check-live: ## Verify live embedded Grafana panels use Verdify Lab styling rules
+	$(PYTHON) scripts/brand-grafana-embeds.py --check --live
+
+site-lint: ## Run cheap lint for public-site content and routes
 	$(PYTHON) scripts/lint_public_site.py
 
 firmware-deploy: ## Compile + OTA deploy to ESP32 + post-deploy sensor-health sweep + auto-rollback on failure

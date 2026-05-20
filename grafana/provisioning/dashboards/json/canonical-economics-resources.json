@@ -47,11 +47,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -125,11 +125,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -184,11 +184,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -243,11 +243,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -302,11 +302,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -361,11 +361,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -444,8 +444,8 @@
           "unit": "currencyUSD",
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 15,
-            "lineWidth": 2,
+            "fillOpacity": 75,
+            "lineWidth": 0,
             "stacking": {
               "mode": "normal"
             },
@@ -568,8 +568,8 @@
           "unit": "currencyUSD",
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 15,
-            "lineWidth": 2,
+            "fillOpacity": 75,
+            "lineWidth": 0,
             "stacking": {
               "mode": "normal"
             },
@@ -786,7 +786,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -891,11 +891,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -1078,7 +1078,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "style": "dark",
+  "style": "light",
   "tags": [
     "canonical",
     "economics-resources",

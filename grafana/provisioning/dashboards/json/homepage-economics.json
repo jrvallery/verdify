@@ -80,15 +80,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 100
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 300
               }
             ]
@@ -131,15 +131,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -199,15 +199,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -267,15 +267,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -331,15 +331,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -378,15 +378,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -425,15 +425,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -472,15 +472,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -535,12 +535,13 @@
           "decimals": 2,
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 70,
+            "fillOpacity": 75,
             "stacking": {
               "mode": "normal"
             },
-            "lineWidth": 2,
-            "spanNulls": false
+            "lineWidth": 0,
+            "spanNulls": false,
+            "showPoints": "never"
           }
         },
         "overrides": [
@@ -654,13 +655,14 @@
           "decimals": 2,
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 70,
+            "fillOpacity": 75,
             "stacking": {
               "mode": "normal"
             },
             "barMaxWidth": 40,
-            "lineWidth": 2,
-            "spanNulls": false
+            "lineWidth": 0,
+            "spanNulls": false,
+            "showPoints": "never"
           }
         },
         "overrides": [
@@ -732,5 +734,6 @@
   ],
   "annotations": {
     "list": []
-  }
+  },
+  "style": "light"
 }

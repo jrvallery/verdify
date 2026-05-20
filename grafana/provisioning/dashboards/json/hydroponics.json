@@ -47,11 +47,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 70
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 90
               }
             ]
@@ -113,11 +113,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -183,11 +183,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 0.4
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1.5
               },
               {
@@ -247,23 +247,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "dark-red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 1
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 2
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 12
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 24
               }
             ]
@@ -430,11 +430,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -500,11 +500,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 10
               }
             ]
@@ -562,7 +562,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
@@ -653,11 +653,11 @@
                 "value": 0
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 75
               },
               {
@@ -716,19 +716,19 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 0
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 500
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 1800
               },
               {
@@ -791,15 +791,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2
               }
             ]
@@ -858,19 +858,19 @@
                 "value": 0
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 5.5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 6.5
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 7
               },
               {
@@ -938,11 +938,11 @@
                 "value": -500
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 0
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 200
               }
             ]
@@ -1018,7 +1018,12 @@
             "fillOpacity": 4,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "none"
         },
@@ -1068,7 +1073,7 @@
                       "value": null
                     },
                     {
-                      "color": "rgba(102,187,106,0.1)",
+                      "color": "rgba(140,140,140,0.1)",
                       "value": 800
                     },
                     {
@@ -1090,7 +1095,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A"
                 }
               },
               {
@@ -1122,9 +1127,12 @@
         },
         "legend": {
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 7,
@@ -1147,7 +1155,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(ts), hydro_ph AS \"pH\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_ph IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT\n  $__time(ts),\n  hydro_ph AS \"pH\"\nFROM climate\nWHERE $__timeFilter(ts)\n  AND hydro_ph BETWEEN 0 AND 14\nORDER BY ts",
           "format": "time_series",
           "refId": "A"
         },
@@ -1156,7 +1164,7 @@
             "uid": "verdify-tsdb",
             "type": "grafana-postgresql-datasource"
           },
-          "rawSql": "SELECT $__time(ts), hydro_orp_mv AS \"ORP (mV)\"\nFROM climate WHERE $__timeFilter(ts) AND hydro_orp_mv IS NOT NULL ORDER BY ts",
+          "rawSql": "SELECT\n  $__time(ts),\n  hydro_orp_mv AS \"ORP (mV)\"\nFROM climate\nWHERE $__timeFilter(ts)\n  AND hydro_orp_mv BETWEEN -1000 AND 1000\nORDER BY ts",
           "format": "time_series",
           "refId": "B"
         }
@@ -1169,7 +1177,12 @@
             "fillOpacity": 0,
             "showPoints": "never",
             "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "none"
         },
@@ -1184,7 +1197,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#FFA726"
+                  "fixedColor": "#FDD835"
                 }
               },
               {
@@ -1211,7 +1224,7 @@
                       "value": null
                     },
                     {
-                      "color": "rgba(102,187,106,0.1)",
+                      "color": "rgba(140,140,140,0.1)",
                       "value": 5.5
                     },
                     {
@@ -1220,6 +1233,14 @@
                     }
                   ]
                 }
+              },
+              {
+                "id": "custom.axisSoftMin",
+                "value": 4
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 8
               }
             ]
           },
@@ -1233,7 +1254,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#CE93D8"
+                  "fixedColor": "#AB47BC"
                 }
               },
               {
@@ -1255,9 +1276,12 @@
         },
         "legend": {
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
         }
-      }
+      },
+      "transparent": true
     },
     {
       "type": "row",
@@ -1325,7 +1349,12 @@
             "showPoints": "never",
             "spanNulls": true,
             "lineInterpolation": "smooth",
-            "axisLabel": "\u00b0F"
+            "axisLabel": "\u00b0F",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
         },
         "overrides": [
@@ -1338,8 +1367,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1370,7 +1399,7 @@
                       "value": null
                     },
                     {
-                      "color": "rgba(239,83,80,0.5)",
+                      "color": "rgba(140,140,140,0.5)",
                       "value": 75
                     }
                   ]
@@ -1387,9 +1416,13 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF9800"
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
               }
             ]
           },
@@ -1402,8 +1435,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#78909C"
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1415,6 +1448,10 @@
                     4
                   ]
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
               }
             ]
           }
@@ -1427,9 +1464,12 @@
         },
         "legend": {
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
         }
-      }
+      },
+      "transparent": true
     },
     {
       "type": "row",
@@ -1645,7 +1685,12 @@
             "barMaxWidth": 20,
             "showPoints": "never",
             "spanNulls": false,
-            "lineInterpolation": "smooth"
+            "lineInterpolation": "smooth",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "none"
         },
@@ -1691,7 +1736,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#42A5F5"
+                  "fixedColor": "#26A69A"
                 }
               },
               {
@@ -1723,9 +1768,12 @@
         },
         "legend": {
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 910,
@@ -1742,7 +1790,16 @@
         "type": "grafana-postgresql-datasource"
       },
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -1757,12 +1814,22 @@
       ],
       "description": "Shows the latest hydroponic water-quality and system readings.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
         "overrides": []
-      }
+      },
+      "transparent": true
     }
   ],
   "templating": {
     "list": []
-  }
+  },
+  "style": "light"
 }

@@ -188,11 +188,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 70
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 90
               }
             ]
@@ -254,11 +254,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -324,11 +324,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 0.4
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 1.5
               },
               {
@@ -388,23 +388,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "dark-red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 1
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 2
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 12
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 24
               }
             ]
@@ -571,11 +571,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -641,11 +641,11 @@
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 10
               }
             ]
@@ -703,7 +703,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
@@ -1128,11 +1128,11 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
+                    "color": "#EF5350",
                     "value": null
                   },
                   {
-                    "color": "green",
+                    "color": "#73BF69",
                     "value": 90
                   }
                 ]
@@ -1205,7 +1205,7 @@
                     "value": 0.4
                   },
                   {
-                    "color": "#66BB6A",
+                    "color": "#73BF69",
                     "value": 0.8
                   },
                   {
@@ -1213,7 +1213,7 @@
                     "value": 1.2
                   },
                   {
-                    "color": "#FFA726",
+                    "color": "#FDD835",
                     "value": 1.6
                   },
                   {
@@ -1312,15 +1312,15 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
+                    "color": "#EF5350",
                     "value": null
                   },
                   {
-                    "color": "yellow",
+                    "color": "#FDD835",
                     "value": 12
                   },
                   {
-                    "color": "green",
+                    "color": "#73BF69",
                     "value": 20
                   }
                 ]
@@ -1420,14 +1420,49 @@
                   },
                   {
                     "id": "custom.fillOpacity",
-                    "value": 1.5
+                    "value": 85
                   },
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "blue"
+                      "fixedColor": "#FDD835",
+                      "mode": "fixed"
                     }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.gradientMode",
+                    "value": "opacity"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Outdoor Illuminance (lx)"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#FDD835",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 85
+                  },
+                  {
+                    "id": "custom.gradientMode",
+                    "value": "opacity"
                   }
                 ]
               }
@@ -1564,8 +1599,30 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "orange"
+                      "fixedColor": "#FDD835",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 2
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.gradientMode",
+                    "value": "none"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dash",
+                      "dash": [
+                        6,
+                        4
+                      ]
                     }
                   }
                 ]
@@ -1587,8 +1644,8 @@
                   {
                     "id": "color",
                     "value": {
-                      "mode": "fixed",
-                      "fixedColor": "rgba(180, 180, 180, 0.5)"
+                      "fixedColor": "#FDD835",
+                      "mode": "fixed"
                     }
                   },
                   {
@@ -1603,11 +1660,15 @@
                   },
                   {
                     "id": "custom.lineWidth",
-                    "value": 1
+                    "value": 2
                   },
                   {
                     "id": "custom.fillOpacity",
                     "value": 0
+                  },
+                  {
+                    "id": "custom.gradientMode",
+                    "value": "none"
                   }
                 ]
               },
@@ -2272,5 +2333,6 @@
         "type": "dashboard"
       }
     ]
-  }
+  },
+  "style": "light"
 }

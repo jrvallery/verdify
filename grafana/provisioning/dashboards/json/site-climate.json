@@ -47,7 +47,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -177,13 +177,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -191,7 +191,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -200,6 +200,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -212,13 +216,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -227,6 +231,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -803,7 +815,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -887,13 +899,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -901,7 +913,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -910,6 +922,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -922,13 +938,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -937,6 +953,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1393,11 +1417,11 @@
                 "value": null
               },
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": 60
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 82
               },
               {
@@ -1513,13 +1537,17 @@
             "axisPlacement": "auto",
             "scaleDistribution": {
               "type": "linear"
+            },
+            "axisColorMode": "text",
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -1535,9 +1563,21 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#F9A825"
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -1550,8 +1590,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FFF176"
+                  "fixedColor": "#FFE66D",
+                  "mode": "fixed"
                 }
               },
               {
@@ -1566,7 +1606,15 @@
               },
               {
                 "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.lineWidth",
                 "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -1587,10 +1635,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+          "calcs": [],
+          "showLegend": true
         }
       },
       "targets": [
@@ -1614,7 +1660,8 @@
         }
       ],
       "title": "Solar Irradiance Over Time",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "id": 105,
@@ -1763,10 +1810,17 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           }
         }
       },
@@ -1779,7 +1833,15 @@
       "id": 19,
       "options": {
         "showHeader": true,
-        "cellHeight": "sm"
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -1793,7 +1855,8 @@
         }
       ],
       "title": "Controller State Table (24h)",
-      "type": "table"
+      "type": "table",
+      "transparent": true
     },
     {
       "datasource": {
@@ -2217,11 +2280,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -2238,7 +2301,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "orange",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -2257,7 +2320,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "blue",
+                  "fixedColor": "#2196F3",
                   "mode": "fixed"
                 }
               },
@@ -2276,7 +2339,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -2297,12 +2360,8 @@
       "id": 11,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2398,7 +2457,8 @@
         }
       ],
       "title": "Zone Temperature Comparison",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "datasource": {
@@ -2444,11 +2504,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -2465,7 +2525,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -2484,7 +2544,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#AB47BC",
+                  "fixedColor": "#2196F3",
                   "mode": "fixed"
                 }
               },
@@ -2503,7 +2563,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#66BB6A",
+                  "fixedColor": "#26A69A",
                   "mode": "fixed"
                 }
               },
@@ -2524,12 +2584,8 @@
       "id": 12,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2625,7 +2681,8 @@
         }
       ],
       "title": "Zone VPD Comparison",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "id": 121,
@@ -2645,10 +2702,17 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           }
         },
         "overrides": [
@@ -2696,7 +2760,15 @@
       },
       "options": {
         "showHeader": true,
-        "cellHeight": "sm"
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
       },
       "targets": [
         {
@@ -2708,7 +2780,8 @@
           "rawSql": "WITH d AS (\n  SELECT *\n  FROM daily_summary\n  WHERE date >= current_date - interval '30 days'\n    AND date < current_date\n), e AS (\n  SELECT equipment, wattage, btu_rating\n  FROM equipment_assets\n), loads AS (\n  SELECT\n    'Heat 1 electric'::text AS device,\n    COALESCE(SUM(d.runtime_heat1_min), 0) / 60.0 AS runtime_h,\n    COALESCE(SUM(d.runtime_heat1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'heat1'), 1500) / 1000.0 AS energy,\n    'kWh'::text AS unit,\n    COALESCE(SUM(d.runtime_heat1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'heat1'), 1500) / 1000.0 * 0.111 AS cost_usd\n  FROM d\n  UNION ALL\n  SELECT\n    'Heat 2 gas furnace',\n    COALESCE(SUM(d.runtime_heat2_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_heat2_min), 0) / 60.0 * COALESCE((SELECT btu_rating FROM e WHERE equipment = 'heat2'), 75000) / 100000.0,\n    'therms',\n    COALESCE(SUM(d.runtime_heat2_min), 0) / 60.0 * COALESCE((SELECT btu_rating FROM e WHERE equipment = 'heat2'), 75000) / 100000.0 * 0.83\n  FROM d\n  UNION ALL\n  SELECT\n    'Fogger',\n    COALESCE(SUM(d.runtime_fog_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_fog_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fog'), 800) / 1000.0,\n    'kWh',\n    COALESCE(SUM(d.runtime_fog_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fog'), 800) / 1000.0 * 0.111\n  FROM d\n  UNION ALL\n  SELECT\n    'Fans',\n    (COALESCE(SUM(d.runtime_fan1_min), 0) + COALESCE(SUM(d.runtime_fan2_min), 0)) / 60.0,\n    COALESCE(SUM(d.runtime_fan1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan1'), 52) / 1000.0 +\n      COALESCE(SUM(d.runtime_fan2_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan2'), 52) / 1000.0,\n    'kWh',\n    (COALESCE(SUM(d.runtime_fan1_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan1'), 52) / 1000.0 +\n      COALESCE(SUM(d.runtime_fan2_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'fan2'), 52) / 1000.0) * 0.111\n  FROM d\n  UNION ALL\n  SELECT\n    'Vent actuator',\n    COALESCE(SUM(d.runtime_vent_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_vent_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'vent'), 10) / 1000.0,\n    'kWh',\n    COALESCE(SUM(d.runtime_vent_min), 0) / 60.0 * COALESCE((SELECT wattage FROM e WHERE equipment = 'vent'), 10) / 1000.0 * 0.111\n  FROM d\n  UNION ALL\n  SELECT\n    'Grow lights',\n    COALESCE(SUM(d.runtime_grow_light_min), 0) / 60.0,\n    COALESCE(SUM(d.runtime_grow_light_min), 0) / 60.0 * (\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_grow'), 816) +\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_main'), 630)\n    ) / 1000.0,\n    'kWh',\n    COALESCE(SUM(d.runtime_grow_light_min), 0) / 60.0 * (\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_grow'), 816) +\n      COALESCE((SELECT wattage FROM e WHERE equipment = 'grow_light_main'), 630)\n    ) / 1000.0 * 0.111\n  FROM d\n)\nSELECT\n  device AS \"Device\",\n  ROUND(runtime_h::numeric, 1) AS \"Runtime h\",\n  ROUND(energy::numeric, 1) AS \"Energy\",\n  unit AS \"Unit\",\n  ROUND(cost_usd::numeric, 2) AS \"Est. cost\"\nFROM loads\nWHERE runtime_h > 0 OR energy > 0\nORDER BY cost_usd DESC;",
           "refId": "A"
         }
-      ]
+      ],
+      "transparent": true
     }
   ],
   "annotations": {
@@ -2716,5 +2789,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

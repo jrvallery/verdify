@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VAULT_ROOT = Path("/mnt/iris/verdify-vault/website")
+
+
+def _dashboard(path: str) -> dict:
+    return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
+
+
+def _panel(dashboard: dict, panel_id: int) -> dict:
+    for panel in dashboard["panels"]:
+        if panel.get("id") == panel_id:
+            return panel
+    raise AssertionError(f"panel {panel_id} not found")
+
+
+def _override_props(panel: dict, label: str) -> dict:
+    for override in panel.get("fieldConfig", {}).get("overrides", []):
+        matcher = override.get("matcher", {})
+        if matcher.get("id") == "byName" and matcher.get("options") == label:
+            return {prop.get("id"): prop.get("value") for prop in override.get("properties", [])}
+    return {}
+
+
+def _mapped_color(panel: dict, label: str, value: str) -> str | None:
+    mappings = _override_props(panel, label).get("mappings")
+    if not isinstance(mappings, list):
+        return None
+    for mapping in mappings:
+        options = mapping.get("options") if isinstance(mapping, dict) else None
+        if not isinstance(options, dict):
+            continue
+        option = options.get(value)
+        if isinstance(option, dict):
+            return option.get("color")
+    return None
+
+
+def test_overview_nav_promotes_greenhouse_evidence_pages():
+    nav = (REPO_ROOT / "site/quartz/components/SiteNav.tsx").read_text(encoding="utf-8")
+    overview_start = nav.index('title: "Overview"')
+    live_start = nav.index('title: "Live Evidence"')
+    overview = nav[overview_start:live_start]
+    greenhouse_start = nav.index('title: "Greenhouse"')
+    reference_start = nav.index('title: "Reference"')
+    greenhouse = nav[greenhouse_start:reference_start]
+
+    assert 'pageLink("Lighting", "greenhouse/lighting")' in overview
+    assert 'pageLink("Hydroponics", "greenhouse/hydroponics")' in overview
+    assert 'pageLink("Soil Sensors", "greenhouse/soil")' in overview
+    assert 'pageLink("Lighting", "greenhouse/lighting")' not in greenhouse
+    assert 'pageLink("Hydroponics", "greenhouse/hydroponics")' not in greenhouse
+    assert 'pageLink("Soil Sensors", "greenhouse/soil")' not in greenhouse
+
+
+def test_resource_use_restores_individual_solar_alignment_panels():
+    page = (VAULT_ROOT / "start/resource-use.md").read_text(encoding="utf-8")
+
+    assert "panelId=310" in page, "electric-vs-solar panel missing"
+    assert "panelId=127" in page, "gas-vs-solar panel missing"
+    assert "panelId=128" in page, "water-vs-solar panel missing"
+    assert "Solar vs Resource Use" not in page
+
+
+def test_resource_use_cost_panels_use_canonical_measured_cost_fields():
+    economics = _dashboard("grafana/dashboards/site-evidence-economics.json")
+    daily_cost = _panel(economics, 312)
+    monthly_cost = _panel(economics, 10)
+    daily_sql = daily_cost["targets"][0]["rawSql"]
+
+    assert "cost_electric::numeric" in daily_sql
+    assert "kwh_estimated * 0.111" not in daily_sql
+    assert monthly_cost["options"]["showValue"] == "never"
+
+
+def test_lighting_dashboard_visual_contract():
+    lighting = _dashboard("grafana/provisioning/dashboards/json/lighting.json")
+    lux_panel = _panel(lighting, 9)
+    altitude_panel = _panel(lighting, 14)
+    decision_panel = _panel(lighting, 16)
+    lighting_page = (VAULT_ROOT / "greenhouse/lighting.md").read_text(encoding="utf-8")
+
+    assert _override_props(lux_panel, "Indoor Lux")["custom.fillOpacity"] == 85
+    assert _override_props(lux_panel, "Outdoor Lux")["custom.fillOpacity"] == 55
+    altitude = _override_props(lux_panel, "Sun Altitude")
+    assert altitude["custom.fillOpacity"] == 0
+    assert altitude["custom.lineWidth"] == 2
+    assert altitude["custom.lineStyle"] == {"fill": "dash", "dash": [6, 4]}
+    assert _override_props(altitude_panel, "Sun Altitude")["custom.fillOpacity"] == 0
+    assert _mapped_color(decision_panel, "Occupancy", "occupied") == "#2196F3"
+    assert _mapped_color(decision_panel, "Occupancy", "empty") == "rgba(253,216,53,0.30)"
+    assert _mapped_color(decision_panel, "Sun", "Day") == "#FDD835"
+    assert _mapped_color(decision_panel, "Sun", "Night") == "#112231"
+    assert "panelId=10&theme=light&from=now-30d&to=now" in lighting_page
+
+
+def test_architecture_page_removes_stale_sections_and_svg_return_path_is_behind_ingestor():
+    architecture = (VAULT_ROOT / "reference/architecture.md").read_text(encoding="utf-8")
+    svg = (VAULT_ROOT / "static/verdify-architecture.svg").read_text(encoding="utf-8")
+
+    for stale in ("Homelab Compute", "Agent Fleet", "MQTT", "Not Production Safe"):
+        assert stale not in architecture
+
+    return_path_index = svg.index('d="M990 500 C850 585 650 535 280 235"')
+    ingestor_label_index = svg.index(">Ingestor<")
+    assert return_path_index < ingestor_label_index

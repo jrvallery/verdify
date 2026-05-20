@@ -47,11 +47,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -68,7 +68,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -87,7 +87,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -139,7 +139,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -233,7 +234,8 @@
         }
       ],
       "title": "Sensor DLI vs Estimated Actual DLI",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "datasource": {
@@ -260,23 +262,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 0
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 5
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 10
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 15
               }
             ]
@@ -372,7 +374,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFD740",
+                  "fixedColor": "#FFE66D",
                   "mode": "fixed"
                 }
               },
@@ -382,7 +384,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 18
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -409,7 +411,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -419,7 +421,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 35
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -484,7 +486,12 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": true,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "degree"
         },
@@ -498,7 +505,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFCA28",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -520,7 +527,25 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 15
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
               }
             ]
           },
@@ -533,7 +558,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#5C6BC0",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -582,7 +607,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -610,7 +636,8 @@
         }
       ],
       "title": "Solar Position",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "datasource": {
@@ -631,22 +658,22 @@
             {
               "options": {
                 "0": {
-                  "color": "rgba(100, 100, 100, 0.3)",
+                  "color": "rgba(253,216,53,0.3)",
                   "index": 0,
                   "text": "Off"
                 },
                 "1": {
-                  "color": "#73BF69",
+                  "color": "#FDD835",
                   "index": 1,
                   "text": "On"
                 },
                 "false": {
-                  "color": "rgba(100, 100, 100, 0.3)",
+                  "color": "rgba(253,216,53,0.3)",
                   "index": 2,
                   "text": "Off"
                 },
                 "true": {
-                  "color": "#73BF69",
+                  "color": "#FDD835",
                   "index": 3,
                   "text": "On"
                 }
@@ -669,7 +696,7 @@
           "thresholds": {
             "steps": [
               {
-                "color": "rgba(100, 100, 100, 0.3)",
+                "color": "rgba(140,140,140,0.3)",
                 "value": null
               },
               {
@@ -700,7 +727,7 @@
                   {
                     "options": {
                       "ON": {
-                        "color": "#C6FF00",
+                        "color": "#9CCC65",
                         "index": 0,
                         "text": "ON"
                       }
@@ -710,7 +737,7 @@
                   {
                     "options": {
                       "OFF": {
-                        "color": "#37474F",
+                        "color": "#9CCC65",
                         "index": 1,
                         "text": ""
                       }
@@ -731,24 +758,28 @@
                 "id": "mappings",
                 "value": [
                   {
+                    "type": "value",
                     "options": {
                       "occupied": {
-                        "color": "#42A5F5",
-                        "text": "Occupied"
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
+                        "color": "#2196F3",
+                        "text": "Occupied",
+                        "index": 0
+                      },
                       "empty": {
-                        "color": "#37474F",
-                        "text": ""
+                        "color": "rgba(253,216,53,0.30)",
+                        "text": "",
+                        "index": 1
                       }
-                    },
-                    "type": "value"
+                    }
                   }
                 ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
               }
             ]
           },
@@ -762,24 +793,123 @@
                 "id": "mappings",
                 "value": [
                   {
+                    "type": "value",
                     "options": {
                       "Day": {
                         "color": "#FDD835",
-                        "text": "Day"
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
+                        "text": "Day",
+                        "index": 0
+                      },
                       "Night": {
-                        "color": "#1A237E",
-                        "text": "Night"
+                        "color": "#112231",
+                        "text": "Night",
+                        "index": 1
                       }
-                    },
-                    "type": "value"
+                    }
                   }
                 ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FDD835",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light Main"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ON": {
+                        "color": "#73BF69",
+                        "text": "ON",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "OFF": {
+                        "color": "rgba(115,191,105,0.18)",
+                        "text": "",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grow Light Grow"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ON": {
+                        "color": "#2196F3",
+                        "text": "ON",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "OFF": {
+                        "color": "rgba(33,150,243,0.18)",
+                        "text": "",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Policy Window"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#B0BEC5",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -799,7 +929,11 @@
           "placement": "bottom"
         },
         "mergeValues": true,
-        "showValue": "auto"
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
@@ -849,7 +983,8 @@
         }
       ],
       "title": "Lighting Control State",
-      "type": "state-timeline"
+      "type": "state-timeline",
+      "transparent": true
     },
     {
       "id": 102,
@@ -960,17 +1095,17 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 0
+                "value": 85
               },
               {
                 "id": "custom.lineWidth",
-                "value": 3
+                "value": 0
               },
               {
                 "id": "custom.lineStyle",
@@ -985,6 +1120,10 @@
               {
                 "id": "custom.axisLabel",
                 "value": "W/m\u00b2"
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -1049,13 +1188,158 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Circuit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Equipment"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target min"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 85
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Qualified min"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Remaining min"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Switch"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 65
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cfg"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 65
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "FW"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Equip"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Qual"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 65
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Remain"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -1083,12 +1367,13 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT light_key AS \"Circuit\",\n       equipment AS \"Equipment\",\n       target_light_minutes AS \"Policy target min\",\n       cfg_target_light_minutes AS \"Cfg target min\",\n       desired_target_light_minutes AS \"Desired target min\",\n       qualified_light_minutes AS \"Qualified min\",\n       natural_qualified_minutes AS \"Natural min\",\n       switch_on_minutes AS \"Switch min\",\n       overlap_minutes AS \"Overlap min\",\n       remaining_light_minutes AS \"Remaining min\",\n       lux_on_threshold AS \"Policy ON Lux\",\n       cfg_lux_on_threshold AS \"Cfg ON Lux\",\n       desired_lux_on_threshold AS \"Desired ON Lux\",\n       lux_off_threshold AS \"Policy OFF Lux\",\n       CASE WHEN auto_enabled THEN 'ON' ELSE 'OFF' END AS \"Policy auto\",\n       CASE WHEN cfg_auto_enabled THEN 'ON' ELSE 'OFF' END AS \"Cfg auto\",\n       CASE WHEN desired_auto_enabled THEN 'ON' ELSE 'OFF' END AS \"Desired auto\",\n       desired_auto_delivery_status AS \"Desired status\",\n       CASE WHEN expected_on THEN 'ON' ELSE 'OFF' END AS \"Policy expected\",\n       CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Physical switch\",\n       CASE WHEN policy_matches_cfg THEN 'MATCH' ELSE 'DRIFT' END AS \"Policy vs cfg\",\n       CASE WHEN firmware_decision_fresh THEN 'FRESH' ELSE 'STALE' END AS \"FW decision\",\n       firmware_state AS \"FW State\",\n       firmware_reason AS \"FW Reason\"\nFROM v_lighting_traceability_now\nORDER BY light_key",
+          "rawSql": "SELECT\n  light_key AS \"Circuit\",\n  equipment AS \"Equip\",\n  target_light_minutes AS \"Target\",\n  qualified_light_minutes AS \"Qual\",\n  remaining_light_minutes AS \"Remain\",\n  CASE WHEN actual_on THEN 'ON' ELSE 'OFF' END AS \"Switch\",\n  CASE WHEN policy_matches_cfg THEN 'MATCH' ELSE 'DRIFT' END AS \"Cfg\",\n  CASE WHEN firmware_decision_fresh THEN 'FRESH' ELSE 'STALE' END AS \"FW\"\nFROM v_lighting_traceability_now\nORDER BY light_key",
           "refId": "A"
         }
       ],
       "title": "Qualified Light Minutes Now",
-      "type": "table"
+      "type": "table",
+      "transparent": true
     },
     {
       "datasource": {
@@ -1135,7 +1420,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -1152,13 +1437,21 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#F2CC0C",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 2
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 85
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           },
@@ -1171,7 +1464,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -1181,11 +1474,15 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 16
+                "value": 22
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1198,23 +1495,21 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#56A64B",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    8,
-                    4
-                  ]
-                }
+                "id": "custom.lineWidth",
+                "value": 0
               },
               {
-                "id": "custom.lineWidth",
-                "value": 1
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1227,7 +1522,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#33A2FF",
+                  "fixedColor": "#5794F2",
                   "mode": "fixed"
                 }
               },
@@ -1237,11 +1532,15 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 10
+                "value": 22
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1254,23 +1553,21 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#33A2FF",
+                  "fixedColor": "#5794F2",
                   "mode": "fixed"
                 }
               },
               {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    4,
-                    4
-                  ]
-                }
+                "id": "custom.lineWidth",
+                "value": 0
               },
               {
-                "id": "custom.lineWidth",
-                "value": 1
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1393,7 +1690,8 @@
         }
       ],
       "title": "Per-Circuit Lighting Forecast Bands",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     }
   ],
   "annotations": {
@@ -1401,5 +1699,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

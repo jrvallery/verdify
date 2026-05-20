@@ -40,7 +40,7 @@ These are the best first-impression photos. They clearly communicate the greenho
 | `exterior-evening-patio-wide.jpg` | Greenhouse in patio setting | Structure | Good contextual exterior, but less evidence-dense than snow or side-path. |
 | `exterior-dusk-patio.jpg` | Warm exterior at dusk | Climate overview | Useful visual bridge for climate narrative. |
 
-### Growing Evidence
+### Crop And Growing Evidence
 
 These are useful because they show crops, channels, or propagation stages. They should be used where the page talks about growing, crop targets, or plant outcomes.
 
@@ -51,7 +51,7 @@ These are useful because they show crops, channels, or propagation stages. They 
 | `hydro-strawberry-flowers.jpg` | Strawberry plants flowering | Strawberries | Strong crop-specific evidence. |
 | `hydro-strawberry-harvest.jpg` | Strawberry harvest in system | Strawberries | Useful, but composition is close and partially occluded. |
 | `seedling-trays-humidity-dome.jpg` | Propagation trays and domes | Growing | Strong propagation-stage evidence. |
-| `seedling-flats-propagation.jpg` | Seedling flats under lights | Growing, herbs, basil, east zone | Good generic propagation image. |
+| `seedling-flats-propagation.jpg` | Seedling flats under lights | Crops overview, herbs, basil, east zone | Good generic propagation image. |
 | `planters-labeled-starts.jpg` | Labeled starts in blue planters | Cucumbers, tomatoes, west zone | Useful only when discussing starts or labels. Avoid as generic crop proof. |
 | `planters-seedlings-mint.jpg` | Blue troughs with seedlings and mint | West zone | Good zone-specific image. |
 | `interior-cannas-hydro-growlights.jpg` | Canna lilies, hydro, grow lights | Canna | Good crop-specific image, portrait crop needs controlled display. |
@@ -108,7 +108,7 @@ These remain in `static/photos` because they may be useful in the next editorial
 | `exterior-patio-trellises-vines.jpg` | Patio/trellis exterior context | Too patio-heavy for primary site use. |
 | `exterior-wide-property-solar.jpg` | Wide property and solar context | Useful if solar/power context gets a page. |
 | `hydro-peppers-lettuce.jpg` | Alternate hydro crop image | Candidate replacement for pepper/lettuce pages. |
-| `interior-aisle-hydro-cannas-wide.jpg` | Dense growing aisle | Strong candidate for greenhouse/growing pages. |
+| `interior-aisle-hydro-cannas-wide.jpg` | Dense growing aisle | Strong candidate for crop or greenhouse overview pages. |
 | `interior-orchids-cannas.jpg` | Orchid/canna interior | Candidate for center/crop pages. |
 | `interior-orchids-mister-nozzles.jpg` | Orchids and mister context | Candidate for humidity/orchid pages. |
 | `kincony-relay-board.jpg` | Relay board closeup | Redundant with `kincony-relay-closeup.jpg`. |

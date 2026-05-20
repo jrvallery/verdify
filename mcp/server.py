@@ -1081,10 +1081,10 @@ async def acknowledge_trigger(trigger_id: str, reason: str, planner_instance: st
             )
         event_label = (existing["event_label"] or "").lower()
         is_validation_ack = event_label.startswith("validation") and "ack-only" in event_label
-        if existing["event_type"] in {"SUNRISE", "SUNSET"} and not is_validation_ack:
+        if existing["event_type"] in {"SUNRISE", "SUNSET", "MIDNIGHT"} and not is_validation_ack:
             return _json(
                 {
-                    "error": "SUNRISE/SUNSET triggers require set_plan; acknowledge_trigger is allowed only for validation ack-only rows",
+                    "error": "SUNRISE/SUNSET/MIDNIGHT triggers require set_plan; acknowledge_trigger is allowed only for validation ack-only rows",
                     "trigger_id": str(tid),
                     "event_type": existing["event_type"],
                     "event_label": existing["event_label"],
@@ -1254,6 +1254,15 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
                 f"the next cycle, or revise your grade."
             )
 
+        site_publish_triggered = False
+        try:
+            trigger_path = Path("/var/local/verdify/state/plan-publish-trigger")
+            trigger_path.parent.mkdir(parents=True, exist_ok=True)
+            trigger_path.write_text(f"evaluation:{ev.plan_id}\n{datetime.now(ZoneInfo('UTC')).isoformat()}\n")
+            site_publish_triggered = True
+        except Exception as e:  # never block evaluation persistence on publish trigger failures
+            print(f"plan-evaluate publish trigger write failed (non-fatal): {e}")
+
         return json.dumps(
             {
                 "ok": True,
@@ -1263,6 +1272,7 @@ async def plan_evaluate(plan_id: str, outcome_score: int, actual_outcome: str, l
                 "guardrail_scorecard": dict(guardrail_row) if guardrail_row else None,
                 "deviation_warning": warning,
                 "lesson_row_id": lesson_row_id,
+                "site_publish_triggered": site_publish_triggered,
             }
         )
     finally:

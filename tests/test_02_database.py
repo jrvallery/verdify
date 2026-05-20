@@ -182,6 +182,25 @@ class TestViewsCompute:
         )
         assert len(rows) >= 1, "v_planner_performance returned no rows"
 
+    def test_planning_quality_panel_sources_have_current_rows(self):
+        """Public Planning Quality panels should not go blank when the scorecard has local-day data."""
+        scorecard_rows = int(
+            db_query("SELECT count(*) FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date)")
+        )
+        assert scorecard_rows >= 10, "local-day planner scorecard has too few rows"
+
+        recent_plan_rows = int(
+            db_query(
+                """
+                SELECT count(*)
+                FROM v_forecast_plan_outcome_mart
+                WHERE created_at >= now() - interval '14 days'
+                  AND compliance_pct IS NOT NULL
+                """
+            )
+        )
+        assert recent_plan_rows >= 1, "Planning Quality 14d plan panels have no recent source rows"
+
     def test_band_setpoints_returns(self):
         """fn_band_setpoints may require args or return empty if no crops — just verify it doesn't error."""
         try:
@@ -525,6 +544,42 @@ class TestViewsCompute:
         rows = db_query_rows("SELECT day, used_gal FROM v_water_meter_daily LIMIT 1")
         assert len(rows) >= 1, "v_water_meter_daily returned no rows"
 
+    def test_water_meter_daily_excludes_rejected_deltas(self):
+        row = db_query_rows(
+            """
+            WITH view_total AS (
+                SELECT COALESCE(SUM(used_gal), 0) AS total_gal
+                FROM v_water_meter_daily
+            ),
+            ok_total AS (
+                SELECT COALESCE(SUM(delta_gal), 0) AS total_gal
+                FROM water_meter_events
+                WHERE event_type = 'delta'
+                  AND quality_flag = 'ok'
+            )
+            SELECT ABS(view_total.total_gal - ok_total.total_gal) < 0.001
+            FROM view_total, ok_total
+            """
+        )
+        assert row and row[0] == "t", "v_water_meter_daily is summing rejected water-meter deltas"
+
+    def test_daily_summary_monthly_water_cost_is_plausible(self):
+        impossible_months = db_query(
+            """
+            SELECT count(*)
+            FROM (
+                SELECT date_trunc('month', date)::date AS month,
+                       SUM(COALESCE(water_used_gal, 0)) AS gallons,
+                       SUM(COALESCE(cost_water, 0)) AS cost_usd
+                FROM daily_summary
+                GROUP BY 1
+                HAVING SUM(COALESCE(water_used_gal, 0)) > 100000
+                    OR SUM(COALESCE(cost_water, 0)) > 500
+            ) bad
+            """
+        )
+        assert int(impossible_months) == 0, "monthly water usage/cost contains an impossible spike"
+
     def test_backlog_story_views_compute(self):
         checks = [
             "SELECT * FROM v_irrigation_accountability LIMIT 1",
@@ -551,3 +606,18 @@ class TestViewsCompute:
         assert rh_avg, "daily_summary.rh_avg was not backfilled"
         assert outdoor_min and outdoor_max, "daily_summary outdoor temp min/max were not backfilled"
         assert kwh_total, "daily_summary.kwh_total was not populated from measured energy"
+
+    def test_daily_summary_electric_cost_uses_measured_kwh(self):
+        rows = db_query_rows(
+            """
+            SELECT date
+            FROM daily_summary
+            WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 31
+              AND date < (now() AT TIME ZONE 'America/Denver')::date - 1
+              AND kwh_total IS NOT NULL
+              AND cost_electric IS NOT NULL
+              AND ABS(cost_electric - ROUND((kwh_total * 0.111)::numeric, 2)) > 0.011
+            LIMIT 1
+            """
+        )
+        assert not rows, f"daily_summary electric cost does not match measured kWh: {rows[0]}"

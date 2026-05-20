@@ -46,7 +46,11 @@ export default (() => {
         const path = url.pathname as FullSlug;
         const baseDir =
             fileData.slug === "404" ? path : pathToRoot(fileData.slug!);
-        const iconPath = joinSegments(baseDir, "static/icon-v2.png");
+        const iconPath = joinSegments(baseDir, "static/brand/favicon.svg");
+        const appleTouchIconPath = joinSegments(
+            baseDir,
+            "static/brand/apple-touch-icon.png",
+        );
 
         // Url of current page
         const socialSlug =
@@ -82,7 +86,7 @@ export default (() => {
                     name: "Verdify Lab",
                     url: `https://${cfg.baseUrl}`,
                     description:
-                        "An ESP32-run greenhouse where Iris uses Claude to write bounded tactical plans, while telemetry, costs, failures, and lessons stay public.",
+                        "An ESP32-run greenhouse where an AI planning agent writes bounded tactical plans, while telemetry, costs, failures, and lessons stay public.",
                 },
                 {
                     "@type": "WebPage",
@@ -193,17 +197,16 @@ export default (() => {
                     </>
                 )}
 
-                <link rel="icon" href={iconPath} />
-                <link
-                    rel="apple-touch-icon"
-                    href={joinSegments(
-                        baseDir,
-                        "static/apple-touch-icon-v2.png",
-                    )}
-                />
+                <link rel="icon" href={iconPath} type="image/svg+xml" />
+                <link rel="apple-touch-icon" href={appleTouchIconPath} />
                 <link rel="canonical" href={socialUrl} />
                 <meta name="description" content={description} />
                 {noindex && <meta name="robots" content="noindex, follow" />}
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `(()=>{const apply=()=>{document.documentElement.setAttribute("saved-theme","light");try{localStorage.setItem("theme","light")}catch{}};apply();if(!window.__verdifyLightThemeOnly){window.__verdifyLightThemeOnly=true;document.addEventListener("nav",apply)}})();`,
+                    }}
+                />
                 <script
                     type="application/ld+json"
                     dangerouslySetInnerHTML={{

@@ -312,7 +312,7 @@ def table_freshness(tables: set[str]) -> dict[str, str]:
 def render_panel(panel: PanelAudit, timeout: int, retries: int = 3) -> tuple[str, int | None, int | None, int | None]:
     url = (
         f"{GRAFANA_BASE}/render/d-solo/{quote(panel.dashboard_uid)}/"
-        f"?orgId=1&panelId={panel.panel_id}&from=now-24h&to=now&width=800&height=360&theme=dark"
+        f"?orgId=1&panelId={panel.panel_id}&from=now-24h&to=now&width=800&height=360&theme=light"
     )
     start = time.monotonic()
     for attempt in range(retries + 1):

@@ -1,5 +1,5 @@
 #!/usr/bin/env /srv/greenhouse/.venv/bin/python3
-"""Regenerate plans/index.md and data/plans/index.md from DB summaries."""
+"""Regenerate data/plans/index.md and the short plans/index.md alias."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 
 CONTENT_ROOT = Path("/srv/verdify/verdify-site/content")
-INDEX = CONTENT_ROOT / "plans" / "index.md"
+INDEX_ALIAS = CONTENT_ROOT / "plans" / "index.md"
 DATA_INDEX = CONTENT_ROOT / "data" / "plans" / "index.md"
 DB_CMD = ["docker", "exec", "verdify-timescaledb", "psql", "-U", "verdify", "-d", "verdify", "-t", "-A", "-F", "|"]
 
@@ -20,6 +20,7 @@ def public_text(value: object) -> str:
     text = re.sub(r"\bHermes\b", "planning gateway", text)
     text = re.sub(r"\bhermes\b", "planner-gateway", text)
     text = re.sub(r"\bOpenClaw/Iris\b", "planner", text)
+    text = re.sub(r"\bIris\b(?!-)", "AI planning agent", text)
     text = re.sub(r"\bOpenClaw\b", "planner gateway", text)
     text = re.sub(r"\blocal Gemma context overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
     text = re.sub(r"\blocal Gemma overflow\b", "planner context overflow", text, flags=re.IGNORECASE)
@@ -35,7 +36,7 @@ def db_rows(sql: str) -> list[list[str]]:
 def default_header(today: date) -> str:
     return f"""---
 title: AI Greenhouse Planning Archive
-description: "Daily archive and monthly summary of Iris, Verdify's AI greenhouse planner: experiments, scorecards, climate stress, costs, and lessons from each planning cycle."
+description: "Daily archive and monthly summary of Verdify's AI greenhouse planning agent: experiments, scorecards, climate stress, costs, and lessons from each planning cycle."
 tags: [plans, greenhouse, ai]
 date: {today}
 cssclasses:
@@ -44,7 +45,7 @@ cssclasses:
 
 # AI Greenhouse Planning Archive
 
-Iris normally runs up to three planning cycles per day. Missed cycles are intentionally visible in this archive, because planner availability is part of the system being audited.
+The AI planning agent normally runs up to three planning cycles per day. Missed cycles are intentionally visible in this archive, because planner availability is part of the system being audited.
 
 The individual daily pages are generated records, not polished articles. The important story is what the AI planned, what the greenhouse actually experienced, how much stress remained, and what the next plan learned.
 
@@ -64,15 +65,43 @@ To understand the exact parameters behind the plan rows, see [AI Tunables Tracea
 
 
 def existing_header(today: date) -> str:
-    if not INDEX.exists():
+    if not DATA_INDEX.exists():
         return default_header(today)
-    text = INDEX.read_text(encoding="utf-8")
+    text = DATA_INDEX.read_text(encoding="utf-8")
     header = re.split(r"^## (?:Recent Plans|All Plans)$", text, maxsplit=1, flags=re.MULTILINE)[0].strip()
     if not header:
         return default_header(today)
     header = re.sub(r"^date: .*$", f"date: {today}", header, flags=re.MULTILINE)
+    header = re.sub(
+        r"Daily archive and monthly summary of [Ii]ris, Verdify's AI greenhouse planner",
+        "Daily archive and monthly summary of Verdify's AI greenhouse planning agent",
+        header,
+    )
+    header = re.sub(
+        r"[Ii]ris normally runs up to three planning cycles per day\.",
+        "The AI planning agent normally runs up to three planning cycles per day.",
+        header,
+    )
     header = header.replace("/intelligence/planning/#ai-writable-tunables", "/reference/ai-tunables/")
-    header = header.replace("/reference/planning-loop/#ai-writable-tunables", "/reference/ai-tunables/")
+    header = header.replace("/reference/ai-tunables/", "/reference/ai-tunables/")
+    header = header.replace("AI-Writable Tunables", "AI Tunables Traceability")
+    header = header.replace("AI Tunables](/reference/ai-tunables/", "AI Tunables Traceability](/reference/ai-tunables/")
+    if "cssclasses:" not in header:
+        header = re.sub(
+            r"^(date: .*)$",
+            "\\1\ncssclasses:\n  - hide-folder-listing",
+            header,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    elif "hide-folder-listing" not in header:
+        header = re.sub(
+            r"^(cssclasses:\s*)$",
+            "\\1\n  - hide-folder-listing",
+            header,
+            count=1,
+            flags=re.MULTILINE,
+        )
     if "Generated planning archive" not in header:
         header = header.replace(
             "## What the Archive Shows",
@@ -109,6 +138,27 @@ def render(rows: list[list[str]], today: date) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_alias(today: date) -> str:
+    return f"""---
+title: AI Greenhouse Planning Archive
+description: "Short route alias for the generated planning archive."
+tags: [plans, greenhouse, ai, auto-generated]
+date: {today}
+noindex: true
+cssclasses:
+  - hide-folder-listing
+---
+
+[//]: # (auto-generated by scripts/generate-plans-index.py; canonical index: /data/plans/)
+
+# AI Greenhouse Planning Archive
+
+The generated planning archive index lives at [Data / Plans](/data/plans/).
+
+Daily plan records still use `/plans/YYYY-MM-DD` URLs. I keep this index route as a short compatibility page so `/plans/` does not fall through to a folder listing.
+"""
+
+
 def main() -> None:
     rows = db_rows(
         """
@@ -131,10 +181,11 @@ def main() -> None:
         """
     )
     output = render(rows, date.today())
-    for path in (INDEX, DATA_INDEX):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(output, encoding="utf-8")
-    print(f"Plans index: {len(rows)} days -> plans/index.md and data/plans/index.md")
+    DATA_INDEX.parent.mkdir(parents=True, exist_ok=True)
+    DATA_INDEX.write_text(output, encoding="utf-8")
+    INDEX_ALIAS.parent.mkdir(parents=True, exist_ok=True)
+    INDEX_ALIAS.write_text(render_alias(date.today()), encoding="utf-8")
+    print(f"Plans index: {len(rows)} days -> data/plans/index.md; plans/index.md is a short alias")
 
 
 if __name__ == "__main__":

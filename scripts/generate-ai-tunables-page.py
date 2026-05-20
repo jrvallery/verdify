@@ -173,16 +173,19 @@ def _md(text: str | None) -> str:
 
 def _frontmatter() -> str:
     data = {
-        "title": "AI Tunables Traceability",
+        "title": "Planner Contract and AI Tunables",
         "description": (
-            "Registry-backed audit of every Verdify tunable: what it controls, "
-            "how it routes from Iris to firmware, when it last landed, and how "
-            "the planner should use it."
+            "Production contract for Verdify planner triggers, accepted writes, publishing behavior, "
+            "and the registry-backed tunable surface the AI planning agent may use."
         ),
         "tags": ["intelligence", "planning", "tunables", "control"],
         "date": datetime.now().date().isoformat(),
         "type": "reference",
         "cssclasses": ["hide-folder-listing"],
+        "aliases": [
+            "reference/planner-trigger-contract",
+            "reference/planner-publishing-contract",
+        ],
     }
     return "---\n" + yaml.safe_dump(data, sort_keys=False).strip() + "\n---\n"
 
@@ -245,7 +248,7 @@ def _why_it_matters(name: str, category: str) -> str:
     if category == "Fog gates":
         return "Fog is high-power humidity assist. These gates decide when that heavy tool is allowed."
     if category == "Irrigation":
-        return "Irrigation settings feed crop water availability and fertigation timing, not the 5-second climate mode."
+        return "Irrigation settings feed crop water availability and fertigation timing, not the firmware climate mode."
     if category == "Grow lights":
         return "Grow-light settings trade supplemental DLI against electrical cost and light-cycle stability."
     if category == "Economiser":
@@ -284,7 +287,7 @@ def _planner_guidance(name: str, spec: TunableDef, plan_required: set[str]) -> s
     if control_class == "planner_policy":
         return "Planner-policy tunable. Use only when forecast or previous-plan evidence points directly to this control path."
     if control_class == "crop_band":
-        return "Do not push from Iris. Crop profiles and dispatcher own this value; use planner-policy bias/staging knobs instead."
+        return "Do not push from the AI planning agent. Crop profiles and dispatcher own this value; use planner-policy bias/staging knobs instead."
     if control_class == "readback_context":
         return "Read-only context. Use it to explain firmware decisions; never emit it in set_plan or set_tunable."
     if control_class == "retired":
@@ -554,6 +557,38 @@ def _effectiveness_status(name: str, spec: TunableDef, ev: Evidence) -> str:
     return "No recent live landing evidence; static route must be reviewed before relying on this."
 
 
+def _planner_status(name: str, spec: TunableDef, plan_required: set[str]) -> str:
+    if name in RESERVED_NO_EFFECT:
+        return "reserved/no-op; do not push"
+    if name in plan_required:
+        return "routine set_plan required"
+    if name in PLANNER_PUSHABLE_REG:
+        return "planner may write with a hypothesis"
+    if spec.control_class == "crop_band":
+        return "dispatcher/crop-band owned"
+    if spec.control_class == "readback_context":
+        return "readback context only"
+    if spec.control_class == "controller_safety":
+        return "controller safety context"
+    if spec.control_class == "retired":
+        return "retired; do not use"
+    return spec.control_class.replace("_", " ")
+
+
+def _route_summary(name: str, spec: TunableDef, ev: Evidence) -> str:
+    if name in RESERVED_NO_EFFECT:
+        return "reserved"
+    if ev.dispatch_7d and ev.confirmed_7d == ev.dispatch_7d:
+        return "confirmed"
+    if ev.dispatch_7d and ev.confirmed_7d:
+        return f"{ev.confirmed_7d}/{ev.dispatch_7d} confirmed"
+    if ev.last_readback_ts:
+        return "readback only"
+    if spec.esp_object_id is None:
+        return "context only"
+    return "static route"
+
+
 def _render_summary(summary: dict[str, Any], plan_required: set[str]) -> list[str]:
     embedding_counts = summary.get("embedding_counts") or {}
     class_counts = {
@@ -608,7 +643,7 @@ def _render_contract_table(evidence: dict[str, Evidence], plan_required: set[str
     rows = [
         "## Routine Plan Contract",
         "",
-        "Routine `set_plan` calls must include these values at every transition. The page below gives the full per-tunable detail; this table is the compact operational contract.",
+        "Routine `set_plan` calls must include these values at every transition. This table is the short operational contract; the full parameter index below covers the rest of the registry.",
         "",
         "| Parameter | Active | Future rows | Last dispatch | 7d confirmed | Planner instruction |",
         "|---|---:|---:|---|---:|---|",
@@ -623,6 +658,49 @@ def _render_contract_table(evidence: dict[str, Evidence], plan_required: set[str
             f"{confirmed} | {_md(_planner_guidance(name, spec, plan_required))} |"
         )
     rows.append("")
+    return rows
+
+
+def _render_parameter_index(
+    evidence: dict[str, Evidence],
+    plan_required: set[str],
+    firmware_hits: dict[str, dict[str, int]],
+) -> list[str]:
+    rows = [
+        "## Parameter Index",
+        "",
+        "This is the public contract table for every registered tunable. The row-level implementation dump is still generated for operations, but the public page keeps the reading path compact.",
+        "",
+    ]
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for name, spec in REGISTRY.items():
+        grouped[_category(name, spec)].append(name)
+
+    for category in sorted(grouped):
+        rows.extend(
+            [
+                f"### {category}",
+                "",
+                "| Parameter | Class | Owner | Default / bounds | Active | Readback | Route | Planner status |",
+                "|---|---|---|---|---:|---:|---|---|",
+            ]
+        )
+        for name in sorted(grouped[category]):
+            spec = REGISTRY[name]
+            ev = evidence[name]
+            bounds = "switch 0/1" if spec.kind == "switch" else f"{_fmt_value(spec.min)} to {_fmt_value(spec.max)}"
+            owner = spec.push_owner.replace("_", " ")
+            hit_count = sum(firmware_hits.get(name, {}).values())
+            route = _route_summary(name, spec, ev)
+            if hit_count:
+                route = f"{route}; firmware refs {hit_count}"
+            rows.append(
+                "| "
+                f"`{name}` | `{spec.control_class}` | {owner} | default `{_fmt_value(spec.default)}`; {bounds} | "
+                f"{_fmt_value(ev.active_value)} | {_fmt_value(ev.last_readback_value)} ({_age(ev.last_readback_ts)}) | "
+                f"{route} | {_planner_status(name, spec, plan_required)} |"
+            )
+        rows.append("")
     return rows
 
 
@@ -688,15 +766,54 @@ def _render_full_page(
         "",
         "[//]: # (auto-generated by scripts/generate-ai-tunables-page.py; sources: tunable_registry, MCP sets, entity_map, firmware source, setpoint_plan, setpoint_changes, setpoint_snapshot, plan_journal)",
         "",
-        "# AI Tunables Traceability",
+        "# Planner Contract and AI Tunables",
         "",
-        "This page is the operating contract for the bounded control surface Iris can reason about. It answers four questions for every tunable: what the value does, why it matters to greenhouse control, how the value routes through the stack, and what live evidence says about recent use.",
+        "This is the canonical planner-control contract for Verdify. It explains what triggers a plan, what values the AI planning agent may write, how those writes publish to the public site, and what live readback evidence says about the bounded tunable surface.",
         "",
         "End-to-end path for planner-owned values:",
         "",
-        "`Iris -> MCP set_plan or set_tunable -> setpoint_plan -> v_active_plan -> ingestor dispatcher -> ESPHome number/switch -> firmware global/Setpoints -> cfg_* readback -> setpoint_snapshot and setpoint_changes confirmation`.",
+        "`AI planning agent -> MCP set_plan or set_tunable -> setpoint_plan -> v_active_plan -> ingestor dispatcher -> ESPHome number/switch -> firmware global/Setpoints -> cfg_* readback -> setpoint_snapshot and setpoint_changes confirmation`.",
         "",
-        "The ESP32 still owns 5-second relay control. Iris owns bounded setpoint hypotheses, not direct actuator commands.",
+        "The ESP32 still owns relay control. The AI planning agent owns bounded setpoint hypotheses, not direct actuator commands.",
+        "",
+        '<div class="data-table">',
+        '  <div class="data-row"><strong>Related evidence</strong><span><a href="/reference/planning-loop/">Planning Loop</a> · <a href="/reference/safety/">Safety Architecture</a> · <a href="/data/operations/">Operations</a></span><p>This generated page owns triggers, accepted writes, publishing behavior, and per-parameter contract evidence. The planning page owns prompt flow, the safety page owns relay-boundary behavior, and Operations owns current live state.</p></div>',
+        "</div>",
+        "",
+        "## Trigger Schedule",
+        "",
+        "Every expected trigger is materialized in `planner_trigger_ledger` before planner delivery. Required full-plan triggers must close with `set_plan`; tactical checkpoints may close with `set_tunable` or `acknowledge_trigger` when no change is warranted.",
+        "",
+        '<div class="data-table">',
+        '  <div class="data-row"><strong><code>MIDNIGHT</code></strong><span>00:15 America/Denver</span><p>Required end-of-day review and reset. The AI planning agent evaluates prior-day plans, extracts supported lessons, and starts the new local day with <code>set_plan</code>.</p></div>',
+        '  <div class="data-row"><strong><code>SUNRISE</code></strong><span>Astral sunrise</span><p>Required morning full plan for daylight, peak stress, decline, and evening handoff.</p></div>',
+        '  <div class="data-row"><strong><code>SOLAR_MAX</code></strong><span>Astral solar noon</span><p>Solar checkpoint for a small tactical correction or honest no-change acknowledgement.</p></div>',
+        '  <div class="data-row"><strong><code>TRANSITION</code></strong><span>Peak stress and decline</span><p>Bounded tactical checkpoint for the two highest-signal day transitions.</p></div>',
+        '  <div class="data-row"><strong><code>SUNSET</code></strong><span>Astral sunset</span><p>Required evening full plan for overnight cold, humidity, dew point, and pre-dawn posture.</p></div>',
+        '  <div class="data-row"><strong><code>FORECAST_DEVIATION</code></strong><span>Sigma-gated observed miss</span><p>Triggered only when actual outdoor conditions diverge materially from forecast after cooldown and threshold checks.</p></div>',
+        '  <div class="data-row"><strong><code>MANUAL</code></strong><span>Operator initiated</span><p>Ad-hoc audited planner run with the same MCP bounds and audit metadata as scheduled triggers.</p></div>',
+        "</div>",
+        "",
+        "## Payload And Runtime Contract",
+        "",
+        "The planner receives one trigger-scoped payload through Hermes `/v1/runs`: standing directives, the event prompt, assembled greenhouse context, and audit metadata. The session id keeps the historical `hermes:iris:main:trigger:<trigger_id>` shape because it is a database/service key, not public planner branding.",
+        "",
+        '<div class="data-table">',
+        '  <div class="data-row"><strong>Planner scheduler</strong><span><code>ingestor/tasks.py::planning_heartbeat</code></span><p>Computes expected trigger times, records them before delivery, dispatches the AI planning agent, and resolves SLA state.</p></div>',
+        '  <div class="data-row"><strong>Prompt builder</strong><span><code>ingestor/iris_planner.py</code></span><p>Builds the event prompt, appends live and static context, stamps audit metadata, and posts to Hermes.</p></div>',
+        '  <div class="data-row"><strong>Dynamic greenhouse packet</strong><span><code>scripts/gather-plan-context.sh</code></span><p>Live sensors, equipment, forecast, active plan, scorecards, plan-review backlog, lessons, alerts, tunable constraints, guardrail audits, and context completeness.</p></div>',
+        '  <div class="data-row"><strong>Public site packet</strong><span><code>/srv/verdify/state/planner-static-context.md</code></span><p>Generated from the same Markdown source tree Quartz renders for <code>lab.verdify.ai</code>, with a SHA-256 digest embedded into planner context.</p></div>',
+        "</div>",
+        "",
+        "## Accepted Writes And Publishing",
+        "",
+        '<div class="data-table">',
+        '  <div class="data-row"><strong><code>set_plan</code></strong><span>Required for full-plan triggers</span><p>Validates the plan envelope, required routine fields, bounds, trigger ID, planner instance, and structured hypothesis; writes <code>setpoint_plan</code> and <code>plan_journal</code>.</p></div>',
+        '  <div class="data-row"><strong><code>set_tunable</code></strong><span>Narrow tactical correction</span><p>Validates one planner-pushable parameter against this registry and writes an audited one-shot setpoint row.</p></div>',
+        '  <div class="data-row"><strong><code>acknowledge_trigger</code></strong><span>No-op closeout</span><p>Allowed for no-op transition, forecast-deviation, heartbeat, and validation-smoke events; rejected for normal required full-plan cycles.</p></div>',
+        '  <div class="data-row"><strong><code>plan_evaluate</code></strong><span>Learning-loop closure</span><p>Writes outcome, score, anchor score, optional lesson extraction, and validation time back to <code>plan_journal</code>.</p></div>',
+        '  <div class="data-row"><strong>Publishing</strong><span><code>publish-site-content.sh</code></span><p>MCP writes trigger generated plan pages, archive, forecast, lessons, tunables, baseline, evidence snapshots, public sample data, static planner context, and a Quartz rebuild.</p></div>',
+        "</div>",
         "",
     ]
     lines.extend(_render_summary(summary, plan_required))
@@ -713,10 +830,33 @@ def _render_full_page(
             + ".",
             "- Readback-only values are now registry-covered but not planner-pushable: `fallback_window_s`, `outdoor_temp_f`, `outdoor_dewpoint_f`.",
             "",
-            "## Per-Tunable Detail",
+        ]
+    )
+    lines.extend(_render_parameter_index(evidence, plan_required, firmware_hits))
+    lines.extend(
+        [
+            "---",
+            "",
+            "*Regenerate with `scripts/generate-ai-tunables-page.py`; publish through `scripts/publish-site-content.sh` so the static context and public site stay aligned.*",
             "",
         ]
     )
+    return "\n".join(lines)
+
+
+def _render_detail_artifact(
+    evidence: dict[str, Evidence],
+    plan_required: set[str],
+    firmware_hits: dict[str, dict[str, int]],
+) -> str:
+    lines = [
+        "# Raw AI Tunables Detail",
+        "",
+        "Generated by `scripts/generate-ai-tunables-page.py` for operations. The public page uses the compact parameter index.",
+        "",
+        "## Per-Tunable Detail",
+        "",
+    ]
 
     grouped: dict[str, list[str]] = defaultdict(list)
     for name, spec in REGISTRY.items():
@@ -776,7 +916,7 @@ def _render_planner_context(evidence: dict[str, Evidence], plan_required: set[st
     return "\n".join(lines)
 
 
-async def _build() -> tuple[str, str]:
+async def _build() -> tuple[str, str, str]:
     plan_required = _assigned_set(REPO_ROOT / "mcp" / "server.py", "PLAN_REQUIRED_PARAMS")
     missing_registry = sorted(set(ALL_TUNABLES) - set(REGISTRY))
     if missing_registry:
@@ -786,8 +926,9 @@ async def _build() -> tuple[str, str]:
     summary = await _load_summary()
     firmware_hits = _static_firmware_hits()
     page = _render_full_page(evidence, summary, plan_required, firmware_hits)
+    detail_artifact = _render_detail_artifact(evidence, plan_required, firmware_hits)
     planner_context = _render_planner_context(evidence, plan_required, summary)
-    return page, planner_context
+    return page, planner_context, detail_artifact
 
 
 def main() -> int:
@@ -799,7 +940,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    page, planner_context = asyncio.run(_build())
+    page, planner_context, detail_artifact = asyncio.run(_build())
     if args.planner_context:
         print(planner_context)
         return 0
@@ -815,9 +956,9 @@ def main() -> int:
             "auto-generated by scripts/generate-ai-tunables-page.py",
             "## Current Audit Snapshot",
             "## Routine Plan Contract",
-            "## Per-Tunable Detail",
+            "## Parameter Index",
             "`mister_engage_kpa` is effectful",
-            "<summary><code>fallback_window_s</code>",
+            "`fallback_window_s`",
         ]
         missing = [marker for marker in required if marker not in existing]
         if missing:
@@ -826,7 +967,7 @@ def main() -> int:
         return 0
 
     OUTPUT_PATH.write_text(page, encoding="utf-8")
-    RAW_OUTPUT_PATH.write_text(page, encoding="utf-8")
+    RAW_OUTPUT_PATH.write_text(detail_artifact, encoding="utf-8")
     print(f"Wrote {OUTPUT_PATH}")
     print(f"Wrote {RAW_OUTPUT_PATH}")
     return 0

@@ -19,11 +19,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#66BB6A",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "#FFA726",
+                "color": "#FDD835",
                 "value": 5
               },
               {
@@ -86,11 +86,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -145,11 +145,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -204,11 +204,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -263,11 +263,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -315,9 +315,9 @@
         "defaults": {
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 15,
+            "fillOpacity": 75,
             "lineInterpolation": "smooth",
-            "lineWidth": 2,
+            "lineWidth": 0,
             "showPoints": "never",
             "spanNulls": true,
             "stacking": {
@@ -429,20 +429,42 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Shows operating cost behavior for this part of the greenhouse system.",
+      "description": "Stacked monthly greenhouse utility cost for the current local month-to-date plus the previous five months. Electric, gas, and water use the public rate assumptions shown on Resource Use.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "barMaxWidth": 40,
-            "drawStyle": "bars",
-            "fillOpacity": 15,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "USD / month",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#26A69A",
+                "value": null
+              }
+            ]
           },
           "unit": "currencyUSD"
         },
@@ -450,13 +472,13 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Electric"
+              "options": "Electric ($)"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FF9800",
+                  "fixedColor": "#66BB6A",
                   "mode": "fixed"
                 }
               }
@@ -465,7 +487,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Gas"
+              "options": "Gas ($)"
             },
             "properties": [
               {
@@ -480,7 +502,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Water"
+              "options": "Water ($)"
             },
             "properties": [
               {
@@ -488,6 +510,22 @@
                 "value": {
                   "fixedColor": "#2196F3",
                   "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total ($)"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
                 }
               }
             ]
@@ -502,15 +540,26 @@
       },
       "id": 10,
       "options": {
+        "barRadius": 0,
+        "barWidth": 0.82,
+        "fullHighlight": false,
+        "groupWidth": 0.72,
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
+        "orientation": "auto",
+        "showValue": "never",
+        "stacking": "normal",
         "tooltip": {
           "mode": "multi",
-          "sort": "desc"
-        }
+          "sort": "none"
+        },
+        "xField": "Month",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
       },
       "targets": [
         {
@@ -518,31 +567,16 @@
             "type": "grafana-postgresql-datasource",
             "uid": "verdify-tsdb"
           },
-          "format": "time_series",
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_electric)::numeric,2) AS \"Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) GROUP BY 1 ORDER BY 1",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH months AS (\n  SELECT generate_series(\n    (date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date - interval '5 months')::date,\n    date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date,\n    interval '1 month'\n  )::date AS month_start\n), costs AS (\n  SELECT\n    date_trunc('month', date)::date AS month_start,\n    ROUND(SUM(COALESCE(cost_electric, 0))::numeric, 2) AS electric_cost_usd,\n    ROUND(SUM(COALESCE(cost_gas, 0))::numeric, 2) AS gas_cost_usd,\n    ROUND(SUM(COALESCE(cost_water, 0))::numeric, 2) AS water_cost_usd\n  FROM daily_summary\n  WHERE date >= (SELECT min(month_start) FROM months)\n    AND date < ((SELECT max(month_start) FROM months) + interval '1 month')::date\n  GROUP BY 1\n)\nSELECT\n  to_char(m.month_start, 'Mon YYYY') AS \"Month\",\n  COALESCE(c.electric_cost_usd, 0) AS \"Electric ($)\",\n  COALESCE(c.gas_cost_usd, 0) AS \"Gas ($)\",\n  COALESCE(c.water_cost_usd, 0) AS \"Water ($)\",\n  COALESCE(c.electric_cost_usd, 0)\n    + COALESCE(c.gas_cost_usd, 0)\n    + COALESCE(c.water_cost_usd, 0) AS \"Total ($)\"\nFROM months m\nLEFT JOIN costs c USING (month_start)\nORDER BY m.month_start",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_gas)::numeric,2) AS \"Gas\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) GROUP BY 1 ORDER BY 1",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawSql": "SELECT date_trunc('month',date)::timestamptz AS time, ROUND(SUM(cost_water)::numeric,2) AS \"Water\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) GROUP BY 1 ORDER BY 1",
-          "refId": "C"
         }
       ],
-      "title": "Monthly Cost by Category",
-      "type": "timeseries"
+      "title": "Monthly Resource Cost by Source (6 Months)",
+      "type": "barchart",
+      "transparent": true
     },
     {
       "datasource": {
@@ -554,9 +588,9 @@
         "defaults": {
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 15,
+            "fillOpacity": 75,
             "lineInterpolation": "smooth",
-            "lineWidth": 2,
+            "lineWidth": 0,
             "showPoints": "never",
             "spanNulls": true,
             "stacking": {
@@ -682,7 +716,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -781,7 +815,12 @@
             "lineInterpolation": "smooth",
             "showPoints": "never",
             "spanNulls": true,
-            "axisLabel": "Hours"
+            "axisLabel": "Hours",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           }
         },
         "overrides": [
@@ -824,7 +863,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#26A69A",
+                  "fixedColor": "#4DB6AC",
                   "mode": "fixed"
                 }
               }
@@ -854,7 +893,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               }
@@ -870,7 +909,7 @@
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#FFCA28"
+                  "fixedColor": "#42A5F5"
                 }
               }
             ]
@@ -941,14 +980,16 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "description": "Daily runtime hours per equipment. Stacked bars show total utilization."
+      "description": "Daily runtime hours per equipment. Stacked bars show total utilization.",
+      "transparent": true
     },
     {
       "id": 221,
@@ -1062,7 +1103,12 @@
             "lineWidth": 2,
             "showPoints": "never",
             "spanNulls": true,
-            "axisLabel": "W"
+            "axisLabel": "W",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "unit": "watt"
         },
@@ -1076,7 +1122,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#73BF69",
+                  "fixedColor": "#66BB6A",
                   "mode": "fixed"
                 }
               },
@@ -1115,17 +1161,17 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 0
+                "value": 85
               },
               {
                 "id": "custom.lineWidth",
-                "value": 3
+                "value": 0
               },
               {
                 "id": "custom.lineStyle",
@@ -1140,6 +1186,10 @@
               {
                 "id": "custom.axisLabel",
                 "value": "W/m\u00b2"
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "opacity"
               }
             ]
           }
@@ -1180,9 +1230,11 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         }
-      }
+      },
+      "transparent": true
     },
     {
       "description": "Percent of greenhouse electrical load consumed during solar hours across the last 30 completed days.",
@@ -1193,16 +1245,20 @@
           "thresholds": {
             "steps": [
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 50
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#FDD835"
+          }
         }
       },
       "gridPos": {
@@ -1222,7 +1278,12 @@
         }
       ],
       "title": "30-Day Solar-Aligned Load",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "description": "Percent of average overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
@@ -1233,20 +1294,24 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 80
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 100
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#26A69A"
+          }
         }
       },
       "gridPos": {
@@ -1266,7 +1331,12 @@
         }
       ],
       "title": "30-Day Powerwall Coverage",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "fieldConfig": {
@@ -1274,20 +1344,24 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1500
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 3000
               }
             ]
           },
-          "unit": "watt"
+          "unit": "watt",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#66BB6A"
+          }
         }
       },
       "gridPos": {
@@ -1307,7 +1381,12 @@
         }
       ],
       "title": "Daytime Watts (30-Day Average)",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "fieldConfig": {
@@ -1315,20 +1394,24 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1000
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2000
               }
             ]
           },
-          "unit": "watt"
+          "unit": "watt",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#66BB6A"
+          }
         }
       },
       "gridPos": {
@@ -1348,7 +1431,12 @@
         }
       ],
       "title": "Night Watts (30-Day Average)",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "fieldConfig": {
@@ -1356,20 +1444,24 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 8
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 15
               }
             ]
           },
-          "unit": "kwatth"
+          "unit": "kwatth",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#66BB6A"
+          }
         }
       },
       "gridPos": {
@@ -1389,7 +1481,12 @@
         }
       ],
       "title": "kWh/day (30-Day Average)",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "fieldConfig": {
@@ -1397,20 +1494,24 @@
           "thresholds": {
             "steps": [
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 400
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 700
               }
             ]
           },
-          "unit": "watt/m\u00b2"
+          "unit": "watt/m\u00b2",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#FDD835"
+          }
         }
       },
       "gridPos": {
@@ -1430,7 +1531,12 @@
         }
       ],
       "title": "Peak Solar (W/m\u00b2)",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none"
+      }
     },
     {
       "fieldConfig": {
@@ -1529,14 +1635,20 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "fillOpacity": 40,
+            "fillOpacity": 75,
             "lineInterpolation": "smooth",
-            "lineWidth": 1,
+            "lineWidth": 0,
             "showPoints": "never",
             "stacking": {
               "mode": "normal"
             },
-            "spanNulls": true
+            "spanNulls": true,
+            "drawStyle": "bars",
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "decimals": 2,
           "unit": "currencyUSD"
@@ -1551,7 +1663,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FADE2A",
+                  "fixedColor": "#66BB6A",
                   "mode": "fixed"
                 }
               }
@@ -1566,7 +1678,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FF7383",
+                  "fixedColor": "#F44336",
                   "mode": "fixed"
                 }
               }
@@ -1581,7 +1693,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#5794F2",
+                  "fixedColor": "#2196F3",
                   "mode": "fixed"
                 }
               }
@@ -1602,7 +1714,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT (date + time '12:00')::timestamp AS time, round((kwh_estimated * 0.111)::numeric, 2) AS \"Electric ($)\", round(cost_gas::numeric, 2) AS \"Gas ($)\", round(cost_water::numeric, 2) AS \"Water ($)\" FROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamp) AND kwh_estimated > 0 ORDER BY date"
+          "rawSql": "SELECT\n  (date + time '12:00')::timestamptz AS time,\n  round(cost_electric::numeric, 2) AS \"Electric ($)\",\n  round(cost_gas::numeric, 2) AS \"Gas ($)\",\n  round(cost_water::numeric, 2) AS \"Water ($)\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz)\n  AND cost_total > 0\nORDER BY date"
         }
       ],
       "title": "Daily Cost by Source",
@@ -1615,9 +1727,11 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 201,
@@ -1650,7 +1764,7 @@
           "decimals": 2,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#FFD740"
+            "fixedColor": "#26A69A"
           }
         }
       },
@@ -1663,7 +1777,8 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average total cost per day across the last 30 completed daily summaries."
+      "description": "Average total cost per day across the last 30 completed daily summaries.",
+      "transparent": true
     },
     {
       "id": 203,
@@ -1709,7 +1824,8 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average gas cost per day across the last 30 completed daily summaries."
+      "description": "Average gas cost per day across the last 30 completed daily summaries.",
+      "transparent": true
     },
     {
       "id": 204,
@@ -1755,7 +1871,8 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average water cost per day across the last 30 completed daily summaries."
+      "description": "Average water cost per day across the last 30 completed daily summaries.",
+      "transparent": true
     },
     {
       "id": 202,
@@ -1788,7 +1905,7 @@
           "decimals": 2,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#FF9800"
+            "fixedColor": "#66BB6A"
           }
         }
       },
@@ -1801,7 +1918,8 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average electric cost per day across the last 30 completed daily summaries."
+      "description": "Average electric cost per day across the last 30 completed daily summaries.",
+      "transparent": true
     }
   ],
   "annotations": {
@@ -1809,5 +1927,6 @@
   },
   "links": [],
   "schemaVersion": 39,
-  "timezone": "America/Denver"
+  "timezone": "America/Denver",
+  "style": "light"
 }

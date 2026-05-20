@@ -33,7 +33,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT now() AS time, value AS score FROM fn_planner_scorecard(current_date) WHERE metric='planner_score'",
+          "rawSql": "SELECT now() AS time, value AS score FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date) WHERE metric='planner_score'",
           "editorMode": "code"
         }
       ],
@@ -45,12 +45,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#73BF69"
+          }
         }
       },
       "options": {
@@ -63,10 +67,11 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 3,
@@ -92,7 +97,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT now() AS time, value AS score FROM fn_planner_scorecard(current_date) WHERE metric='7d_avg_score'",
+          "rawSql": "SELECT now() AS time, value AS score FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date) WHERE metric='7d_avg_score'",
           "editorMode": "code"
         }
       ],
@@ -104,12 +109,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#73BF69"
+          }
         }
       },
       "options": {
@@ -122,10 +131,11 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 4,
@@ -151,7 +161,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT now() AS time, value AS compliance FROM fn_planner_scorecard(current_date) WHERE metric='compliance_pct'",
+          "rawSql": "SELECT now() AS time, value AS compliance FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date) WHERE metric='compliance_pct'",
           "editorMode": "code"
         }
       ],
@@ -163,12 +173,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": null
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#73BF69"
+          }
         }
       },
       "options": {
@@ -181,10 +195,11 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 5,
@@ -210,19 +225,19 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT now() AS time, value AS stress_h FROM fn_planner_scorecard(current_date) WHERE metric='total_stress_h'",
+          "rawSql": "SELECT now() AS time, value AS stress_h FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date) WHERE metric='total_stress_h'",
           "editorMode": "code"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "suffix:h",
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": null
               }
             ]
@@ -230,6 +245,10 @@
           "mappings": [],
           "custom": {
             "axisLabel": "Hours"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#EF5350"
           }
         }
       },
@@ -243,10 +262,11 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 6,
@@ -272,7 +292,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT now() AS time, value AS cost FROM fn_planner_scorecard(current_date) WHERE metric='cost_total'",
+          "rawSql": "SELECT now() AS time, value AS cost FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date) WHERE metric='cost_total'",
           "editorMode": "code"
         }
       ],
@@ -284,12 +304,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": null
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#26A69A"
+          }
         }
       },
       "options": {
@@ -302,10 +326,11 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center"
-      }
+      },
+      "transparent": true
     },
     {
       "id": 7,
@@ -331,7 +356,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT now() AS time, value AS gal FROM fn_planner_scorecard(current_date) WHERE metric='water_gal'",
+          "rawSql": "SELECT now() AS time, value AS gal FROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date) WHERE metric='water_gal'",
           "editorMode": "code"
         }
       ],
@@ -343,12 +368,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": null
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2196F3"
+          }
         }
       },
       "options": {
@@ -361,10 +390,11 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center"
-      }
+      },
+      "transparent": true
     },
     {
       "datasource": {
@@ -412,7 +442,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -429,7 +459,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               }
@@ -444,7 +474,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               }
@@ -482,7 +512,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -503,7 +534,8 @@
         }
       ],
       "title": "Firmware Band Compliance \u2014 Temp, VPD, Both",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "datasource": {
@@ -551,7 +583,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -568,7 +600,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#EF5350",
+                  "fixedColor": "#FF9800",
                   "mode": "fixed"
                 }
               }
@@ -583,7 +615,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#42A5F5",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
               }
@@ -598,7 +630,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFB74D",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -632,7 +664,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFB74D",
+                  "fixedColor": "#EF5350",
                   "mode": "fixed"
                 }
               },
@@ -674,7 +706,8 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -695,7 +728,8 @@
         }
       ],
       "title": "Planner Stress-Category Hours \u2014 Temp, VPD, Total",
-      "type": "timeseries"
+      "type": "timeseries",
+      "transparent": true
     },
     {
       "id": 11,
@@ -754,120 +788,8 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 82 ELSE NULL END AS \"Fan 1\" FROM equipment_state WHERE equipment='fan1' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "WITH bounds AS MATERIALIZED (\n  SELECT\n    $__timeFrom()::timestamptz AS from_ts,\n    LEAST($__timeTo()::timestamptz, now()) AS to_ts,\n    interval '5 minutes' AS step,\n    date_trunc('hour', $__timeFrom()::timestamptz) AS seed_start_ts\n),\nbuckets AS MATERIALIZED (\n  SELECT generate_series(time_bucket(b.step, b.seed_start_ts), b.to_ts, b.step) AS time\n  FROM bounds b\n),\nlane_metrics AS MATERIALIZED (\n  SELECT *\n  FROM (VALUES\n    ('heat2'::text, 'Heat 2 (Gas)'::text, 'Heat 2 (Gas) Base'::text, 54.5::double precision, 56.0::double precision),\n    ('heat1'::text, 'Heat 1 (Electric)'::text, 'Heat 1 (Electric) Base'::text, 56.5::double precision, 58.0::double precision),\n    ('fan1'::text, 'Fan 1'::text, 'Fan 1 Base'::text, 80.5::double precision, 82.0::double precision),\n    ('fan2'::text, 'Fan 2'::text, 'Fan 2 Base'::text, 82.5::double precision, 84.0::double precision),\n    ('fog'::text, 'Fog'::text, 'Fog Base'::text, 84.5::double precision, 86.0::double precision)\n  ) AS m(equipment, top_metric, base_metric, lane_low, lane_high)\n),\nstate_seed AS MATERIALIZED (\n  SELECT bd.seed_start_ts AS time, m.equipment, COALESCE(seed.state, false) AS state\n  FROM bounds bd\n  CROSS JOIN lane_metrics m\n  LEFT JOIN LATERAL (\n    SELECT e.state\n    FROM equipment_state e\n    WHERE e.greenhouse_id = 'vallery'\n      AND e.equipment = m.equipment\n      AND e.ts <= bd.seed_start_ts\n    ORDER BY e.ts DESC\n    LIMIT 1\n  ) seed ON true\n),\nstate_events AS MATERIALIZED (\n  SELECT e.ts AS time, e.equipment, e.state\n  FROM equipment_state e, bounds bd\n  WHERE e.greenhouse_id = 'vallery'\n    AND e.equipment IN ('heat2', 'heat1', 'fan1', 'fan2', 'fog')\n    AND e.ts >= bd.seed_start_ts\n    AND e.ts <= bd.to_ts\n),\nstate_timeline AS MATERIALIZED (\n  SELECT\n    e.time,\n    e.equipment,\n    e.state,\n    lead(e.time, 1, (SELECT to_ts FROM bounds)) OVER (PARTITION BY e.equipment ORDER BY e.time) AS next_time\n  FROM (\n    SELECT time, equipment, state FROM state_seed\n    UNION ALL\n    SELECT time, equipment, state FROM state_events\n  ) e\n),\nstate_segments AS MATERIALIZED (\n  SELECT\n    greatest(st.time, bd.seed_start_ts) AS start_time,\n    least(st.next_time, bd.to_ts) AS end_time,\n    st.equipment\n  FROM state_timeline st\n  CROSS JOIN bounds bd\n  WHERE st.state\n    AND st.time < bd.to_ts\n    AND st.next_time > bd.seed_start_ts\n),\nlanes AS (\n  SELECT\n    b.time,\n    m.top_metric AS metric,\n    CASE WHEN EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = m.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) THEN m.lane_high ELSE NULL::double precision END AS value\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN lane_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n  UNION ALL\n  SELECT b.time, m.base_metric, m.lane_low\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN lane_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n)\nSELECT time, metric, value\nFROM lanes\nORDER BY time, metric",
           "refId": "E",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 84 ELSE NULL END AS \"Fan 2\" FROM equipment_state WHERE equipment='fan2' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "F",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 86 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "H",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 58 ELSE NULL END AS \"Heat 1 (Electric)\" FROM equipment_state WHERE equipment='heat1' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "G",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 56 ELSE NULL END AS \"Heat 2 (Gas)\" FROM equipment_state WHERE equipment='heat2' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "I",
           "sql": {
             "columns": [
               {
@@ -921,7 +843,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -953,13 +875,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -967,7 +889,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -976,6 +898,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -988,13 +914,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -1003,6 +929,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1015,13 +949,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#26A69A",
+                  "fixedColor": "#4DB6AC",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1049,6 +983,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Fan 1 Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1067,7 +1021,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1095,6 +1049,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Fan 2 Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1107,13 +1081,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1141,6 +1115,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Fog Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1159,7 +1153,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1187,6 +1181,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Heat 1 (Electric) Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1199,13 +1213,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "rgba(255,140,50,0.7)",
+                  "fixedColor": "rgba(244,81,30,0.7)",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1233,6 +1247,231 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Heat 2 (Gas) Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast Outdoor Temp"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Actual Indoor Temp (15-sample rolling avg)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 2 (Gas) Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(244,81,30,0.7)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heat 1 (Electric) Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 1 Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4DB6AC",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fan 2 Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5C6BC0",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
               }
             ]
           }
@@ -1241,19 +1480,16 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 12,
@@ -1290,7 +1526,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT c.ts AS time, avg(c.vpd_avg) OVER (ORDER BY c.ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Actual Indoor VPD (30-sample rolling avg)\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
+          "rawSql": "SELECT c.ts AS time, avg(c.vpd_avg) OVER (ORDER BY c.ts ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS \"Actual Indoor VPD\" FROM climate c WHERE c.ts > now() - interval '72 hours' ORDER BY 1",
           "editorMode": "code"
         },
         {
@@ -1312,92 +1548,8 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.8 ELSE NULL END AS \"Mister South\" FROM equipment_state WHERE equipment='mister_south' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "WITH bounds AS MATERIALIZED (\n  SELECT\n    $__timeFrom()::timestamptz AS from_ts,\n    LEAST($__timeTo()::timestamptz, now()) AS to_ts,\n    interval '5 minutes' AS step,\n    date_trunc('hour', $__timeFrom()::timestamptz) AS seed_start_ts\n),\nbuckets AS MATERIALIZED (\n  SELECT generate_series(time_bucket(b.step, b.seed_start_ts), b.to_ts, b.step) AS time\n  FROM bounds b\n),\nlane_metrics AS MATERIALIZED (\n  SELECT *\n  FROM (VALUES\n    ('mister_south'::text, 'Mister South'::text, 'Mister South Base'::text, 1.75::double precision, 1.8::double precision),\n    ('mister_west'::text, 'Mister West'::text, 'Mister West Base'::text, 1.85::double precision, 1.9::double precision),\n    ('mister_center'::text, 'Mister Center'::text, 'Mister Center Base'::text, 1.95::double precision, 2.0::double precision),\n    ('fog'::text, 'Fog'::text, 'Fog Base'::text, 2.05::double precision, 2.1::double precision)\n  ) AS m(equipment, top_metric, base_metric, lane_low, lane_high)\n),\nstate_seed AS MATERIALIZED (\n  SELECT bd.seed_start_ts AS time, m.equipment, COALESCE(seed.state, false) AS state\n  FROM bounds bd\n  CROSS JOIN lane_metrics m\n  LEFT JOIN LATERAL (\n    SELECT e.state\n    FROM equipment_state e\n    WHERE e.greenhouse_id = 'vallery'\n      AND e.equipment = m.equipment\n      AND e.ts <= bd.seed_start_ts\n    ORDER BY e.ts DESC\n    LIMIT 1\n  ) seed ON true\n),\nstate_events AS MATERIALIZED (\n  SELECT e.ts AS time, e.equipment, e.state\n  FROM equipment_state e, bounds bd\n  WHERE e.greenhouse_id = 'vallery'\n    AND e.equipment IN ('mister_south', 'mister_west', 'mister_center', 'fog')\n    AND e.ts >= bd.seed_start_ts\n    AND e.ts <= bd.to_ts\n),\nstate_timeline AS MATERIALIZED (\n  SELECT\n    e.time,\n    e.equipment,\n    e.state,\n    lead(e.time, 1, (SELECT to_ts FROM bounds)) OVER (PARTITION BY e.equipment ORDER BY e.time) AS next_time\n  FROM (\n    SELECT time, equipment, state FROM state_seed\n    UNION ALL\n    SELECT time, equipment, state FROM state_events\n  ) e\n),\nstate_segments AS MATERIALIZED (\n  SELECT\n    greatest(st.time, bd.seed_start_ts) AS start_time,\n    least(st.next_time, bd.to_ts) AS end_time,\n    st.equipment\n  FROM state_timeline st\n  CROSS JOIN bounds bd\n  WHERE st.state\n    AND st.time < bd.to_ts\n    AND st.next_time > bd.seed_start_ts\n),\nlanes AS (\n  SELECT\n    b.time,\n    m.top_metric AS metric,\n    CASE WHEN EXISTS (\n      SELECT 1\n      FROM state_segments s\n      WHERE s.equipment = m.equipment\n        AND s.start_time < b.time + bd.step\n        AND s.end_time > b.time\n    ) THEN m.lane_high ELSE NULL::double precision END AS value\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN lane_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n  UNION ALL\n  SELECT b.time, m.base_metric, m.lane_low\n  FROM buckets b\n  CROSS JOIN bounds bd\n  CROSS JOIN lane_metrics m\n  WHERE b.time >= bd.from_ts\n    AND b.time <= bd.to_ts\n)\nSELECT time, metric, value\nFROM lanes\nORDER BY time, metric",
           "refId": "E",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 1.9 ELSE NULL END AS \"Mister West\" FROM equipment_state WHERE equipment='mister_west' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "F",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.0 ELSE NULL END AS \"Mister Center\" FROM equipment_state WHERE equipment='mister_center' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "G",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "P44368ADAD746BC27"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT $__time(ts), CASE WHEN state THEN 2.1 ELSE NULL END AS \"Fog\" FROM equipment_state WHERE equipment='fog' AND $__timeFilter(ts) ORDER BY ts",
-          "refId": "H",
           "sql": {
             "columns": [
               {
@@ -1451,7 +1603,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -1468,9 +1620,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#73BF69",
+                  "fixedColor": "#AB47BC",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
               }
             ]
           },
@@ -1483,13 +1639,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -1497,7 +1653,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -1506,6 +1662,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1518,13 +1678,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -1533,6 +1693,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1545,13 +1713,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#00ACC1",
+                  "fixedColor": "#4FC3F7",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1579,6 +1747,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Fog Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1597,7 +1785,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1625,6 +1813,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Mister South Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1643,7 +1851,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1671,6 +1879,26 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Mister West Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
               }
             ]
           },
@@ -1689,7 +1917,7 @@
               },
               {
                 "id": "custom.drawStyle",
-                "value": "points"
+                "value": "line"
               },
               {
                 "id": "custom.pointSize",
@@ -1717,6 +1945,195 @@
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Mister Center Base"
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 38
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast Outdoor VPD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister South Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CE93D8",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister West Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Center Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E040FB",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fog Base"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#4FC3F7",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": false
+                }
               }
             ]
           }
@@ -1725,19 +2142,16 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 13,
@@ -1763,18 +2177,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT planned_ts AS time, CASE WHEN plan_achieved THEN 1 ELSE 0 END AS \"Compliant\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
-          "editorMode": "code"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "verdify-tsdb"
-          },
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT planned_ts AS time, overshoot AS \"Overshoot\" FROM v_plan_compliance WHERE planned_ts > now() - interval '14 days' AND parameter IN ('temp_high','temp_low','vpd_high','vpd_low') ORDER BY 1",
+          "rawSql": "SELECT created_at AS time, round(compliance_pct::numeric, 1) AS \"Both-axis compliance\", round(temp_compliance_pct::numeric, 1) AS \"Temp compliance\", round(vpd_compliance_pct::numeric, 1) AS \"VPD compliance\" FROM v_forecast_plan_outcome_mart WHERE created_at >= now() - interval '14 days' AND compliance_pct IS NOT NULL ORDER BY 1",
           "editorMode": "code"
         }
       ],
@@ -1812,30 +2215,74 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
           "mappings": []
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Both-axis compliance"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Temp compliance"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD compliance"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 14,
@@ -1861,7 +2308,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT day::text AS \"Day\", round(avg(accuracy_pct),1) AS \"Accuracy %\", round(avg(mean_abs_error),2) AS \"Mean Abs Error\" FROM v_plan_accuracy_by_day WHERE day >= current_date - interval '30 days' GROUP BY day ORDER BY day",
+          "rawSql": "SELECT\n  to_char(date, 'MM/DD') AS \"Day\",\n  round(avg(compliance_pct)::numeric, 1) AS \"Compliance %\",\n  round(avg(temp_mae_f)::numeric, 2) AS \"Temp MAE F\",\n  round(avg(vpd_mae_kpa)::numeric, 3) AS \"VPD MAE kPa\"\nFROM v_forecast_plan_outcome_mart\nWHERE date >= (now() AT TIME ZONE 'America/Denver')::date - interval '13 days'\n  AND compliance_pct IS NOT NULL\nGROUP BY date\nORDER BY date",
           "editorMode": "code"
         }
       ],
@@ -1873,18 +2320,74 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
-          "mappings": []
-        }
+          "mappings": [],
+          "custom": {
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Compliance %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Temp MAE F"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9800",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VPD MAE kPa"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "orientation": "auto",
         "xField": "Day",
-        "showValue": "auto",
+        "showValue": "never",
         "stacking": "none",
         "groupWidth": 0.7,
         "barWidth": 0.9,
@@ -1897,8 +2400,11 @@
         "tooltip": {
           "mode": "single",
           "sort": "none"
-        }
-      }
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": "auto"
+      },
+      "transparent": true
     },
     {
       "id": 15,
@@ -1984,30 +2490,74 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
           "mappings": []
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost ($)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stress Hours"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EF5350",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost / Stress Hour"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8C8C8C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 16,
@@ -2093,30 +2643,74 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           },
           "mappings": []
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Water Used (gal)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2196F3",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Water (gal)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#AB47BC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mister Runtime h x10"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F48FB1",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 17,
@@ -2142,7 +2736,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT metric, value FROM fn_planner_scorecard(current_date) ORDER BY CASE metric WHEN 'planner_score' THEN 1 WHEN 'compliance_pct' THEN 2 WHEN 'total_stress_h' THEN 3 WHEN 'cost_total' THEN 4 ELSE 9 END, metric",
+          "rawSql": "SELECT\n  initcap(replace(metric, '_', ' ')) AS \"Metric\",\n  value AS \"Value\"\nFROM fn_planner_scorecard((now() AT TIME ZONE 'America/Denver')::date)\nORDER BY CASE metric\n  WHEN 'planner_score' THEN 1\n  WHEN 'compliance_pct' THEN 2\n  WHEN 'total_stress_h' THEN 3\n  WHEN 'cost_total' THEN 4\n  ELSE 9\nEND, metric",
           "editorMode": "code"
         }
       ],
@@ -2152,19 +2746,46 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
-            }
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Metric"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -2177,7 +2798,8 @@
           "countRows": false,
           "fields": ""
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 18,
@@ -2203,7 +2825,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT plan_id, created_at AT TIME ZONE 'America/Denver' AS created_local, planner_instance, outcome_score, left(regexp_replace(coalesce(hypothesis,''), '\\s+', ' ', 'g'), 120) AS hypothesis FROM plan_journal ORDER BY created_at DESC LIMIT 12",
+          "rawSql": "SELECT\n  plan_id AS \"Plan\",\n  created_label AS \"Created\",\n  coalesce(outcome_score::text, '-') AS \"Score\",\n  CASE\n    WHEN length(hypothesis_clean) > 58 THEN left(hypothesis_clean, 55) || '...'\n    ELSE hypothesis_clean\n  END AS \"Hypothesis\"\nFROM (\n  SELECT\n    plan_id,\n    to_char(created_at AT TIME ZONE 'America/Denver', 'MM/DD HH24:MI') AS created_label,\n    outcome_score,\n    regexp_replace(coalesce(hypothesis, ''), '\\s+', ' ', 'g') AS hypothesis_clean,\n    created_at\n  FROM plan_journal\n) AS plans\nORDER BY created_at DESC\nLIMIT 12",
           "editorMode": "code"
         }
       ],
@@ -2213,19 +2835,70 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
-            }
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plan"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Created"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Score"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Hypothesis"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 430
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -2238,7 +2911,8 @@
           "countRows": false,
           "fields": ""
         }
-      }
+      },
+      "transparent": true
     },
     {
       "id": 19,
@@ -2264,7 +2938,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT plan_id, validated_at AT TIME ZONE 'America/Denver' AS validated_local, outcome_score, left(regexp_replace(coalesce(lesson_extracted,''), '\\s+', ' ', 'g'), 180) AS lesson FROM plan_journal WHERE lesson_extracted IS NOT NULL ORDER BY validated_at DESC NULLS LAST, created_at DESC LIMIT 10",
+          "rawSql": "SELECT\n  plan_id AS \"Plan\",\n  validated_label AS \"Validated\",\n  coalesce(outcome_score::text, '-') AS \"Score\",\n  CASE\n    WHEN length(lesson_clean) > 58 THEN left(lesson_clean, 55) || '...'\n    ELSE lesson_clean\n  END AS \"Lesson\"\nFROM (\n  SELECT\n    plan_id,\n    to_char(validated_at AT TIME ZONE 'America/Denver', 'MM/DD HH24:MI') AS validated_label,\n    outcome_score,\n    regexp_replace(coalesce(lesson_extracted, ''), '\\s+', ' ', 'g') AS lesson_clean,\n    validated_at\n  FROM plan_journal\n  WHERE lesson_extracted IS NOT NULL\n) AS lessons\nORDER BY validated_at DESC NULLS LAST\nLIMIT 10",
           "editorMode": "code"
         }
       ],
@@ -2274,19 +2948,70 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
-            }
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plan"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Validated"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Score"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Lesson"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 430
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -2299,7 +3024,8 @@
           "countRows": false,
           "fields": ""
         }
-      }
+      },
+      "transparent": true
     }
   ],
   "refresh": "5m",
@@ -2322,5 +3048,6 @@
   "title": "Site: Evidence \u2014 Planning Quality",
   "uid": "site-evidence-planning-quality",
   "version": 3,
-  "weekStart": ""
+  "weekStart": "",
+  "style": "light"
 }

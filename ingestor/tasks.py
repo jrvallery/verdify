@@ -3447,6 +3447,8 @@ async def setpoint_dispatcher(pool: asyncpg.Pool) -> None:
                     "Dispatcher: wrote %d guardrail hold/audit row(s) with no ESP32 push",
                     clamp_rows_written,
                 )
+            else:
+                log.info("Dispatcher: no setpoint changes needed")
             (STATE_DIR / "setpoint-dispatcher.log").touch()
             return
 
@@ -4630,6 +4632,8 @@ def _compute_milestones() -> dict[str, datetime]:
     # plan. SOLAR_MAX is new: a deterministic solar-noon checkpoint that
     # replaces the implicit "peak stress is noon + 2h" guess. See plan
     # /home/jason/.claude-agents/iris-dev/plans/i-d-like-you-to-cozy-frost.md.
+    now_local = datetime.now(_DENVER)
+    midnight_review = datetime(today.year, today.month, today.day, 0, 15, tzinfo=_DENVER)
     _milestones_cache = {
         "SUNRISE": s["sunrise"],
         "TRANSITION:peak_stress": noon + _td(hours=2),
@@ -4637,6 +4641,10 @@ def _compute_milestones() -> dict[str, datetime]:
         "TRANSITION:decline": s["sunset"] - _td(hours=1),
         "SUNSET": s["sunset"],
     }
+    # Include the midnight review only during its catch-up window so a midday
+    # process restart does not create a stale missed trigger for 00:15.
+    if now_local <= midnight_review + _td(hours=2):
+        _milestones_cache = {"MIDNIGHT": midnight_review, **_milestones_cache}
 
     # Load any previously fired milestones from disk (in case of restart)
     _load_milestone_state()
@@ -4651,6 +4659,8 @@ def _milestone_event(key: str, *, catchup: bool = False) -> tuple[str, str]:
         return "SUNRISE", f"Morning planning cycle{catchup_tag}"
     if key == "SUNSET":
         return "SUNSET", f"Evening planning cycle{catchup_tag}"
+    if key == "MIDNIGHT":
+        return "MIDNIGHT", f"End-of-day review and reset{catchup_tag}"
     if key == "SOLAR_MAX":
         return "SOLAR_MAX", f"Solar peak planning checkpoint{catchup_tag}"
     return "TRANSITION", key.split(":", 1)[1].replace("_", " ").title() + catchup_tag

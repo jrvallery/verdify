@@ -6,7 +6,6 @@ export { Latex } from "./latex";
 export { Description } from "./description";
 export { CrawlLinks } from "./links";
 export { GrafanaDefer } from "./grafana-defer";
-export { IrisClarifier } from "./iris-clarifier";
 export { ObsidianFlavoredMarkdown } from "./ofm";
 export { OxHugoFlavouredMarkdown } from "./oxhugofm";
 export { SyntaxHighlighting } from "./syntax";

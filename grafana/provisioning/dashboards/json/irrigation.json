@@ -54,15 +54,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 100
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 200
               }
             ]
@@ -95,15 +95,15 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 30
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 50
               }
             ]
@@ -138,11 +138,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -174,7 +174,7 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -207,7 +207,7 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               }
             ]
@@ -242,11 +242,11 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 0.05
               }
             ]
@@ -734,19 +734,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -783,19 +783,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -832,19 +832,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -882,11 +882,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -943,19 +943,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -1118,19 +1118,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 200
               },
               {
-                "color": "orange",
+                "color": "#FF9800",
                 "value": 1000
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 2000
               }
             ]
@@ -1203,19 +1203,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -1254,19 +1254,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 20
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 40
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 80
               }
             ]
@@ -1305,19 +1305,19 @@
           "thresholds": {
             "steps": [
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 18
               },
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": 35
               },
               {
-                "color": "blue",
+                "color": "#2196F3",
                 "value": 75
               }
             ]
@@ -1615,11 +1615,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -1809,5 +1809,6 @@
   },
   "annotations": {
     "list": []
-  }
+  },
+  "style": "light"
 }

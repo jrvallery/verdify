@@ -96,6 +96,7 @@ async def _db_checks() -> dict[str, object]:
               FROM setpoint_changes
              WHERE source = 'plan'
                AND ts > now() - interval '30 minutes'
+               AND COALESCE(planner_instance, '') <> 'codex-operator'
             """
         )
         unresolved_delivery = await conn.fetchval(

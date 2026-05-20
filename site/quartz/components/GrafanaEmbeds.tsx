@@ -26,11 +26,12 @@ export default (() => {
 .grafana-embed {
   width: 100%;
   margin: 0.5rem 0;
-  border-radius: 6px;
+  border-radius: 0;
   overflow: hidden;
-  background: var(--lightgray);
-  border: 1px solid var(--lightgray);
+  background: transparent;
+  border: 0;
   position: relative;
+  box-shadow: none;
 }
 .grafana-embed__frame,
 .grafana-embed__img {
@@ -44,19 +45,19 @@ export default (() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  color: var(--gray);
+  color: var(--canopy-green, #0E5A43);
   font-size: 0.85rem;
   min-height: 60px;
 }
 .grafana-embed__actions {
   padding: 0.4rem 0.6rem;
   font-size: 0.8rem;
-  color: var(--gray);
-  border-top: 1px solid var(--lightgray);
-  background: var(--light);
+  color: var(--gray, #6B7280);
+  border-top: 1px solid var(--panel-border, #DCEDE7);
+  background: color-mix(in srgb, var(--fog-white, #F4F7F4) 92%, white);
 }
 .grafana-embed__actions a {
-  color: var(--secondary);
+  color: var(--canopy-green, #0E5A43);
   text-decoration: underline;
 }
 .grafana-embed__actions button {
@@ -65,7 +66,7 @@ export default (() => {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--secondary);
+  color: var(--canopy-green, #0E5A43);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

@@ -8,6 +8,13 @@ Jason is refocusing Verdify from a greenhouse-first public launch / SaaS traject
 
 Canonical refocus backlog: [`docs/backlog/refocus.md`](backlog/refocus.md).
 
+Canonical lab-site refactor and data-integrity backlog from the 2026-05-20
+live-site feedback: [`docs/backlog/lab-site-refactor-2026-05-20.md`](backlog/lab-site-refactor-2026-05-20.md).
+The same file also tracks the later 2026-05-20 live visual/data follow-up
+items: Grafana panel chrome/colors/bands/relay states, lighting/lux review,
+Resource Use monthly cost and solar-aligned panels, GPU power evidence,
+Architecture cleanup, and electric-cost math.
+
 Current posture:
 
 - Track A greenhouse operations still outrank all business/site/repo work.
@@ -97,6 +104,7 @@ In chronological order:
 
 - **Planner:** Hermes hardening is now the top planning backlog. Genai owns the GPT-5.5 context pack, tuning rubric, site/lesson digest, MCP `plan_run` audit parity, and registry validation at the planner boundary. Ingestor owns the trigger matrix, no-missed-sunrise behavior, per-trigger SLA lifecycle, exact trigger correlation, deviation coverage, fixed-boundary triggers, and active/future plan range guard. Coordinator owns shared contracts, trigger-ledger schema, and model observability.
 - **Web:** Site simplification pass reduced the public entry path and fixed corrupted text. Remaining editorial cleanup: fold detailed Climate subpages into `/climate`, finish hiding or archiving redundant reference routes, and remove drafting scaffolds from hidden reference pages.
+- **Web/Data:** The 2026-05-20 lab-site feedback is tracked in `docs/backlog/lab-site-refactor-2026-05-20.md`: initial site/content refactor tasks (`CODEX-001` through `CODEX-012`), later visual/resource/architecture follow-ups (`CODEX-013` through `CODEX-018`), and Grafana/time-series research tasks (`RP-001` through `RP-007`).
 - **Web:** Image cleanup removed broken/public backup assets and documented current photo fit. The manual image catalog now has a machine-readable manifest checked by `site-doctor`; crop-specific photos for basil/cucumbers/tomatoes remain a content acquisition issue, not a rendering blocker.
 - **Web:** Raw ASCII/Mermaid diagrams were removed from hand-authored public pages. Forecast, daily-plan, plans-index, crop, and zone generated outputs now use web components instead of generated Markdown tables.
 

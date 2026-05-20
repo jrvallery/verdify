@@ -44,6 +44,7 @@ SCRIPT_ROOT=${VERDIFY_SCRIPT_ROOT:-/srv/verdify/scripts}
 PYTHON=${PYTHON:-/srv/greenhouse/.venv/bin/python}
 LOG=${VERDIFY_PUBLISH_LOG:-/srv/verdify/state/publish.log}
 LOCK=${VERDIFY_PUBLISH_LOCK:-/var/lock/verdify-site-content-publish.lock}
+PREV_DATE=$(date -d "${DATE} -1 day" +%Y-%m-%d)
 
 mkdir -p "$(dirname "$LOG")" "$(dirname "$LOCK")"
 
@@ -60,6 +61,7 @@ run_step() {
 
   echo "[$(date -Is)] Starting site content publish: reason=${REASON}, date=${DATE}" | tee -a "$LOG"
 
+  run_step "$PYTHON" "$SCRIPT_ROOT/generate-daily-plan.py" --date "$PREV_DATE"
   run_step "$PYTHON" "$SCRIPT_ROOT/generate-daily-plan.py" --date "$DATE"
   run_step "$PYTHON" "$SCRIPT_ROOT/generate-forecast-page.py"
   run_step "$PYTHON" "$SCRIPT_ROOT/generate-plans-index.py"

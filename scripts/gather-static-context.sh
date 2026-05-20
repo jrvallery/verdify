@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gather-static-context.sh — Concatenate all verdify.ai static content into
+# gather-static-context.sh — Concatenate all lab.verdify.ai static content into
 # a single context file for the planner to read in one pass.
 #
 # Output: /srv/verdify/state/planner-static-context.md

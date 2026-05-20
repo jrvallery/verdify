@@ -29,6 +29,7 @@ import os
 import re
 import runpy
 import sys
+from datetime import datetime as _dt
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -936,13 +937,12 @@ def test_lighting_automation_audit_checks_state_graph_labels():
 
     assert "lighting state graph labels and fills" in src
     for token in (
-        "Natural Lux (10m avg)",
+        "Solar / Tempest Exterior Lux (10m avg)",
+        "Tempest/Forecast Lux",
         "Main/Grow ON Threshold",
         "Main/Grow OFF Threshold",
         "switch.greenhouse_main ON",
         "switch.greenhouse_grow ON",
-        "Solar",
-        "Solar Forecast",
         "fn_lighting_minutes_policy",
         "equipment_state",
         "custom.axisPlacement",
@@ -1309,6 +1309,34 @@ def test_plan_context_surfaces_transition_audit_and_corrected_vpd_forecast():
     assert "HOT/DRY VENTILATE UTILIZATION" in script
 
 
+def test_plan_context_embeds_public_site_static_context():
+    script = (REPO_ROOT / "scripts" / "gather-plan-context.sh").read_text()
+    assert (
+        'STATIC_CONTEXT_FILE="${VERDIFY_PLANNER_STATIC_CONTEXT:-/srv/verdify/state/planner-static-context.md}"'
+        in script
+    )
+    assert "PUBLIC SITE STATIC CONTEXT (same source as lab.verdify.ai)" in script
+    assert 'sha256=$(sha256sum "$STATIC_CONTEXT_FILE"' in script
+    assert 'cat "$STATIC_CONTEXT_FILE"' in script
+    assert "planner static site context" in script
+
+
+def test_site_publish_refreshes_prior_day_current_day_and_static_context():
+    script = (REPO_ROOT / "scripts" / "publish-site-content.sh").read_text()
+    assert 'PREV_DATE=$(date -d "${DATE} -1 day" +%Y-%m-%d)' in script
+    assert 'generate-daily-plan.py" --date "$PREV_DATE"' in script
+    assert 'generate-daily-plan.py" --date "$DATE"' in script
+    assert "gather-static-context.sh" in script
+
+
+def test_site_poller_refreshes_static_context_after_successful_rebuild():
+    script = (REPO_ROOT / "scripts" / "site-poll-and-rebuild.sh").read_text()
+    assert "static_context_output=" in script
+    assert "/srv/verdify/scripts/gather-static-context.sh" in script
+    assert "static context refresh failed" in script
+    assert "content_signature" in script
+
+
 def test_plan_evaluate_returns_guardrail_scorecard():
     server = (REPO_ROOT / "mcp" / "server.py").read_text()
     start = server.index("async def plan_evaluate")
@@ -1316,6 +1344,16 @@ def test_plan_evaluate_returns_guardrail_scorecard():
     body = server[start:end]
     assert "v_plan_guardrail_scorecard" in body
     assert '"guardrail_scorecard": dict(guardrail_row)' in body
+
+
+def test_plan_evaluate_triggers_public_site_publish():
+    server = (REPO_ROOT / "mcp" / "server.py").read_text()
+    start = server.index("async def plan_evaluate")
+    end = server.index("@mcp.tool()", start + 1) if "@mcp.tool()" in server[start + 1 :] else len(server)
+    body = server[start:end]
+    assert 'Path("/var/local/verdify/state/plan-publish-trigger")' in body
+    assert "evaluation:{ev.plan_id}" in body
+    assert "site_publish_triggered" in body
 
 
 def test_send_to_iris_targets_hermes_gateway():
@@ -1330,6 +1368,52 @@ def test_send_to_iris_targets_hermes_gateway():
     assert "hermes_run_id" in body
     assert '"MANUAL"' in src
     assert "prepare_delivery_result" in src
+
+
+def test_midnight_trigger_has_required_review_prompt_and_wake_mode():
+    src = Path(iris_planner.__file__).read_text()
+    assert "def _midnight_prompt" in src
+    assert "Planning Event: MIDNIGHT" in src
+    assert "call `plan_evaluate` for every completed Iris plan" in src
+    assert "Start the new local day with a plan" in src
+    assert '"MIDNIGHT": lambda ctx' in src
+    assert 'event_type in ("SUNRISE", "SUNSET", "MIDNIGHT", "FORECAST_DEVIATION", "MANUAL")' in src
+
+
+def test_midnight_milestone_exists_only_inside_catchup_window(monkeypatch):
+    import tasks
+
+    class EarlyDatetime(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 5, 19, 1, 0, tzinfo=tz)
+
+    class LateDatetime(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 5, 19, 12, 0, tzinfo=tz)
+
+    def fake_sun(_observer, *, date, tzinfo):
+        return {
+            "sunrise": _dt(date.year, date.month, date.day, 5, 40, tzinfo=tzinfo),
+            "noon": _dt(date.year, date.month, date.day, 12, 55, tzinfo=tzinfo),
+            "sunset": _dt(date.year, date.month, date.day, 20, 10, tzinfo=tzinfo),
+        }
+
+    monkeypatch.setattr(tasks, "_sun", fake_sun)
+    monkeypatch.setattr(tasks, "_load_milestone_state", lambda: None)
+
+    monkeypatch.setattr(tasks, "datetime", EarlyDatetime)
+    tasks._milestones_date = None
+    tasks._milestones_cache = {}
+    tasks._milestones_fired = {}
+    assert tasks._compute_milestones()["MIDNIGHT"].hour == 0
+
+    monkeypatch.setattr(tasks, "datetime", LateDatetime)
+    tasks._milestones_date = None
+    tasks._milestones_cache = {}
+    tasks._milestones_fired = {}
+    assert "MIDNIGHT" not in tasks._compute_milestones()
 
 
 def test_mcp_plan_run_uses_manual_trigger_and_delivery_log():
@@ -1420,6 +1504,16 @@ def test_mcp_set_plan_updates_delivery_log_by_trigger_id_immediately():
     assert '"delivery_status": "plan_written" if normalized_trigger_id else None' in body
 
 
+def test_mcp_set_plan_triggers_public_site_publish():
+    server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
+    start = server.index("async def set_plan")
+    end = server.index("@mcp.tool()", start + 1)
+    body = server[start:end]
+    assert 'Path("/var/local/verdify/state/plan-publish-trigger")' in body
+    assert "trigger_path.write_text" in body
+    assert "plan.plan_id" in body
+
+
 def test_mcp_set_plan_populates_plan_journal_feedback_fields():
     server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
     start = server.index("async def set_plan")
@@ -1453,8 +1547,8 @@ def test_mcp_rejects_non_validation_solar_acknowledgement():
     server = (Path(iris_planner.__file__).resolve().parent.parent / "mcp" / "server.py").read_text()
     start = server.index("async def acknowledge_trigger")
     body = server[start:]
-    assert 'existing["event_type"] in {"SUNRISE", "SUNSET"}' in body
-    assert "SUNRISE/SUNSET triggers require set_plan" in body
+    assert 'existing["event_type"] in {"SUNRISE", "SUNSET", "MIDNIGHT"}' in body
+    assert "SUNRISE/SUNSET/MIDNIGHT triggers require set_plan" in body
     assert "validation ack-only" in body
 
 

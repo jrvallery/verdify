@@ -7,8 +7,8 @@ caught at the boundary. Invoked by:
   - systemd timer verdify-forecast-page.timer (every 30 min)
   - manual `python3 scripts/generate-forecast-page.py`
 
-Output: /mnt/iris/verdify-vault/website/forecast/index.md
-        /mnt/iris/verdify-vault/website/data/forecast/index.md
+Output: /mnt/iris/verdify-vault/website/data/forecast/index.md
+        (the legacy /forecast route is a frontmatter alias)
         (picked up by the Quartz poll-timer within 10 s)
 """
 
@@ -25,10 +25,9 @@ import yaml  # noqa: E402
 
 from verdify_schemas import ForecastHour, ForecastVaultFrontmatter  # noqa: E402
 
-OUT_PATHS = (
-    Path("/mnt/iris/verdify-vault/website/forecast/index.md"),
-    Path("/mnt/iris/verdify-vault/website/data/forecast/index.md"),
-)
+DATA_OUT_PATH = Path("/mnt/iris/verdify-vault/website/data/forecast/index.md")
+RETIRED_ALIAS_PATH = Path("/mnt/iris/verdify-vault/website/forecast/index.md")
+OUT_PATHS = (DATA_OUT_PATH,)
 
 
 def _data_table(rows: list[tuple[str, str, str]]) -> str:
@@ -168,29 +167,36 @@ def _recent_deviations() -> list[list[str]]:
     return psql(sql)
 
 
-def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations: list) -> str:
-    denver_now = datetime.now(UTC).astimezone()
+def _frontmatter(rendered_at: datetime, description: str, aliases: list[str] | None = None) -> str:
     # Sprint 22: frontmatter validated through ForecastVaultFrontmatter.
     fm = ForecastVaultFrontmatter(
         title="Greenhouse Weather Forecast",
-        description=(
-            "Generated 72-hour Longmont weather forecast for Verdify's greenhouse planning loop, "
-            "including temperature, humidity, VPD, solar radiation, precipitation, and bias checks."
-        ),
-        date=denver_now.date(),
+        description=description,
+        date=rendered_at.date(),
         tags=["forecast", "auto-generated"],
-        last_updated=denver_now.isoformat(timespec="seconds"),
+        last_updated=rendered_at.isoformat(timespec="seconds"),
     )
-    yaml_block = yaml.safe_dump(
-        fm.model_dump(mode="json", exclude_none=True),
-        sort_keys=False,
-        default_flow_style=None,
-        width=1000,
+    data = fm.model_dump(mode="json", exclude_none=True)
+    data["cssclasses"] = ["hide-folder-listing"]
+    if aliases:
+        data["aliases"] = aliases
+    yaml_block = yaml.safe_dump(data, sort_keys=False, default_flow_style=False, width=1000)
+    if aliases:
+        compact_aliases = "aliases:\n" + "".join(f"- {alias}\n" for alias in aliases)
+        expanded_aliases = "aliases:\n" + "".join(f"  - {alias}\n" for alias in aliases)
+        yaml_block = yaml_block.replace(compact_aliases, expanded_aliases)
+    return f"---\n{yaml_block.rstrip()}\n---"
+
+
+def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations: list, rendered_at: datetime) -> str:
+    frontmatter = _frontmatter(
+        rendered_at,
+        "Generated 72-hour Longmont weather forecast for Verdify's greenhouse planning loop, "
+        "including temperature, humidity, VPD, solar radiation, precipitation, and bias checks.",
+        aliases=["forecast"],
     )
     lines = [
-        "---",
-        yaml_block.rstrip(),
-        "---",
+        frontmatter,
         "",
         '<link rel="stylesheet" href="/static/grafana-controls.f0ea8065.css">',
         "",
@@ -200,29 +206,41 @@ def _render(hours: list[ForecastHour], daily: list[dict], bias: dict, deviations
         "Open-Meteo's biases are tracked and reported below; apply them to the raw "
         "numbers for a more accurate expectation.*",
         "",
-        "The forecast matters because Verdify plans against future heat, VPD, solar load, wind, and precipitation, not just current greenhouse state. The graphs below show the next 48 hours in the same public Grafana layer the planner and operations pages use.",
+        "Verdify plans against future heat, VPD, solar load, wind, and precipitation. "
+        "The graphs below show the next 48 hours in the same public Grafana layer "
+        "the planner and operations pages use.",
+        "",
+        '<div class="data-table">',
+        '  <div class="data-row"><strong>Related evidence</strong>'
+        '<span><a href="/start/climate/">Climate</a> · '
+        '<a href="/reference/planning-loop/">Planning Loop</a> · '
+        '<a href="/data/operations/">Operations</a></span>'
+        "<p>This page owns the forecast, bias, and deviation receipts. "
+        "Climate owns greenhouse response; Planning Loop owns how forecast context "
+        "becomes a plan; Operations owns live controller state.</p></div>",
+        "</div>",
         "",
         "[Open the full live weather dashboard](https://graphs.verdify.ai/d/greenhouse-weather/greenhouse3a-weather?orgId=1&from=now-24h&to=now%2B48h&timezone=America%2FDenver&refresh=5m)",
         "",
         "## Forecast Graphs",
         "",
         '<div class="pg s1">',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=20&theme=dark&from=now-24h&to=now%2B48h" width="100%" height="350" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=20&theme=light&from=now-24h&to=now%2B48h" width="100%" height="350" frameborder="0"></iframe>',
         "</div>",
         "",
         '<div class="pg s2">',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=31&theme=dark&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=32&theme=dark&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=31&theme=light&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=32&theme=light&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
         "</div>",
         "",
         '<div class="pg s2">',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=50&theme=dark&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=52&theme=dark&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=50&theme=light&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=52&theme=light&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
         "</div>",
         "",
         '<div class="pg s2">',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=40&theme=dark&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
-        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=910&theme=dark&from=now-7d&to=now" width="100%" height="320" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=40&theme=light&from=now-24h&to=now%2B48h" width="100%" height="320" frameborder="0"></iframe>',
+        '<iframe src="https://graphs.verdify.ai/d-solo/greenhouse-weather/?orgId=1&panelId=910&theme=light&from=now-7d&to=now" width="100%" height="320" frameborder="0"></iframe>',
         "</div>",
         "",
         "## Bias correction (7-day rolling)",
@@ -311,19 +329,23 @@ def main() -> None:
     daily = _daily_4to7()
     bias = _bias_correction()
     deviations = _recent_deviations()
-    body = _render(hours, daily, bias, deviations)
+    rendered_at = datetime.now(UTC).astimezone()
+    outputs = {DATA_OUT_PATH: _render(hours, daily, bias, deviations, rendered_at)}
     changed: list[Path] = []
-    for out_path in OUT_PATHS:
+    for out_path, body in outputs.items():
         out_path.parent.mkdir(parents=True, exist_ok=True)
         # Only rewrite if content changed — saves unnecessary site rebuilds.
         old = out_path.read_text() if out_path.exists() else ""
         if old != body:
             out_path.write_text(body)
             changed.append(out_path)
+    if RETIRED_ALIAS_PATH.exists():
+        RETIRED_ALIAS_PATH.unlink()
+        changed.append(RETIRED_ALIAS_PATH)
 
     if changed:
         paths = ", ".join(str(path) for path in changed)
-        print(f"Wrote {paths} ({len(body)} chars; {len(hours)} hourly rows, {len(daily)} daily rows)")
+        print(f"Wrote {paths} ({len(hours)} hourly rows, {len(daily)} daily rows)")
     else:
         paths = ", ".join(str(path) for path in OUT_PATHS)
         print(f"No change; {paths} unchanged ({len(hours)} hourly rows)")

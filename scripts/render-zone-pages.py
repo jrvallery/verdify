@@ -117,9 +117,9 @@ def _render_sensors_table(sensors: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _render_water_systems_table(water_systems: list[dict]) -> str:
+def _render_water_systems_table(water_systems: list[dict], zone_name: str) -> str:
     if not water_systems:
-        return _empty_card("No water systems", "No water systems in this zone.")
+        return _empty_card("No water systems", f"No water systems are assigned to {zone_name}.")
     lines = ['<div class="metric-grid">']
     for w in sorted(water_systems, key=lambda x: (x["kind"], x["slug"])):
         lines.append(
@@ -132,9 +132,9 @@ def _render_water_systems_table(water_systems: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _render_current_crops_table(crops: list[dict]) -> str:
+def _render_current_crops_table(crops: list[dict], zone_name: str) -> str:
     if not crops:
-        return _empty_card("No active crops", "No active crops in this zone.")
+        return _empty_card("No active crops", f"No active crops are recorded in {zone_name}.")
     lines = ['<div class="data-table">']
     for c in sorted(crops, key=lambda x: x["position_label"]):
         if not c.get("is_occupied"):
@@ -152,7 +152,7 @@ def _render_current_crops_table(crops: list[dict]) -> str:
             f"<p>{age_note}</p></div>"
         )
     if len(lines) == 1:
-        return _empty_card("No active crops", "No active crops in this zone.")
+        return _empty_card("No active crops", f"No occupied crop records are attached to {zone_name}.")
     lines.append("</div>")
     return "\n".join(lines)
 
@@ -182,7 +182,7 @@ def _planting_stage_label(stage: object, days_value: object) -> str:
     stage_text = str(stage or "—")
     days = _coerce_days(days_value)
     if _is_stale_seedling(stage, days):
-        return f"reported {stage_text} stage · review needed"
+        return "stage review needed"
     return stage_text
 
 
@@ -191,7 +191,7 @@ def _planting_age_note(planted_date: object, days_value: object, stage: object) 
     days_text = f"{days} days in place" if days is not None else "age not recorded"
     note = f"Planted {planted_date or '—'}; {days_text}."
     if _is_stale_seedling(stage, days):
-        note += " Stage review needed: the database still reports seedling beyond the expected seedling window."
+        note += " Stage review needed: the database stage value is stale for this planting age."
     return note
 
 
@@ -289,11 +289,11 @@ async def render_zone(conn: asyncpg.Connection, zone_slug: str) -> tuple[str, st
     fm_yaml = _yaml_dumps(fm.model_dump(exclude_none=True))
 
     blocks = {
-        "current-plantings": _render_current_crops_table(plantings_list),
+        "current-plantings": _render_current_crops_table(plantings_list, d["zone_name"]),
         "shelves": _render_shelves_table(d["shelves"]),
         "sensors": _render_sensors_table(d["sensors"]),
         "equipment": _render_equipment_table(d["equipment"]),
-        "water-systems": _render_water_systems_table(d["water_systems"]),
+        "water-systems": _render_water_systems_table(d["water_systems"], d["zone_name"]),
         "zone-profile": _render_zone_profile_cards(d, zone_slug, status, position_scheme),
     }
 

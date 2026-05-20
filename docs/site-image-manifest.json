@@ -198,7 +198,7 @@
     },
     "seedling-flats-propagation.jpg": {
       "allowed_paths": [
-        "greenhouse/growing.md",
+        "greenhouse/crops/index.md",
         "greenhouse/zones/east.md",
         "greenhouse/crops/basil.md",
         "greenhouse/crops/herbs.md"
@@ -208,7 +208,7 @@
     },
     "seedling-trays-humidity-dome.jpg": {
       "allowed_paths": [
-        "greenhouse/growing.md"
+        "greenhouse/crops/index.md"
       ],
       "category": "starts",
       "status": "approved"

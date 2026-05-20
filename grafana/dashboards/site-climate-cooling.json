@@ -188,7 +188,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFD740",
+                  "fixedColor": "#FFE66D",
                   "mode": "fixed"
                 }
               },
@@ -198,7 +198,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 18
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -225,7 +225,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -235,7 +235,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 35
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -330,11 +330,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 80
               }
             ]
@@ -408,7 +408,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -418,7 +418,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 35
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -451,7 +451,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFD740",
+                  "fixedColor": "#FFE66D",
                   "mode": "fixed"
                 }
               },
@@ -461,7 +461,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 18
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -504,13 +504,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -518,7 +518,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -527,6 +527,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -539,13 +543,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -554,6 +558,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1641,7 +1653,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFA726",
+                  "fixedColor": "#FDD835",
                   "mode": "fixed"
                 }
               },
@@ -1651,7 +1663,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 35
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -1684,7 +1696,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#FFD740",
+                  "fixedColor": "#FFE66D",
                   "mode": "fixed"
                 }
               },
@@ -1694,7 +1706,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 18
+                "value": 85
               },
               {
                 "id": "custom.gradientMode",
@@ -1783,13 +1795,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.fillBelowTo",
@@ -1797,7 +1809,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 20
+                "value": 22
               },
               {
                 "id": "custom.hideFrom",
@@ -1806,6 +1818,10 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -1818,13 +1834,13 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#2E7D32",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
               {
                 "id": "custom.lineWidth",
-                "value": 1
+                "value": 0
               },
               {
                 "id": "custom.hideFrom",
@@ -1833,6 +1849,14 @@
                   "tooltip": true,
                   "viz": false
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.gradientMode",
+                "value": "none"
               }
             ]
           },
@@ -2407,5 +2431,6 @@
   "links": [],
   "schemaVersion": 39,
   "timezone": "America/Denver",
-  "version": 2
+  "version": 2,
+  "style": "light"
 }

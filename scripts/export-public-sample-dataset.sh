@@ -85,7 +85,7 @@ COPY (
   ORDER BY date, created_at
 ) TO STDOUT WITH CSV HEADER;
 SQL
-perl -0pi -e 's/\bOpenClaw\/Iris\b/planner/g; s/\bOpenClaw\b/planner gateway/g; s/\blocal Gemma context overflow\b/planner context overflow/gi; s/\blocal Gemma overflow\b/planner context overflow/gi; s/\blocal Gemma\b/planner/gi; s/\bGemma\b/planner/g; s/ESP32 v2 band-first controller/ESP32 band-first controller/g' "$OUT_DIR/verdify-sample-30d-plan-outcomes.csv"
+perl -0pi -e 's/\bOpenClaw\/Iris\b/planner/g; s/\bIris\b(?!-)/AI planning agent/g; s/\bOpenClaw\b/planner gateway/g; s/\blocal Gemma context overflow\b/planner context overflow/gi; s/\blocal Gemma overflow\b/planner context overflow/gi; s/\blocal Gemma\b/planner/gi; s/\bGemma\b/planner/g; s/ESP32 v2 band-first controller/ESP32 band-first controller/g' "$OUT_DIR/verdify-sample-30d-plan-outcomes.csv"
 
 cat >"$OUT_DIR/verdify-sample-readme.txt" <<EOF
 Verdify public sample dataset

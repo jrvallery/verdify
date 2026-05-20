@@ -42,11 +42,11 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "#EF5350",
                 "value": 1
               }
             ]
@@ -81,11 +81,11 @@
           "thresholds": {
             "steps": [
               {
-                "color": "green",
+                "color": "#73BF69",
                 "value": null
               },
               {
-                "color": "yellow",
+                "color": "#FDD835",
                 "value": 1
               }
             ]
@@ -162,5 +162,6 @@
     }
   ],
   "schemaVersion": 39,
-  "version": 1
+  "version": 1,
+  "style": "light"
 }

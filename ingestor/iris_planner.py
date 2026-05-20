@@ -9,6 +9,7 @@ planner memory source of truth.
 
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -35,6 +36,7 @@ PlannerInstance = Literal["opus", "local"]
 
 DENVER = ZoneInfo("America/Denver")
 GATHER_SCRIPT = "/srv/verdify/scripts/gather-plan-context.sh"
+CONTEXT_GATHER_TIMEOUT = int(os.getenv("IRIS_CONTEXT_GATHER_TIMEOUT", "120"))
 
 # Iris reads this at runtime from her agent-host filesystem. The canonical
 # version-controlled source is `docs/planner/greenhouse-playbook.md` in the
@@ -578,6 +580,41 @@ and set the overnight posture.
 When done, post your summary to #greenhouse via Slack."""
 
 
+def _midnight_prompt(context: str) -> str:
+    now = datetime.now(DENVER).strftime("%A %Y-%m-%d %H:%M %Z")
+    return f"""## Planning Event: MIDNIGHT
+**Time:** {now}
+
+You are beginning the end-of-day review and midnight reset cycle. This is a
+required full-plan trigger, separate from SUNRISE and SUNSET.
+
+### Your tasks:
+1. **Review the completed local day** — use the assembled WINDOW SCORECARD per
+   plan section and call `plan_evaluate` for every completed Iris plan from the
+   prior local day that is still missing `validated_at`. Score 1-10. Explain
+   whether the hypothesis and measurable goals were met.
+2. **Extract learning** — if a durable finding is supported by the measured
+   outcome, include it in `plan_evaluate(lesson_extracted=...)` or use
+   `lessons_manage` for an existing lesson.
+3. **Check the overnight and pre-dawn state** — inspect current climate,
+   equipment, active alerts, dew point margin, forecast, active setpoints, and
+   plan coverage.
+4. **Start the new local day with a plan** — call `set_plan` with
+   `trigger_id` and `planner_instance`. The plan should cover the post-midnight,
+   pre-dawn, sunrise-ramp, and early-day handoff window using all tactical Tier
+   1 params. Do not include crop-band params (`temp_low`, `temp_high`,
+   `vpd_low`, `vpd_high`).
+5. **Post a concise midnight review brief** — include the prior day's score,
+   what matched or missed the hypothesis, new lessons, current risk, and the
+   new plan posture.
+
+### Assembled Context
+{context}
+
+---
+When done, post your summary to #greenhouse via Slack."""
+
+
 def _transition_prompt(context: str, label: str) -> str:
     """TRANSITION prompt — Phase 4: only `peak_stress` and `decline` survive
     the trigger reshape; the other 7 subtypes were retired (fixed_midnight /
@@ -731,6 +768,7 @@ _PREAMBLE = _compose_preamble("local")
 _PROMPT_BUILDERS = {
     "SUNRISE": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _sunrise_prompt(ctx),
     "SUNSET": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _sunset_prompt(ctx),
+    "MIDNIGHT": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _midnight_prompt(ctx),
     "SOLAR_MAX": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _solar_max_prompt(ctx),
     "TRANSITION": lambda ctx, lbl, instance="local": _compose_preamble(instance) + _transition_prompt(ctx, lbl),
     "FORECAST_DEVIATION": lambda ctx, lbl, instance="local": (
@@ -845,7 +883,7 @@ def gather_context() -> str:
             ["/bin/bash", GATHER_SCRIPT],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=CONTEXT_GATHER_TIMEOUT,
         )
         if result.returncode != 0:
             log.error("gather-plan-context.sh failed: %s", result.stderr[:200])
@@ -854,7 +892,7 @@ def gather_context() -> str:
         _resolve_plan_context_failures()
         return result.stdout
     except subprocess.TimeoutExpired as e:
-        log.error("gather-plan-context.sh timed out (60s)")
+        log.error("gather-plan-context.sh timed out (%ss)", CONTEXT_GATHER_TIMEOUT)
         _record_plan_context_failure("timeout", str(e), None)
         return CONTEXT_GATHER_FAILED_SENTINEL
 
@@ -976,7 +1014,7 @@ def send_to_iris(
             "---\n\n"
         ) + message
 
-    wake_now = event_type in ("SUNRISE", "SUNSET", "FORECAST_DEVIATION", "MANUAL")
+    wake_now = event_type in ("SUNRISE", "SUNSET", "MIDNIGHT", "FORECAST_DEVIATION", "MANUAL")
     result["wake_mode"] = "now" if wake_now else "next-heartbeat"
 
     payload = {

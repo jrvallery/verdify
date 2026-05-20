@@ -56,7 +56,7 @@ CROP_TAXONOMY = {
     ),
     "lettuce": (
         "Active Control",
-        "Occupied east-zone record in <code>v_position_current</code>; heat-sensitive profile constrains the active band.",
+        "Occupied east-zone record in <code>v_position_current</code>; heat-sensitive crop context participates in active policy. Target Bands below show current DB-backed profile coverage.",
     ),
     "orchid": (
         "Active Control",
@@ -64,16 +64,27 @@ CROP_TAXONOMY = {
     ),
     "peppers": (
         "Active Control",
-        "Occupied east-zone record in <code>v_position_current</code>; warm-crop profile participates in active control.",
+        "Occupied east-zone record in <code>v_position_current</code>; warm-crop context participates in active policy. Target Bands below show current DB-backed profile coverage.",
     ),
     "strawberries": (
         "Active Control",
-        "Occupied east-zone record in <code>v_position_current</code>; strawberry VPD tolerance drives east stress scoring.",
+        "Occupied east-zone record in <code>v_position_current</code>; strawberry crop context participates in active policy. Target Bands below show current DB-backed profile coverage.",
     ),
     "tomatoes": (
         "Planned/Retired",
         "No active planting in <code>v_position_current</code>; retained as a south-zone future crop profile.",
     ),
+}
+CROP_LABELS = {
+    "basil": "Basil",
+    "canna": "Canna lilies",
+    "cucumbers": "Cucumbers",
+    "herbs": "Herbs",
+    "lettuce": "Lettuce",
+    "orchid": "Vanda orchids",
+    "peppers": "Peppers",
+    "strawberries": "Strawberries",
+    "tomatoes": "Tomatoes",
 }
 AUTO_BLOCK_RE = re.compile(
     r"(?P<start>(?:\[//\]: # \(auto-render:start (?P<markdown_name>[-a-z0-9_]+)\)|"
@@ -95,12 +106,12 @@ def _yaml_dumps(fm: dict) -> str:
     return yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip()
 
 
-def _render_stage_band_table(profiles: list[dict]) -> str:
+def _render_stage_band_table(profiles: list[dict], crop_label: str) -> str:
     if not profiles:
         return (
             '<div class="metric-grid">\n'
             '  <div class="metric-card"><strong>No target profile</strong>'
-            "<p>No hourly target profiles defined for this crop yet.</p></div>\n"
+            f"<p>No hourly target profiles defined for {crop_label} yet.</p></div>\n"
             "</div>"
         )
     lines = ['<div class="metric-grid">']
@@ -121,12 +132,12 @@ def _render_stage_band_table(profiles: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _render_current_plantings(current: list[dict]) -> str:
+def _render_current_plantings(current: list[dict], crop_label: str) -> str:
     if not current:
         return (
             '<div class="metric-grid">\n'
             '  <div class="metric-card"><strong>No active plantings</strong>'
-            "<p>No active plantings of this crop type right now.</p></div>\n"
+            f"<p>No active {crop_label} plantings are recorded right now.</p></div>\n"
             "</div>"
         )
     lines = ['<div class="data-table">']
@@ -163,7 +174,7 @@ def _planting_stage_label(stage: object, days_value: object) -> str:
     stage_text = str(stage or "—")
     days = _coerce_days(days_value)
     if _is_stale_seedling(stage, days):
-        return f"reported {stage_text} stage · review needed"
+        return "stage review needed"
     return stage_text
 
 
@@ -172,16 +183,16 @@ def _planting_age_note(planted_date: object, days_value: object, stage: object) 
     days_text = f"{days} days in place" if days is not None else "age not recorded"
     note = f"Planted {planted_date or '—'}; {days_text}."
     if _is_stale_seedling(stage, days):
-        note += " Stage review needed: the database still reports seedling beyond the expected seedling window."
+        note += " Stage review needed: the database stage value is stale for this planting age."
     return note
 
 
-def _render_history(history: list[dict]) -> str:
+def _render_history(history: list[dict], crop_label: str) -> str:
     if not history:
         return (
             '<div class="metric-grid">\n'
             '  <div class="metric-card"><strong>No planting history</strong>'
-            "<p>No historical plantings recorded yet.</p></div>\n"
+            f"<p>No historical {crop_label} plantings are recorded yet.</p></div>\n"
             "</div>"
         )
     lines = ['<div class="data-table">']
@@ -229,7 +240,7 @@ def _render_catalog_cards(d: dict) -> str:
 def _render_taxonomy_status(slug: str, current: list[dict]) -> str:
     status, note = CROP_TAXONOMY.get(
         slug,
-        ("Observed/Reference", "No explicit launch taxonomy assigned; treated as reference until reviewed."),
+        ("Observed/Reference", "No explicit crop-control status assigned; treated as reference until reviewed."),
     )
     occupied = [c for c in current if c.get("is_occupied", True)]
     positions = ", ".join(c.get("position_label") or "—" for c in occupied) or "none"
@@ -286,7 +297,7 @@ def _auto_block(name: str, body: str) -> str:
 def _insert_missing_blocks(existing: str, missing: list[str], blocks: dict[str, str]) -> str:
     updated = existing
     if "taxonomy-status" in missing:
-        block = "\n\n## Launch Taxonomy\n\n" + _auto_block("taxonomy-status", blocks["taxonomy-status"])
+        block = "\n\n## Crop-Control Status\n\n" + _auto_block("taxonomy-status", blocks["taxonomy-status"])
         anchors = [
             "[//]: # (auto-render:end catalog-entry)",
             "<!-- auto-render:end catalog-entry -->",
@@ -337,12 +348,12 @@ async def _check_crop_consistency(conn: asyncpg.Connection) -> int:
     return 0 if ok else 1
 
 
-def _render_latest_vision(rows: list[dict], public_refs: dict[int, str]) -> str:
+def _render_latest_vision(rows: list[dict], public_refs: dict[int, str], crop_label: str) -> str:
     if not rows:
         return (
             '<div class="metric-grid">\n'
             '  <div class="metric-card"><strong>No vision observations</strong>'
-            "<p>No camera observations have been linked to this crop yet.</p></div>\n"
+            f"<p>No camera observations have been linked to {crop_label} yet.</p></div>\n"
             "</div>"
         )
     lines = ['<div class="data-table vision-gallery">']
@@ -353,7 +364,7 @@ def _render_latest_vision(rows: list[dict], public_refs: dict[int, str]) -> str:
         lines.append(
             f'  <div class="data-row"><img src="{image_ref}" alt="Latest {row["crop_name"]} camera observation from {row["camera"]}"/>'
             f"<strong>{str(row['ts'])[:16]}</strong><span>{row['camera']} · {row['zone']} · health {score}/10</span>"
-            f"<p>{notes}</p></div>"
+            f"<p><strong>{crop_label}:</strong> {notes}</p></div>"
         )
     lines.append("</div>")
     return "\n".join(lines)
@@ -431,10 +442,16 @@ async def render_crop(
     blocks = {
         "catalog-entry": _render_catalog_cards(d),
         "taxonomy-status": _render_taxonomy_status(slug, [dict(r) for r in current]),
-        "target-bands": _render_stage_band_table(profiles),
-        "current-plantings": _render_current_plantings([dict(r) for r in current]),
-        "latest-vision": _render_latest_vision([dict(r) for r in vision_rows], public_refs),
-        "planting-history": _render_history([dict(r) for r in history_rows]),
+        "target-bands": _render_stage_band_table(profiles, CROP_LABELS.get(slug, d["common_name"])),
+        "current-plantings": _render_current_plantings(
+            [dict(r) for r in current], CROP_LABELS.get(slug, d["common_name"])
+        ),
+        "latest-vision": _render_latest_vision(
+            [dict(r) for r in vision_rows],
+            public_refs,
+            CROP_LABELS.get(slug, d["common_name"]),
+        ),
+        "planting-history": _render_history([dict(r) for r in history_rows], CROP_LABELS.get(slug, d["common_name"])),
     }
 
     body = f"""# {d["common_name"]}
@@ -446,7 +463,7 @@ async def render_crop(
 
 {_auto_block("catalog-entry", blocks["catalog-entry"])}
 
-## Launch Taxonomy
+## Crop-Control Status
 
 {_auto_block("taxonomy-status", blocks["taxonomy-status"])}
 
@@ -536,7 +553,9 @@ def main() -> None:
     p.add_argument("--slug", help="Render only this crop slug")
     p.add_argument("--out", default=str(DEFAULT_OUT), help="Output directory")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--check-consistency", action="store_true", help="Validate launch crop taxonomy against DB views")
+    p.add_argument(
+        "--check-consistency", action="store_true", help="Validate active crop-control status against DB views"
+    )
     p.add_argument(
         "--replace-page", action="store_true", help="Overwrite the whole page instead of updating auto-render blocks"
     )
