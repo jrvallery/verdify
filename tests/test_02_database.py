@@ -607,17 +607,23 @@ class TestViewsCompute:
         assert outdoor_min and outdoor_max, "daily_summary outdoor temp min/max were not backfilled"
         assert kwh_total, "daily_summary.kwh_total was not populated from measured energy"
 
-    def test_daily_summary_electric_cost_uses_measured_kwh(self):
+    def test_daily_summary_electric_cost_uses_runtime_kwh(self):
         rows = db_query_rows(
             """
             SELECT date
             FROM daily_summary
             WHERE date >= (now() AT TIME ZONE 'America/Denver')::date - 31
               AND date < (now() AT TIME ZONE 'America/Denver')::date - 1
-              AND kwh_total IS NOT NULL
+              AND kwh_estimated IS NOT NULL
               AND cost_electric IS NOT NULL
-              AND ABS(cost_electric - ROUND((kwh_total * 0.111)::numeric, 2)) > 0.011
+              AND ABS(cost_electric - ROUND((kwh_estimated * 0.111)::numeric, 2)) > 0.011
             LIMIT 1
             """
         )
-        assert not rows, f"daily_summary electric cost does not match measured kWh: {rows[0]}"
+        assert not rows, f"daily_summary electric cost does not match runtime-modeled kWh: {rows[0]}"
+
+    def test_energy_reconciliation_compares_runtime_to_measured_kwh(self):
+        view_sql = db_query("SELECT pg_get_viewdef('v_energy_estimate_reconciliation'::regclass, true)")
+        assert "ds.kwh_estimated" in view_sql
+        assert "COALESCE(ds.kwh_total, ds.kwh_estimated)" not in view_sql
+        assert "meter_runtime_divergence" in view_sql

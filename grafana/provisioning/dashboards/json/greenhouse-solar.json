@@ -76,10 +76,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round(avg(watts)::numeric, 0) AS value\nFROM modeled\nWHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
         }
       ],
-      "title": "Daytime Watts (30-Day Average)",
+      "title": "Runtime Daytime Watts (30-Day Avg)",
       "type": "stat",
       "description": "Average greenhouse power draw during daytime hours across the last 30 completed days.",
       "options": {}
@@ -119,10 +119,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round(avg(watts)::numeric, 0) AS value\nFROM modeled\nWHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
-      "title": "Night Watts (30-Day Average)",
+      "title": "Runtime Night Watts (30-Day Avg)",
       "type": "stat",
       "description": "Average greenhouse power draw during nighttime hours across the last 30 completed days.",
       "options": {}
@@ -171,7 +171,7 @@
       "options": {}
     },
     {
-      "description": "Percent of average overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
+      "description": "Percent of average runtime-modeled overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 200,
@@ -208,7 +208,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round((13.5 / NULLIF(avg(watts_total)::numeric * 14 / 1000, 0) * 100)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round((13.5 / NULLIF(avg(watts)::numeric * 14 / 1000, 0) * 100)::numeric, 0) AS value\nFROM modeled\nWHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
       "title": "30-Day Powerwall Coverage",
@@ -259,7 +259,7 @@
       "options": {}
     },
     {
-      "description": "Greenhouse electrical load overlaid with available solar radiation. When solar is up, the greenhouse runs on sun.",
+      "description": "Runtime-modeled electric load from published device wattage and observed on-time overlaid with available solar radiation.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -276,7 +276,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Greenhouse (W)"
+              "options": "Runtime Load (W)"
             },
             "properties": [
               {
@@ -368,7 +368,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', e.ts) AS time, round(avg(watts_total)::numeric, 0) AS \"Greenhouse (W)\" FROM energy e WHERE $__timeFilter(e.ts) GROUP BY 1 ORDER BY 1",
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    date_trunc('minute', $__timeFrom()::timestamptz),\n    LEAST($__timeTo()::timestamptz, now()),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT\n  time_bucket('30 minutes', ts) AS time,\n  round(avg(watts)::numeric, 0) AS \"Runtime Load (W)\"\nFROM modeled\nGROUP BY 1\nORDER BY 1",
           "refId": "A"
         },
         {
@@ -380,7 +380,7 @@
           "refId": "B"
         }
       ],
-      "title": "Greenhouse Power vs Solar Irradiance",
+      "title": "Runtime-Modeled Power vs Solar Irradiance",
       "type": "timeseries",
       "options": {
         "legend": {
@@ -518,7 +518,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Electric ($)"
+              "options": "Runtime Electric ($)"
             },
             "properties": [
               {
@@ -575,7 +575,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT date::timestamp AS time, round(kwh_estimated * 0.111, 2) AS \"Electric ($)\", round(gas_cost::numeric, 2) AS \"Gas ($)\", round(water_cost::numeric, 2) AS \"Water ($)\" FROM daily_summary WHERE $__timeFilter(date::timestamp) AND kwh_estimated > 0 ORDER BY date"
+          "rawSql": "SELECT\n  (date + time '12:00')::timestamptz AS time,\n  round(cost_electric::numeric, 2) AS \"Runtime Electric ($)\",\n  round(cost_gas::numeric, 2) AS \"Gas ($)\",\n  round(cost_water::numeric, 2) AS \"Water ($)\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz)\n  AND cost_total > 0\nORDER BY date"
         }
       ],
       "title": "Daily Cost by Source",

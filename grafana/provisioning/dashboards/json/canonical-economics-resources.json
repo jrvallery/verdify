@@ -518,7 +518,7 @@
           "sort": "desc"
         }
       },
-      "description": "Daily cost stacked by utility type."
+      "description": "Daily cost stacked by utility type. Electric uses published device watts multiplied by observed on-time."
     },
     {
       "id": 10,

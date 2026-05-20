@@ -66,15 +66,22 @@ def test_resource_use_restores_individual_solar_alignment_panels():
     assert "Solar vs Resource Use" not in page
 
 
-def test_resource_use_cost_panels_use_canonical_measured_cost_fields():
+def test_resource_use_cost_panels_use_canonical_runtime_cost_fields():
     economics = _dashboard("grafana/dashboards/site-evidence-economics.json")
+    baseline_page = (VAULT_ROOT / "data/baseline-vs-iris.md").read_text(encoding="utf-8")
     daily_cost = _panel(economics, 312)
     monthly_cost = _panel(economics, 10)
+    solar_load = _panel(economics, 310)
     daily_sql = daily_cost["targets"][0]["rawSql"]
 
+    assert "Runtime Electric ($)" in daily_sql
     assert "cost_electric::numeric" in daily_sql
     assert "kwh_estimated * 0.111" not in daily_sql
+    assert "Runtime Load (W)" in solar_load["targets"][0]["rawSql"]
+    assert "energy e" not in solar_load["targets"][0]["rawSql"]
     assert monthly_cost["options"]["showValue"] == "never"
+    assert "Runtime-modeled electric energy/day" in baseline_page
+    assert "Metered electric energy/day" not in baseline_page
 
 
 def test_lighting_dashboard_visual_contract():

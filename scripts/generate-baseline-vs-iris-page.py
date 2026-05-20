@@ -29,7 +29,7 @@ WITH periods AS (
     COALESCE(ds.stress_hours_heat, 0) + COALESCE(ds.stress_hours_cold, 0)
       + COALESCE(ds.stress_hours_vpd_high, 0) + COALESCE(ds.stress_hours_vpd_low, 0) AS stress_h,
     ds.water_used_gal,
-    ds.kwh_total,
+    ds.kwh_estimated,
     ds.cost_total,
     vp.planner_score,
     (SELECT count(*) FROM plan_journal pj WHERE (pj.created_at AT TIME ZONE 'America/Denver')::date = ds.date) AS plans
@@ -48,7 +48,7 @@ SELECT
   round(avg(vpd_compliance_pct)::numeric, 1) AS vpd_compliance_pct,
   round(avg(stress_h)::numeric, 1) AS stress_hours_day,
   round(avg(water_used_gal)::numeric, 1) AS water_gal_day,
-  round(avg(kwh_total)::numeric, 1) AS kwh_day,
+  round(avg(kwh_estimated)::numeric, 1) AS kwh_day,
   round(avg(cost_total)::numeric, 2) AS cost_day_usd,
   round(avg(planner_score)::numeric, 1) AS planner_score
 FROM day_metrics
@@ -260,7 +260,7 @@ def render(periods: list[Period], confounders: list[Confounders], daily: list[Da
             fmt_reduction(current.water_gal, baseline.water_gal, " gal"),
         ),
         (
-            "Estimated electric energy/day",
+            "Runtime-modeled electric energy/day",
             f"{baseline.kwh} kWh",
             f"{current.kwh} kWh",
             fmt_reduction(current.kwh, baseline.kwh, " kWh"),
@@ -351,7 +351,7 @@ The comparison is more useful when stress is shown beside what the greenhouse sp
   <div class="data-row"><strong>Both-axis compliance</strong><span><code>daily_summary.compliance_pct</code></span><p>Percent of samples where temperature and VPD were both inside the firmware-enforced band.</p></div>
   <div class="data-row"><strong>Cumulative stress-axis hours/day</strong><span>Heat + cold + VPD-high + VPD-low</span><p>Summed daily stress duration from corrected daily summary fields. This is not capped at one stress type; a hot-dry hour can count on more than one axis.</p></div>
   <div class="data-row"><strong>Planner score</strong><span><code>v_planner_performance.planner_score</code></span><p>Composite score: 80% compliance and 20% cost efficiency. It is useful as an operational KPI, not as a yield claim.</p></div>
-  <div class="data-row"><strong>Metered electric energy/day</strong><span><code>daily_summary.kwh_total</code></span><p>Electric energy from the greenhouse power meter where available, with runtime estimates kept as a separate diagnostic.</p></div>
+  <div class="data-row"><strong>Runtime-modeled electric energy/day</strong><span><code>daily_summary.kwh_estimated</code></span><p>Electric energy from published equipment wattage multiplied by observed on-time; metered kWh is retained separately as diagnostic evidence.</p></div>
   <div class="data-row"><strong>Cost/day</strong><span>Electric + gas + water</span><p>Resource spend comes from estimated daily summary fields unless marked measured. The greenhouse is solar-aligned but still uses grid electricity and gas heat.</p></div>
 </div>
 

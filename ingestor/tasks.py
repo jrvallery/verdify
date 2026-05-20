@@ -64,7 +64,6 @@ from config import (
     SLACK_CHANNEL,
     SLACK_TOKEN_FILE,
     STATE_DIR,
-    WATTAGES,
 )
 from config import (
     load_token as _load_token,
@@ -3877,7 +3876,7 @@ SELECT
 FROM light_events;
 """
 
-WATTAGES = {
+DEFAULT_ELECTRIC_WATTAGES = {
     "heat1": 1500,
     "fan1": 52,
     "fan2": 52,
@@ -3887,6 +3886,25 @@ WATTAGES = {
     "vent": 10,
 }
 HEAT2_BTU, THERM_BTU = 75000, 100000
+
+
+async def _electric_wattages(conn: asyncpg.Connection) -> dict[str, float]:
+    """Return published device wattages, falling back to conservative defaults."""
+    wattages = dict(DEFAULT_ELECTRIC_WATTAGES)
+    rows = await conn.fetch(
+        """
+        SELECT equipment, wattage
+        FROM equipment_assets
+        WHERE wattage IS NOT NULL
+        """
+    )
+    for row in rows:
+        wattages[row["equipment"]] = float(row["wattage"])
+    return wattages
+
+
+def _runtime_kwh_from_minutes(minutes_by_equipment: dict[str, float], wattages: dict[str, float]) -> float:
+    return sum(minutes_by_equipment.get(e, 0.0) / 60.0 * watts / 1000.0 for e, watts in wattages.items())
 
 
 async def grow_light_daily(pool: asyncpg.Pool) -> None:
@@ -3912,8 +3930,11 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
         rdc = rt.get("drip_center", (0, 0))[0] / 60.0
         rgl = rt.get("grow_light_main", (0, 0))[0] + rt.get("grow_light_grow", (0, 0))[0]
 
-        # Energy
-        kwh = sum(rt.get(e, (0, 0))[0] / 60.0 * w / 1000.0 for e, w in WATTAGES.items())
+        # Energy. Electric cost uses published device watts × observed on-time;
+        # Shelly metered kWh remains a diagnostic because its circuit coverage is partial.
+        wattages = await _electric_wattages(conn)
+        electric_minutes = {e: rt.get(e, (0, 0))[0] for e in wattages}
+        kwh = _runtime_kwh_from_minutes(electric_minutes, wattages)
         therms = rh2 / 60.0 * HEAT2_BTU / THERM_BTU
         water_gal = (
             await conn.fetchval("SELECT COALESCE(water_used_gal, 0) FROM daily_summary WHERE date = $1", yesterday) or 0
@@ -3976,12 +3997,7 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
             UPDATE daily_summary ds
                SET kwh_total = ed.measured_kwh::double precision,
                    peak_kw = (ed.peak_watts / 1000.0)::double precision,
-                   cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
-                   cost_total = round((
-                       COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
-                       + COALESCE(ds.cost_gas::numeric, 0)
-                       + COALESCE(ds.cost_water::numeric, 0)
-                   ), 2)::double precision
+                   captured_at = now()
               FROM v_energy_daily ed
              WHERE ds.date = $1
                AND ed.date = ds.date
@@ -4000,7 +4016,7 @@ async def grow_light_daily(pool: asyncpg.Pool) -> None:
             SELECT ROUND(SUM(COALESCE(cost_electric,0))::numeric, 2) AS ce,
                    ROUND(SUM(COALESCE(cost_gas,0))::numeric, 2)      AS cg,
                    ROUND(SUM(COALESCE(cost_water,0))::numeric, 2)    AS cw,
-                   ROUND(SUM(COALESCE(kwh_total,kwh_estimated,0))::numeric, 2) AS kwh,
+                   ROUND(SUM(COALESCE(kwh_estimated,0))::numeric, 2) AS kwh,
                    ROUND(SUM(COALESCE(water_used_gal,0))::numeric, 2) AS gal
             FROM daily_summary
             WHERE date >= $1 AND date < ($1 + INTERVAL '1 month')::date
@@ -4220,17 +4236,6 @@ async def forecast_deviation_check(pool: asyncpg.Pool) -> None:
 # ═════════════════════════════════════════════════════════════════
 # 13. LIVE DAILY SUMMARY (every 1800s = 30 min)
 # ═════════════════════════════════════════════════════════════════
-_DS_WATTAGES = {
-    "heat1": 1500,
-    "fan1": 52,
-    "fan2": 52,
-    "fog": 1644,
-    "grow_light_main": 630,
-    "grow_light_grow": 816,
-    "vent": 10,
-}
-
-
 async def _refresh_daily_summary_for_date(conn: asyncpg.Connection, target_day) -> tuple[float, float, float]:
     """Refresh daily_summary derived aggregates for a local greenhouse day."""
     # Ensure row exists
@@ -4396,7 +4401,9 @@ async def _refresh_daily_summary_for_date(conn: asyncpg.Connection, target_day) 
     rt = {r["equipment"]: float(r["on_minutes"] or 0) for r in rt_rows}
     cycles = {r["equipment"]: int(r["cycles"] or 0) for r in rt_rows}
 
-    kwh = sum(rt.get(e, 0) / 60.0 * w / 1000.0 for e, w in _DS_WATTAGES.items())
+    wattages = await _electric_wattages(conn)
+    electric_minutes = {e: rt.get(e, 0.0) for e in wattages}
+    kwh = _runtime_kwh_from_minutes(electric_minutes, wattages)
     therms = rt.get("heat2", 0) / 60.0 * 75000 / 100000
 
     mister_water_gal = float(climate["mister_water_gal"]) if climate and climate["mister_water_gal"] else 0.0
@@ -4510,12 +4517,6 @@ async def _refresh_daily_summary_for_date(conn: asyncpg.Connection, target_day) 
         UPDATE daily_summary ds
            SET kwh_total = ed.measured_kwh::double precision,
                peak_kw = (ed.peak_watts / 1000.0)::double precision,
-               cost_electric = round((ed.measured_kwh * 0.111), 2)::double precision,
-               cost_total = round((
-                   COALESCE(round((ed.measured_kwh * 0.111), 2), ds.cost_electric::numeric, 0)
-                   + COALESCE(ds.cost_gas::numeric, 0)
-                   + COALESCE(ds.cost_water::numeric, 0)
-               ), 2)::double precision,
                captured_at = now()
           FROM v_energy_daily ed
          WHERE ds.date = $1

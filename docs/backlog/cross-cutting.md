@@ -62,7 +62,7 @@ shared contract and schema pieces; genai and ingestor own their code slices.
 Currently handled as ephemeral coordinator-dispatched work (see `CLAUDE.md` open question 2). If this queue grows past ~5 items, revisit whether a persistent `observability` agent is warranted.
 
 - [ ] **C-M20 Planning Quality and Resource Cost Data Integrity.** Canonical research backlog: [`lab-site-refactor-2026-05-20.md`](lab-site-refactor-2026-05-20.md), `RP-001` through `RP-005`. Covers no-data Planning Quality Grafana panels, the water-cost historical anomaly, cost graph definition standardization, outlined-bar rendering, and the Climate page information-design/panel-placement pass.
-- [ ] **C-M21 Electric meter coverage and cost truth.** Canonical research backlog: [`lab-site-refactor-2026-05-20.md`](lab-site-refactor-2026-05-20.md), `RP-008`. Covers Shelly EM50 circuit mapping, light/heat state-source reconciliation, runtime-modeled versus metered kWh divergence, `v_energy_estimate_reconciliation` honesty, and the canonical public electric-cost field.
+- [x] **C-M21 Electric meter coverage and cost truth.** Canonical research backlog: [`lab-site-refactor-2026-05-20.md`](lab-site-refactor-2026-05-20.md), `RP-008`. Public electric cost now uses published equipment watts multiplied by observed on-time; Shelly EM50 kWh remains diagnostic/reconciliation evidence through `v_energy_estimate_reconciliation`.
 
 ## Data trust / data science audit — 2026-05-01
 

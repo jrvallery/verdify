@@ -36,9 +36,9 @@ Updated 2026-05-20 after the site/content refactor, Planning Quality dashboard r
 | CODEX-016 | Complete | `scripts/brand-grafana-embeds.py` now encodes the public visual rules for transparent/white embeds, reduced double chrome, stronger solar/sun/lux fills with gradient fade, no extra filled-band outlines, temp/VPD band consistency, lighting-style relay state lanes, and solid gray observed outdoor VPD. Source and live brand checks pass, `make site-doctor` reports 0 findings, and key panels rendered successfully. |
 | CODEX-017 | Complete | Resource Use has the six-month stacked Monthly Resource Cost by Source chart using canonical daily-summary cost fields, with overlapping segment dollar labels disabled; Runtime Hours remains visible; GPU Board Power is included on Resource Use and distinct VM/GPU colors are enforced in the dashboard. |
 | CODEX-018 | Complete | Architecture no longer includes Homelab Compute and Agent Fleet, MQTT, or Not Production Safe content. GPU power evidence lives on Resource Use instead of Architecture, and live Architecture curl checks show the stale headings are gone. |
-| RP-006 | Complete | Root cause: the daily graph still computed electric cost from runtime-estimated `kwh_estimated * 0.111`, while the 30-day stat used measured `daily_summary.cost_electric` from `v_energy_daily.measured_kwh`. The economics dashboard now uses the stored canonical cost fields for daily/monthly cost panels, and `test_daily_summary_electric_cost_uses_measured_kwh` guards the measured-kWh cost path. |
+| RP-006 | Superseded | The original panel mismatch was real: one graph computed `kwh_estimated * 0.111` while stat cards used stored `daily_summary.cost_electric`. The stored canonical field is still the single panel source, but RP-008 changed that field from Shelly-derived metered kWh to runtime-modeled kWh from published watts and observed on-time. |
 | RP-007 | Complete | Lux review confirmed the active readback thresholds are 40,000 lux with 8,000 lux hysteresis and recent Tempest daylight samples exceed 100,000 lux, so the "45,000 lux full sun" view was a panel/window/aggregation interpretation rather than a unit cap. Lighting copy now explains exterior threshold semantics, and lux/solar visual treatment was normalized through the brand script and render checks. |
-| RP-008 | Open | New 2026-05-20 electric-meter skepticism trace: last 30 completed days average 2.30 Shelly-metered kWh/day, while the relay-runtime model averages 24.29 kWh/day. HA currently reports lights on while Shelly channel 0 is near 0 W; heat relay-on samples average about 19 W on the heater channel; Shelly exposes cumulative kWh only for channel 0. Resource Use now labels the public electric feed as Shelly-metered and under audit; the canonical cost model still needs a cross-scope meter/state-source fix. |
+| RP-008 | Complete | Public electric cost now uses published device wattage from `equipment_assets.wattage` multiplied by observed relay on-time, matching the gas therms model. Shelly kWh remains stored as `daily_summary.kwh_total` and exposed through `v_energy_estimate_reconciliation` as diagnostic evidence; it no longer overwrites `cost_electric` or public Resource Use panels. |
 
 ### CODEX-002 terminology exception list
 
@@ -654,7 +654,9 @@ These items came from the later live review on 2026-05-20 after the first site/c
 
 ### RP-006 - Fix Resource Use electric-cost inconsistency
 
-**Problem statement:** The Resource Use page currently shows inconsistent electric cost math. The 30-day average electric stat reports about USD 0.25/day, while the daily cost graph shows most electric days around USD 4-6. Initial inspection suggests the stat uses `daily_summary.cost_electric`, while the graph may still compute `kwh_estimated * 0.111`.
+**Status:** Superseded by RP-008. The immediate mismatch was fixed by making public panels read the stored canonical `daily_summary.cost_electric` field. RP-008 then changed how that stored field is computed: runtime-modeled kWh from published watts and observed on-time is now canonical; Shelly measured kWh is diagnostic.
+
+**Problem statement:** The Resource Use page showed inconsistent electric cost math. The 30-day average electric stat reported about USD 0.25/day, while the daily cost graph showed most electric days around USD 4-6. Initial inspection showed the stat used `daily_summary.cost_electric`, while the graph still computed `kwh_estimated * 0.111`.
 
 **Research tasks:**
 
@@ -684,9 +686,11 @@ These items came from the later live review on 2026-05-20 after the first site/c
 - No public Resource Use panel shows electric daily costs that contradict the stat-card average for the same window.
 - The chosen rate/source assumptions are explicit and consistent across Resource Use.
 
-### RP-008 - Audit electric meter coverage and canonical electric cost model
+### RP-008 - Select runtime-modeled electric cost source
 
-**Problem statement:** The prior `RP-006` fix made Resource Use panels internally consistent by using `daily_summary.cost_electric`, but the chosen source is now suspect. The displayed electric cost averages about USD 0.25/day because `daily_summary.cost_electric` is derived from `v_energy_daily.measured_kwh`, which integrates `energy.watts_total` from the Shelly Pro EM50 feed. A 2026-05-20 trace found the last 30 completed days averaged 2.30 Shelly-metered kWh/day, while `daily_summary.kwh_estimated` from equipment relay runtime averaged 24.29 kWh/day.
+**Status:** Complete for the public site and daily summary pipeline. Verdify now uses published watts per device plus observed on-time for public electric kWh/cost, the same modeling posture as gas therms from furnace runtime. The Shelly meter remains useful for reconciliation and hardware diagnostics, but it is no longer trusted as canonical greenhouse electric spend.
+
+**Problem statement:** The prior `RP-006` fix made Resource Use panels internally consistent by using `daily_summary.cost_electric`, but the chosen source was suspect. The displayed electric cost averaged about USD 0.25/day because `daily_summary.cost_electric` was derived from `v_energy_daily.measured_kwh`, which integrates `energy.watts_total` from the Shelly Pro EM50 feed. A 2026-05-20 trace found the last 30 completed days averaged 2.30 Shelly-metered kWh/day, while `daily_summary.kwh_estimated` from equipment relay runtime averaged 24.29 kWh/day.
 
 **Evidence captured 2026-05-20:**
 
@@ -697,20 +701,20 @@ These items came from the later live review on 2026-05-20 after the first site/c
 - Fog/fan relay states correlate with higher Shelly watts, but the observed Shelly draw during fog is lower than the 1644 W nameplate/runtime model.
 - `v_energy_estimate_reconciliation` currently coalesces `kwh_total` before `kwh_estimated`, so it reports `ok` even when runtime-modeled and Shelly-metered kWh diverge by an order of magnitude.
 
-**Research tasks:**
+**Implemented tasks:**
 
-1. Physically and logically map Shelly EM50 channel 0 and channel 1 to greenhouse circuits: heat1, heat2 igniter/blower, fogger, fans, vent, grow lights, controller hardware, pumps, and any bypassed/non-greenhouse loads.
-2. Verify whether the current Shelly CT placement covers the lighting circuits and heater circuits; if not, label the feed as partial until hardware is moved or new meters are added.
-3. Reconcile HA lighting state sources: determine whether `light.greenhouse_main` / `light.greenhouse_grow` or `switch.greenhouse_main` / `switch.greenhouse_grow` are authoritative for runtime accounting.
-4. Determine whether heat relay-on state means active electrical draw, a heat call, a thermostat-enabled outlet, or an inverted/latched state. Do not price heat runtime at 1500 W unless measured draw supports it.
-5. Split the model into explicit fields or views for:
+1. Load public electric wattage from every `equipment_assets.wattage` row, with conservative code defaults for the known electric devices only as fallback.
+2. Compute `daily_summary.kwh_estimated` and `cost_electric` from equipment on-minutes times published watts.
+3. Stop the Shelly measured-energy refresh from overwriting `cost_electric` and `cost_total`; it now only maintains `kwh_total`, `peak_kw`, and capture metadata.
+4. Recompute monthly `utility_cost` electric amount/kWh from runtime-modeled `daily_summary` values.
+5. Split the model into explicit fields/views for:
    - Shelly-metered kWh,
    - runtime-modeled kWh,
    - validated billable/estimated electric kWh,
    - source/quality flag.
 6. Fix `v_energy_estimate_reconciliation` so it compares runtime-modeled kWh to Shelly-metered kWh instead of hiding divergence with `COALESCE(kwh_total, kwh_estimated)`.
-7. Update `daily_summary.cost_electric`, Grafana panels, and generated plan/site copy only after the canonical field is selected.
-8. Add a guardrail that fails when runtime-modeled kWh is more than 3x Shelly-metered kWh for a completed day unless the meter-quality flag explicitly says `partial_meter_expected`.
+7. Update Resource Use copy and Grafana panel labels to say runtime-modeled electric/load instead of Shelly-metered electric.
+8. Add regression checks that `cost_electric` matches `kwh_estimated * 0.111` and that reconciliation surfaces `meter_runtime_divergence`.
 
 **Deliverables:**
 
@@ -723,10 +727,10 @@ These items came from the later live review on 2026-05-20 after the first site/c
 
 **Acceptance criteria:**
 
-- Public Resource Use no longer implies that the Shelly feed is full greenhouse electric spend unless circuit coverage proves it.
+- Public Resource Use no longer implies that the Shelly feed is full greenhouse electric spend.
 - The selected electric cost source can explain heater, fogger, fan, and lighting operation without an order-of-magnitude hidden mismatch.
 - `v_energy_estimate_reconciliation` surfaces current divergence instead of reporting `ok`.
-- The 30-day electric stat, daily graph, monthly graph, and solar-aligned electric panel all use the selected canonical source or are explicitly labeled as partial-meter diagnostics.
+- The 30-day electric stat, daily graph, monthly graph, and solar-aligned electric panel all use runtime-modeled electric values or are explicitly labeled as meter diagnostics.
 
 ### RP-007 - Review lighting lux targets and exterior lux alignment
 

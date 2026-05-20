@@ -74,7 +74,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Average electric cost per day from the current Shelly-metered circuit feed across the last 30 completed daily summaries. This is under meter-coverage review.",
+      "description": "Average electric cost per day from published device wattage multiplied by observed on-time across the last 30 completed daily summaries.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -125,7 +125,7 @@
           "refId": "A"
         }
       ],
-      "title": "Shelly Electric $/Day (30-Day Avg)",
+      "title": "Runtime Electric $/Day (30-Day Avg)",
       "type": "stat"
     },
     {
@@ -310,7 +310,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Daily cost stacked by utility type. Electric is the current Shelly-metered circuit feed and is under meter-coverage review.",
+      "description": "Daily cost stacked by utility type. Electric uses published device watts multiplied by observed on-time.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -330,7 +330,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly Electric"
+              "options": "Runtime Electric"
             },
             "properties": [
               {
@@ -399,7 +399,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_electric AS \"Shelly Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
+          "rawSql": "SELECT (date + time '12:00')::timestamptz AS time, cost_electric AS \"Runtime Electric\"\nFROM daily_summary WHERE $__timeFilter((date + time '12:00')::timestamptz) AND cost_total > 0 ORDER BY date",
           "refId": "A"
         },
         {
@@ -429,7 +429,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Stacked monthly greenhouse utility cost for the current local month-to-date plus the previous five months. Electric is the current Shelly-metered circuit feed; gas and water use the public rate assumptions shown on Resource Use.",
+      "description": "Stacked monthly greenhouse utility cost for the current local month-to-date plus the previous five months. Electric uses published device watts multiplied by observed on-time; gas and water use the public rate assumptions shown on Resource Use.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -472,7 +472,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly Electric ($)"
+              "options": "Runtime Electric ($)"
             },
             "properties": [
               {
@@ -570,7 +570,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH months AS (\n  SELECT generate_series(\n    (date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date - interval '5 months')::date,\n    date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date,\n    interval '1 month'\n  )::date AS month_start\n), costs AS (\n  SELECT\n    date_trunc('month', date)::date AS month_start,\n    ROUND(SUM(COALESCE(cost_electric, 0))::numeric, 2) AS electric_cost_usd,\n    ROUND(SUM(COALESCE(cost_gas, 0))::numeric, 2) AS gas_cost_usd,\n    ROUND(SUM(COALESCE(cost_water, 0))::numeric, 2) AS water_cost_usd\n  FROM daily_summary\n  WHERE date >= (SELECT min(month_start) FROM months)\n    AND date < ((SELECT max(month_start) FROM months) + interval '1 month')::date\n  GROUP BY 1\n)\nSELECT\n  to_char(m.month_start, 'Mon YYYY') AS \"Month\",\n  COALESCE(c.electric_cost_usd, 0) AS \"Shelly Electric ($)\",\n  COALESCE(c.gas_cost_usd, 0) AS \"Gas ($)\",\n  COALESCE(c.water_cost_usd, 0) AS \"Water ($)\",\n  COALESCE(c.electric_cost_usd, 0)\n    + COALESCE(c.gas_cost_usd, 0)\n    + COALESCE(c.water_cost_usd, 0) AS \"Total ($)\"\nFROM months m\nLEFT JOIN costs c USING (month_start)\nORDER BY m.month_start",
+          "rawSql": "WITH months AS (\n  SELECT generate_series(\n    (date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date - interval '5 months')::date,\n    date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date,\n    interval '1 month'\n  )::date AS month_start\n), costs AS (\n  SELECT\n    date_trunc('month', date)::date AS month_start,\n    ROUND(SUM(COALESCE(cost_electric, 0))::numeric, 2) AS electric_cost_usd,\n    ROUND(SUM(COALESCE(cost_gas, 0))::numeric, 2) AS gas_cost_usd,\n    ROUND(SUM(COALESCE(cost_water, 0))::numeric, 2) AS water_cost_usd\n  FROM daily_summary\n  WHERE date >= (SELECT min(month_start) FROM months)\n    AND date < ((SELECT max(month_start) FROM months) + interval '1 month')::date\n  GROUP BY 1\n)\nSELECT\n  to_char(m.month_start, 'Mon YYYY') AS \"Month\",\n  COALESCE(c.electric_cost_usd, 0) AS \"Runtime Electric ($)\",\n  COALESCE(c.gas_cost_usd, 0) AS \"Gas ($)\",\n  COALESCE(c.water_cost_usd, 0) AS \"Water ($)\",\n  COALESCE(c.electric_cost_usd, 0)\n    + COALESCE(c.gas_cost_usd, 0)\n    + COALESCE(c.water_cost_usd, 0) AS \"Total ($)\"\nFROM months m\nLEFT JOIN costs c USING (month_start)\nORDER BY m.month_start",
           "refId": "A"
         }
       ],
@@ -1094,7 +1094,7 @@
       "description": "Gas heating demand inversely correlates with outdoor temperature."
     },
     {
-      "description": "Current Shelly-metered electric load overlaid with available solar radiation. This feed is being audited for complete greenhouse circuit coverage.",
+      "description": "Runtime-modeled electric load from published device wattage and observed on-time overlaid with available solar radiation.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1116,13 +1116,13 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly Meter (W)"
+              "options": "Runtime Load (W)"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#66BB6A",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               },
@@ -1208,7 +1208,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', e.ts) AS time, round(avg(watts_total)::numeric, 0) AS \"Shelly Meter (W)\" FROM energy e WHERE $__timeFilter(e.ts) GROUP BY 1 ORDER BY 1",
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    date_trunc('minute', $__timeFrom()::timestamptz),\n    LEAST($__timeTo()::timestamptz, now()),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT\n  time_bucket('30 minutes', ts) AS time,\n  round(avg(watts)::numeric, 0) AS \"Runtime Load (W)\"\nFROM modeled\nGROUP BY 1\nORDER BY 1",
           "refId": "A"
         },
         {
@@ -1220,7 +1220,7 @@
           "refId": "B"
         }
       ],
-      "title": "Shelly-Metered Power vs Solar Irradiance",
+      "title": "Runtime-Modeled Power vs Solar Irradiance",
       "type": "timeseries",
       "options": {
         "tooltip": {
@@ -1237,7 +1237,7 @@
       "transparent": true
     },
     {
-      "description": "Percent of current Shelly-metered electrical load consumed during solar hours across the last 30 completed days.",
+      "description": "Percent of runtime-modeled electrical load consumed during solar hours across the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -1274,10 +1274,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round((100.0 * SUM(watts_total) FILTER (WHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17) / NULLIF(SUM(watts_total), 0))::numeric, 1) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round((100.0 * SUM(watts) FILTER (WHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17) / NULLIF(SUM(watts), 0))::numeric, 1) AS value\nFROM modeled"
         }
       ],
-      "title": "30-Day Solar-Aligned Shelly Load",
+      "title": "30-Day Solar-Aligned Runtime Load",
       "type": "stat",
       "transparent": true,
       "options": {
@@ -1286,7 +1286,7 @@
       }
     },
     {
-      "description": "Percent of average Shelly-metered overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
+      "description": "Percent of average runtime-modeled overnight load covered by one Powerwall (13.5 kWh), using the last 30 completed days.",
       "fieldConfig": {
         "defaults": {
           "max": 200,
@@ -1327,7 +1327,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round((13.5 / NULLIF(avg(watts_total)::numeric * 14 / 1000, 0) * 100)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round((13.5 / NULLIF(avg(watts)::numeric * 14 / 1000, 0) * 100)::numeric, 0) AS value\nFROM modeled\nWHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
       "title": "30-Day Powerwall Coverage",
@@ -1377,10 +1377,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round(avg(watts)::numeric, 0) AS value\nFROM modeled\nWHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"
         }
       ],
-      "title": "Shelly Daytime Watts (30-Day Avg)",
+      "title": "Runtime Daytime Watts (30-Day Avg)",
       "type": "stat",
       "transparent": true,
       "options": {
@@ -1427,10 +1427,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "table",
-          "rawSql": "SELECT now() as time, round(avg(watts_total)::numeric, 0) as value FROM energy WHERE ts >= current_date - interval '30 days' AND ts < current_date AND extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),\n    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT now() AS time,\n       round(avg(watts)::numeric, 0) AS value\nFROM modeled\nWHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"
         }
       ],
-      "title": "Shelly Night Watts (30-Day Avg)",
+      "title": "Runtime Night Watts (30-Day Avg)",
       "type": "stat",
       "transparent": true,
       "options": {
@@ -1557,7 +1557,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly Heater Channel"
+              "options": "Runtime Heat 1 (W)"
             },
             "properties": [
               {
@@ -1572,7 +1572,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly Fans Estimate"
+              "options": "Runtime Fans (W)"
             },
             "properties": [
               {
@@ -1587,7 +1587,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly General Channel"
+              "options": "Runtime Other (fog/lights/vent)"
             },
             "properties": [
               {
@@ -1614,10 +1614,10 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', ts) AS time, round(avg(watts_heat)::numeric, 0) AS \"Shelly Heater Channel\", round(avg(watts_fans)::numeric, 0) AS \"Shelly Fans Estimate\", round(avg(watts_other)::numeric, 0) AS \"Shelly General Channel\" FROM energy WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 1"
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    date_trunc('minute', $__timeFrom()::timestamptz),\n    LEAST($__timeTo()::timestamptz, now()),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN w.equipment = 'heat1' AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS heat_w,\n    SUM(CASE WHEN w.equipment IN ('fan1', 'fan2') AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS fan_w,\n    SUM(CASE WHEN w.equipment NOT IN ('heat1', 'fan1', 'fan2') AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS other_w\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT\n  time_bucket('30 minutes', ts) AS time,\n  round(avg(heat_w)::numeric, 0) AS \"Runtime Heat 1 (W)\",\n  round(avg(fan_w)::numeric, 0) AS \"Runtime Fans (W)\",\n  round(avg(other_w)::numeric, 0) AS \"Runtime Other (fog/lights/vent)\"\nFROM modeled\nGROUP BY 1\nORDER BY 1"
         }
       ],
-      "title": "Shelly Power by Circuit",
+      "title": "Runtime Power by Device Group",
       "type": "timeseries",
       "options": {
         "tooltip": {
@@ -1657,13 +1657,13 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Electric ($)"
+              "options": "Runtime Electric ($)"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "#66BB6A",
+                  "fixedColor": "#73BF69",
                   "mode": "fixed"
                 }
               }
@@ -1702,7 +1702,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Shelly Electric ($)"
+              "options": "Runtime Electric ($)"
             },
             "properties": [
               {
@@ -1729,7 +1729,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  (date + time '12:00')::timestamptz AS time,\n  round(cost_electric::numeric, 2) AS \"Shelly Electric ($)\",\n  round(cost_gas::numeric, 2) AS \"Gas ($)\",\n  round(cost_water::numeric, 2) AS \"Water ($)\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz)\n  AND cost_total > 0\nORDER BY date"
+          "rawSql": "SELECT\n  (date + time '12:00')::timestamptz AS time,\n  round(cost_electric::numeric, 2) AS \"Runtime Electric ($)\",\n  round(cost_gas::numeric, 2) AS \"Gas ($)\",\n  round(cost_water::numeric, 2) AS \"Water ($)\"\nFROM daily_summary\nWHERE $__timeFilter((date + time '12:00')::timestamptz)\n  AND cost_total > 0\nORDER BY date"
         }
       ],
       "title": "Daily Cost by Source",
@@ -1892,7 +1892,7 @@
     {
       "id": 202,
       "type": "stat",
-      "title": "Shelly Electric $/Day (30-Day Avg)",
+      "title": "Runtime Electric $/Day (30-Day Avg)",
       "datasource": {
         "uid": "verdify-tsdb",
         "type": "grafana-postgresql-datasource"
@@ -1933,7 +1933,7 @@
         "colorMode": "value",
         "graphMode": "none"
       },
-      "description": "Average electric cost per day from the current Shelly-metered circuit feed across the last 30 completed daily summaries. This is under meter-coverage review.",
+      "description": "Average electric cost per day from published device wattage multiplied by observed on-time across the last 30 completed daily summaries.",
       "transparent": true
     }
   ],

@@ -90,9 +90,9 @@ VPD_RELAY_STATE_LANES = (
     ("fog", "Fog", "Fog Base", 2.05, 2.1),
 )
 EXPECTED_STAT_COLORS = {
-    "Shelly Electric $/Day (30-Day Avg)": "#66BB6A",
-    "Shelly Daytime Watts (30-Day Avg)": "#66BB6A",
-    "Shelly Night Watts (30-Day Avg)": "#66BB6A",
+    "Runtime Electric $/Day (30-Day Avg)": "#66BB6A",
+    "Runtime Daytime Watts (30-Day Avg)": "#66BB6A",
+    "Runtime Night Watts (30-Day Avg)": "#66BB6A",
     "Runtime-Modeled kWh/day (30-Day Avg)": "#66BB6A",
     "VPD Stress Hours": BRAND["violet"],
     "Heat Stress Hours": BRAND["heat"],
@@ -115,10 +115,14 @@ EXPECTED_SERIES_COLORS = {
     "Temp MAE F": BRAND["heat"],
     "VPD MAE kPa": BRAND["violet"],
     "Cost ($)": BRAND["leaf"],
-    "Shelly Electric": BRAND["leaf"],
-    "Shelly Electric ($)": BRAND["leaf"],
+    "Runtime Electric": BRAND["leaf"],
+    "Runtime Electric ($)": BRAND["leaf"],
     "Gas ($)": BRAND["gas"],
     "Water ($)": BRAND["water"],
+    "Runtime Load (W)": BRAND["leaf"],
+    "Runtime Heat 1 (W)": BRAND["heat"],
+    "Runtime Fans (W)": BRAND["fan"],
+    "Runtime Other (fog/lights/vent)": BRAND["water"],
     "Stress Hours": BRAND["fault"],
     "Cost / Stress Hour": BRAND["gray"],
     "Water Used (gal)": BRAND["water"],
@@ -174,13 +178,150 @@ ORDER BY date"""
 
 DAILY_COST_BY_SOURCE_SQL = """SELECT
   (date + time '12:00')::timestamptz AS time,
-  round(cost_electric::numeric, 2) AS "Shelly Electric ($)",
+  round(cost_electric::numeric, 2) AS "Runtime Electric ($)",
   round(cost_gas::numeric, 2) AS "Gas ($)",
   round(cost_water::numeric, 2) AS "Water ($)"
 FROM daily_summary
 WHERE $__timeFilter((date + time '12:00')::timestamptz)
   AND cost_total > 0
 ORDER BY date"""
+
+MONTHLY_RESOURCE_COST_SQL = """WITH months AS (
+  SELECT generate_series(
+    (date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date - interval '5 months')::date,
+    date_trunc('month', (now() AT TIME ZONE 'America/Denver')::date)::date,
+    interval '1 month'
+  )::date AS month_start
+), costs AS (
+  SELECT
+    date_trunc('month', date)::date AS month_start,
+    ROUND(SUM(COALESCE(cost_electric, 0))::numeric, 2) AS electric_cost_usd,
+    ROUND(SUM(COALESCE(cost_gas, 0))::numeric, 2) AS gas_cost_usd,
+    ROUND(SUM(COALESCE(cost_water, 0))::numeric, 2) AS water_cost_usd
+  FROM daily_summary
+  WHERE date >= (SELECT min(month_start) FROM months)
+    AND date < ((SELECT max(month_start) FROM months) + interval '1 month')::date
+  GROUP BY 1
+)
+SELECT
+  to_char(m.month_start, 'Mon YYYY') AS "Month",
+  COALESCE(c.electric_cost_usd, 0) AS "Runtime Electric ($)",
+  COALESCE(c.gas_cost_usd, 0) AS "Gas ($)",
+  COALESCE(c.water_cost_usd, 0) AS "Water ($)",
+  COALESCE(c.electric_cost_usd, 0)
+    + COALESCE(c.gas_cost_usd, 0)
+    + COALESCE(c.water_cost_usd, 0) AS "Total ($)"
+FROM months m
+LEFT JOIN costs c USING (month_start)
+ORDER BY m.month_start"""
+
+RUNTIME_ELECTRIC_WATTS_SQL = """WITH samples AS (
+  SELECT generate_series(
+    date_trunc('minute', $__timeFrom()::timestamptz),
+    LEAST($__timeTo()::timestamptz, now()),
+    interval '5 minutes'
+  ) AS ts
+), wattages AS (
+  SELECT equipment, wattage::double precision AS wattage
+  FROM equipment_assets
+  WHERE wattage IS NOT NULL
+), modeled AS (
+  SELECT
+    s.ts,
+    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts
+  FROM samples s
+  CROSS JOIN wattages w
+  GROUP BY s.ts
+)
+SELECT
+  time_bucket('30 minutes', ts) AS time,
+  round(avg(watts)::numeric, 0) AS "Runtime Load (W)"
+FROM modeled
+GROUP BY 1
+ORDER BY 1"""
+
+RUNTIME_WATTS_30D_CTE = """WITH samples AS (
+  SELECT generate_series(
+    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),
+    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),
+    interval '5 minutes'
+  ) AS ts
+), wattages AS (
+  SELECT equipment, wattage::double precision AS wattage
+  FROM equipment_assets
+  WHERE wattage IS NOT NULL
+), modeled AS (
+  SELECT
+    s.ts,
+    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts
+  FROM samples s
+  CROSS JOIN wattages w
+  GROUP BY s.ts
+)"""
+
+RUNTIME_SOLAR_ALIGNED_LOAD_SQL = (
+    RUNTIME_WATTS_30D_CTE
+    + """
+SELECT now() AS time,
+       round((100.0 * SUM(watts) FILTER (WHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17) / NULLIF(SUM(watts), 0))::numeric, 1) AS value
+FROM modeled"""
+)
+
+RUNTIME_POWERWALL_COVERAGE_SQL = (
+    RUNTIME_WATTS_30D_CTE
+    + """
+SELECT now() AS time,
+       round((13.5 / NULLIF(avg(watts)::numeric * 14 / 1000, 0) * 100)::numeric, 0) AS value
+FROM modeled
+WHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"""
+)
+
+RUNTIME_DAYTIME_WATTS_SQL = (
+    RUNTIME_WATTS_30D_CTE
+    + """
+SELECT now() AS time,
+       round(avg(watts)::numeric, 0) AS value
+FROM modeled
+WHERE extract(hour from ts AT TIME ZONE 'America/Denver') BETWEEN 8 AND 17"""
+)
+
+RUNTIME_NIGHT_WATTS_SQL = (
+    RUNTIME_WATTS_30D_CTE
+    + """
+SELECT now() AS time,
+       round(avg(watts)::numeric, 0) AS value
+FROM modeled
+WHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"""
+)
+
+RUNTIME_POWER_BY_GROUP_SQL = """WITH samples AS (
+  SELECT generate_series(
+    date_trunc('minute', $__timeFrom()::timestamptz),
+    LEAST($__timeTo()::timestamptz, now()),
+    interval '5 minutes'
+  ) AS ts
+), wattages AS (
+  SELECT equipment, wattage::double precision AS wattage
+  FROM equipment_assets
+  WHERE wattage IS NOT NULL
+), modeled AS (
+  SELECT
+    s.ts,
+    SUM(CASE WHEN w.equipment = 'heat1' AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS heat_w,
+    SUM(CASE WHEN w.equipment IN ('fan1', 'fan2') AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS fan_w,
+    SUM(CASE WHEN w.equipment NOT IN ('heat1', 'fan1', 'fan2') AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS other_w
+  FROM samples s
+  CROSS JOIN wattages w
+  GROUP BY s.ts
+)
+SELECT
+  time_bucket('30 minutes', ts) AS time,
+  round(avg(heat_w)::numeric, 0) AS "Runtime Heat 1 (W)",
+  round(avg(fan_w)::numeric, 0) AS "Runtime Fans (W)",
+  round(avg(other_w)::numeric, 0) AS "Runtime Other (fog/lights/vent)"
+FROM modeled
+GROUP BY 1
+ORDER BY 1"""
 
 FREE_HEAP_SQL = """SELECT
   $__time(ts),
@@ -481,6 +622,18 @@ def semantic_color(label: str, current: Any = None, context: str = "") -> str:
         return maybe_alpha("#FF5C8A")
     if label_text.startswith("switch.greenhouse_grow"):
         return maybe_alpha("#5794F2")
+    if label_text in {
+        "runtime load (w)",
+        "runtime electric",
+        "runtime electric ($)",
+    }:
+        return maybe_alpha(BRAND["leaf"])
+    if label_text == "runtime heat 1 (w)":
+        return maybe_alpha(BRAND["heat"])
+    if label_text == "runtime fans (w)":
+        return maybe_alpha(BRAND["fan"])
+    if label_text == "runtime other (fog/lights/vent)":
+        return maybe_alpha(BRAND["water"])
     if "cortex" in label_text or "vm-docker-ai" in label_text:
         return maybe_alpha("#AB47BC")
     if "sentinel" in label_text or "vm-docker-frigate" in label_text:
@@ -523,14 +676,7 @@ def semantic_color(label: str, current: Any = None, context: str = "") -> str:
         return maybe_alpha(BRAND["sky"])
     if "total stress" in label_text:
         return maybe_alpha(BRAND["fault"])
-    if label_text in {
-        "electric",
-        "electric ($)",
-        "greenhouse (w)",
-        "shelly meter (w)",
-        "shelly electric",
-        "shelly electric ($)",
-    }:
+    if label_text in {"electric", "electric ($)", "greenhouse (w)", "shelly meter (w)", "shelly electric"}:
         return maybe_alpha("#66BB6A")
     if any(k in label_text for k in ("electric $", "daytime watts", "night watts", "kwh/day")):
         return maybe_alpha("#66BB6A")
@@ -1158,10 +1304,110 @@ def ensure_relay_state_lane_overrides(
         upsert_override_property(base_override, "color", {"fixedColor": color, "mode": "fixed"})
 
 
+def normalize_runtime_electric_sources(panel: dict[str, Any]) -> None:
+    """Use runtime-modeled electric load as the public cost/load source."""
+
+    title = str(panel.get("title") or "")
+    if title in {
+        "Runtime Electric $/Day (30-Day Avg)",
+        "Shelly Electric $/Day (30-Day Avg)",
+        "Electric $/Day (30-Day Average)",
+    }:
+        panel["title"] = "Runtime Electric $/Day (30-Day Avg)"
+        panel["description"] = (
+            "Average electric cost per day from published device wattage multiplied by observed on-time "
+            "across the last 30 completed daily summaries."
+        )
+
+    if title in {
+        "Runtime Daytime Watts (30-Day Avg)",
+        "Shelly Daytime Watts (30-Day Avg)",
+        "Daytime Watts (30-Day Average)",
+    }:
+        panel["title"] = "Runtime Daytime Watts (30-Day Avg)"
+        replace_first_target_sql(panel, RUNTIME_DAYTIME_WATTS_SQL)
+
+    if title in {
+        "Runtime Night Watts (30-Day Avg)",
+        "Shelly Night Watts (30-Day Avg)",
+        "Night Watts (30-Day Average)",
+    }:
+        panel["title"] = "Runtime Night Watts (30-Day Avg)"
+        replace_first_target_sql(panel, RUNTIME_NIGHT_WATTS_SQL)
+
+    if title in {"30-Day Solar-Aligned Runtime Load", "30-Day Solar-Aligned Shelly Load"}:
+        panel["title"] = "30-Day Solar-Aligned Runtime Load"
+        panel["description"] = (
+            "Percent of runtime-modeled electrical load consumed during solar hours across the last 30 completed days."
+        )
+        replace_first_target_sql(panel, RUNTIME_SOLAR_ALIGNED_LOAD_SQL)
+
+    if title == "30-Day Powerwall Coverage":
+        panel["description"] = (
+            "Percent of average runtime-modeled overnight load covered by one Powerwall (13.5 kWh), "
+            "using the last 30 completed days."
+        )
+        replace_first_target_sql(panel, RUNTIME_POWERWALL_COVERAGE_SQL)
+
+    if title == "Runtime-Modeled kWh/day (30-Day Avg)":
+        replace_first_target_sql(
+            panel,
+            "SELECT now() as time, round(avg(kwh_estimated)::numeric, 1) as value FROM daily_summary WHERE date >= current_date - interval '30 days' AND date < current_date AND kwh_estimated IS NOT NULL",
+        )
+
+    if title in {
+        "Runtime-Modeled Power vs Solar Irradiance",
+        "Shelly-Metered Power vs Solar Irradiance",
+        "Greenhouse Power vs Solar Irradiance",
+    }:
+        panel["title"] = "Runtime-Modeled Power vs Solar Irradiance"
+        panel["description"] = (
+            "Runtime-modeled electric load from published device wattage and observed on-time overlaid "
+            "with available solar radiation."
+        )
+        replace_target_sql(panel, "A", RUNTIME_ELECTRIC_WATTS_SQL)
+        rename_override_label(panel, "Shelly Meter (W)", "Runtime Load (W)")
+        rename_override_label(panel, "Greenhouse (W)", "Runtime Load (W)")
+
+    if title in {"Runtime Power by Device Group", "Shelly Power by Circuit"}:
+        panel["title"] = "Runtime Power by Device Group"
+        replace_first_target_sql(panel, RUNTIME_POWER_BY_GROUP_SQL)
+        rename_override_label(panel, "Shelly Heater Channel", "Runtime Heat 1 (W)")
+        rename_override_label(panel, "Shelly Fans Estimate", "Runtime Fans (W)")
+        rename_override_label(panel, "Shelly General Channel", "Runtime Other (fog/lights/vent)")
+
+    if title == "Daily Cost by Type" and panel.get("type") == "timeseries":
+        panel["description"] = (
+            "Daily cost stacked by utility type. Electric uses published device watts multiplied by observed on-time."
+        )
+        rename_override_label(panel, "Shelly Electric", "Runtime Electric")
+        for target in panel.get("targets", []) or []:
+            raw_sql = target.get("rawSql")
+            if isinstance(raw_sql, str):
+                target["rawSql"] = raw_sql.replace('AS "Shelly Electric"', 'AS "Runtime Electric"')
+
+    if title == "Monthly Resource Cost by Source (6 Months)" and panel.get("type") == "barchart":
+        panel["description"] = (
+            "Stacked monthly greenhouse utility cost for the current local month-to-date plus the previous "
+            "five months. Electric uses published device watts multiplied by observed on-time; gas and water "
+            "use the public rate assumptions shown on Resource Use."
+        )
+        replace_first_target_sql(panel, MONTHLY_RESOURCE_COST_SQL)
+        rename_override_label(panel, "Shelly Electric ($)", "Runtime Electric ($)")
+        rename_override_label(panel, "Electric ($)", "Runtime Electric ($)")
+
+    if title == "Daily Cost by Source" and panel.get("type") == "timeseries":
+        replace_first_target_sql(panel, DAILY_COST_BY_SOURCE_SQL)
+        rename_override_label(panel, "Shelly Electric ($)", "Runtime Electric ($)")
+        rename_override_label(panel, "Electric ($)", "Runtime Electric ($)")
+
+
 def normalize_public_panel_schema(panel: dict[str, Any]) -> None:
     """Keep embedded panels readable at site width, not just valid in Grafana."""
 
     title = str(panel.get("title") or "")
+    normalize_runtime_electric_sources(panel)
+
     if title == "Temperature Compliance Band" and panel.get("type") == "timeseries":
         if panel_has_relay_state_lanes(panel, TEMPERATURE_RELAY_STATE_LANES):
             replace_equipment_state_targets_with_lanes(panel, TEMPERATURE_RELAY_STATE_LANES)
@@ -1346,9 +1592,6 @@ def normalize_public_panel_schema(panel: dict[str, Any]) -> None:
         options["xTickLabelRotation"] = 0
         options["xTickLabelSpacing"] = "auto"
         replace_first_target_sql(panel, PLAN_ACCURACY_SQL)
-
-    if title == "Daily Cost by Source" and panel.get("type") == "timeseries":
-        replace_first_target_sql(panel, DAILY_COST_BY_SOURCE_SQL)
 
     if title == "Free Heap" and panel.get("type") == "stat":
         defaults = panel.setdefault("fieldConfig", {}).setdefault("defaults", {})
@@ -1800,6 +2043,7 @@ def brand_dashboard(path: Path, embedded_ids: set[int]) -> tuple[bool, int]:
         strengthen_compliance_band(panel)
         strengthen_lighting_threshold_bands(panel)
         strengthen_relay_state_lanes(panel)
+        normalize_runtime_electric_sources(panel)
         if panel.get("id") not in embedded_ids:
             continue
         normalize_public_panel_schema(panel)

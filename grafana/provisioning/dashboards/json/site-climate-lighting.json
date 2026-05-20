@@ -1033,7 +1033,7 @@
       "description": "Electric cost = \u03a3(equipment runtime \u00d7 watts \u00d7 $0.111/kWh)"
     },
     {
-      "description": "Greenhouse electrical load overlaid with available solar radiation. When solar is up, the greenhouse runs on sun.",
+      "description": "Runtime-modeled electric load from published device wattage and observed on-time overlaid with available solar radiation.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1050,7 +1050,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Greenhouse (W)"
+              "options": "Runtime Load (W)"
             },
             "properties": [
               {
@@ -1142,7 +1142,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "SELECT time_bucket('30 minutes', e.ts) AS time, round(avg(watts_total)::numeric, 0) AS \"Greenhouse (W)\" FROM energy e WHERE $__timeFilter(e.ts) GROUP BY 1 ORDER BY 1",
+          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    date_trunc('minute', $__timeFrom()::timestamptz),\n    LEAST($__timeTo()::timestamptz, now()),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT\n  time_bucket('30 minutes', ts) AS time,\n  round(avg(watts)::numeric, 0) AS \"Runtime Load (W)\"\nFROM modeled\nGROUP BY 1\nORDER BY 1",
           "refId": "A"
         },
         {
@@ -1154,7 +1154,7 @@
           "refId": "B"
         }
       ],
-      "title": "Greenhouse Power vs Solar Irradiance",
+      "title": "Runtime-Modeled Power vs Solar Irradiance",
       "type": "timeseries",
       "options": {
         "tooltip": {

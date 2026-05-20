@@ -592,7 +592,7 @@
           }
         ]
       },
-      "description": "Shows operating cost broken down by source or category.",
+      "description": "Daily cost stacked by utility type. Electric uses published device watts multiplied by observed on-time.",
       "options": {
         "legend": {
           "calcs": [

@@ -633,7 +633,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "verdify-tsdb"
       },
-      "description": "Trailing 30-day daily cost stacked by utility type.",
+      "description": "Daily cost stacked by utility type. Electric uses published device watts multiplied by observed on-time.",
       "fieldConfig": {
         "defaults": {
           "custom": {
