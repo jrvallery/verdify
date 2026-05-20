@@ -90,10 +90,10 @@ VPD_RELAY_STATE_LANES = (
     ("fog", "Fog", "Fog Base", 2.05, 2.1),
 )
 EXPECTED_STAT_COLORS = {
-    "Electric $/Day (30-Day Average)": "#66BB6A",
-    "Daytime Watts (30-Day Average)": "#66BB6A",
-    "Night Watts (30-Day Average)": "#66BB6A",
-    "kWh/day (30-Day Average)": "#66BB6A",
+    "Shelly Electric $/Day (30-Day Avg)": "#66BB6A",
+    "Shelly Daytime Watts (30-Day Avg)": "#66BB6A",
+    "Shelly Night Watts (30-Day Avg)": "#66BB6A",
+    "Runtime-Modeled kWh/day (30-Day Avg)": "#66BB6A",
     "VPD Stress Hours": BRAND["violet"],
     "Heat Stress Hours": BRAND["heat"],
     "Cold Stress Hours": BRAND["sky"],
@@ -115,6 +115,10 @@ EXPECTED_SERIES_COLORS = {
     "Temp MAE F": BRAND["heat"],
     "VPD MAE kPa": BRAND["violet"],
     "Cost ($)": BRAND["leaf"],
+    "Shelly Electric": BRAND["leaf"],
+    "Shelly Electric ($)": BRAND["leaf"],
+    "Gas ($)": BRAND["gas"],
+    "Water ($)": BRAND["water"],
     "Stress Hours": BRAND["fault"],
     "Cost / Stress Hour": BRAND["gray"],
     "Water Used (gal)": BRAND["water"],
@@ -170,7 +174,7 @@ ORDER BY date"""
 
 DAILY_COST_BY_SOURCE_SQL = """SELECT
   (date + time '12:00')::timestamptz AS time,
-  round(cost_electric::numeric, 2) AS "Electric ($)",
+  round(cost_electric::numeric, 2) AS "Shelly Electric ($)",
   round(cost_gas::numeric, 2) AS "Gas ($)",
   round(cost_water::numeric, 2) AS "Water ($)"
 FROM daily_summary
@@ -519,7 +523,14 @@ def semantic_color(label: str, current: Any = None, context: str = "") -> str:
         return maybe_alpha(BRAND["sky"])
     if "total stress" in label_text:
         return maybe_alpha(BRAND["fault"])
-    if label_text in {"electric", "electric ($)", "greenhouse (w)"}:
+    if label_text in {
+        "electric",
+        "electric ($)",
+        "greenhouse (w)",
+        "shelly meter (w)",
+        "shelly electric",
+        "shelly electric ($)",
+    }:
         return maybe_alpha("#66BB6A")
     if any(k in label_text for k in ("electric $", "daytime watts", "night watts", "kwh/day")):
         return maybe_alpha("#66BB6A")
