@@ -1142,7 +1142,7 @@
             "uid": "verdify-tsdb"
           },
           "format": "time_series",
-          "rawSql": "WITH samples AS (\n  SELECT generate_series(\n    date_trunc('minute', $__timeFrom()::timestamptz),\n    LEAST($__timeTo()::timestamptz, now()),\n    interval '5 minutes'\n  ) AS ts\n), wattages AS (\n  SELECT equipment, wattage::double precision AS wattage\n  FROM equipment_assets\n  WHERE wattage IS NOT NULL\n), modeled AS (\n  SELECT\n    s.ts,\n    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts\n  FROM samples s\n  CROSS JOIN wattages w\n  GROUP BY s.ts\n)\nSELECT\n  time_bucket('30 minutes', ts) AS time,\n  round(avg(watts)::numeric, 0) AS \"Runtime Load (W)\"\nFROM modeled\nGROUP BY 1\nORDER BY 1",
+          "rawSql": "SELECT\n  bucket AS time,\n  round(total_watts::numeric, 0) AS \"Runtime Load (W)\"\nFROM fn_runtime_power_30m($__timeFrom()::timestamptz, LEAST($__timeTo()::timestamptz, now()))\nORDER BY bucket",
           "refId": "A"
         },
         {

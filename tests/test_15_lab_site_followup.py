@@ -63,6 +63,9 @@ def test_resource_use_restores_individual_solar_alignment_panels():
     assert "panelId=310" in page, "electric-vs-solar panel missing"
     assert "panelId=127" in page, "gas-vs-solar panel missing"
     assert "panelId=128" in page, "water-vs-solar panel missing"
+    assert "panelId=310&theme=light&from=now-7d&to=now" in page
+    assert "panelId=127&theme=light&from=now-7d&to=now" in page
+    assert "panelId=128&theme=light&from=now-7d&to=now" in page
     assert "Solar vs Resource Use" not in page
 
 
@@ -77,6 +80,8 @@ def test_resource_use_cost_panels_use_canonical_runtime_cost_fields():
     assert "Runtime Electric ($)" in daily_sql
     assert "cost_electric::numeric" in daily_sql
     assert "kwh_estimated * 0.111" not in daily_sql
+    assert "fn_runtime_power_30m" in solar_load["targets"][0]["rawSql"]
+    assert "fn_equip_at" not in solar_load["targets"][0]["rawSql"]
     assert "Runtime Load (W)" in solar_load["targets"][0]["rawSql"]
     assert "energy e" not in solar_load["targets"][0]["rawSql"]
     assert monthly_cost["options"]["showValue"] == "never"

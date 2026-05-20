@@ -101,7 +101,7 @@ def fetch_snapshot(url: str) -> dict:
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=45) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

@@ -215,48 +215,20 @@ FROM months m
 LEFT JOIN costs c USING (month_start)
 ORDER BY m.month_start"""
 
-RUNTIME_ELECTRIC_WATTS_SQL = """WITH samples AS (
-  SELECT generate_series(
-    date_trunc('minute', $__timeFrom()::timestamptz),
-    LEAST($__timeTo()::timestamptz, now()),
-    interval '5 minutes'
-  ) AS ts
-), wattages AS (
-  SELECT equipment, wattage::double precision AS wattage
-  FROM equipment_assets
-  WHERE wattage IS NOT NULL
-), modeled AS (
-  SELECT
-    s.ts,
-    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts
-  FROM samples s
-  CROSS JOIN wattages w
-  GROUP BY s.ts
-)
-SELECT
-  time_bucket('30 minutes', ts) AS time,
-  round(avg(watts)::numeric, 0) AS "Runtime Load (W)"
-FROM modeled
-GROUP BY 1
-ORDER BY 1"""
+RUNTIME_ELECTRIC_WATTS_SQL = """SELECT
+  bucket AS time,
+  round(total_watts::numeric, 0) AS "Runtime Load (W)"
+FROM fn_runtime_power_30m($__timeFrom()::timestamptz, LEAST($__timeTo()::timestamptz, now()))
+ORDER BY bucket"""
 
-RUNTIME_WATTS_30D_CTE = """WITH samples AS (
-  SELECT generate_series(
-    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),
-    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver'),
-    interval '5 minutes'
-  ) AS ts
-), wattages AS (
-  SELECT equipment, wattage::double precision AS wattage
-  FROM equipment_assets
-  WHERE wattage IS NOT NULL
-), modeled AS (
+RUNTIME_WATTS_30D_CTE = """WITH modeled AS (
   SELECT
-    s.ts,
-    SUM(CASE WHEN fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS watts
-  FROM samples s
-  CROSS JOIN wattages w
-  GROUP BY s.ts
+    bucket AS ts,
+    total_watts AS watts
+  FROM fn_runtime_power_30m(
+    (((now() AT TIME ZONE 'America/Denver')::date - 30)::timestamp AT TIME ZONE 'America/Denver'),
+    ((now() AT TIME ZONE 'America/Denver')::date::timestamp AT TIME ZONE 'America/Denver')
+  )
 )"""
 
 RUNTIME_SOLAR_ALIGNED_LOAD_SQL = (
@@ -294,34 +266,13 @@ FROM modeled
 WHERE extract(hour from ts AT TIME ZONE 'America/Denver') NOT BETWEEN 8 AND 17"""
 )
 
-RUNTIME_POWER_BY_GROUP_SQL = """WITH samples AS (
-  SELECT generate_series(
-    date_trunc('minute', $__timeFrom()::timestamptz),
-    LEAST($__timeTo()::timestamptz, now()),
-    interval '5 minutes'
-  ) AS ts
-), wattages AS (
-  SELECT equipment, wattage::double precision AS wattage
-  FROM equipment_assets
-  WHERE wattage IS NOT NULL
-), modeled AS (
-  SELECT
-    s.ts,
-    SUM(CASE WHEN w.equipment = 'heat1' AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS heat_w,
-    SUM(CASE WHEN w.equipment IN ('fan1', 'fan2') AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS fan_w,
-    SUM(CASE WHEN w.equipment NOT IN ('heat1', 'fan1', 'fan2') AND fn_equip_at(w.equipment, s.ts) THEN w.wattage ELSE 0 END) AS other_w
-  FROM samples s
-  CROSS JOIN wattages w
-  GROUP BY s.ts
-)
-SELECT
-  time_bucket('30 minutes', ts) AS time,
-  round(avg(heat_w)::numeric, 0) AS "Runtime Heat 1 (W)",
-  round(avg(fan_w)::numeric, 0) AS "Runtime Fans (W)",
-  round(avg(other_w)::numeric, 0) AS "Runtime Other (fog/lights/vent)"
-FROM modeled
-GROUP BY 1
-ORDER BY 1"""
+RUNTIME_POWER_BY_GROUP_SQL = """SELECT
+  bucket AS time,
+  round(heat1_watts::numeric, 0) AS "Runtime Heat 1 (W)",
+  round(fans_watts::numeric, 0) AS "Runtime Fans (W)",
+  round(other_watts::numeric, 0) AS "Runtime Other (fog/lights/vent)"
+FROM fn_runtime_power_30m($__timeFrom()::timestamptz, LEAST($__timeTo()::timestamptz, now()))
+ORDER BY bucket"""
 
 FREE_HEAP_SQL = """SELECT
   $__time(ts),

@@ -627,3 +627,18 @@ class TestViewsCompute:
         assert "ds.kwh_estimated" in view_sql
         assert "COALESCE(ds.kwh_total, ds.kwh_estimated)" not in view_sql
         assert "meter_runtime_divergence" in view_sql
+
+    def test_runtime_power_30m_function_returns_buckets(self):
+        rows = db_query_rows(
+            """
+            SELECT count(*) AS buckets,
+                   bool_and(total_watts >= 0 AND heat1_watts >= 0 AND fans_watts >= 0 AND other_watts >= 0) AS nonnegative,
+                   max(total_watts) AS max_watts
+            FROM fn_runtime_power_30m(now() - interval '24 hours', now())
+            """
+        )
+        assert rows, "fn_runtime_power_30m returned no aggregate row"
+        buckets, nonnegative, max_watts = rows[0].split("|")
+        assert int(buckets) >= 40, "fn_runtime_power_30m returned too few 30-minute buckets"
+        assert nonnegative == "t", "fn_runtime_power_30m returned negative watt values"
+        assert float(max_watts) >= 0, "fn_runtime_power_30m returned invalid max watts"

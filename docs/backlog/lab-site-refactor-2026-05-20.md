@@ -38,7 +38,7 @@ Updated 2026-05-20 after the site/content refactor, Planning Quality dashboard r
 | CODEX-018 | Complete | Architecture no longer includes Homelab Compute and Agent Fleet, MQTT, or Not Production Safe content. GPU power evidence lives on Resource Use instead of Architecture, and live Architecture curl checks show the stale headings are gone. |
 | RP-006 | Superseded | The original panel mismatch was real: one graph computed `kwh_estimated * 0.111` while stat cards used stored `daily_summary.cost_electric`. The stored canonical field is still the single panel source, but RP-008 changed that field from Shelly-derived metered kWh to runtime-modeled kWh from published watts and observed on-time. |
 | RP-007 | Complete | Lux review confirmed the active readback thresholds are 40,000 lux with 8,000 lux hysteresis and recent Tempest daylight samples exceed 100,000 lux, so the "45,000 lux full sun" view was a panel/window/aggregation interpretation rather than a unit cap. Lighting copy now explains exterior threshold semantics, and lux/solar visual treatment was normalized through the brand script and render checks. |
-| RP-008 | Complete | Public electric cost now uses published device wattage from `equipment_assets.wattage` multiplied by observed relay on-time, matching the gas therms model. Shelly kWh remains stored as `daily_summary.kwh_total` and exposed through `v_energy_estimate_reconciliation` as diagnostic evidence; it no longer overwrites `cost_electric` or public Resource Use panels. |
+| RP-008 | Complete | Public electric cost now uses published device wattage from `equipment_assets.wattage` multiplied by observed relay on-time, matching the gas therms model. Shelly kWh remains stored as `daily_summary.kwh_total` and exposed through `v_energy_estimate_reconciliation` as diagnostic evidence; it no longer overwrites `cost_electric` or public Resource Use panels. Follow-up performance fix: public runtime-watts panels now use `fn_runtime_power_30m()` instead of per-sample `fn_equip_at()` lookups. |
 
 ### CODEX-002 terminology exception list
 
@@ -715,6 +715,7 @@ These items came from the later live review on 2026-05-20 after the first site/c
 6. Fix `v_energy_estimate_reconciliation` so it compares runtime-modeled kWh to Shelly-metered kWh instead of hiding divergence with `COALESCE(kwh_total, kwh_estimated)`.
 7. Update Resource Use copy and Grafana panel labels to say runtime-modeled electric/load instead of Shelly-metered electric.
 8. Add regression checks that `cost_electric` matches `kwh_estimated * 0.111` and that reconciliation surfaces `meter_runtime_divergence`.
+9. Replace slow Grafana runtime-watts queries with `fn_runtime_power_30m()`, which buckets equipment-state intervals once instead of calling `fn_equip_at()` for every sample/equipment pair.
 
 **Deliverables:**
 
